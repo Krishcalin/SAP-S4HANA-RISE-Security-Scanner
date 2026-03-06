@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0e17"/>
+      <stop offset="100%" style="stop-color:#111827"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#38bdf8"/>
+      <stop offset="100%" style="stop-color:#818cf8"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="200" rx="12" fill="url(#bg)"/>
+  <rect x="0" y="0" width="800" height="3" rx="1.5" fill="url(#accent)"/>
+  <!-- Shield icon -->
+  <g transform="translate(60, 55)">
+    <path d="M45 5 L85 20 L85 55 C85 80 65 95 45 100 C25 95 5 80 5 55 L5 20 Z" 
+          fill="none" stroke="#38bdf8" stroke-width="3" opacity="0.9"/>
+    <path d="M35 50 L45 60 L60 40" fill="none" stroke="#22c55e" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <!-- Text -->
+  <text x="170" y="78" font-family="monospace" font-size="28" font-weight="bold" fill="#e2e8f0">SAP S/4HANA RISE</text>
+  <text x="170" y="110" font-family="monospace" font-size="20" fill="#38bdf8">Security Scanner</text>
+  <text x="170" y="145" font-family="sans-serif" font-size="14" fill="#64748b">Offline Configuration Review &amp; Vulnerability Audit for RISE &amp; BTP</text>
+  <!-- Version badge -->
+  <rect x="650" y="70" width="80" height="26" rx="13" fill="rgba(56,189,248,0.1)" stroke="#38bdf8" stroke-width="1"/>
+  <text x="690" y="88" font-family="monospace" font-size="12" fill="#38bdf8" text-anchor="middle">v1.0.0</text>
+</svg>

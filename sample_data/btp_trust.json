@@ -1,0 +1,18 @@
+{
+  "trusts": [
+    {
+      "identityProvider": "SAP ID Service",
+      "originKey": "sap.default",
+      "status": true,
+      "createShadowUsers": true,
+      "description": "Default SAP IDP"
+    },
+    {
+      "identityProvider": "Corporate Azure AD",
+      "originKey": "corp-aad-tenant",
+      "status": true,
+      "createShadowUsers": true,
+      "description": "Corporate IDP via Azure AD"
+    }
+  ]
+}

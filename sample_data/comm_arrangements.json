@@ -1,0 +1,53 @@
+{
+  "arrangements": [
+    {
+      "name": "ARIBA_PROCUREMENT",
+      "scenario_id": "SAP_COM_0A01",
+      "authentication_method": "oauth2",
+      "communication_user": "ARIBA_COMM_USER",
+      "services": ["PurchaseOrder", "Supplier", "Contract", "Requisition"]
+    },
+    {
+      "name": "SF_EMPLOYEE_SYNC",
+      "scenario_id": "SAP_COM_0008",
+      "authentication_method": "basic",
+      "communication_user": "SF_COMM_USER",
+      "services": ["EmployeeMaster", "OrgUnit", "Position", "CostCenter", "PayrollArea", "PersonalData", "BankDetails", "Compensation", "TimeManagement", "Benefits", "Recruiting", "Onboarding"]
+    },
+    {
+      "name": "BANK_STATEMENT_IMPORT",
+      "scenario_id": "SAP_COM_0057",
+      "authentication_method": "none",
+      "communication_user": "BANK_COMM",
+      "services": ["BankStatement", "PaymentAdvice"]
+    },
+    {
+      "name": "ANALYTICS_EXPORT",
+      "scenario_id": "SAP_COM_0045",
+      "authentication_method": "oauth2",
+      "communication_user": "ANALYTICS_USER",
+      "services": ["GLAccount", "CostCenter", "ProfitCenter"]
+    },
+    {
+      "name": "VENDOR_INVOICE_API",
+      "scenario_id": "SAP_COM_0062",
+      "authentication_method": "basic",
+      "communication_user": "SF_COMM_USER",
+      "services": ["InvoiceProcessing", "VendorMaster"]
+    },
+    {
+      "name": "CRM_INTEGRATION",
+      "scenario_id": "SAP_COM_0100",
+      "authentication_method": "oauth2",
+      "communication_user": "SF_COMM_USER",
+      "services": ["BusinessPartner", "SalesOrder", "SalesQuotation"]
+    },
+    {
+      "name": "TAX_ENGINE",
+      "scenario_id": "SAP_COM_0120",
+      "authentication_method": "oauth2",
+      "communication_user": "SF_COMM_USER",
+      "services": ["TaxCalculation"]
+    }
+  ]
+}

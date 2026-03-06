@@ -1,0 +1,1963 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SAP S/4HANA RISE — Security Assessment Report</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg-primary: #0a0e17;
+    --bg-secondary: #111827;
+    --bg-card: #1a2332;
+    --bg-card-hover: #1f2b3d;
+    --border: #2a3548;
+    --text-primary: #e2e8f0;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --accent: #38bdf8;
+    --accent-dim: rgba(56, 189, 248, 0.1);
+    --critical: #ef4444;
+    --critical-bg: rgba(239, 68, 68, 0.08);
+    --high: #f97316;
+    --high-bg: rgba(249, 115, 22, 0.08);
+    --medium: #eab308;
+    --medium-bg: rgba(234, 179, 8, 0.08);
+    --low: #22c55e;
+    --low-bg: rgba(34, 197, 94, 0.08);
+    --info-c: #38bdf8;
+    --info-bg: rgba(56, 189, 248, 0.08);
+    --font-sans: 'DM Sans', -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  .noise {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 2rem;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 2.5rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .header-left h1 {
+    font-family: var(--font-mono);
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -0.02em;
+    margin-bottom: 0.25rem;
+  }
+
+  .header-left .subtitle {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .header-right {
+    text-align: right;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .header-right span {
+    display: block;
+  }
+
+  /* Summary Grid */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 1.5rem;
+    margin-bottom: 2.5rem;
+  }
+
+  /* Risk Score */
+  .risk-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .risk-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: #dc2626;
+  }
+
+  .risk-score-ring {
+    width: 140px;
+    height: 140px;
+    position: relative;
+    margin-bottom: 1rem;
+  }
+
+  .risk-score-ring svg {
+    transform: rotate(-90deg);
+    width: 140px;
+    height: 140px;
+  }
+
+  .risk-score-ring .score-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+  }
+
+  .risk-score-ring .score-number {
+    font-family: var(--font-mono);
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #dc2626;
+    line-height: 1;
+  }
+
+  .risk-score-ring .score-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .risk-level {
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #dc2626;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* Severity Cards */
+  .severity-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    align-content: start;
+  }
+
+  .sev-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem;
+    position: relative;
+    overflow: hidden;
+    transition: background 0.2s;
+  }
+
+  .sev-card:hover {
+    background: var(--bg-card-hover);
+  }
+
+  .sev-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+
+  .sev-card.critical::before { background: var(--critical); }
+  .sev-card.high::before { background: var(--high); }
+  .sev-card.medium::before { background: var(--medium); }
+  .sev-card.low::before { background: var(--low); }
+
+  .sev-card .sev-count {
+    font-family: var(--font-mono);
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .sev-card.critical .sev-count { color: var(--critical); }
+  .sev-card.high .sev-count { color: var(--high); }
+  .sev-card.medium .sev-count { color: var(--medium); }
+  .sev-card.low .sev-count { color: var(--low); }
+
+  .sev-card .sev-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 0.25rem;
+  }
+
+  /* Category breakdown bar */
+  .categories-section {
+    margin-bottom: 2.5rem;
+  }
+
+  .categories-section h2 {
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 1rem;
+  }
+
+  .cat-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .cat-bar-row {
+    display: grid;
+    grid-template-columns: 220px 1fr 50px;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .cat-bar-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    text-align: right;
+  }
+
+  .cat-bar-track {
+    height: 20px;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .cat-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), #818cf8);
+    border-radius: 4px;
+    min-width: 2px;
+    transition: width 0.8s ease-out;
+  }
+
+  .cat-bar-count {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+
+  /* Filter bar */
+  .filter-bar {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .filter-bar label {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-right: 0.5rem;
+  }
+
+  .filter-btn {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    padding: 0.4rem 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .filter-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .filter-btn.active {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* Findings */
+  .findings-section h2 {
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 1rem;
+  }
+
+  .finding-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 0.75rem;
+    overflow: hidden;
+    transition: background 0.2s;
+  }
+
+  .finding-card:hover {
+    background: var(--bg-card-hover);
+  }
+
+  .finding-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .sev-badge {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    letter-spacing: 0.05em;
+    min-width: 72px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .sev-badge.CRITICAL { background: var(--critical-bg); color: var(--critical); border: 1px solid rgba(239,68,68,0.2); }
+  .sev-badge.HIGH { background: var(--high-bg); color: var(--high); border: 1px solid rgba(249,115,22,0.2); }
+  .sev-badge.MEDIUM { background: var(--medium-bg); color: var(--medium); border: 1px solid rgba(234,179,8,0.2); }
+  .sev-badge.LOW { background: var(--low-bg); color: var(--low); border: 1px solid rgba(34,197,94,0.2); }
+  .sev-badge.INFO { background: var(--info-bg); color: var(--info-c); border: 1px solid rgba(56,189,248,0.2); }
+
+  .finding-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    flex: 1;
+  }
+
+  .finding-id {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  .finding-chevron {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    transition: transform 0.2s;
+  }
+
+  .finding-card.open .finding-chevron {
+    transform: rotate(90deg);
+  }
+
+  .finding-body {
+    display: none;
+    padding: 0 1.25rem 1.25rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .finding-card.open .finding-body {
+    display: block;
+  }
+
+  .finding-section {
+    margin-top: 1rem;
+  }
+
+  .finding-section-title {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.4rem;
+  }
+
+  .finding-section p {
+    font-size: 0.825rem;
+    color: var(--text-secondary);
+    line-height: 1.7;
+  }
+
+  .affected-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    background: var(--bg-primary);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .affected-list li {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    padding: 0.2rem 0;
+    border-bottom: 1px solid rgba(42, 53, 72, 0.5);
+  }
+
+  .affected-list li:last-child { border: none; }
+
+  .ref-list {
+    list-style: none;
+    padding: 0;
+  }
+
+  .ref-list li {
+    font-size: 0.8rem;
+    color: var(--accent);
+    padding: 0.15rem 0;
+  }
+
+  .ref-list li::before {
+    content: '→ ';
+    color: var(--text-muted);
+  }
+
+  .remediation-text {
+    background: rgba(34, 197, 94, 0.05);
+    border-left: 3px solid var(--low);
+    padding: 0.75rem 1rem;
+    border-radius: 0 6px 6px 0;
+    font-size: 0.825rem;
+    color: var(--text-secondary);
+    line-height: 1.7;
+  }
+
+  /* Footer */
+  .footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+  }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .summary-grid { grid-template-columns: 1fr; }
+    .severity-grid { grid-template-columns: repeat(2, 1fr); }
+    .cat-bar-row { grid-template-columns: 140px 1fr 40px; }
+  }
+
+  /* Print */
+  @media print {
+    body { background: white; color: #111; }
+    .finding-body { display: block !important; }
+    .noise { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="noise"></div>
+<div class="container">
+
+  <div class="header">
+    <div class="header-left">
+      <h1>&#x1f6e1; SAP S/4HANA RISE</h1>
+      <div class="subtitle">Security Assessment Report</div>
+    </div>
+    <div class="header-right">
+      <span>Scan: 2026-03-06T07:34:59</span>
+      <span>Source: sample_data</span>
+      <span>Modules: users, params, network, rise</span>
+    </div>
+  </div>
+
+  <!-- Summary Grid -->
+  <div class="summary-grid">
+    <div class="risk-card">
+      <div class="risk-score-ring">
+        <svg viewBox="0 0 140 140">
+          <circle cx="70" cy="70" r="60" fill="none" stroke="#1e293b" stroke-width="10"/>
+          <circle cx="70" cy="70" r="60" fill="none" stroke="#dc2626" stroke-width="10"
+            stroke-dasharray="377.0 0.0"
+            stroke-linecap="round"/>
+        </svg>
+        <div class="score-text">
+          <div class="score-number">100</div>
+          <div class="score-label">Risk Score</div>
+        </div>
+      </div>
+      <div class="risk-level">Critical Risk</div>
+    </div>
+
+    <div class="severity-grid">
+      <div class="sev-card critical">
+        <div class="sev-count">10</div>
+        <div class="sev-label">Critical</div>
+      </div>
+      <div class="sev-card high">
+        <div class="sev-count">17</div>
+        <div class="sev-label">High</div>
+      </div>
+      <div class="sev-card medium">
+        <div class="sev-count">13</div>
+        <div class="sev-label">Medium</div>
+      </div>
+      <div class="sev-card low">
+        <div class="sev-count">3</div>
+        <div class="sev-label">Low</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Category Breakdown -->
+  <div class="categories-section">
+    <h2>Findings by Category</h2>
+    <div class="cat-bars">
+      
+      <div class="cat-bar-row">
+        <div class="cat-bar-label">User &amp; Authorization</div>
+        <div class="cat-bar-track"><div class="cat-bar-fill" style="width: 100.0%"></div></div>
+        <div class="cat-bar-count">9</div>
+      </div>
+
+      <div class="cat-bar-row">
+        <div class="cat-bar-label">RISE / BTP Security</div>
+        <div class="cat-bar-track"><div class="cat-bar-fill" style="width: 88.88888888888889%"></div></div>
+        <div class="cat-bar-count">8</div>
+      </div>
+
+      <div class="cat-bar-row">
+        <div class="cat-bar-label">Password Policy</div>
+        <div class="cat-bar-track"><div class="cat-bar-fill" style="width: 66.66666666666666%"></div></div>
+        <div class="cat-bar-count">6</div>
+      </div>
+
+      <div class="cat-bar-row">
+        <div class="cat-bar-label">Network &amp; Service Exposure</div>
+        <div class="cat-bar-track"><div class="cat-bar-fill" style="width: 55.55555555555556%"></div></div>
+        <div class="cat-bar-count">5</div>
+      </div>
+
+      <div class="cat-bar-row">
+        <div class="cat-bar-label">Login Security</div>
+        <div class="cat-bar-track"><div class="cat-bar-fill" style="width: 44.44444444444444%"></div></div>
+        <div class="cat-bar-count">4</div>
+      </div>
+
+      <div class="cat-bar-row">
+        <div class="cat-bar-label">RFC Security</div>
+        <div class="cat-bar-track"><div class="cat-bar-fill" style="width: 33.33333333333333%"></div></div>
+        <div class="cat-bar-count">3</div>
+      </div>
+
+      <div class="cat-bar-row">
+        <div class="cat-bar-label">Audit Logging</div>
+        <div class="cat-bar-track"><div class="cat-bar-fill" style="width: 33.33333333333333%"></div></div>
+        <div class="cat-bar-count">3</div>
+      </div>
+
+      <div class="cat-bar-row">
+        <div class="cat-bar-label">Gateway Security</div>
+        <div class="cat-bar-track"><div class="cat-bar-fill" style="width: 22.22222222222222%"></div></div>
+        <div class="cat-bar-count">2</div>
+      </div>
+
+      <div class="cat-bar-row">
+        <div class="cat-bar-label">Transport Security</div>
+        <div class="cat-bar-track"><div class="cat-bar-fill" style="width: 11.11111111111111%"></div></div>
+        <div class="cat-bar-count">1</div>
+      </div>
+
+      <div class="cat-bar-row">
+        <div class="cat-bar-label">Development Controls</div>
+        <div class="cat-bar-track"><div class="cat-bar-fill" style="width: 11.11111111111111%"></div></div>
+        <div class="cat-bar-count">1</div>
+      </div>
+
+      <div class="cat-bar-row">
+        <div class="cat-bar-label">Security Parameters</div>
+        <div class="cat-bar-track"><div class="cat-bar-fill" style="width: 11.11111111111111%"></div></div>
+        <div class="cat-bar-count">1</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter Bar -->
+  <div class="filter-bar">
+    <label>Filter:</label>
+    <button class="filter-btn active" onclick="filterFindings('ALL')">All (43)</button>
+    <button class="filter-btn" onclick="filterFindings('CRITICAL')">Critical (10)</button>
+    <button class="filter-btn" onclick="filterFindings('HIGH')">High (17)</button>
+    <button class="filter-btn" onclick="filterFindings('MEDIUM')">Medium (13)</button>
+    <button class="filter-btn" onclick="filterFindings('LOW')">Low (3)</button>
+  </div>
+
+  <!-- Findings -->
+  <div class="findings-section">
+    <h2>Detailed Findings (43)</h2>
+    
+    <div class="finding-card" data-severity="CRITICAL" data-category="User &amp; Authorization">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">Default user SAP* is unlocked</span>
+        <span class="finding-id">USR-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>The default SAP user &#x27;SAP*&#x27; is unlocked. Default superuser — must be locked in all clients. Attackers routinely target default users with well-known passwords.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>SAP*</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Lock user SAP* via SU01 or set UFLAG &gt; 0. Change password to a strong random value. For SAP*, consider setting login/no_automatic_user_sapstar = 1.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1414256 — Secure default users</li><li>CIS SAP Benchmark Section 2.1</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="User &amp; Authorization">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">Default user DDIC is unlocked</span>
+        <span class="finding-id">USR-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>The default SAP user &#x27;DDIC&#x27; is unlocked. Data dictionary user — lock in production, restrict to admin. Attackers routinely target default users with well-known passwords.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>DDIC</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Lock user DDIC via SU01 or set UFLAG &gt; 0. Change password to a strong random value. For SAP*, consider setting login/no_automatic_user_sapstar = 1.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1414256 — Secure default users</li><li>CIS SAP Benchmark Section 2.1</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="User &amp; Authorization">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">Users assigned critical profiles (SAP_ALL, SAP_NEW, S_A.SYSTEM)</span>
+        <span class="finding-id">USR-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>5 user-profile assignment(s) found with critical profiles that grant unrestricted system access.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (5)</div>
+                  <ul class="affected-list"><li>SAP* → SAP_ALL</li><li>DDIC → SAP_ALL</li><li>JSMITH → SAP_ALL</li><li>MWILSON → SAP_NEW</li><li>LWANG → S_A.SYSTEM</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Remove all SAP_ALL/SAP_NEW/S_A.SYSTEM assignments. Implement proper role-based access control (RBAC). Use emergency/firefighter procedures (e.g., SAP GRC) for break-glass scenarios.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1698789</li><li>CIS SAP Benchmark Section 2.3</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Login Security">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">Parameter login/no_automatic_user_sapstar non-compliant</span>
+        <span class="finding-id">PARAM-login/no_automatic_user_sapstar</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>Must disable automatic SAP* user logon (prevents default password attack). Current value: &#x27;0&#x27;, Expected: == &#x27;1&#x27;</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>login/no_automatic_user_sapstar = 0</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Set login/no_automatic_user_sapstar = 1</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 68048</li><li>CIS SAP Benchmark 1.2.5</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Gateway Security">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">Parameter gw/sec_info non-compliant</span>
+        <span class="finding-id">PARAM-gw/sec_info</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>Gateway security info file must be configured (secinfo). Current value: &#x27;&#x27;, Expected: != &#x27;&#x27;</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>gw/sec_info = </li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Configure gw/sec_info to point to a secinfo file with restrictive rules</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1408081</li><li>CIS SAP Benchmark 3.1</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Gateway Security">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">Parameter gw/reg_info non-compliant</span>
+        <span class="finding-id">PARAM-gw/reg_info</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>Gateway registration info file must be configured (reginfo). Current value: &#x27;&#x27;, Expected: != &#x27;&#x27;</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>gw/reg_info = </li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Configure gw/reg_info to point to a reginfo file with restrictive rules</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1408081</li><li>CIS SAP Benchmark 3.2</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Audit Logging">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">Parameter rsau/enable non-compliant</span>
+        <span class="finding-id">PARAM-rsau/enable</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>Security Audit Log must be enabled. Current value: &#x27;0&#x27;, Expected: == &#x27;1&#x27;</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>rsau/enable = 0</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Set rsau/enable = 1 and configure filters in SM19</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 2191612</li><li>CIS SAP Benchmark 6.1</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Network &amp; Service Exposure">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">Active ICF services without authentication</span>
+        <span class="finding-id">NET-005</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 active ICF service(s) do not require authentication. Anonymous access to SAP services can lead to data leakage and exploitation.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>/sap/bc/webrfc</li><li>/sap/bc/soap/wsdl</li><li>/default_host/sap/bc/ping</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Enable authentication for all non-public ICF services. Configure appropriate logon procedure (Basic, SSO, Certificate). Review and restrict the ICF handler chain.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1439348</li><li>CIS SAP Benchmark Section 5.2</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Audit Logging">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">No active security audit filters configured</span>
+        <span class="finding-id">NET-008</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>No active audit filters found in SM19 configuration. Without audit filters, security-relevant events are not recorded.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>SM19 — 0 active filters</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Configure SM19 audit filters for at least: dialog logon failures, RFC logon events, transaction starts, user master changes, authority check failures. Enable both static and dynamic profiles.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 2191612</li><li>CIS SAP Benchmark Section 6.1</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="RISE / BTP Security">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">Communication arrangements with weak/no authentication</span>
+        <span class="finding-id">RISE-004</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 communication arrangement(s) use no authentication or only basic authentication. This allows unauthenticated or weakly protected access to SAP APIs.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>SF_EMPLOYEE_SYNC (auth: basic, user: SF_COMM_USER)</li><li>BANK_STATEMENT_IMPORT (auth: none, user: BANK_COMM)</li><li>VENDOR_INVOICE_API (auth: basic, user: SF_COMM_USER)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Configure OAuth 2.0 client credentials or X.509 certificate-based authentication for all communication arrangements. Basic auth should only be used with HTTPS and as a last resort.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 3089413</li><li>SAP BTP Security Guide</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="User &amp; Authorization">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Default user SAPCPIC is unlocked</span>
+        <span class="finding-id">USR-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>The default SAP user &#x27;SAPCPIC&#x27; is unlocked. CPI-C communication user — lock if unused. Attackers routinely target default users with well-known passwords.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>SAPCPIC</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Lock user SAPCPIC via SU01 or set UFLAG &gt; 0. Change password to a strong random value. For SAP*, consider setting login/no_automatic_user_sapstar = 1.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1414256 — Secure default users</li><li>CIS SAP Benchmark Section 2.1</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="User &amp; Authorization">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Default user TMSADM is unlocked</span>
+        <span class="finding-id">USR-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>The default SAP user &#x27;TMSADM&#x27; is unlocked. Transport management — verify authorization scope. Attackers routinely target default users with well-known passwords.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>TMSADM</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Lock user TMSADM via SU01 or set UFLAG &gt; 0. Change password to a strong random value. For SAP*, consider setting login/no_automatic_user_sapstar = 1.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1414256 — Secure default users</li><li>CIS SAP Benchmark Section 2.1</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="User &amp; Authorization">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Service/technical accounts with dialog logon type</span>
+        <span class="finding-id">USR-004</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>4 account(s) appear to be service/technical users but have dialog (interactive) logon capability. This allows interactive logon with service credentials.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (4)</div>
+                  <ul class="affected-list"><li>SVC_RFC_01 (type=A)</li><li>RFC_BILLING (type=A)</li><li>BATCH_FIN (type=A)</li><li>INT_ARIBA (type=A)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Change user type to B (System), C (Communication), or S (Service) as appropriate via SU01. Service accounts should never allow dialog logon in production.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 2175909</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Password Policy">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Parameter login/min_password_lng non-compliant</span>
+        <span class="finding-id">PARAM-login/min_password_lng</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>Minimum password length should be at least 8 characters. Current value: &#x27;6&#x27;, Expected: &gt;= &#x27;8&#x27;</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>login/min_password_lng = 6</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Set login/min_password_lng &gt;= 8 in RZ10 (12+ recommended)</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1731549</li><li>CIS SAP Benchmark 1.1.1</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Login Security">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Parameter login/fails_to_session_end non-compliant</span>
+        <span class="finding-id">PARAM-login/fails_to_session_end</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>Session should end after max 3 failed logon attempts. Current value: &#x27;5&#x27;, Expected: &lt;= &#x27;3&#x27;</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>login/fails_to_session_end = 5</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Set login/fails_to_session_end &lt;= 3</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>CIS SAP Benchmark 1.2.1</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Login Security">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Parameter login/fails_to_user_lock non-compliant</span>
+        <span class="finding-id">PARAM-login/fails_to_user_lock</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>Account should lock after max 5 failed logon attempts. Current value: &#x27;10&#x27;, Expected: &lt;= &#x27;5&#x27;</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>login/fails_to_user_lock = 10</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Set login/fails_to_user_lock &lt;= 5</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>CIS SAP Benchmark 1.2.2</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="RFC Security">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Parameter rfc/reject_insecure_logon non-compliant</span>
+        <span class="finding-id">PARAM-rfc/reject_insecure_logon</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>Must reject insecure RFC logons (plaintext password transmission). Current value: &#x27;0&#x27;, Expected: == &#x27;1&#x27;</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>rfc/reject_insecure_logon = 0</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Set rfc/reject_insecure_logon = 1</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 2416093</li><li>CIS SAP Benchmark 4.1</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="RFC Security">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Parameter rfc/reject_insecure_logon_data non-compliant</span>
+        <span class="finding-id">PARAM-rfc/reject_insecure_logon_data</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>Must reject insecure RFC data transmission. Current value: &#x27;0&#x27;, Expected: == &#x27;1&#x27;</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>rfc/reject_insecure_logon_data = 0</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Set rfc/reject_insecure_logon_data = 1</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 2416093</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Transport Security">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Parameter ssl/ciphersuites non-compliant</span>
+        <span class="finding-id">PARAM-ssl/ciphersuites</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>TLS cipher suites must be explicitly configured (not defaults). Current value: &#x27;&#x27;, Expected: != &#x27;&#x27;</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>ssl/ciphersuites = </li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Configure ssl/ciphersuites to allow only strong ciphers (TLS 1.2+, AES-256)</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 510007</li><li>CIS SAP Benchmark 5.1</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Audit Logging">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Parameter rec/client non-compliant</span>
+        <span class="finding-id">PARAM-rec/client</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>Table logging client must be configured. Current value: &#x27;&#x27;, Expected: != &#x27;&#x27;</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>rec/client = </li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Set rec/client to log critical client(s), e.g. rec/client = ALL</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>CIS SAP Benchmark 6.2</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Development Controls">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Parameter rdisp/wpdbug_max_no non-compliant</span>
+        <span class="finding-id">PARAM-rdisp/wpdbug_max_no</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>Debugging in production should be disabled (zero debug work processes). Current value: &#x27;2&#x27;, Expected: == &#x27;0&#x27;</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>rdisp/wpdbug_max_no = 2</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Set rdisp/wpdbug_max_no = 0 in production systems</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>CIS SAP Benchmark 7.1</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Security Parameters">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Critical security parameters not found in export</span>
+        <span class="finding-id">PARAM-MISSING</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 critical/high-severity parameters were not found in the exported data. They may be at default values (often insecure) or not exported.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>gw/reg_no_conn_info (Gateway Security)</li><li>icm/HTTPS/verify_client (Transport Security)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Export all profile parameters using RSPARAM or RZ10. Ensure the listed parameters are explicitly set to secure values.</div>
+                </div>
+        
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Network &amp; Service Exposure">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">RFC destinations with stored credentials</span>
+        <span class="finding-id">NET-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>7 RFC destination(s) have stored user credentials. Stored credentials in RFC destinations can be extracted and misused. This is especially dangerous for destinations with privileged users.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (7)</div>
+                  <ul class="affected-list"><li>SAP_ERP_PROD → user: RFC_ADMIN (auth type: STORED)</li><li>SAP_BW_SYSTEM → user: BW_RFC_USER (auth type: STORED)</li><li>ARIBA_CLOUD → user: ARIBA_INT (auth type: BASIC)</li><li>SF_EC_CONNECT → user: SF_API_USER (auth type: OAUTH)</li><li>VENDOR_PORTAL → user: VENDOR_RFC (auth type: STORED)</li><li>LEGACY_ECC → user: LEGACY_USER (auth type: STORED)</li><li>BANK_INTERFACE → user: BANK_RFC_USR (auth type: STORED)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Replace stored credentials with: (1) Trusted RFC connections, (2) SSO/certificate-based auth, or (3) SNC-secured connections. If stored creds are required, ensure the RFC user has minimal privileges.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1480644</li><li>CIS SAP Benchmark Section 4.2</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Network &amp; Service Exposure">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">RFC destinations without SNC encryption</span>
+        <span class="finding-id">NET-003</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>6 RFC destination(s) use connection types that transmit data without SNC encryption. Credentials and data may be interceptable.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (6)</div>
+                  <ul class="affected-list"><li>SAP_ERP_PROD (type: 3, SNC: disabled) — RFC via TCP/IP (Type 3) — verify SNC encryption</li><li>ARIBA_CLOUD (type: W, SNC: disabled) — WebRFC/HTTP — verify HTTPS and auth</li><li>SF_EC_CONNECT (type: W, SNC: disabled) — WebRFC/HTTP — verify HTTPS and auth</li><li>VENDOR_PORTAL (type: 3, SNC: disabled) — RFC via TCP/IP (Type 3) — verify SNC encryption</li><li>LEGACY_ECC (type: 3, SNC: disabled) — RFC via TCP/IP (Type 3) — verify SNC encryption</li><li>BANK_INTERFACE (type: T, SNC: disabled) — TCP/IP Connection — potentially unencrypted</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Enable SNC for all RFC destinations (type 3/T). For HTTP connections (type W), ensure HTTPS is used. Configure SNC with quality of protection &#x27;integrity + encryption&#x27;.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 2416093</li><li>CIS SAP Benchmark Section 4.1</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Network &amp; Service Exposure">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">High-risk ICF services are active</span>
+        <span class="finding-id">NET-004</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>10 high-risk ICF service(s) are active. These services can expose system information, enable remote code execution, or provide attack surfaces if publicly accessible.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (10)</div>
+                  <ul class="affected-list"><li>/sap/public/icman/ping — ICM ping — information disclosure</li><li>/sap/public/info — System info page — reveals version/kernel details</li><li>/sap/bc/soap/rfc — SOAP RFC gateway — remote function execution</li><li>/sap/bc/srt/rfc/sap — SRT RFC — web service RFC bridge</li><li>/sap/bc/gui/sap/its/webgui — WebGUI — full SAP GUI in browser (high risk if public)</li><li>/sap/bc/webrfc — WebRFC — HTTP-to-RFC bridge</li><li>/sap/bc/bsp/sap/it00 — ITS pages — legacy web interface</li><li>/sap/bc/soap/wsdl — WSDL exposure — service definition enumeration</li><li>/sap/bc/webdynpro — WebDynpro — may expose internal apps</li><li>/sap/public/icf_info/icr_groups — ICF group info — service enumeration</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Deactivate unnecessary ICF services via SICF. For required services, restrict access via ICF handler-level authentication and IP filtering. Document business justification for each active high-risk service.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1439348</li><li>CIS SAP Benchmark Section 5.1</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="RISE / BTP Security">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Sensitive APIs/OData services exposed</span>
+        <span class="finding-id">RISE-005</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>9 sensitive API endpoint(s) are published and accessible. These include financial, HR, or master data services that should have strict access controls.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (9)</div>
+                  <ul class="affected-list"><li>API_BUSINESS_PARTNER (/sap/opu/odata/sap/API_BUSINESS_PARTNER_SRV) — auth: oauth2</li><li>API_SALES_ORDER_SRV (/sap/opu/odata/sap/API_SALES_ORDER_SRV) — auth: basic</li><li>API_PURCHASEORDER_PROCESS_SRV (/sap/opu/odata/sap/API_PURCHASEORDER_PROCESS_SRV) — auth: oauth2</li><li>API_BILLING_DOCUMENT_SRV (/sap/opu/odata/sap/API_BILLING_DOCUMENT_SRV) — auth: none</li><li>API_JOURNAL_ENTRY_SRV (/sap/opu/odata/sap/API_JOURNAL_ENTRY_SRV) — auth: basic</li><li>API_MATERIAL_DOCUMENT_SRV (/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV) — auth: oauth2</li><li>API_COST_CENTER_SRV (/sap/opu/odata/sap/API_COST_CENTER_SRV) — auth: oauth2</li><li>API_PRODUCT_SRV (/sap/opu/odata/sap/API_PRODUCT_SRV) — auth: oauth2</li><li>HCM_EMPLOYEE_MASTER (/sap/opu/odata/sap/HCM_EMPLOYEE_MASTER_SRV) — auth: none</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Review each exposed API for business necessity. Disable services not actively consumed. Implement API Management (SAP APIM) with rate limiting, OAuth scopes, and IP restrictions for all sensitive endpoints.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP S/4HANA Cloud API Governance Guide</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="RISE / BTP Security">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">API endpoints with weak or no authentication</span>
+        <span class="finding-id">RISE-007</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>4 API endpoint(s) have weak or no authentication configured. In a RISE environment, all APIs should use OAuth 2.0 or certificate-based authentication.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (4)</div>
+                  <ul class="affected-list"><li>API_SALES_ORDER_SRV (/sap/opu/odata/sap/API_SALES_ORDER_SRV) — auth: basic</li><li>API_BILLING_DOCUMENT_SRV (/sap/opu/odata/sap/API_BILLING_DOCUMENT_SRV) — auth: none</li><li>API_JOURNAL_ENTRY_SRV (/sap/opu/odata/sap/API_JOURNAL_ENTRY_SRV) — auth: basic</li><li>HCM_EMPLOYEE_MASTER (/sap/opu/odata/sap/HCM_EMPLOYEE_MASTER_SRV) — auth: none</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Enforce OAuth 2.0 (client_credentials or authorization_code grant) for all API endpoints. Configure appropriate scopes. Use SAP API Management for centralized policy enforcement.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP BTP Security Guide — API Authentication</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="User &amp; Authorization">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Dormant accounts (90+ days inactive)</span>
+        <span class="finding-id">USR-003</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>15 active (unlocked) user account(s) have not logged in for over 90 days. Dormant accounts increase attack surface.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (15)</div>
+                  <ul class="affected-list"><li>SAP* (last logon: 20240115, 781d ago)</li><li>DDIC (last logon: 20241201, 460d ago)</li><li>TMSADM (last logon: 20241015, 507d ago)</li><li>JSMITH (last logon: 20250220, 379d ago)</li><li>AGARCIA (last logon: 20250301, 370d ago)</li><li>MWILSON (last logon: 20240801, 582d ago)</li><li>SVC_RFC_01 (last logon: 20250228, 371d ago)</li><li>RFC_BILLING (last logon: 20250115, 415d ago)</li><li>BATCH_FIN (last logon: 20250210, 389d ago)</li><li>INT_ARIBA (last logon: 20250101, 429d ago)</li><li>DLEE (last logon: 20250225, 374d ago)</li><li>TNGUYEN (last logon: 20241115, 476d ago)</li><li>API_GATEWAY (last logon: 20250228, 371d ago)</li><li>TECH_MONITOR (last logon: 20250301, 370d ago)</li><li>LWANG (last logon: 20250228, 371d ago)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Review and lock dormant accounts. Implement automated dormant account detection using SAP GRC or scheduled ABAP report RSUSR200. Establish a policy for periodic user access reviews.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>CIS SAP Benchmark Section 2.5</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="User &amp; Authorization">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Dialog users with stale passwords (&gt;180 days)</span>
+        <span class="finding-id">USR-008</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>12 dialog user(s) have not changed their password in over 180 days.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (12)</div>
+                  <ul class="affected-list"><li>SAP* (password age: 1009d)</li><li>DDIC (password age: 795d)</li><li>JSMITH (password age: 398d)</li><li>AGARCIA (password age: 384d)</li><li>MWILSON (password age: 795d)</li><li>SVC_RFC_01 (password age: 1009d)</li><li>RFC_BILLING (password age: 795d)</li><li>BATCH_FIN (password age: 979d)</li><li>INT_ARIBA (password age: 735d)</li><li>DLEE (password age: 379d)</li><li>TNGUYEN (password age: 1040d)</li><li>LWANG (password age: 384d)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Enforce password rotation via profile parameter login/password_max_idle_initial and login/password_expiration_time. Consider SSO/certificate-based auth to reduce password dependency.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1731549</li><li>CIS SAP Benchmark Section 2.8</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Password Policy">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Parameter login/min_password_digits non-compliant</span>
+        <span class="finding-id">PARAM-login/min_password_digits</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>Passwords should require at least 1 digit. Current value: &#x27;0&#x27;, Expected: &gt;= &#x27;1&#x27;</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>login/min_password_digits = 0</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Set login/min_password_digits &gt;= 1 in RZ10</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>CIS SAP Benchmark 1.1.2</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Password Policy">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Parameter login/min_password_specials non-compliant</span>
+        <span class="finding-id">PARAM-login/min_password_specials</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>Passwords should require at least 1 special character. Current value: &#x27;0&#x27;, Expected: &gt;= &#x27;1&#x27;</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>login/min_password_specials = 0</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Set login/min_password_specials &gt;= 1 in RZ10</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>CIS SAP Benchmark 1.1.4</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Password Policy">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Parameter login/password_expiration_time non-compliant</span>
+        <span class="finding-id">PARAM-login/password_expiration_time</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>Password expiration should be 90 days or less. Current value: &#x27;180&#x27;, Expected: &lt;= &#x27;90&#x27;</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>login/password_expiration_time = 180</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Set login/password_expiration_time &lt;= 90 in RZ10</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>CIS SAP Benchmark 1.1.6</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Password Policy">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Parameter login/password_max_idle_initial non-compliant</span>
+        <span class="finding-id">PARAM-login/password_max_idle_initial</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>Initial passwords should expire within 14 days if unused. Current value: &#x27;30&#x27;, Expected: &lt;= &#x27;14&#x27;</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>login/password_max_idle_initial = 30</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Set login/password_max_idle_initial &lt;= 14</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>CIS SAP Benchmark 1.1.7</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="RFC Security">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Parameter rfc/allowoldticket4tt non-compliant</span>
+        <span class="finding-id">PARAM-rfc/allowoldticket4tt</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>Should disable old-format RFC tickets (weaker crypto). Current value: &#x27;1&#x27;, Expected: == &#x27;0&#x27;</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>rfc/allowoldticket4tt = 1</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Set rfc/allowoldticket4tt = 0</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 2416093</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Network &amp; Service Exposure">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">RFC destinations to external/non-RFC hosts</span>
+        <span class="finding-id">NET-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>6 RFC destination(s) point to hosts outside recognized internal IP ranges. Verify these are legitimate and encrypted (SNC/TLS).</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (6)</div>
+                  <ul class="affected-list"><li>ARIBA_CLOUD → ariba.cloud.sap.com (type: W)</li><li>SF_EC_CONNECT → api.successfactors.com (type: W)</li><li>VENDOR_PORTAL → 203.0.113.55 (type: 3)</li><li>LEGACY_ECC → 198.51.100.22 (type: 3)</li><li>BTP_DESTINATION → mysubaccount.authentication.eu10.hana.ondemand.com (type: W)</li><li>BANK_INTERFACE → 192.0.2.100 (type: T)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Review each external RFC destination for business justification. Ensure SNC or TLS encryption is enabled. Remove any destinations that are no longer needed.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1480644</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="RISE / BTP Security">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Default SAP IDP trust still active: sap.default</span>
+        <span class="finding-id">RISE-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>The default SAP identity provider &#x27;sap.default&#x27; is still active. If a custom corporate IDP is configured, the default should be disabled to prevent bypass via SAP ID Service accounts.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>Trust: SAP ID Service (origin: sap.default)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Disable the default SAP IDP trust in the BTP subaccount security settings once your corporate IDP is configured and tested. Navigate to: BTP Cockpit → Subaccount → Security → Trust Configuration.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP BTP Security Guide — Trust Configuration</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="RISE / BTP Security">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Automatic shadow user creation enabled for SAP ID Service</span>
+        <span class="finding-id">RISE-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>Trust &#x27;SAP ID Service&#x27; has automatic shadow user creation enabled. Any user authenticating via this IDP will automatically get a BTP shadow user, potentially granting unintended access.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>Trust: SAP ID Service — auto_create_shadow_users = true</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Disable automatic shadow user creation unless required. Instead, provision users explicitly via BTP User Management or SCIM-based provisioning with proper approval workflows.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP BTP Security Recommendations — Shadow Users</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="RISE / BTP Security">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Automatic shadow user creation enabled for Corporate Azure AD</span>
+        <span class="finding-id">RISE-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>Trust &#x27;Corporate Azure AD&#x27; has automatic shadow user creation enabled. Any user authenticating via this IDP will automatically get a BTP shadow user, potentially granting unintended access.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>Trust: Corporate Azure AD — auto_create_shadow_users = true</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Disable automatic shadow user creation unless required. Instead, provision users explicitly via BTP User Management or SCIM-based provisioning with proper approval workflows.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP BTP Security Recommendations — Shadow Users</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="RISE / BTP Security">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Communication arrangements with excessive service scope</span>
+        <span class="finding-id">RISE-003</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>1 communication arrangement(s) expose more than 10 services each. Overly broad arrangements increase the attack surface if the communication user is compromised.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>SF_EMPLOYEE_SYNC (scenario: SAP_COM_0008, 12 services)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Review each arrangement and restrict to only required services. Create separate arrangements for different integration scenarios. Apply principle of least privilege to communication scenarios.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP S/4HANA Cloud Security Guide — Communication Management</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="RISE / BTP Security">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Communication users shared across many arrangements</span>
+        <span class="finding-id">RISE-006</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>1 communication user(s) are reused across more than 3 arrangements. Shared communication users make it difficult to trace API activity and increase blast radius if compromised.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>SF_COMM_USER — used in 4 arrangements: SF_EMPLOYEE_SYNC, VENDOR_INVOICE_API, CRM_INTEGRATION, TAX_ENGINE</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Create dedicated communication users per integration scenario or external system. This enables granular audit trails and limits the impact of credential compromise.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP S/4HANA Cloud Security Guide</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="LOW" data-category="User &amp; Authorization">
+      <div class="finding-header">
+        <span class="sev-badge LOW">LOW</span>
+        <span class="finding-title">Active accounts that have never logged in</span>
+        <span class="finding-id">USR-007</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 unlocked account(s) have no recorded logon. These may be orphaned provisioning artifacts or pre-staged accounts.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>SAPCPIC (created: 20190101)</li><li>KPATEL (created: 20250101)</li><li>RMARTINEZ (created: 20250115)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Verify account necessity with business owners. Lock or delete unused accounts.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>CIS SAP Benchmark Section 2.5</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="LOW" data-category="Password Policy">
+      <div class="finding-header">
+        <span class="sev-badge LOW">LOW</span>
+        <span class="finding-title">Parameter login/password_history_size non-compliant</span>
+        <span class="finding-id">PARAM-login/password_history_size</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>Password history should prevent reuse of last 5+ passwords. Current value: &#x27;3&#x27;, Expected: &gt;= &#x27;5&#x27;</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>login/password_history_size = 3</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Set login/password_history_size &gt;= 5</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>CIS SAP Benchmark 1.1.8</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="LOW" data-category="Login Security">
+      <div class="finding-header">
+        <span class="sev-badge LOW">LOW</span>
+        <span class="finding-title">Parameter login/disable_multi_gui_login non-compliant</span>
+        <span class="finding-id">PARAM-login/disable_multi_gui_login</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>Should disable multiple GUI sessions per user. Current value: &#x27;0&#x27;, Expected: == &#x27;1&#x27;</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>login/disable_multi_gui_login = 0</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Set login/disable_multi_gui_login = 1</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>CIS SAP Benchmark 1.2.6</li></ul>
+                </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    SAP S/4HANA RISE Security Scanner &middot; Generated 2026-03-06T07:34:59 &middot;
+    For authorized security assessments only
+  </div>
+</div>
+
+<script>
+// Toggle finding details
+document.querySelectorAll('.finding-header').forEach(el => {
+  el.addEventListener('click', () => {
+    el.parentElement.classList.toggle('open');
+  });
+});
+
+// Severity filter
+function filterFindings(sev) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  document.querySelectorAll('.finding-card').forEach(card => {
+    if (sev === 'ALL' || card.dataset.severity === sev) {
+      card.style.display = '';
+    } else {
+      card.style.display = 'none';
+    }
+  });
+}
+
+// Expand all for print
+window.addEventListener('beforeprint', () => {
+  document.querySelectorAll('.finding-card').forEach(c => c.classList.add('open'));
+});
+</script>
+</body>
+</html>

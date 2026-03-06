@@ -1,0 +1,13 @@
+{
+  "endpoints": [
+    {"name": "API_BUSINESS_PARTNER", "url": "/sap/opu/odata/sap/API_BUSINESS_PARTNER_SRV", "status": "ACTIVE", "authentication": "oauth2"},
+    {"name": "API_SALES_ORDER_SRV", "url": "/sap/opu/odata/sap/API_SALES_ORDER_SRV", "status": "ACTIVE", "authentication": "basic"},
+    {"name": "API_PURCHASEORDER_PROCESS_SRV", "url": "/sap/opu/odata/sap/API_PURCHASEORDER_PROCESS_SRV", "status": "ACTIVE", "authentication": "oauth2"},
+    {"name": "API_BILLING_DOCUMENT_SRV", "url": "/sap/opu/odata/sap/API_BILLING_DOCUMENT_SRV", "status": "ACTIVE", "authentication": "none"},
+    {"name": "API_JOURNAL_ENTRY_SRV", "url": "/sap/opu/odata/sap/API_JOURNAL_ENTRY_SRV", "status": "ACTIVE", "authentication": "basic"},
+    {"name": "API_MATERIAL_DOCUMENT_SRV", "url": "/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV", "status": "ACTIVE", "authentication": "oauth2"},
+    {"name": "API_COST_CENTER_SRV", "url": "/sap/opu/odata/sap/API_COST_CENTER_SRV", "status": "ACTIVE", "authentication": "oauth2"},
+    {"name": "API_PRODUCT_SRV", "url": "/sap/opu/odata/sap/API_PRODUCT_SRV", "status": "ACTIVE", "authentication": "oauth2"},
+    {"name": "HCM_EMPLOYEE_MASTER", "url": "/sap/opu/odata/sap/HCM_EMPLOYEE_MASTER_SRV", "status": "ACTIVE", "authentication": "none"}
+  ]
+}
