@@ -1,0 +1,14 @@
+{
+  "dataStores": [
+    {"name": "payment_token_cache", "entryCount": 250, "encrypted": false},
+    {"name": "idoc_retry_queue", "entryCount": 15400, "encrypted": false},
+    {"name": "bank_credentials_staging", "entryCount": 12, "encrypted": false},
+    {"name": "order_correlation", "entryCount": 800, "encrypted": true}
+  ],
+  "variables": [
+    {"name": "SF_API_Password", "value": "***"},
+    {"name": "processing_counter", "value": "4521"},
+    {"name": "bank_secret_key", "value": "***"},
+    {"name": "last_sync_date", "value": "2025-03-01"}
+  ]
+}

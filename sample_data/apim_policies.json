@@ -1,0 +1,10 @@
+{
+  "proxies": [
+    {"name": "BusinessPartner_API", "basePath": "/api/v1/bp", "target": "https://s4h.company.com/sap/opu/odata/sap/API_BUSINESS_PARTNER", "policies": ["oauth_v2", "spike_arrest", "cors"], "tlsEnforced": true, "minTlsVersion": "1.2", "active": true},
+    {"name": "SalesOrder_API", "basePath": "/api/v1/sales", "target": "https://s4h.company.com/sap/opu/odata/sap/API_SALES_ORDER_SRV", "policies": ["verify_api_key"], "tlsEnforced": true, "minTlsVersion": "1.2", "active": true},
+    {"name": "Payment_API", "basePath": "/api/v1/payments", "target": "https://s4h.company.com/sap/opu/odata/sap/API_PAYMENT", "policies": [], "tlsEnforced": false, "minTlsVersion": "1.0", "active": true},
+    {"name": "Legacy_Vendor_Proxy", "basePath": "/api/legacy/vendor", "target": "http://ecc.company.com/sap/bc/webrfc", "policies": ["verify_api_key", "quota"], "tlsEnforced": false, "active": true},
+    {"name": "Internal_Test_API", "basePath": "/api/test", "target": "https://dev.company.com/test", "policies": [], "tlsEnforced": false, "active": true},
+    {"name": "HR_Employee_API", "basePath": "/api/v1/hr/employee", "target": "https://sf.company.com/odata/v2/Employee", "policies": ["oauth_v2", "spike_arrest", "threat_protection", "quota", "cors"], "tlsEnforced": true, "minTlsVersion": "1.2", "active": true}
+  ]
+}

@@ -65,6 +65,18 @@ class DataLoader:
         "cpi_artifacts":        ["cpi_artifacts.json", "cpi_security.json"],
         "btp_network":          ["btp_network.json", "private_link.json"],
         "btp_subaccounts":      ["btp_subaccounts.json", "subaccounts.json"],
+        # Network & Integration Layer data sources
+        "apim_policies":        ["apim_policies.json", "api_proxies.json"],
+        "idoc_ports":           ["idoc_ports.csv", "we21.csv"],
+        "idoc_partners":        ["idoc_partners.csv", "we20.csv"],
+        "ws_endpoints":         ["ws_endpoints.csv", "soamanager.csv"],
+        "webhooks":             ["webhooks.json", "callbacks.json"],
+        "gw_secinfo":           ["gw_secinfo.csv", "secinfo.csv"],
+        "gw_reginfo":           ["gw_reginfo.csv", "reginfo.csv"],
+        "integration_alerts":   ["integration_alerts.json", "alert_config.json"],
+        "cpi_datastores":       ["cpi_datastores.json", "cpi_variables.json"],
+        "oauth_clients":        ["oauth_clients.json", "xsuaa_clients.json"],
+        "integration_topology": ["integration_topology.json", "system_map.json"],
     }
 
     def __init__(self, data_dir: Path):

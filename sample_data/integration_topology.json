@@ -1,0 +1,18 @@
+{
+  "connections": [
+    {"source": "S4HANA_PROD", "target": "CPI_BROKER", "protocol": "HTTPS", "encrypted": true},
+    {"source": "CPI_BROKER", "target": "SuccessFactors", "protocol": "HTTPS", "encrypted": true},
+    {"source": "CPI_BROKER", "target": "Ariba_Cloud", "protocol": "HTTPS", "encrypted": true},
+    {"source": "S4HANA_PROD", "target": "BW4HANA", "protocol": "RFC", "encrypted": true},
+    {"source": "S4HANA_PROD", "target": "ECC_LEGACY", "protocol": "RFC", "encrypted": false},
+    {"source": "S4HANA_PROD", "target": "BANK_GATEWAY", "protocol": "SFTP", "encrypted": true},
+    {"source": "CPI_BROKER", "target": "VENDOR_PORTAL", "protocol": "HTTP", "encrypted": false},
+    {"source": "ECC_LEGACY", "target": "CPI_BROKER", "protocol": "HTTP", "encrypted": false},
+    {"source": "S4HANA_PROD", "target": "SAP_ANALYTICS", "protocol": "HTTPS", "encrypted": true},
+    {"source": "S4HANA_PROD", "target": "CRM_OLD_5.0", "protocol": "RFC", "encrypted": false},
+    {"source": "BTP_PORTAL", "target": "S4HANA_PROD", "protocol": "HTTPS", "encrypted": true},
+    {"source": "BTP_PORTAL", "target": "CPI_BROKER", "protocol": "HTTPS", "encrypted": true},
+    {"source": "S4HANA_PROD", "target": "TAX_ENGINE", "protocol": "HTTPS", "encrypted": true},
+    {"source": "S4HANA_PROD", "target": "EDI_GATEWAY", "protocol": "FTP", "encrypted": false}
+  ]
+}

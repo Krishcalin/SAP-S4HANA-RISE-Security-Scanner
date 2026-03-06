@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat-square" alt="Zero Dependencies"/>
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="MIT License"/>
   <img src="https://img.shields.io/badge/SAP-S%2F4HANA%20RISE-0FAAFF?style=flat-square&logo=sap&logoColor=white" alt="SAP S/4HANA"/>
-  <img src="https://img.shields.io/badge/checks-96%2B-red?style=flat-square" alt="96+ Checks"/>
+  <img src="https://img.shields.io/badge/checks-123%2B-red?style=flat-square" alt="96+ Checks"/>
 </p>
 
 ---
@@ -22,7 +22,7 @@
 
 - **No direct system connection required** — ideal for RISE environments with restricted RFC access
 - **Zero external dependencies** — runs on Python 3.8+ stdlib only
-- **96+ security checks** across 6 audit modules
+- **123+ security checks across 7 audit modules
 - **CIS SAP Benchmark aligned** — checks mapped to industry-standard baselines
 
 ---
@@ -37,6 +37,7 @@
 | 🌐 **Network & Services** | NET-001→008 | RFC destinations, ICF services, transports, audit config |
 | ☁️ **RISE / BTP Core** | RISE-001→007 | Trust config, comm arrangements, API exposure |
 | 🔥 **BTP Cloud Attack Surface** | BTP-CC/SB/DST/IAS/ENT/EM/CPI/NET/GOV/MIG (29) | Cloud Connector, service bindings, destinations, IAS, Event Mesh, CPI, network isolation |
+| 🔗 **Network & Integration Layer** | INTG-APIM/IDOC/WS/WH/GW/MON/CPI/OAUTH/TOPO (27) | API Management, IDOC ports, web services, webhooks, gateway ACLs, OAuth, topology |
 
 <details>
 <summary><strong>🔥 BTP Cloud Attack Surface — Full Check List (NEW)</strong></summary>
@@ -115,6 +116,79 @@
 
 </details>
 
+<details>
+<summary><strong>🔗 Network & Integration Layer — Full Check List (NEW)</strong></summary>
+
+### API Management (INTG-APIM-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| INTG-APIM-001 | API proxies missing required security policies | HIGH |
+| INTG-APIM-002 | API proxies without authentication policies | CRITICAL |
+| INTG-APIM-003 | API proxies allowing unencrypted HTTP | HIGH |
+| INTG-APIM-004 | API proxies allowing deprecated TLS versions | HIGH |
+| INTG-APIM-005 | API proxies in pass-through mode (zero policies) | CRITICAL |
+
+### IDOC Port & Partner Security (INTG-IDOC-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| INTG-IDOC-001 | IDOC ports without encryption (TLS/SNC) | HIGH |
+| INTG-IDOC-002 | IDOC file ports with insecure directories | MEDIUM |
+| INTG-IDOC-003 | IDOC partners with wildcard message types | HIGH |
+| INTG-IDOC-004 | IDOC partners handling sensitive message types | MEDIUM |
+
+### Web Services / SOAMANAGER (INTG-WS-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| INTG-WS-001 | High-risk BAPIs/RFCs exposed as web services | HIGH |
+| INTG-WS-002 | Excessive active web service endpoints | MEDIUM |
+| INTG-WS-003 | Web services with weak/no authentication | CRITICAL |
+
+### Webhook & Callback Security (INTG-WH-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| INTG-WH-001 | Webhook callbacks using unencrypted HTTP | HIGH |
+| INTG-WH-002 | Webhooks without HMAC signature verification | HIGH |
+| INTG-WH-003 | Webhooks delivering to external endpoints | MEDIUM |
+| INTG-WH-004 | Stale webhook registrations | LOW |
+
+### Gateway ACL Deep Analysis (INTG-GW-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| INTG-GW-001 | Secinfo with overly permissive permit rules | CRITICAL |
+| INTG-GW-002 | Secinfo missing deny-all default rule | HIGH |
+| INTG-GW-003 | Secinfo permits external program execution | HIGH |
+| INTG-GW-004 | Reginfo permits unrestricted RFC registration | CRITICAL |
+| INTG-GW-005 | Reginfo missing deny-all default rule | HIGH |
+
+### Integration Monitoring (INTG-MON-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| INTG-MON-001 | Missing integration monitoring alert rules | HIGH |
+| INTG-MON-002 | Integration events not forwarded to SIEM | MEDIUM |
+
+### CPI Data Stores (INTG-CPI-DS-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| INTG-CPI-DS-001 | Data stores with sensitive names, no encryption | HIGH |
+| INTG-CPI-DS-002 | Global variables with potentially sensitive names | MEDIUM |
+| INTG-CPI-DS-003 | Data stores with excessive entries | LOW |
+
+### OAuth Client Governance (INTG-OAUTH-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| INTG-OAUTH-001 | OAuth clients with admin/wildcard scopes | HIGH |
+| INTG-OAUTH-002 | OAuth clients using deprecated grant types | HIGH |
+| INTG-OAUTH-003 | OAuth clients unused for 180+ days | MEDIUM |
+
+### Integration Topology (INTG-TOPO-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| INTG-TOPO-001 | Integration connections without encryption | HIGH |
+| INTG-TOPO-002 | Hub systems with excessive connections | MEDIUM |
+| INTG-TOPO-003 | Connections to deprecated/legacy systems | MEDIUM |
+
+</details>
+
 ---
 
 ## Quick Start
@@ -146,6 +220,7 @@ network   — Network & Service Exposure (NET-*)
 rise      — RISE / BTP Core (RISE-*)
 iam       — Advanced IAM (IAM-*)
 btpcloud  — BTP Cloud Attack Surface (BTP-*)
+intglayer — Network & Integration Layer (INTG-*)
 all       — Run everything (default)
 ```
 
@@ -205,7 +280,8 @@ SAP-S4HANA-RISE-Security-Scanner/
 │   ├── security_params.py          # PARAM-* checks
 │   ├── network_services.py         # NET-* checks
 │   ├── rise_btp_checks.py          # RISE-* checks
-│   ├── btp_cloud_surface.py        # BTP-* checks (NEW)
+│   ├── btp_cloud_surface.py        # BTP-* checks
+│   ├── integration_layer.py        # INTG-* checks (NEW)
 │   └── report_generator.py         # HTML dashboard
 ├── sample_data/                    # 25+ demo files
 ├── docs/

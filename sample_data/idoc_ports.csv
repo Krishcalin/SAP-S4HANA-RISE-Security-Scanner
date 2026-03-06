@@ -1,0 +1,9 @@
+PORT,PORT_TYPE,DIRECTION,HOST,TLS,SNC,FILE_PATH
+TRFC_ARIBA,TRFC,OUTBOUND,ariba.cloud.sap.com,0,0,
+HTTP_SF,HTTP,OUTBOUND,api.successfactors.com,1,,
+FILE_BANK,FILE,INBOUND,,,,/tmp/idoc_bank/inbound
+TRFC_ECC,TRFC,BOTH,10.0.2.100,0,0,
+HTTP_CPI,HTTP,OUTBOUND,cpi.eu10.hana.ondemand.com,1,,
+FILE_ARCHIVE,FILE,OUTBOUND,,,,/sapmnt/PRD/idoc_archive
+XML_VENDOR,XML_HTTP,INBOUND,vendor-portal.example.com,0,,
+TRFC_BW,TRFC,OUTBOUND,10.0.1.60,0,1,

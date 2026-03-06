@@ -509,9 +509,9 @@
       <div class="subtitle">Security Assessment Report</div>
     </div>
     <div class="header-right">
-      <span>Scan: 2026-03-06T10:16:57</span>
+      <span>Scan: 2026-03-06T10:36:07</span>
       <span>Source: sample_data</span>
-      <span>Modules: users, params, network, rise, iam, btpcloud</span>
+      <span>Modules: users, params, network, rise, iam, btpcloud, intglayer</span>
     </div>
   </div>
 
@@ -535,19 +535,19 @@
 
     <div class="severity-grid">
       <div class="sev-card critical">
-        <div class="sev-count">18</div>
+        <div class="sev-count">21</div>
         <div class="sev-label">Critical</div>
       </div>
       <div class="sev-card high">
-        <div class="sev-count">39</div>
+        <div class="sev-count">54</div>
         <div class="sev-label">High</div>
       </div>
       <div class="sev-card medium">
-        <div class="sev-count">30</div>
+        <div class="sev-count">37</div>
         <div class="sev-label">Medium</div>
       </div>
       <div class="sev-card low">
-        <div class="sev-count">9</div>
+        <div class="sev-count">11</div>
         <div class="sev-label">Low</div>
       </div>
     </div>
@@ -562,6 +562,12 @@
         <div class="cat-bar-label">BTP Cloud Attack Surface</div>
         <div class="cat-bar-track"><div class="cat-bar-fill" style="width: 100.0%"></div></div>
         <div class="cat-bar-count">29</div>
+      </div>
+
+      <div class="cat-bar-row">
+        <div class="cat-bar-label">Network &amp; Integration Layer</div>
+        <div class="cat-bar-track"><div class="cat-bar-fill" style="width: 93.10344827586206%"></div></div>
+        <div class="cat-bar-count">27</div>
       </div>
 
       <div class="cat-bar-row">
@@ -641,16 +647,16 @@
   <!-- Filter Bar -->
   <div class="filter-bar">
     <label>Filter:</label>
-    <button class="filter-btn active" onclick="filterFindings('ALL')">All (96)</button>
-    <button class="filter-btn" onclick="filterFindings('CRITICAL')">Critical (18)</button>
-    <button class="filter-btn" onclick="filterFindings('HIGH')">High (39)</button>
-    <button class="filter-btn" onclick="filterFindings('MEDIUM')">Medium (30)</button>
-    <button class="filter-btn" onclick="filterFindings('LOW')">Low (9)</button>
+    <button class="filter-btn active" onclick="filterFindings('ALL')">All (123)</button>
+    <button class="filter-btn" onclick="filterFindings('CRITICAL')">Critical (21)</button>
+    <button class="filter-btn" onclick="filterFindings('HIGH')">High (54)</button>
+    <button class="filter-btn" onclick="filterFindings('MEDIUM')">Medium (37)</button>
+    <button class="filter-btn" onclick="filterFindings('LOW')">Low (11)</button>
   </div>
 
   <!-- Findings -->
   <div class="findings-section">
-    <h2>Detailed Findings (96)</h2>
+    <h2>Detailed Findings (123)</h2>
     
     <div class="finding-card" data-severity="CRITICAL" data-category="User &amp; Authorization">
       <div class="finding-header">
@@ -1188,6 +1194,96 @@
                 <div class="finding-section">
                   <div class="finding-section-title">References</div>
                   <ul class="ref-list"><li>SAP CPI — Security Material Externalization</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">API proxies without authentication policies</span>
+        <span class="finding-id">INTG-APIM-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 API proxy/proxies have no authentication policy (OAuth 2.0 or API key verification). Unauthenticated APIs are fully exposed to any caller.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>Payment_API (/api/v1/payments) — no authentication policy</li><li>Internal_Test_API (/api/test) — no authentication policy</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Add OAuth 2.0 token validation (OAuthV2 policy) or API key verification (VerifyAPIKey policy) to every API proxy. Prefer OAuth 2.0 for production APIs.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>OWASP API Security — API2:2023 Broken Authentication</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">API proxies operating in pass-through mode (zero policies)</span>
+        <span class="finding-id">INTG-APIM-005</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 API proxy/proxies have no policies applied. These are pure pass-through proxies that provide no security value — no authentication, no rate limiting, no threat protection.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>Payment_API (/api/v1/payments) → https://s4h.company.com/sap/opu/odata/sap/API_PAYMENT</li><li>Internal_Test_API (/api/test) → https://dev.company.com/test</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Apply at minimum: authentication (OAuth/API key), rate limiting, and threat protection policies. If the proxy is unused, undeploy it.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>OWASP API Security Top 10</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">Web service endpoints with weak/no authentication</span>
+        <span class="finding-id">INTG-WS-003</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 active web service endpoint(s) have no authentication or rely only on transport-level security. Any network-reachable caller can invoke these services.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>BAPI_COMPANYCODE_GETLIST — auth: NONE, transport: HTTPS</li><li>RFC_SYSTEM_INFO — auth: TRANSPORT, transport: HTTP</li><li>SXMB_MESSAGE_SEND — auth: ANONYMOUS, transport: HTTPS</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Configure message-level authentication (WS-Security with X.509 certificates, SAML tokens, or username/password with TLS). Never rely solely on transport-level (network) security.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1503579 — SOAMANAGER Authentication</li></ul>
                 </div>
       </div>
     </div>
@@ -2358,6 +2454,456 @@
       </div>
     </div>
 
+    <div class="finding-card" data-severity="HIGH" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">API proxies missing required security policies</span>
+        <span class="finding-id">INTG-APIM-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>6 API proxy/proxies are missing one or more required security policies. Without rate limiting, threat protection, and authentication, APIs are vulnerable to abuse, injection attacks, and unauthorized access.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (6)</div>
+                  <ul class="affected-list"><li>BusinessPartner_API (/api/v1/bp) — missing: quota, verify_api_key, threat_protection</li><li>SalesOrder_API (/api/v1/sales) — missing: spike_arrest, quota, oauth_v2, threat_protection, cors</li><li>Payment_API (/api/v1/payments) — missing: spike_arrest, quota, verify_api_key, oauth_v2, threat_protection, cors</li><li>Legacy_Vendor_Proxy (/api/legacy/vendor) — missing: spike_arrest, oauth_v2, threat_protection, cors</li><li>Internal_Test_API (/api/test) — missing: spike_arrest, quota, verify_api_key, oauth_v2, threat_protection, cors</li><li>HR_Employee_API (/api/v1/hr/employee) — missing: verify_api_key</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Apply all required policies to every API proxy: spike_arrest (rate limiting), threat_protection (JSON/XML injection), oauth_v2 or verify_api_key (authentication), quota (usage limits), and cors (cross-origin restriction). Use API Management policy templates for consistent enforcement.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP API Management — Security Policy Best Practices</li><li>OWASP API Security Top 10</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">API proxies allowing unencrypted HTTP traffic</span>
+        <span class="finding-id">INTG-APIM-003</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 API proxy/proxies do not enforce HTTPS. API traffic over HTTP exposes authentication tokens, business data, and credentials to network interception.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>Payment_API (/api/v1/payments) — HTTPS not enforced</li><li>Legacy_Vendor_Proxy (/api/legacy/vendor) — HTTPS not enforced</li><li>Internal_Test_API (/api/test) — HTTPS not enforced</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Enable HTTPS-only mode on all API proxies. Configure virtual hosts to reject HTTP connections. Redirect HTTP to HTTPS as a transitional measure.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP API Management — TLS Configuration</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">API proxies allowing deprecated TLS versions</span>
+        <span class="finding-id">INTG-APIM-004</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>1 API proxy/proxies allow TLS 1.0 or 1.1, which are deprecated and have known vulnerabilities (BEAST, POODLE).</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>Payment_API (/api/v1/payments) — min TLS: 1.0 (should be 1.2+)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Set minimum TLS version to 1.2 across all API proxies. Prefer TLS 1.3 where client compatibility allows. Disable TLS 1.0/1.1 at the API Management platform level.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>NIST SP 800-52 Rev 2 — TLS Guidelines</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">IDOC ports without encryption (no TLS/SNC)</span>
+        <span class="finding-id">INTG-IDOC-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 IDOC port(s) transmit data without encryption. IDOC payloads often contain sensitive business data (orders, invoices, HR records) that should be encrypted in transit.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>TRFC_ARIBA (type: TRFC) — RFC without SNC, host: ariba.cloud.sap.com</li><li>TRFC_ECC (type: TRFC) — RFC without SNC, host: 10.0.2.100</li><li>XML_VENDOR (type: XML_HTTP) — HTTP without TLS, host: vendor-portal.example.com</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Enable TLS on all HTTP/XML IDOC ports. Enable SNC on all RFC-based IDOC ports. Verify certificate validity on both ends.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 2416093 — Secure RFC/IDOC Communication</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">IDOC partner profiles with wildcard message types</span>
+        <span class="finding-id">INTG-IDOC-003</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 partner profile(s) accept all IDOC message types. This allows any IDOC type to be sent/received, bypassing message-type-level authorization.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>Partner: SF_EC (LS) — message type: * (direction: INBOUND)</li><li>Partner: ECC_LEGACY (LS) — message type: ALL (direction: BOTH)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Restrict each partner profile to specific message types required for the business integration. Remove wildcard entries. Document each message type assignment with business justification.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP IDOC — Partner Profile Authorization</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">High-risk BAPIs/RFCs exposed as web services</span>
+        <span class="finding-id">INTG-WS-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>6 active web service endpoint(s) expose high-risk function modules (user management, arbitrary table reads, financial postings). These can be exploited remotely if authentication is weak.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (6)</div>
+                  <ul class="affected-list"><li>BAPI_USER_GET_DETAIL (binding: UserGet_WS) — auth: BASIC, transport: HTTPS</li><li>BAPI_COMPANYCODE_GETLIST (binding: CompanyCode_WS) — auth: NONE, transport: HTTPS</li><li>RFC_READ_TABLE (binding: ReadTable_WS) — auth: BASIC, transport: HTTP</li><li>BAPI_ACC_DOCUMENT_POST (binding: AccDoc_WS) — auth: X509, transport: HTTPS</li><li>RFC_SYSTEM_INFO (binding: SysInfo_WS) — auth: TRANSPORT, transport: HTTP</li><li>SXMB_MESSAGE_SEND (binding: XIMsg_WS) — auth: ANONYMOUS, transport: HTTPS</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Deactivate unnecessary web service endpoints via SOAMANAGER. For required endpoints, enforce strong authentication (X.509 or OAuth). Restrict access to specific consumer IP ranges. Prefer OData/REST services with proper scope controls over raw BAPI WS.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1503579 — SOAMANAGER Security</li><li>OWASP — Web Service Security Cheat Sheet</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Webhook callbacks using unencrypted HTTP</span>
+        <span class="finding-id">INTG-WH-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 webhook(s) send event payloads over plain HTTP. Webhook payloads contain business event data and potentially authentication tokens that can be intercepted.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>Vendor_Updated → http://middleware.company.com/hooks/vendor — unencrypted HTTP</li><li>Legacy_ERP_Sync → http://10.0.2.100:8080/callback/erp — unencrypted HTTP</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Update all webhook callback URLs to use HTTPS. Reject HTTP callback registrations at the platform level.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>OWASP — Webhook Security Best Practices</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Webhooks without signature/HMAC verification</span>
+        <span class="finding-id">INTG-WH-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>4 webhook(s) do not use signature verification. Without HMAC/signature validation, receivers cannot verify that webhook payloads are authentic, enabling replay and spoofing attacks.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (4)</div>
+                  <ul class="affected-list"><li>Vendor_Updated → http://middleware.company.com/hooks/vendor — no HMAC/signature validation</li><li>Invoice_Approved → https://ariba.procurement.com/callback/invoice — no HMAC/signature validation</li><li>Legacy_ERP_Sync → http://10.0.2.100:8080/callback/erp — no HMAC/signature validation</li><li>Test_Hook_Old → https://test.company.com/hooks/test — no HMAC/signature validation</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Configure HMAC (SHA-256) signature on all webhook registrations. Receiving endpoints must validate the signature header before processing the payload. Use a unique secret per registration.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>OWASP — Webhook Signature Verification</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Gateway secinfo missing deny-all default rule</span>
+        <span class="finding-id">INTG-GW-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>The gateway secinfo configuration does not contain a default deny-all rule. Without explicit denial, undefined access may be implicitly allowed depending on gateway configuration.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>secinfo — no deny-all default found</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Add &#x27;D *  *  *&#x27; (deny all) as the last rule in secinfo. Then add specific permit rules above it for required access.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1408081 — Gateway Security Configuration</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Gateway reginfo missing deny-all default rule</span>
+        <span class="finding-id">INTG-GW-005</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>The gateway reginfo does not have a default deny-all rule. Without it, unrecognized RFC servers may be able to register.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>reginfo — no deny-all default found</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Add &#x27;D *  *&#x27; as the last line in reginfo.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1408081</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Missing integration monitoring alert rules</span>
+        <span class="finding-id">INTG-MON-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>4 required alert rule category/categories are not configured. Without proper alerting, integration failures and security events go undetected.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (4)</div>
+                  <ul class="affected-list"><li>idoc_failure: IDOC processing failures</li><li>auth_failure: Authentication/authorization failures on APIs</li><li>rfc_error: RFC communication failures</li><li>quota_exceeded: API quota/rate limit exceeded</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Configure alerts for all critical integration events using SAP Alert Notification Service or equivalent. At minimum: iFlow errors, IDOC failures, auth failures, certificate expiry, RFC errors, and quota breaches.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP BTP Alert Notification Service — Configuration Guide</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">CPI data stores with sensitive data names but no encryption</span>
+        <span class="finding-id">INTG-CPI-DS-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 CPI data store(s) have names suggesting sensitive content but are not marked as encrypted. Data store contents are accessible via CPI OData API.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>payment_token_cache — entries: 250, encrypted: False</li><li>bank_credentials_staging — entries: 12, encrypted: False</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Enable encryption for all data stores containing sensitive data. Use the CPI Security Material for credential storage instead. Minimize data store retention periods.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP CPI — Data Store Security</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">OAuth clients with admin-level or wildcard scopes</span>
+        <span class="finding-id">INTG-OAUTH-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 OAuth client(s) have overly broad scope assignments. Compromised client credentials with admin scopes can lead to full platform takeover.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>sb-apim-admin — scopes: apim.admin, manage_all</li><li>sb-test-legacy — scopes: *</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Restrict OAuth client scopes to minimum required permissions. Create separate clients for different integration scenarios with narrow, purpose-specific scopes.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>OAuth 2.0 Security Best Practices — RFC 6819</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">OAuth clients using deprecated grant types (password/implicit)</span>
+        <span class="finding-id">INTG-OAUTH-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 OAuth client(s) use the password or implicit grant types, which are deprecated in OAuth 2.1 due to security risks (credential exposure, token leakage).</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>sb-apim-admin — grant types: [&#x27;client_credentials&#x27;, &#x27;password&#x27;]</li><li>sb-portal-app — grant types: [&#x27;authorization_code&#x27;, &#x27;implicit&#x27;]</li><li>sb-test-legacy — grant types: [&#x27;password&#x27;]</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Migrate to client_credentials (for service-to-service) or authorization_code with PKCE (for user-facing apps). Remove password and implicit grant type configurations.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>OAuth 2.1 Draft — Deprecated Grant Types</li><li>SAP BTP — OAuth Configuration Best Practices</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Integration connections without encryption</span>
+        <span class="finding-id">INTG-TOPO-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>5 integration connection(s) in the topology do not use encryption or use protocols without verified TLS. Business data traversing these connections is at risk of interception.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (5)</div>
+                  <ul class="affected-list"><li>S4HANA_PROD → ECC_LEGACY (protocol: RFC)</li><li>CPI_BROKER → VENDOR_PORTAL (protocol: HTTP)</li><li>ECC_LEGACY → CPI_BROKER (protocol: HTTP)</li><li>S4HANA_PROD → CRM_OLD_5.0 (protocol: RFC)</li><li>S4HANA_PROD → EDI_GATEWAY (protocol: FTP)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Enable TLS/SNC on all integration connections. Migrate FTP to SFTP, HTTP to HTTPS, and RFC to SNC-secured RFC. Verify encryption status on all undetermined connections.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Security Baseline — Encrypted Communications</li></ul>
+                </div>
+      </div>
+    </div>
+
     <div class="finding-card" data-severity="MEDIUM" data-category="User &amp; Authorization">
       <div class="finding-header">
         <span class="sev-badge MEDIUM">MEDIUM</span>
@@ -3258,6 +3804,216 @@
       </div>
     </div>
 
+    <div class="finding-card" data-severity="MEDIUM" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">IDOC file ports with insecure directory paths</span>
+        <span class="finding-id">INTG-IDOC-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 IDOC file port(s) write to commonly accessible or temporary directories. IDOCs written to insecure paths may be readable by unauthorized OS users.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>FILE_BANK (type: FILE) — path: /tmp/idoc_bank/inbound</li><li>FILE_ARCHIVE (type: FILE) — path: /sapmnt/PRD/idoc_archive</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Use dedicated, access-controlled directories for IDOC file ports. Set strict OS-level permissions (owner: sidadm, mode: 700). Avoid /tmp, /var/tmp, or shared mount points.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Security Guide — File System Permissions</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">IDOC partner profiles configured for sensitive message types</span>
+        <span class="finding-id">INTG-IDOC-004</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>7 partner profile(s) handle sensitive IDOC types (HR data, payments, financial postings, master data). These require additional scrutiny for authorization and encryption.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (7)</div>
+                  <ul class="affected-list"><li>Partner: ARIBA_CLOUD (LS) — ORDERS via port TRFC_ARIBA (OUTBOUND)</li><li>Partner: SF_EC (LS) — HRMD_A via port HTTP_SF (OUTBOUND)</li><li>Partner: BANK_01 (KU) — FINSTA01 via port FILE_BANK (INBOUND)</li><li>Partner: BANK_01 (KU) — PEXR2002 via port FILE_BANK (OUTBOUND)</li><li>Partner: VENDOR_X (LI) — CREMAS via port XML_VENDOR (INBOUND)</li><li>Partner: BW_SYSTEM (LS) — WMMBXY via port TRFC_BW (OUTBOUND)</li><li>Partner: CPI_BROKER (LS) — ACC_DOCUMENT via port HTTP_CPI (OUTBOUND)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Ensure all sensitive IDOC types use encrypted transport (SNC/TLS). Verify the receiving partner is authorized for the data classification. Implement IDOC monitoring for sensitive message types.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP IDOC Security — Sensitive Data Handling</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Webhooks delivering events to external/third-party endpoints</span>
+        <span class="finding-id">INTG-WH-003</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>5 webhook(s) deliver business events to external endpoints outside the recognized corporate domain. Verify these are authorized and data classification allows it.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (5)</div>
+                  <ul class="affected-list"><li>SalesOrder_Created → https://integration.company.com/hooks/so-created</li><li>Vendor_Updated → http://middleware.company.com/hooks/vendor</li><li>Payment_Processed → https://external-bank-api.com/webhooks/payment-notify</li><li>Invoice_Approved → https://ariba.procurement.com/callback/invoice</li><li>Test_Hook_Old → https://test.company.com/hooks/test</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Review each external webhook for business authorization. Ensure data classification allows the event data to leave the corporate boundary. Implement IP allowlisting on callback URLs.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>Data Classification — Outbound Event Controls</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Integration events not forwarded to SIEM</span>
+        <span class="finding-id">INTG-MON-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>Integration monitoring events are not configured for SIEM forwarding. Without SIEM integration, integration security events cannot be correlated with other security data for incident detection.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>SIEM integration: not configured</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Configure log forwarding from SAP Alert Notification Service to your SIEM (Splunk, Sentinel, QRadar). Include: CPI runtime logs, API Management access logs, Event Mesh audit logs, and Cloud Connector logs.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP BTP — SIEM Integration with Alert Notification</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">CPI global variables with potentially sensitive names</span>
+        <span class="finding-id">INTG-CPI-DS-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 CPI global variable(s) have names suggesting they contain credentials, tokens, or personal data. Global variables are not encrypted and are readable via management API.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>Variable: SF_API_Password — may contain sensitive data</li><li>Variable: bank_secret_key — may contain sensitive data</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Move credentials to CPI Security Material (credential store). Do not use global variables for secrets. If PII must be stored, use encrypted data stores instead.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP CPI — Credential Management Best Practices</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">OAuth clients unused for 180+ days</span>
+        <span class="finding-id">INTG-OAUTH-003</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>6 OAuth client(s) have not been used recently. Stale clients represent unmonitored credential exposure.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (6)</div>
+                  <ul class="affected-list"><li>sb-cpi-prod — last activity: 2025-03-01 (370d ago)</li><li>sb-apim-admin — last activity: 2025-02-20 (379d ago)</li><li>sb-portal-app — last activity: 2025-03-01 (370d ago)</li><li>sb-test-legacy — last activity: 2023-11-01 (856d ago)</li><li>sb-sf-replication — last activity: 2025-03-01 (370d ago)</li><li>sb-ariba-sync — last activity: 2025-02-28 (371d ago)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Review and delete unused OAuth clients. Implement OAuth client lifecycle management with periodic reviews.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>OAuth Client Governance — Credential Lifecycle</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Integration connections to deprecated/legacy systems</span>
+        <span class="finding-id">INTG-TOPO-003</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 integration connection(s) involve systems that appear to be deprecated or end-of-life based on naming patterns. Legacy systems often have weaker security posture and may lack patches.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>S4HANA_PROD → ECC_LEGACY (system: ECC_LEGACY)</li><li>S4HANA_PROD → CRM_OLD_5.0 (system: CRM_OLD_5.0)</li><li>ECC_LEGACY → CPI_BROKER (system: ECC_LEGACY)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Validate each legacy system connection for business necessity. Prioritize migration to supported systems. For connections that must remain, ensure compensating controls: encryption, monitoring, and network isolation.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP — System Decommissioning Security Checklist</li></ul>
+                </div>
+      </div>
+    </div>
+
     <div class="finding-card" data-severity="LOW" data-category="User &amp; Authorization">
       <div class="finding-header">
         <span class="sev-badge LOW">LOW</span>
@@ -3527,10 +4283,70 @@
                 </div>
       </div>
     </div>
+
+    <div class="finding-card" data-severity="LOW" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge LOW">LOW</span>
+        <span class="finding-title">Stale webhook registrations with no recent activity</span>
+        <span class="finding-id">INTG-WH-004</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>6 webhook registration(s) have not been triggered in over 180 days. Stale registrations may point to decommissioned consumers.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (6)</div>
+                  <ul class="affected-list"><li>SalesOrder_Created → https://integration.company.com/hooks/so-created — last activity: 2025-03-01 (370d ago)</li><li>Vendor_Updated → http://middleware.company.com/hooks/vendor — last activity: 2025-02-28 (371d ago)</li><li>Payment_Processed → https://external-bank-api.com/webhooks/payment-notify — last activity: 2025-03-01 (370d ago)</li><li>Invoice_Approved → https://ariba.procurement.com/callback/invoice — last activity: 2025-02-15 (384d ago)</li><li>Legacy_ERP_Sync → http://10.0.2.100:8080/callback/erp — last activity: 2024-03-01 (735d ago)</li><li>Test_Hook_Old → https://test.company.com/hooks/test — last activity: 2023-08-15 (934d ago)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Review and remove unused webhook registrations.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>Integration Governance — Webhook Lifecycle</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="LOW" data-category="Network &amp; Integration Layer">
+      <div class="finding-header">
+        <span class="sev-badge LOW">LOW</span>
+        <span class="finding-title">CPI data stores with excessive entries</span>
+        <span class="finding-id">INTG-CPI-DS-003</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>1 CPI data store(s) have more entries than the configured threshold. Large data stores may indicate missing cleanup logic, impacting performance and increasing data exposure risk.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>idoc_retry_queue — 15400 entries (max: 10000)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Implement TTL (time-to-live) on data store entries. Add cleanup logic to iFlows or use scheduled cleanup iFlows. Review if data store usage is appropriate vs a proper database.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP CPI — Data Store Management</li></ul>
+                </div>
+      </div>
+    </div>
   </div>
 
   <div class="footer">
-    SAP S/4HANA RISE Security Scanner &middot; Generated 2026-03-06T10:16:57 &middot;
+    SAP S/4HANA RISE Security Scanner &middot; Generated 2026-03-06T10:36:07 &middot;
     For authorized security assessments only
   </div>
 </div>

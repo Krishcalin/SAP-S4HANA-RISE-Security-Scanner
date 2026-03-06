@@ -1,0 +1,10 @@
+{
+  "webhooks": [
+    {"name": "SalesOrder_Created", "url": "https://integration.company.com/hooks/so-created", "signatureVerification": true, "created": "2024-06-01", "lastTriggered": "2025-03-01"},
+    {"name": "Vendor_Updated", "url": "http://middleware.company.com/hooks/vendor", "signatureVerification": false, "created": "2024-03-15", "lastTriggered": "2025-02-28"},
+    {"name": "Payment_Processed", "url": "https://external-bank-api.com/webhooks/payment-notify", "signatureVerification": true, "created": "2024-09-01", "lastTriggered": "2025-03-01"},
+    {"name": "Invoice_Approved", "url": "https://ariba.procurement.com/callback/invoice", "signatureVerification": false, "created": "2023-11-01", "lastTriggered": "2025-02-15"},
+    {"name": "Legacy_ERP_Sync", "url": "http://10.0.2.100:8080/callback/erp", "signatureVerification": false, "created": "2023-01-15", "lastTriggered": "2024-03-01"},
+    {"name": "Test_Hook_Old", "url": "https://test.company.com/hooks/test", "signatureVerification": false, "created": "2022-06-01", "lastTriggered": "2023-08-15"}
+  ]
+}

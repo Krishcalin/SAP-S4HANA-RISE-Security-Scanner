@@ -1,0 +1,8 @@
+{
+  "rules": [
+    {"name": "iflow_error", "type": "runtime_error", "enabled": true},
+    {"name": "cert_expiry", "type": "certificate", "enabled": true}
+  ],
+  "siemIntegration": false,
+  "emailNotification": true
+}
