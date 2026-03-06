@@ -1,0 +1,1 @@
+{"enabled": true, "connector": "Splunk_HEC", "lastSync": "2025-03-01", "logSources": ["SM20", "SM21", "CDHDR"]}

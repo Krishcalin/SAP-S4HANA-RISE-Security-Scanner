@@ -1,0 +1,6 @@
+{"spaces": [
+  {"name": "Finance_Home", "roles": ["Z_FI_ACCOUNTANT", "Z_FI_PAYMENT"], "visibility": "ROLE"},
+  {"name": "Admin_Space", "roles": ["Z_BC_USER_ADMIN"], "visibility": "PUBLIC"},
+  {"name": "Default_Space", "roles": [], "visibility": "EVERYONE"},
+  {"name": "HR_Space", "roles": ["Z_HR_MASTER_DATA"], "visibility": "ROLE"}
+]}

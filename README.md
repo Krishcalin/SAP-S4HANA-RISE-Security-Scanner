@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat-square" alt="Zero Dependencies"/>
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="MIT License"/>
   <img src="https://img.shields.io/badge/SAP-S%2F4HANA%20RISE-0FAAFF?style=flat-square&logo=sap&logoColor=white" alt="SAP S/4HANA"/>
-  <img src="https://img.shields.io/badge/checks-162%2B-red?style=flat-square" alt="123+ Checks"/>
+  <img src="https://img.shields.io/badge/checks-186%2B-red?style=flat-square" alt="123+ Checks"/>
 </p>
 
 ---
@@ -22,7 +22,7 @@
 
 - **No direct system connection required** — ideal for RISE environments with restricted RFC access
 - **Zero external dependencies** — runs on Python 3.8+ stdlib only
-- **162+ security checks across 9 audit modules
+- **186+ security checks across 12 audit modules
 - **CIS SAP Benchmark aligned** — checks mapped to industry-standard baselines
 
 ---
@@ -40,6 +40,9 @@
 | 🔗 **Network & Integration Layer** | INTG-APIM/IDOC/WS/WH/GW/MON/CPI/OAUTH/TOPO (27) | API Management, IDOC ports, web services, webhooks, gateway ACLs, OAuth, topology |
 | 🔏 **Data Protection & Privacy** | DPP-RAL/ILM/MASK/TOOLKIT/POP/FIELD/RES/DEL/LAND (18) | Read Access Logging, ILM retention, data masking, GDPR/DPDP toolkit, data residency |
 | 💻 **Code & Transport Security** | CODE-INJ/STMT/ATC/TMS/CLIENT/CHG/DEV/MOD/DEAD (21) | SQL injection, hardcoded creds, ATC findings, transport workflow, client config, SAP mods |
+| 📊 **Logging, Monitoring & IR** | LOG-AUD/SIEM/RET/TBL/LOGON/IR (11) | Audit log config, SIEM integration, log retention, table logging, brute-force detection |
+| 🖥️ **Fiori & UI Layer** | FIORI-CAT/APP/ODATA/SPACE/TILE/USAGE (8) | Catalog access, OData backend auth, sensitive app exposure, spaces/pages config |
+| 🔑 **Cryptographic Posture** | CRYPTO-TLS/CERT/SNC/HANA/LIB/PSE/KEY (13) | TLS config, certificate health, SNC, HANA encryption, crypto library, key management |
 
 <details>
 <summary><strong>🛡️ Advanced IAM — Full Check List</strong></summary>
@@ -377,6 +380,131 @@ SoD checks support three data strategies: pre-computed matrix (`sod_matrix.csv`)
 
 </details>
 
+<details>
+<summary><strong>📊 Logging, Monitoring & IR — Full Check List (NEW)</strong></summary>
+
+### Security Audit Log (LOG-AUD-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| LOG-AUD-001 | Security Audit Log disabled or no active filters | CRITICAL |
+| LOG-AUD-002 | No static audit profile configured (lost on restart) | HIGH |
+| LOG-AUD-003 | Audit log missing coverage for required event types | HIGH |
+
+### SIEM Integration (LOG-SIEM-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| LOG-SIEM-001 | No SIEM integration or SIEM disabled | HIGH |
+| LOG-SIEM-002 | SIEM missing critical log source forwarding | MEDIUM |
+
+### Log Retention (LOG-RET-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| LOG-RET-001 | Log retention below minimum (365 days) | MEDIUM |
+| LOG-RET-002 | Security logs without archiving | LOW |
+
+### Table Logging (LOG-TBL-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| LOG-TBL-001 | Critical tables without change logging | HIGH |
+
+### Logon Analysis (LOG-LOGON-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| LOG-LOGON-001 | Potential brute-force attack patterns | CRITICAL |
+| LOG-LOGON-002 | Accounts with excessive logon failures | MEDIUM |
+
+### Incident Response (LOG-IR-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| LOG-IR-001 | Incident response readiness gaps | MEDIUM |
+
+</details>
+
+<details>
+<summary><strong>🖥️ Fiori & UI Layer — Full Check List (NEW)</strong></summary>
+
+### Catalog Access (FIORI-CAT-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| FIORI-CAT-001 | Catalogs with public/unrestricted scope | HIGH |
+| FIORI-CAT-002 | Catalogs assigned to excessive roles | MEDIUM |
+
+### App Exposure (FIORI-APP-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| FIORI-APP-001 | Sensitive admin apps exposed with broad access | HIGH |
+
+### OData Authorization (FIORI-ODATA-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| FIORI-ODATA-001 | OData services without authorization checks | CRITICAL |
+| FIORI-ODATA-002 | Sensitive OData services with inadequate auth | HIGH |
+
+### Spaces & Pages (FIORI-SPACE-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| FIORI-SPACE-001 | Spaces with public visibility | MEDIUM |
+
+### Tile-Service Alignment (FIORI-TILE-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| FIORI-TILE-001 | Tiles with OData authorization mismatches | MEDIUM |
+
+### App Usage (FIORI-USAGE-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| FIORI-USAGE-001 | Apps with zero usage (never launched) | LOW |
+
+</details>
+
+<details>
+<summary><strong>🔑 Cryptographic Posture — Full Check List (NEW)</strong></summary>
+
+### TLS Configuration (CRYPTO-TLS-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| CRYPTO-TLS-001 | TLS endpoints allowing deprecated protocols (1.0/1.1/SSLv3) | HIGH |
+| CRYPTO-TLS-002 | Cipher suites include weak algorithms (RC4, DES, 3DES) | HIGH |
+| CRYPTO-TLS-003 | HTTPS without HSTS headers | MEDIUM |
+
+### Certificate Management (CRYPTO-CERT-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| CRYPTO-CERT-001 | Expired certificates in trust store | CRITICAL |
+| CRYPTO-CERT-002 | Certificates expiring within warning window | HIGH |
+| CRYPTO-CERT-003 | Certificates with weak keys/algorithms | HIGH |
+| CRYPTO-CERT-004 | Self-signed certificates in production | MEDIUM |
+
+### SNC (CRYPTO-SNC-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| CRYPTO-SNC-001 | SNC (Secure Network Communications) disabled | HIGH |
+| CRYPTO-SNC-002 | SNC quality set to authentication only (no encryption) | MEDIUM |
+
+### HANA Encryption (CRYPTO-HANA-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| CRYPTO-HANA-001 | HANA data volume encryption disabled | HIGH |
+| CRYPTO-HANA-002 | HANA log volume encryption disabled | MEDIUM |
+| CRYPTO-HANA-003 | HANA using internal/default key management | MEDIUM |
+
+### Crypto Library (CRYPTO-LIB-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| CRYPTO-LIB-001 | Outdated SAP Crypto Library version | HIGH |
+
+### PSE Health (CRYPTO-PSE-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| CRYPTO-PSE-001 | PSE files with errors or expired certificates | HIGH |
+
+### Key Management (CRYPTO-KEY-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| CRYPTO-KEY-001 | Key management policy gaps (rotation, backup) | MEDIUM |
+
+</details>
+
 ---
 
 ## Quick Start
@@ -411,6 +539,9 @@ btpcloud  — BTP Cloud Attack Surface (BTP-*)
 intglayer — Network & Integration Layer (INTG-*)
 dataprot  — Data Protection & Privacy (DPP-*)
 codetrans — Code & Transport Security (CODE-*)
+logmon    — Logging, Monitoring & IR (LOG-*)
+fiori     — Fiori & UI Layer (FIORI-*)
+crypto    — Cryptographic Posture (CRYPTO-*)
 all       — Run everything (default)
 ```
 
@@ -554,8 +685,11 @@ SAP-S4HANA-RISE-Security-Scanner/
 │   ├── integration_layer.py        # INTG-* checks
 │   ├── data_protection.py          # DPP-* checks (NEW)
 │   ├── code_transport.py           # CODE-* checks (NEW)
+│   ├── log_monitoring.py           # LOG-* checks (NEW)
+│   ├── fiori_ui.py                 # FIORI-* checks (NEW)
+│   ├── crypto_posture.py           # CRYPTO-* checks (NEW)
 │   └── report_generator.py         # HTML dashboard
-├── sample_data/                    # 50+ demo files
+├── sample_data/                    # 70+ demo files
 ├── docs/
 │   ├── banner.svg
 │   ├── EXPORT_GUIDE.md
@@ -609,11 +743,24 @@ SAP-S4HANA-RISE-Security-Scanner/
 - [x] Client configuration security (SCC4)
 - [x] SAP standard modification auditing
 - [x] Dead/unreferenced custom code detection
-- [ ] Fiori catalog/tile authorization review
-- [ ] Fiori catalog/tile authorization review
-- [ ] Cryptographic posture assessment
+- [x] Security Audit Log (SM20/SM21) configuration & coverage
+- [x] SIEM integration & log forwarding validation
+- [x] Log retention & archiving compliance
+- [x] Table logging for critical tables
+- [x] Logon anomaly / brute-force detection
+- [x] Incident response readiness assessment
+- [x] Fiori catalog/tile authorization review
+- [x] OData service-level authorization audit
+- [x] Fiori spaces/pages role-based configuration
+- [x] TLS configuration depth (protocols, ciphers, HSTS)
+- [x] Certificate inventory & expiry management
+- [x] SNC configuration & quality of protection
+- [x] HANA encryption at rest & log encryption
+- [x] CommonCryptoLib version auditing
+- [x] PSE health & key management policies
 - [ ] Scan comparison mode (diff two scans)
 - [ ] CI/CD integration with exit codes
+- [ ] PDF report export
 
 ---
 

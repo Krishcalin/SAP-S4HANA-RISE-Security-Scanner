@@ -98,6 +98,27 @@ class DataLoader:
         "code_inventory":          ["code_inventory.csv", "custom_objects.csv"],
         "sap_modifications":       ["sap_modifications.csv", "se95.csv", "modifications.csv"],
         "dev_access_prod":         ["dev_access_prod.csv"],
+        # Logging, Monitoring & IR data sources
+        "security_audit_log":      ["security_audit_log.csv", "sm19_filters.csv"],
+        "siem_config":             ["siem_config.json"],
+        "log_retention":           ["log_retention.json"],
+        "incident_response":       ["incident_response.json", "ir_config.json"],
+        "table_logging":           ["table_logging.csv", "dd09l.csv"],
+        "logon_events":            ["logon_events.csv", "logon_stats.csv"],
+        # Fiori & UI Layer data sources
+        "fiori_catalogs":          ["fiori_catalogs.csv", "flpd_catalogs.csv"],
+        "fiori_tiles":             ["fiori_tiles.csv", "flpd_tiles.csv"],
+        "odata_auth":              ["odata_auth.csv", "iwfnd_auth.csv"],
+        "fiori_spaces":            ["fiori_spaces.json", "spaces_pages.json"],
+        "fiori_app_usage":         ["fiori_app_usage.csv", "app_usage.csv"],
+        # Cryptographic Posture data sources
+        "tls_config":              ["tls_config.csv", "icm_ssl.csv"],
+        "certificate_inventory":   ["certificate_inventory.csv", "strust_certs.csv"],
+        "snc_config":              ["snc_config.csv"],
+        "hana_encryption":         ["hana_encryption.json"],
+        "crypto_library":          ["crypto_library.csv", "commoncryptolib.csv"],
+        "pse_inventory":           ["pse_inventory.csv", "strust_pse.csv"],
+        "key_management":          ["key_management.json"],
     }
 
     def __init__(self, data_dir: Path):

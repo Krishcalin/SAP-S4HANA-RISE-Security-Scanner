@@ -29,6 +29,9 @@ from modules.btp_cloud_surface import BtpCloudSurfaceAuditor
 from modules.integration_layer import IntegrationLayerAuditor
 from modules.data_protection import DataProtectionAuditor
 from modules.code_transport import CodeTransportAuditor
+from modules.log_monitoring import LogMonitoringAuditor
+from modules.fiori_ui import FioriUiAuditor
+from modules.crypto_posture import CryptoPostureAuditor
 from modules.report_generator import ReportGenerator
 from modules.data_loader import DataLoader
 
@@ -63,7 +66,7 @@ def main():
     )
     parser.add_argument(
         "--modules", nargs="+",
-        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "all"],
+        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "logmon", "fiori", "crypto", "all"],
         default=["all"],
         help="Which audit modules to run (default: all)"
     )
@@ -92,7 +95,8 @@ def main():
         print(f"[*] Loaded custom baseline from {args.config}")
 
     run_modules = args.modules if "all" not in args.modules else [
-        "users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans"
+        "users", "params", "network", "rise", "iam", "btpcloud",
+        "intglayer", "dataprot", "codetrans", "logmon", "fiori", "crypto"
     ]
 
     all_findings = []
@@ -171,6 +175,30 @@ def main():
     if "codetrans" in run_modules:
         print("[*] Running Code & Transport Security Checks...")
         auditor = CodeTransportAuditor(data, baseline_overrides)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- Logging, Monitoring & Incident Response ---
+    if "logmon" in run_modules:
+        print("[*] Running Logging, Monitoring & IR Checks...")
+        auditor = LogMonitoringAuditor(data, baseline_overrides)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- Fiori & UI Layer ---
+    if "fiori" in run_modules:
+        print("[*] Running Fiori & UI Layer Checks...")
+        auditor = FioriUiAuditor(data, baseline_overrides)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- Cryptographic Posture ---
+    if "crypto" in run_modules:
+        print("[*] Running Cryptographic Posture Checks...")
+        auditor = CryptoPostureAuditor(data, baseline_overrides)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")

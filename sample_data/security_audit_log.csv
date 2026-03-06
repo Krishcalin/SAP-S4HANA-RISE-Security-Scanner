@@ -1,0 +1,7 @@
+CONFIG_NAME,EVENT_CLASS,ACTIVE,PROFILE_TYPE,CLIENT
+Dialog_Logon_Filter,dialog_logon_failure,ACTIVE,STATIC,100
+RFC_Logon_Filter,rfc_logon,ACTIVE,STATIC,100
+User_Changes,user_master_change,ACTIVE,STATIC,100
+Transaction_Monitor,transaction_start,ACTIVE,DYNAMIC,100
+Report_Exec,report_start,INACTIVE,DYNAMIC,100
+Table_Access_Filter,table_access,INACTIVE,STATIC,100

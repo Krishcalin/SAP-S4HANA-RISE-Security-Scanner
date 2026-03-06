@@ -1,0 +1,6 @@
+{"policies": [
+  {"logType": "Security Audit Log (SM20)", "retentionDays": 90, "archiving": false},
+  {"logType": "System Log (SM21)", "retentionDays": 60, "archiving": false},
+  {"logType": "Change Documents (CDHDR)", "retentionDays": 365, "archiving": true},
+  {"logType": "ICM Access Log", "retentionDays": 30, "archiving": false}
+]}

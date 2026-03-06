@@ -509,9 +509,9 @@
       <div class="subtitle">Security Assessment Report</div>
     </div>
     <div class="header-right">
-      <span>Scan: 2026-03-06T11:26:04</span>
+      <span>Scan: 2026-03-06T12:03:09</span>
       <span>Source: sample_data</span>
-      <span>Modules: users, params, network, rise, iam, btpcloud, intglayer, dataprot, codetrans</span>
+      <span>Modules: users, params, network, rise, iam, btpcloud, intglayer, dataprot, codetrans, logmon, fiori, crypto</span>
     </div>
   </div>
 
@@ -535,19 +535,19 @@
 
     <div class="severity-grid">
       <div class="sev-card critical">
-        <div class="sev-count">32</div>
+        <div class="sev-count">35</div>
         <div class="sev-label">Critical</div>
       </div>
       <div class="sev-card high">
-        <div class="sev-count">69</div>
+        <div class="sev-count">79</div>
         <div class="sev-label">High</div>
       </div>
       <div class="sev-card medium">
-        <div class="sev-count">48</div>
+        <div class="sev-count">57</div>
         <div class="sev-label">Medium</div>
       </div>
       <div class="sev-card low">
-        <div class="sev-count">13</div>
+        <div class="sev-count">15</div>
         <div class="sev-label">Low</div>
       </div>
     </div>
@@ -589,6 +589,12 @@
       </div>
 
       <div class="cat-bar-row">
+        <div class="cat-bar-label">Cryptographic Posture</div>
+        <div class="cat-bar-track"><div class="cat-bar-fill" style="width: 37.93103448275862%"></div></div>
+        <div class="cat-bar-count">11</div>
+      </div>
+
+      <div class="cat-bar-row">
         <div class="cat-bar-label">User &amp; Authorization</div>
         <div class="cat-bar-track"><div class="cat-bar-fill" style="width: 31.03448275862069%"></div></div>
         <div class="cat-bar-count">9</div>
@@ -601,7 +607,19 @@
       </div>
 
       <div class="cat-bar-row">
+        <div class="cat-bar-label">Logging, Monitoring &amp; IR</div>
+        <div class="cat-bar-track"><div class="cat-bar-fill" style="width: 24.137931034482758%"></div></div>
+        <div class="cat-bar-count">7</div>
+      </div>
+
+      <div class="cat-bar-row">
         <div class="cat-bar-label">Password Policy</div>
+        <div class="cat-bar-track"><div class="cat-bar-fill" style="width: 20.689655172413794%"></div></div>
+        <div class="cat-bar-count">6</div>
+      </div>
+
+      <div class="cat-bar-row">
+        <div class="cat-bar-label">Fiori &amp; UI Layer</div>
         <div class="cat-bar-track"><div class="cat-bar-fill" style="width: 20.689655172413794%"></div></div>
         <div class="cat-bar-count">6</div>
       </div>
@@ -659,16 +677,16 @@
   <!-- Filter Bar -->
   <div class="filter-bar">
     <label>Filter:</label>
-    <button class="filter-btn active" onclick="filterFindings('ALL')">All (162)</button>
-    <button class="filter-btn" onclick="filterFindings('CRITICAL')">Critical (32)</button>
-    <button class="filter-btn" onclick="filterFindings('HIGH')">High (69)</button>
-    <button class="filter-btn" onclick="filterFindings('MEDIUM')">Medium (48)</button>
-    <button class="filter-btn" onclick="filterFindings('LOW')">Low (13)</button>
+    <button class="filter-btn active" onclick="filterFindings('ALL')">All (186)</button>
+    <button class="filter-btn" onclick="filterFindings('CRITICAL')">Critical (35)</button>
+    <button class="filter-btn" onclick="filterFindings('HIGH')">High (79)</button>
+    <button class="filter-btn" onclick="filterFindings('MEDIUM')">Medium (57)</button>
+    <button class="filter-btn" onclick="filterFindings('LOW')">Low (15)</button>
   </div>
 
   <!-- Findings -->
   <div class="findings-section">
-    <h2>Detailed Findings (162)</h2>
+    <h2>Detailed Findings (186)</h2>
     
     <div class="finding-card" data-severity="CRITICAL" data-category="User &amp; Authorization">
       <div class="finding-header">
@@ -1626,6 +1644,96 @@
                 <div class="finding-section">
                   <div class="finding-section-title">References</div>
                   <ul class="ref-list"><li>SAP — Modification Guidelines for Security Objects</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Logging, Monitoring &amp; IR">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">Potential brute-force attack patterns detected</span>
+        <span class="finding-id">LOG-LOGON-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 account(s) show patterns consistent with brute-force attacks (very high failure-to-success ratio). Investigate immediately.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>UNKNOWN_USER1: 350 failures, 0 successes (ratio: 350.0)</li><li>ADMIN_TEST: 180 failures, 2 successes (ratio: 90.0)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Investigate affected accounts for unauthorized access attempts. Lock accounts if attack is confirmed. Review source IPs from SM20 logs. Ensure login/fails_to_user_lock is properly configured.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP — Brute-Force Attack Detection</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Fiori &amp; UI Layer">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">OData services without authorization checks</span>
+        <span class="finding-id">FIORI-ODATA-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>4 OData service(s) have no authorization check configured. Any authenticated user can call these services directly, bypassing Fiori UI-level restrictions.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (4)</div>
+                  <ul class="affected-list"><li>API_SALES_ORDER_SRV (SO_SRV) — auth check: NONE</li><li>API_USER_MANAGEMENT_SRV (USER_SRV) — auth check: DISABLED</li><li>HCM_EMPLOYEE_MASTER_SRV (EMP_SRV) — auth check: NONE</li><li>Z_CUSTOM_REPORT_SRV (ZRPT_SRV) — auth check: NONE</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Enable authorization checks on all OData services via IWFND/MAINT_SERVICE → Service → Authorization. Implement authorization in DPC_EXT GET_ENTITYSET methods. Never rely on Fiori UI for access control — always enforce at OData layer.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 2926224 — OData Service Authorization</li><li>OWASP — API Authorization</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Cryptographic Posture">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">Expired certificates in system trust store</span>
+        <span class="finding-id">CRYPTO-CERT-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>5 certificate(s) have expired. Expired certificates cause TLS handshake failures, breaking HTTPS, SNC, and SSO.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (5)</div>
+                  <ul class="affected-list"><li>SSL_Server_Cert (purpose: HTTPS Server) — EXPIRED 296d ago (2025-05-15)</li><li>SNC_System_PSE (purpose: SNC) — EXPIRED 340d ago (2025-04-01)</li><li>SSO_Signing_Cert (purpose: SSO) — EXPIRED 462d ago (2024-11-30)</li><li>Legacy_Client_Cert (purpose: Client Auth) — EXPIRED 66d ago (2025-12-31)</li><li>Test_Cert (purpose: Testing) — EXPIRED 65d ago (2026-01-01)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Renew expired certificates immediately via STRUST. Import updated CA certificates. Restart ICM after changes.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 510007 — Certificate Management</li></ul>
                 </div>
       </div>
     </div>
@@ -3696,6 +3804,306 @@
       </div>
     </div>
 
+    <div class="finding-card" data-severity="HIGH" data-category="Logging, Monitoring &amp; IR">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Critical tables without change logging enabled</span>
+        <span class="finding-id">LOG-TBL-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>16 critical table(s) do not have change logging enabled. Changes to these tables (user master, authorization, RFC config) will not be recorded in the change document log.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (16)</div>
+                  <ul class="affected-list"><li>USR04</li><li>USR21</li><li>AGR_DEFINE</li><li>AGR_1251</li><li>PRGN_CUST</li><li>TMSPCONF</li><li>PA0000</li><li>PA0001</li><li>PA0002</li><li>PA0008</li><li>KNA1</li><li>LFA1</li><li>BSEG</li><li>TADIR</li><li>E070</li><li>E071</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Enable table logging for all listed tables via SE11 (technical settings). Ensure rec/client parameter is set to log the production client. Verify with report RSTBHIST.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>CIS SAP Benchmark 6.2 — Table Logging</li><li>SAP Note 2098872</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Fiori &amp; UI Layer">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Fiori catalogs with public/unrestricted scope</span>
+        <span class="finding-id">FIORI-CAT-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 Fiori catalog(s) are scoped as public, making their tiles visible to all authenticated users regardless of role assignment.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>Z_ADMIN_CATALOG — scope: PUBLIC</li><li>Z_ALL_USERS_CATALOG — scope: PUBLIC</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Change catalog scope to role-based. Assign catalogs to specific business roles via /UI2/FLPD_CUST or Manage Launchpad Settings. Remove public scope from all non-default catalogs.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Fiori — Catalog-Based Authorization</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Fiori &amp; UI Layer">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Sensitive admin Fiori apps exposed with broad access</span>
+        <span class="finding-id">FIORI-APP-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 sensitive Fiori application(s) (user management, role management, communication config) are accessible from broadly scoped catalogs.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>F0733: Manage Users — catalog: Z_ADMIN_CATALOG, scope: PUBLIC</li><li>F0735: Manage Business Roles — catalog: Z_ADMIN_CATALOG, scope: PUBLIC</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Move sensitive admin apps to restricted catalogs assigned only to admin roles. Verify backend authorization also restricts access. Do not rely solely on Fiori tile visibility for security.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Fiori — Admin App Authorization Best Practices</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Fiori &amp; UI Layer">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Sensitive OData services with inadequate authorization</span>
+        <span class="finding-id">FIORI-ODATA-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 sensitive OData service(s) (finance, HR, master data) have weak or missing authorization configuration. Direct API calls can bypass UI-level field restrictions.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>API_SALES_ORDER_SRV (SO_SRV) — auth: NONE</li><li>API_USER_MANAGEMENT_SRV (USER_SRV) — auth: DISABLED</li><li>HCM_EMPLOYEE_MASTER_SRV (EMP_SRV) — auth: NONE</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Implement full authorization checks including: S_SERVICE for service-level access, business authorization objects in the DPC implementation, and field-level authorization where needed.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Fiori — OData Backend Authorization Design</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Cryptographic Posture">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">TLS endpoints allowing deprecated protocol versions</span>
+        <span class="finding-id">CRYPTO-TLS-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>1 TLS endpoint(s) allow TLS 1.0, TLS 1.1, or SSLv3. These have known vulnerabilities (BEAST, POODLE, etc.).</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>HTTPS_Default (port: 443) — protocol: TLSv1.0 TLSv1.1 TLSv1.2</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Set minimum TLS version to 1.2 across all ICM ports. Configure via icm/HTTPS/client_sni_* and ssl/ciphersuites. Prefer TLS 1.3 where client compatibility allows.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 510007 — SSL/TLS Configuration</li><li>NIST SP 800-52 Rev 2</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Cryptographic Posture">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">TLS cipher suites include weak algorithms</span>
+        <span class="finding-id">CRYPTO-TLS-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>1 TLS endpoint(s) include weak cipher algorithms (RC4, DES, 3DES, NULL, EXPORT, MD5-based). These can be exploited for decryption or downgrade attacks.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>HTTPS_Default (port: 443) — weak cipher: RC4 in suite</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Configure ssl/ciphersuites to allow only strong ciphers: AES-256-GCM, AES-128-GCM with ECDHE/DHE key exchange. Remove all RC4, DES, 3DES, NULL, and EXPORT ciphers.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 510007</li><li>Mozilla TLS Configuration Guide</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Cryptographic Posture">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Certificates with weak key sizes or algorithms</span>
+        <span class="finding-id">CRYPTO-CERT-003</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>4 certificate(s) use weak key sizes (&lt;2048 bits) or deprecated signature algorithms (SHA-1, MD5).</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (4)</div>
+                  <ul class="affected-list"><li>SSO_Signing_Cert (purpose: SSO) — key: 1024 bits</li><li>SSO_Signing_Cert (purpose: SSO) — algorithm: SHA1withRSA</li><li>Test_Cert (purpose: Testing) — key: 512 bits</li><li>Test_Cert (purpose: Testing) — algorithm: MD5withRSA</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Replace with RSA 2048+ or ECDSA P-256+ keys, signed with SHA-256 or stronger.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>NIST SP 800-131A — Cryptographic Standards</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Cryptographic Posture">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">HANA data volume encryption is disabled</span>
+        <span class="finding-id">CRYPTO-HANA-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>HANA data volume encryption (encryption at rest) is not enabled. Data stored on disk, including backups, is unencrypted and vulnerable to physical media theft or unauthorized disk access.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>Data volume encryption: disabled</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Enable HANA data volume encryption via ALTER SYSTEM ENCRYPTION ON. Configure with AES-256-CBC or AES-256-XTS. Enable backup encryption separately.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP HANA Security Guide — Data Volume Encryption</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Cryptographic Posture">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Outdated SAP Crypto Library: sapcryptolib 5.5.5c</span>
+        <span class="finding-id">CRYPTO-LIB-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>The SAP Crypto Library version (sapcryptolib 5.5.5c) appears outdated. Older versions may lack support for current TLS standards and contain known vulnerabilities.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>sapcryptolib 5.5.5c at /usr/sap/PRD/SYS/exe/run/</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Update CommonCryptoLib to the latest version. Download from SAP Software Center. Verify compatibility with kernel version before upgrade.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1848999 — CommonCryptoLib Updates</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Cryptographic Posture">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">PSE files with errors or expired certificates</span>
+        <span class="finding-id">CRYPTO-PSE-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>5 PSE file(s) have errors, are corrupted, or contain expired certificates. PSEs are used for SSL/TLS, SNC, and SSO — failures break encrypted communications.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (5)</div>
+                  <ul class="affected-list"><li>SAPSSLS.pse (SSL Server) — PSE certificate expired: 2025-05-15</li><li>SAPSNCSSLS.pse (SNC) — PSE certificate expired: 2025-04-01</li><li>SAPSSOC.pse (SSO) — status: EXPIRED</li><li>SAPSSOC.pse (SSO) — PSE certificate expired: 2024-11-30</li><li>SAPSPSE.pse (System) — PSE certificate expired: 2026-01-01</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Repair or recreate affected PSE files via STRUST. Renew expired certificates within PSEs. Verify PSE integrity after system copy or migration.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP STRUST — PSE Management</li></ul>
+                </div>
+      </div>
+    </div>
+
     <div class="finding-card" data-severity="MEDIUM" data-category="User &amp; Authorization">
       <div class="finding-header">
         <span class="sev-badge MEDIUM">MEDIUM</span>
@@ -4791,7 +5199,7 @@
         
                 <div class="finding-section">
                   <div class="finding-section-title">Affected Items (3)</div>
-                  <ul class="affected-list"><li>S4HANA_PROD → ECC_LEGACY (system: ECC_LEGACY)</li><li>S4HANA_PROD → CRM_OLD_5.0 (system: CRM_OLD_5.0)</li><li>ECC_LEGACY → CPI_BROKER (system: ECC_LEGACY)</li></ul>
+                  <ul class="affected-list"><li>ECC_LEGACY → CPI_BROKER (system: ECC_LEGACY)</li><li>S4HANA_PROD → CRM_OLD_5.0 (system: CRM_OLD_5.0)</li><li>S4HANA_PROD → ECC_LEGACY (system: ECC_LEGACY)</li></ul>
                 </div>
         
                 <div class="finding-section">
@@ -5132,6 +5540,276 @@
                 <div class="finding-section">
                   <div class="finding-section-title">References</div>
                   <ul class="ref-list"><li>SAP Note 7920 — Modification Assistant</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Logging, Monitoring &amp; IR">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">SIEM missing critical log source forwarding</span>
+        <span class="finding-id">LOG-SIEM-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 critical log source(s) are not being forwarded to the SIEM. Incomplete log coverage creates detection blind spots.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>BTP_AUDIT: BTP Audit Log</li><li>ICM_LOG: ICM Access Log (HTTP)</li><li>GATEWAY_LOG: Gateway security log</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Configure forwarding for all listed log sources. For BTP, use Alert Notification Service with webhook to SIEM. For on-premise, use SAP ETD connector or syslog forwarding.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP SIEM Integration — Log Source Configuration</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Logging, Monitoring &amp; IR">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Log retention below 365-day minimum</span>
+        <span class="finding-id">LOG-RET-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 log type(s) have retention periods below the 365-day minimum. Insufficient retention limits forensic investigation capability.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>Security Audit Log (SM20): 90d (min: 365d)</li><li>System Log (SM21): 60d (min: 365d)</li><li>ICM Access Log: 30d (min: 365d)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Increase retention to at least 365 days for all security logs. Configure archiving for long-term compliance requirements.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SOX — Log Retention Requirements</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Logging, Monitoring &amp; IR">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Accounts with excessive logon failures</span>
+        <span class="finding-id">LOG-LOGON-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 account(s) have 20+ logon failures. This may indicate password issues, misconfigured service accounts, or attack attempts.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>MWILSON: 45 failures, 80 successes (ratio: 0.6)</li><li>SVC_RFC_01: 200 failures, 5000 successes (ratio: 0.0)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Review failure reasons (expired password, wrong password, locked). Contact users or check service account configurations. Configure automated alerting for logon failure spikes.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>CIS SAP Benchmark — Logon Monitoring</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Logging, Monitoring &amp; IR">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Incident response readiness gaps</span>
+        <span class="finding-id">LOG-IR-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 incident response component(s) are not configured or documented. Without these, response to security incidents will be delayed and uncoordinated.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>forensicAccess: Forensic access procedures documented</li><li>backupVerification: Log backup verification schedule</li><li>drillSchedule: IR drill/tabletop exercise schedule</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Complete all IR readiness components: document runbooks, maintain contact lists, define escalation paths, ensure forensic access is pre-approved, and schedule regular IR drills.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>NIST SP 800-61 — Incident Handling Guide</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Fiori &amp; UI Layer">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Fiori spaces with public visibility</span>
+        <span class="finding-id">FIORI-SPACE-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 Fiori space(s) are visible to all users. Public spaces expose application tiles to broader audiences than intended.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>Admin_Space — visibility: PUBLIC</li><li>Default_Space — visibility: EVERYONE</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Configure role-based visibility for all spaces. Migrate from catalog-based to spaces/pages architecture with proper role assignments.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Fiori — Spaces and Pages Configuration</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Cryptographic Posture">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">HTTPS endpoints without HSTS (Strict Transport Security)</span>
+        <span class="finding-id">CRYPTO-TLS-003</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 HTTPS endpoint(s) do not send HSTS headers. Without HSTS, users can be downgraded from HTTPS to HTTP via SSL stripping attacks.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>HTTPS_Default (port: 443) — HSTS: not enabled</li><li>HTTP_ICM (port: 8000) — HSTS: not enabled</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Enable HSTS via ICM parameter icm/HTTP/hsts_header. Set max-age to at least 31536000 (1 year). Include includeSubDomains directive where appropriate.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 2300507 — HSTS Configuration</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Cryptographic Posture">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">HANA log volume encryption is disabled</span>
+        <span class="finding-id">CRYPTO-HANA-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>HANA redo log encryption is not enabled. Transaction logs contain complete change data and may expose sensitive records.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>Log volume encryption: disabled</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Enable log volume encryption alongside data volume encryption.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP HANA Security Guide — Log Encryption</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Cryptographic Posture">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">HANA encryption uses internal/default root key management</span>
+        <span class="finding-id">CRYPTO-HANA-003</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>HANA encryption root keys are managed internally. For production, an external key management solution (KMS) is recommended for key separation and compliance.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>Root key management: INTERNAL</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Consider external key management via SAP Data Custodian or cloud provider KMS (Azure Key Vault, AWS KMS). This enables key separation from data.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP HANA — External Key Management</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Cryptographic Posture">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Key management policy gaps</span>
+        <span class="finding-id">CRYPTO-KEY-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 key management gap(s) detected. Proper key management is essential for maintaining encryption integrity and enabling key recovery in disaster scenarios.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>Key rotation policy: not configured or manual-only</li><li>Key rotation interval: 730d (max: 365d)</li><li>Encryption key backup: not configured</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Implement automated key rotation with defined intervals. Configure key backup/escrow for disaster recovery. Document key management procedures and responsibilities.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>NIST SP 800-57 — Key Management Recommendations</li></ul>
                 </div>
       </div>
     </div>
@@ -5525,10 +6203,70 @@
                 </div>
       </div>
     </div>
+
+    <div class="finding-card" data-severity="LOW" data-category="Logging, Monitoring &amp; IR">
+      <div class="finding-header">
+        <span class="sev-badge LOW">LOW</span>
+        <span class="finding-title">Security logs without archiving configured</span>
+        <span class="finding-id">LOG-RET-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 log type(s) have no archiving configured. Without archiving, logs are permanently lost after retention expiry.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>Security Audit Log (SM20): archiving not configured</li><li>System Log (SM21): archiving not configured</li><li>ICM Access Log: archiving not configured</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Configure log archiving for long-term retention compliance.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP — Log Archiving Configuration</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="LOW" data-category="Fiori &amp; UI Layer">
+      <div class="finding-header">
+        <span class="sev-badge LOW">LOW</span>
+        <span class="finding-title">Fiori apps with zero usage (never launched)</span>
+        <span class="finding-id">FIORI-USAGE-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>4 Fiori app(s) in active catalogs have never been launched. These consume catalog space and may represent unnecessary access surface.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (4)</div>
+                  <ul class="affected-list"><li>F2001: My Profile (catalog: Z_ALL_USERS_CATALOG) — never launched</li><li>F4020: Approve Leave Requests (catalog: Z_HR_CATALOG) — never launched</li><li>F5050: Display GL Balances (catalog: SAP_SFIN_BC_GL_ACC_MAINT) — never launched</li><li>F6060: Custom Legacy Report (catalog: Z_ALL_USERS_CATALOG) — never launched</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Review unused apps for continued business need. Remove from catalogs if not required. This reduces the visible attack surface and simplifies catalog management.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Fiori — App Usage Analytics</li></ul>
+                </div>
+      </div>
+    </div>
   </div>
 
   <div class="footer">
-    SAP S/4HANA RISE Security Scanner &middot; Generated 2026-03-06T11:26:04 &middot;
+    SAP S/4HANA RISE Security Scanner &middot; Generated 2026-03-06T12:03:09 &middot;
     For authorized security assessments only
   </div>
 </div>
