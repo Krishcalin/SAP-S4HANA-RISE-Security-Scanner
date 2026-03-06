@@ -509,9 +509,9 @@
       <div class="subtitle">Security Assessment Report</div>
     </div>
     <div class="header-right">
-      <span>Scan: 2026-03-06T11:06:03</span>
+      <span>Scan: 2026-03-06T11:26:04</span>
       <span>Source: sample_data</span>
-      <span>Modules: users, params, network, rise, iam, btpcloud, intglayer, dataprot</span>
+      <span>Modules: users, params, network, rise, iam, btpcloud, intglayer, dataprot, codetrans</span>
     </div>
   </div>
 
@@ -535,19 +535,19 @@
 
     <div class="severity-grid">
       <div class="sev-card critical">
-        <div class="sev-count">25</div>
+        <div class="sev-count">32</div>
         <div class="sev-label">Critical</div>
       </div>
       <div class="sev-card high">
-        <div class="sev-count">61</div>
+        <div class="sev-count">69</div>
         <div class="sev-label">High</div>
       </div>
       <div class="sev-card medium">
-        <div class="sev-count">44</div>
+        <div class="sev-count">48</div>
         <div class="sev-label">Medium</div>
       </div>
       <div class="sev-card low">
-        <div class="sev-count">11</div>
+        <div class="sev-count">13</div>
         <div class="sev-label">Low</div>
       </div>
     </div>
@@ -574,6 +574,12 @@
         <div class="cat-bar-label">Identity &amp; Access Management</div>
         <div class="cat-bar-track"><div class="cat-bar-fill" style="width: 82.75862068965517%"></div></div>
         <div class="cat-bar-count">24</div>
+      </div>
+
+      <div class="cat-bar-row">
+        <div class="cat-bar-label">Code &amp; Transport Security</div>
+        <div class="cat-bar-track"><div class="cat-bar-fill" style="width: 72.41379310344827%"></div></div>
+        <div class="cat-bar-count">21</div>
       </div>
 
       <div class="cat-bar-row">
@@ -653,16 +659,16 @@
   <!-- Filter Bar -->
   <div class="filter-bar">
     <label>Filter:</label>
-    <button class="filter-btn active" onclick="filterFindings('ALL')">All (141)</button>
-    <button class="filter-btn" onclick="filterFindings('CRITICAL')">Critical (25)</button>
-    <button class="filter-btn" onclick="filterFindings('HIGH')">High (61)</button>
-    <button class="filter-btn" onclick="filterFindings('MEDIUM')">Medium (44)</button>
-    <button class="filter-btn" onclick="filterFindings('LOW')">Low (11)</button>
+    <button class="filter-btn active" onclick="filterFindings('ALL')">All (162)</button>
+    <button class="filter-btn" onclick="filterFindings('CRITICAL')">Critical (32)</button>
+    <button class="filter-btn" onclick="filterFindings('HIGH')">High (69)</button>
+    <button class="filter-btn" onclick="filterFindings('MEDIUM')">Medium (48)</button>
+    <button class="filter-btn" onclick="filterFindings('LOW')">Low (13)</button>
   </div>
 
   <!-- Findings -->
   <div class="findings-section">
-    <h2>Detailed Findings (141)</h2>
+    <h2>Detailed Findings (162)</h2>
     
     <div class="finding-card" data-severity="CRITICAL" data-category="User &amp; Authorization">
       <div class="finding-header">
@@ -1410,6 +1416,216 @@
                 <div class="finding-section">
                   <div class="finding-section-title">References</div>
                   <ul class="ref-list"><li>GDPR Article 12(3) — Response Time Limits</li><li>DPDP Act 2023 Section 12 — Right of Grievance Redressal</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Code &amp; Transport Security">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">SQL injection patterns detected in custom code</span>
+        <span class="finding-id">CODE-INJ-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 custom code finding(s) indicate potential SQL injection vulnerabilities. Dynamic WHERE clause construction via string concatenation allows attackers to manipulate queries.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>Z_VENDOR_REPORT (PROG) line 145: Dynamic WHERE clause built via CONCATENATE without escaping</li><li>Z_FI_POSTING_BAPI (FUGR) line 112: CL_SQL_STATEMENT used without parameterized query</li><li>Z_LEGACY_MIGRATION (PROG) line 89: EXEC SQL native SQL block without input validation</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Replace dynamic WHERE concatenation with parameterized queries: use ? placeholders with CL_SQL_STATEMENT=&gt;BIND, or use range tables / SELECT-OPTIONS for dynamic filtering. Replace EXEC SQL with Open SQL where possible. Run ABAP Test Cockpit (ATC) with security checks enabled.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1520356 — Secure ABAP Programming</li><li>OWASP — SQL Injection Prevention</li><li>SAP ATC Check — CALL_INJECTION_DYNAMIC_SQL</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Code &amp; Transport Security">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">Hardcoded credentials detected in custom code</span>
+        <span class="finding-id">CODE-INJ-003</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 custom code finding(s) suggest hardcoded credentials (passwords, API keys, tokens) in ABAP source. Hardcoded secrets are visible in source code, transport logs, and version history.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>Z_CUSTOMER_EXTRACT (PROG) line 89: Literal PASSWORD value detected in RFC call parameters</li><li>Z_HR_SALARY_RPT (PROG) line 34: API_KEY literal string found in HTTP client setup</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Remove all hardcoded credentials from source code. Use SAP Secure Store (SSF/STRUST) for certificates, SM59 destinations for RFC credentials, or CL_SEC_SXML_XSTRING for encrypted data storage. For BTP, use the Credential Store service.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1520356</li><li>OWASP — Credential Management Cheat Sheet</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Code &amp; Transport Security">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">Unresolved critical ATC findings (4)</span>
+        <span class="finding-id">CODE-ATC-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>4 critical ATC/code inspector finding(s) remain unresolved out of 15 total. Critical findings indicate exploitable security vulnerabilities in custom code.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (4)</div>
+                  <ul class="affected-list"><li>Z_VENDOR_REPORT: SQL_INJECTION — Dynamic WHERE clause built via CONCATENATE without escaping</li><li>Z_CUSTOMER_EXTRACT: HARDCODED_CREDENTIAL — Literal PASSWORD value detected in RFC call parameters</li><li>Z_FI_POSTING_BAPI: SQL_INJECTION — CL_SQL_STATEMENT used without parameterized query</li><li>Z_INTEGRATION_HUB: DYNAMIC_WHERE — String template used to build WHERE clause dynamically</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Prioritize remediation of all critical ATC findings. Integrate ATC into the transport workflow to block transports with critical findings. Use ATC exemption process for false positives.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP ATC — Security Check Configuration</li><li>SAP Note 2364916 — ATC in Transport Workflow</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Code &amp; Transport Security">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">Transport routes allow direct dev-to-production delivery</span>
+        <span class="finding-id">CODE-TMS-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>1 transport route(s) allow direct transport from development to production, bypassing quality assurance. This violates separation of environments and change management controls.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>DEV → PRD (direct, no QA)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Remove direct dev→prod transport routes. Enforce dev→QA→prod route sequence in TMS (STMS). Configure transport target groups for multi-tier delivery.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>CIS SAP Benchmark — Transport Route Configuration</li><li>SAP Note 18898 — TMS Configuration</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Code &amp; Transport Security">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">Transports imported into production directly from development</span>
+        <span class="finding-id">CODE-TMS-005</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 transport(s) were imported into production directly from development systems, bypassing QA/staging. This skips integration testing and quality gates.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>DEVK900101: DEV → PRD (type: WORKBENCH)</li><li>DEVK900103: DEV → PRD (type: WORKBENCH)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Block direct dev→prod transports in TMS. Enforce the consolidated delivery path through QA. For emergencies, use a documented hotfix process that still requires QA validation (post-deploy).</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>CIS SAP Benchmark — Transport Route Enforcement</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Code &amp; Transport Security">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">Production client allows changes (not locked)</span>
+        <span class="finding-id">CODE-CLIENT-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>1 production client(s) are not properly locked. Production clients should prohibit direct changes, cross-client customizing, and repository modifications to enforce the transport-based change management process.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>Client 100 (role: PRODUCTION) — changes_allowed=MODIFIABLE; cross_client_changes=allowed; repository_changes=allowed</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Lock production client via SCC4: set &#x27;Changes and Transports for Client-Specific Objects&#x27; = &#x27;No Changes Allowed&#x27;, disable cross-client changes, and disable repository changes. Only allow changes via transport import.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 135028 — Client Settings for Production</li><li>CIS SAP Benchmark — Client Configuration</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Code &amp; Transport Security">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">Modifications to SAP security-critical standard programs</span>
+        <span class="finding-id">CODE-MOD-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>4 modification(s) affect SAP security-related standard programs (authorization, user management, transport system). These modifications may weaken or bypass built-in security controls.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (4)</div>
+                  <ul class="affected-list"><li>SAPLSU01 (type: PROG, by: LWANG) — modified security namespace: SAPLSU</li><li>SAPMSSY1 (type: PROG, by: ADMIN) — modified security namespace: SAPMSSY</li><li>SAPLAUTH (type: PROG, by: LWANG) — modified security namespace: SAPLAUTH</li><li>SAPLSTMS (type: PROG, by: ADMIN) — modified security namespace: SAPLSTMS</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Review each security-related modification immediately. Verify modifications do not weaken authorization checks. Replace with BAdI/enhancement implementations where possible. Request SAP security review for critical modifications.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP — Modification Guidelines for Security Objects</li></ul>
                 </div>
       </div>
     </div>
@@ -3240,6 +3456,246 @@
       </div>
     </div>
 
+    <div class="finding-card" data-severity="HIGH" data-category="Code &amp; Transport Security">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Custom code missing authority checks</span>
+        <span class="finding-id">CODE-INJ-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>4 custom code object(s) lack proper AUTHORITY-CHECK statements. Without authority checks, any authenticated user can execute the function regardless of their role assignments.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (4)</div>
+                  <ul class="affected-list"><li>Z_VENDOR_REPORT (PROG) line 12: No AUTHORITY-CHECK for S_TCODE in function entry</li><li>Z_FI_POSTING_BAPI (FUGR) line 45: Missing authority check in BAPI wrapper function module</li><li>Z_MM_PO_UPLOAD (PROG) line 22: No AUTHORITY-CHECK before BAPI_PO_CREATE1 call</li><li>Z_DATA_EXPORT (PROG) line 15: Function module callable via RFC without authorization check</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Add AUTHORITY-CHECK OBJECT statements for all relevant authorization objects (e.g., S_TCODE, business-specific objects). For OData implementations, check authorizations in the GET_ENTITYSET / GET_ENTITY methods. Use ATC check &#x27;Missing Authorization Check&#x27; profile.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1520356 — Secure ABAP Programming</li><li>CIS SAP Benchmark — Custom Code Authorization Checks</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Code &amp; Transport Security">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Dangerous ABAP statement: CALL &#x27;SYSTEM&#x27;</span>
+        <span class="finding-id">CODE-STMT-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>1 custom code object(s) use &#x27;CALL &#x27;SYSTEM&#x27;&#x27;. Risk: OS command execution via kernel call. This statement should not be used in production custom code.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>Z_CUSTOMER_EXTRACT (PROG) line 203</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Replace &#x27;CALL &#x27;SYSTEM&#x27;&#x27; with safe alternatives. For OS commands, use BAdI BADI_RUNTIME_EXEC with allowlisting. For dynamic code, use predefined functions or BAdI frameworks. Disable debugging statements via rdisp/wpdbug_max_no = 0.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1520356 — Secure ABAP Coding Guidelines</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Code &amp; Transport Security">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Dangerous ABAP statement: GENERATE SUBROUTINE POOL</span>
+        <span class="finding-id">CODE-STMT-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>1 custom code object(s) use &#x27;GENERATE SUBROUTINE POOL&#x27;. Risk: Dynamic code generation — code injection risk. This statement should not be used in production custom code.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>Z_HR_SALARY_RPT (PROG) line 178</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Replace &#x27;GENERATE SUBROUTINE POOL&#x27; with safe alternatives. For OS commands, use BAdI BADI_RUNTIME_EXEC with allowlisting. For dynamic code, use predefined functions or BAdI frameworks. Disable debugging statements via rdisp/wpdbug_max_no = 0.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1520356 — Secure ABAP Coding Guidelines</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Code &amp; Transport Security">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Dangerous ABAP statement: READ REPORT</span>
+        <span class="finding-id">CODE-STMT-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>1 custom code object(s) use &#x27;READ REPORT&#x27;. Risk: Read ABAP source code at runtime. This statement should not be used in production custom code.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>Z_SD_PRICING_EXIT (FUGR) line 67</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Replace &#x27;READ REPORT&#x27; with safe alternatives. For OS commands, use BAdI BADI_RUNTIME_EXEC with allowlisting. For dynamic code, use predefined functions or BAdI frameworks. Disable debugging statements via rdisp/wpdbug_max_no = 0.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1520356 — Secure ABAP Coding Guidelines</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Code &amp; Transport Security">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Dangerous ABAP statement: INSERT REPORT</span>
+        <span class="finding-id">CODE-STMT-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>1 custom code object(s) use &#x27;INSERT REPORT&#x27;. Risk: Modify ABAP source at runtime. This statement should not be used in production custom code.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>Z_UTILS_COMMON (PROG) line 234</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Replace &#x27;INSERT REPORT&#x27; with safe alternatives. For OS commands, use BAdI BADI_RUNTIME_EXEC with allowlisting. For dynamic code, use predefined functions or BAdI frameworks. Disable debugging statements via rdisp/wpdbug_max_no = 0.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 1520356 — Secure ABAP Coding Guidelines</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Code &amp; Transport Security">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Unresolved high-severity ATC findings (9)</span>
+        <span class="finding-id">CODE-ATC-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>9 high-severity ATC finding(s) remain unresolved. These represent significant code quality and security risks.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (9)</div>
+                  <ul class="affected-list"><li>Z_VENDOR_REPORT: MISSING_AUTHORIZATION — No AUTHORITY-CHECK for S_TCODE in function entry</li><li>Z_CUSTOMER_EXTRACT: CALL_SYSTEM — CALL &#x27;SYSTEM&#x27; — OS command execution in custom code</li><li>Z_FI_POSTING_BAPI: MISSING_AUTHORIZATION — Missing authority check in BAPI wrapper function module</li><li>Z_HR_SALARY_RPT: GENERATE_SUBROUTINE — GENERATE SUBROUTINE POOL — dynamic code generation</li><li>Z_MM_PO_UPLOAD: MISSING_AUTHORIZATION — No AUTHORITY-CHECK before BAPI_PO_CREATE1 call</li><li>Z_SD_PRICING_EXIT: READ_REPORT — READ REPORT used to access ABAP source at runtime</li><li>Z_UTILS_COMMON: INSERT_REPORT — INSERT REPORT — can modify ABAP source at runtime</li><li>Z_LEGACY_MIGRATION: EXEC_SQL — EXEC SQL native SQL block without input validation</li><li>Z_BATCH_SCHEDULER: SUBMIT_VIA_JOB — SUBMIT via JOB without preceding authorization check</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Schedule remediation sprints for high-severity findings. Target: resolve within 90 days of detection.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP ATC — Finding Management</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Code &amp; Transport Security">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Production transport imports without approval</span>
+        <span class="finding-id">CODE-TMS-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 transport(s) were imported into production without recorded approval. Change management requires explicit approval before production deployment.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>DEVK900101 → PRD (imported by: JSMITH)</li><li>DEVK900103 → PRD (imported by: MWILSON)</li><li>DEVK900105 → PRD (imported by: LWANG)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Configure TMS workflow to require approval before production import. Use SAP ChaRM (Change Request Management) or Solution Manager for automated approval workflows. Retroactively document approval for existing imports.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>ITIL Change Management — Approval Process</li><li>CIS SAP Benchmark — Transport Approval Controls</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Code &amp; Transport Security">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Transports released and imported by the same user</span>
+        <span class="finding-id">CODE-TMS-003</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 transport(s) were both released and imported by the same person. This violates separation of duties in the change management process (maker-checker principle).</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>DEVK900101 → PRD — released and imported by: JSMITH</li><li>DEVK900103 → PRD — released and imported by: MWILSON</li><li>DEVK900105 → PRD — released and imported by: LWANG</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Enforce different users for release vs import. Configure TMS to prevent self-import. Separate developer (release) and basis admin (import) roles.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>CIS SAP Benchmark — Transport SoD Controls</li></ul>
+                </div>
+      </div>
+    </div>
+
     <div class="finding-card" data-severity="MEDIUM" data-category="User &amp; Authorization">
       <div class="finding-header">
         <span class="sev-badge MEDIUM">MEDIUM</span>
@@ -4560,6 +5016,126 @@
       </div>
     </div>
 
+    <div class="finding-card" data-severity="MEDIUM" data-category="Code &amp; Transport Security">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Transport imports outside normal change windows (weekends)</span>
+        <span class="finding-id">CODE-TMS-004</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>6 transport(s) were imported on weekends, outside normal change windows. While not always prohibited, off-hours changes warrant additional scrutiny.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (6)</div>
+                  <ul class="affected-list"><li>DEVK900100 → QAS — imported: 2025-02-15 (weekend)</li><li>DEVK900102 → QAS — imported: 2025-02-22 (weekend)</li><li>DEVK900103 → PRD — imported: 2025-03-01 (weekend)</li><li>DEVK900104 → QAS — imported: 2025-03-01 (weekend)</li><li>DEVK900105 → QAS — imported: 2025-03-02 (weekend)</li><li>DEVK900105 → PRD — imported: 2025-03-02 (weekend)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Review all off-hours imports for emergency justification. Implement change freeze periods with exception workflows. Log all emergency changes with post-implementation review.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>ITIL — Change Window Management</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Code &amp; Transport Security">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Critical object types without change documents</span>
+        <span class="finding-id">CODE-CHG-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>5 critical object type(s) have no change documents recorded. This may indicate change logging is disabled or the data export is incomplete.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (5)</div>
+                  <ul class="affected-list"><li>PFCG: Role changes</li><li>CDHDR: Change document header manipulation</li><li>T000: Client configuration changes</li><li>TADIR: Repository object directory changes</li><li>RFCDES: RFC destination changes</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Ensure change document logging is enabled for all critical objects. Verify rec/client parameter includes the production client. Check table logging is active for sensitive tables.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>CIS SAP Benchmark — Change Document Logging</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Code &amp; Transport Security">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Change documents with empty or system user attribution</span>
+        <span class="finding-id">CODE-CHG-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 change document(s) are attributed to empty, BATCH, or SYSTEM users. Changes without proper user attribution break the audit trail for forensic investigation.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>MATERIAL #0001234575 — user: empty, tcode: MM01, date: 20250215</li><li>VENDOR #0001234580 — user: BATCH, tcode: , date: 20250220</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Investigate the source of unattributed changes. Ensure batch jobs run under named service accounts, not generic users. Configure system-to-system interactions to use traceable identities.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SOX Section 404 — Change Audit Trail</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Code &amp; Transport Security">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Unregistered SAP standard modifications</span>
+        <span class="finding-id">CODE-MOD-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>4 modification(s) to SAP standard objects are not registered with an SAP Note or correction number. Unregistered modifications are lost during upgrades and may introduce undocumented vulnerabilities.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (4)</div>
+                  <ul class="affected-list"><li>SAPLSU01 (type: PROG, by: LWANG) — no SAP Note / registration</li><li>SAPMHTTP (type: PROG, by: FORMER_DEV) — no SAP Note / registration</li><li>SAPLAUTH (type: PROG, by: LWANG) — no SAP Note / registration</li><li>SAPLSTMS (type: PROG, by: ADMIN) — no SAP Note / registration</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Register all modifications via transaction SE95 (Modification Browser). Document the business reason and expected behavior change. Plan to reverse modifications during upgrade projects.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 7920 — Modification Assistant</li></ul>
+                </div>
+      </div>
+    </div>
+
     <div class="finding-card" data-severity="LOW" data-category="User &amp; Authorization">
       <div class="finding-header">
         <span class="sev-badge LOW">LOW</span>
@@ -4889,10 +5465,70 @@
                 </div>
       </div>
     </div>
+
+    <div class="finding-card" data-severity="LOW" data-category="Code &amp; Transport Security">
+      <div class="finding-header">
+        <span class="sev-badge LOW">LOW</span>
+        <span class="finding-title">Stale SAP modifications (5+ years old)</span>
+        <span class="finding-id">CODE-MOD-003</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 SAP modification(s) are more than 5 years old. Very old modifications are likely outdated, may conflict with current SAP patches, and should be reviewed for relevance.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>SAPMHTTP (type: PROG, by: FORMER_DEV) — modified: 20190601 (7 years ago)</li><li>SAPLSTMS (type: PROG, by: ADMIN) — modified: 20200301 (6 years ago)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Review all stale modifications for continued necessity. Reverse modifications that are no longer needed. Update remaining modifications to align with current SAP version.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Upgrade Guide — Modification Handling</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="LOW" data-category="Code &amp; Transport Security">
+      <div class="finding-header">
+        <span class="sev-badge LOW">LOW</span>
+        <span class="finding-title">Custom code objects without designated owner</span>
+        <span class="finding-id">CODE-DEAD-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>6 custom code object(s) have no designated owner. Ownerless code cannot be maintained, reviewed, or properly included in security assessments.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (6)</div>
+                  <ul class="affected-list"><li>Z_FI_POSTING_BAPI (FUGR)</li><li>Z_OLD_REPORT_2019 (PROG)</li><li>Z_TEST_PROGRAM_01 (PROG)</li><li>Z_UTILS_COMMON (PROG)</li><li>Z_DATA_EXPORT (PROG)</li><li>Z_OBSOLETE_IDOC (PROG)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Assign owners to all custom code objects. Owner should be the responsible development team or individual. Include ownership in ATC/code inspector metadata.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP — Custom Code Governance</li></ul>
+                </div>
+      </div>
+    </div>
   </div>
 
   <div class="footer">
-    SAP S/4HANA RISE Security Scanner &middot; Generated 2026-03-06T11:06:03 &middot;
+    SAP S/4HANA RISE Security Scanner &middot; Generated 2026-03-06T11:26:04 &middot;
     For authorized security assessments only
   </div>
 </div>

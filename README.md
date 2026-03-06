@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat-square" alt="Zero Dependencies"/>
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="MIT License"/>
   <img src="https://img.shields.io/badge/SAP-S%2F4HANA%20RISE-0FAAFF?style=flat-square&logo=sap&logoColor=white" alt="SAP S/4HANA"/>
-  <img src="https://img.shields.io/badge/checks-141%2B-red?style=flat-square" alt="123+ Checks"/>
+  <img src="https://img.shields.io/badge/checks-162%2B-red?style=flat-square" alt="123+ Checks"/>
 </p>
 
 ---
@@ -22,7 +22,7 @@
 
 - **No direct system connection required** — ideal for RISE environments with restricted RFC access
 - **Zero external dependencies** — runs on Python 3.8+ stdlib only
-- **141+ security checks across 8 audit modules
+- **162+ security checks across 9 audit modules
 - **CIS SAP Benchmark aligned** — checks mapped to industry-standard baselines
 
 ---
@@ -39,6 +39,7 @@
 | 🔥 **BTP Cloud Attack Surface** | BTP-CC/SB/DST/IAS/ENT/EM/CPI/NET/GOV/MIG (29) | Cloud Connector, service bindings, destinations, IAS, Event Mesh, CPI, network isolation |
 | 🔗 **Network & Integration Layer** | INTG-APIM/IDOC/WS/WH/GW/MON/CPI/OAUTH/TOPO (27) | API Management, IDOC ports, web services, webhooks, gateway ACLs, OAuth, topology |
 | 🔏 **Data Protection & Privacy** | DPP-RAL/ILM/MASK/TOOLKIT/POP/FIELD/RES/DEL/LAND (18) | Read Access Logging, ILM retention, data masking, GDPR/DPDP toolkit, data residency |
+| 💻 **Code & Transport Security** | CODE-INJ/STMT/ATC/TMS/CLIENT/CHG/DEV/MOD/DEAD (21) | SQL injection, hardcoded creds, ATC findings, transport workflow, client config, SAP mods |
 
 <details>
 <summary><strong>🛡️ Advanced IAM — Full Check List</strong></summary>
@@ -315,6 +316,67 @@ SoD checks support three data strategies: pre-computed matrix (`sod_matrix.csv`)
 
 </details>
 
+<details>
+<summary><strong>💻 Code & Transport Security — Full Check List (NEW)</strong></summary>
+
+### Code Injection / SQL Injection (CODE-INJ-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| CODE-INJ-001 | SQL injection patterns in custom code (dynamic WHERE, EXEC SQL) | CRITICAL |
+| CODE-INJ-002 | Custom code missing authority checks | HIGH |
+| CODE-INJ-003 | Hardcoded credentials in ABAP source | CRITICAL |
+
+### Dangerous Statements (CODE-STMT-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| CODE-STMT-001 | Dangerous ABAP statements (CALL 'SYSTEM', GENERATE, INSERT REPORT) | HIGH |
+
+### ATC / Code Inspector (CODE-ATC-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| CODE-ATC-001 | Unresolved critical ATC findings | CRITICAL |
+| CODE-ATC-002 | Unresolved high-severity ATC findings | HIGH |
+
+### Transport Management (CODE-TMS-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| CODE-TMS-001 | Transport routes allow direct dev→prod delivery | CRITICAL |
+| CODE-TMS-002 | Production imports without approval | HIGH |
+| CODE-TMS-003 | Same user releasing and importing (SoD violation) | HIGH |
+| CODE-TMS-004 | Transport imports outside change windows (weekends) | MEDIUM |
+| CODE-TMS-005 | Transports imported directly from dev to prod | CRITICAL |
+
+### Client Configuration (CODE-CLIENT-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| CODE-CLIENT-001 | Production client allows changes (not locked) | CRITICAL |
+
+### Change Documents (CODE-CHG-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| CODE-CHG-001 | Critical object types without change documents | MEDIUM |
+| CODE-CHG-002 | Change documents with empty/system user attribution | MEDIUM |
+
+### Development Access (CODE-DEV-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| CODE-DEV-001 | Users with S_DEVELOP modify/create in production | HIGH |
+
+### SAP Modifications (CODE-MOD-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| CODE-MOD-001 | Unregistered SAP standard modifications | MEDIUM |
+| CODE-MOD-002 | Modifications to security-critical standard programs | CRITICAL |
+| CODE-MOD-003 | Stale modifications (5+ years old) | LOW |
+
+### Dead Code (CODE-DEAD-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| CODE-DEAD-001 | Excessive unreferenced custom code | MEDIUM |
+| CODE-DEAD-002 | Custom code objects without designated owner | LOW |
+
+</details>
+
 ---
 
 ## Quick Start
@@ -348,6 +410,7 @@ rise      — RISE / BTP Core (RISE-*)
 btpcloud  — BTP Cloud Attack Surface (BTP-*)
 intglayer — Network & Integration Layer (INTG-*)
 dataprot  — Data Protection & Privacy (DPP-*)
+codetrans — Code & Transport Security (CODE-*)
 all       — Run everything (default)
 ```
 
@@ -490,8 +553,9 @@ SAP-S4HANA-RISE-Security-Scanner/
 │   ├── btp_cloud_surface.py        # BTP-* checks
 │   ├── integration_layer.py        # INTG-* checks
 │   ├── data_protection.py          # DPP-* checks (NEW)
+│   ├── code_transport.py           # CODE-* checks (NEW)
 │   └── report_generator.py         # HTML dashboard
-├── sample_data/                    # 45+ demo files
+├── sample_data/                    # 50+ demo files
 ├── docs/
 │   ├── banner.svg
 │   ├── EXPORT_GUIDE.md
@@ -539,7 +603,13 @@ SAP-S4HANA-RISE-Security-Scanner/
 - [x] Sensitive field inventory & classification
 - [x] Cross-border data transfer controls
 - [x] Data subject request (DSAR) compliance
-- [ ] Custom ABAP code security scanning
+- [x] Custom ABAP code security scanning (SQL injection, hardcoded creds, dangerous statements)
+- [x] ATC/code inspector finding analysis
+- [x] Transport workflow enforcement (approval, SoD, route integrity)
+- [x] Client configuration security (SCC4)
+- [x] SAP standard modification auditing
+- [x] Dead/unreferenced custom code detection
+- [ ] Fiori catalog/tile authorization review
 - [ ] Fiori catalog/tile authorization review
 - [ ] Cryptographic posture assessment
 - [ ] Scan comparison mode (diff two scans)

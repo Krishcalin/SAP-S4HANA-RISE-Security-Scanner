@@ -89,6 +89,15 @@ class DataLoader:
         "personal_data_inventory": ["personal_data_inventory.csv", "pdi.csv"],
         "deletion_requests":       ["deletion_requests.csv", "dsar_requests.csv"],
         "system_landscape":        ["system_landscape.csv", "landscape.csv"],
+        # Code & Transport Security data sources
+        "custom_code_scan":        ["custom_code_scan.csv", "atc_results.csv", "code_inspector.csv"],
+        "transport_routes":        ["transport_routes.csv", "tms_routes.csv"],
+        "transport_history":       ["transport_history.csv", "stms_log.csv", "import_history.csv"],
+        "client_settings":         ["client_settings.csv", "scc4.csv"],
+        "change_documents":        ["change_documents.csv", "cdhdr.csv"],
+        "code_inventory":          ["code_inventory.csv", "custom_objects.csv"],
+        "sap_modifications":       ["sap_modifications.csv", "se95.csv", "modifications.csv"],
+        "dev_access_prod":         ["dev_access_prod.csv"],
     }
 
     def __init__(self, data_dir: Path):
