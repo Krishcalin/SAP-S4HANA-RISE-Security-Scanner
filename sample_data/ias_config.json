@@ -1,0 +1,10 @@
+{
+  "applications": [
+    {"name": "S4HANA_Fiori_Launchpad", "appType": "standard", "authenticationRules": [{"condition": "group=FLP_Users", "action": "allow"}], "ipRestrictions": [], "mfaEnabled": false, "riskBasedAuth": false, "authenticationType": "IAS", "trustType": "IAS"},
+    {"name": "BTP_Admin_Cockpit", "appType": "standard", "authenticationRules": [], "ipRestrictions": ["10.0.0.0/8"], "mfaEnabled": true, "riskBasedAuth": true, "authenticationType": "IAS", "trustType": "IAS"},
+    {"name": "Integration_Suite", "appType": "standard", "authenticationRules": [], "ipRestrictions": [], "mfaEnabled": false, "riskBasedAuth": false, "authenticationType": "XSUAA", "trustType": "XSUAA"},
+    {"name": "Build_WorkZone", "appType": "standard", "authenticationRules": [], "ipRestrictions": [], "mfaEnabled": false, "riskBasedAuth": false, "authenticationType": "XSUAA", "trustType": "LEGACY"},
+    {"name": "Analytics_Cloud", "appType": "standard", "authenticationRules": [{"condition": "ip_range", "action": "mfa"}], "ipRestrictions": [], "mfaEnabled": false, "riskBasedAuth": false, "authenticationType": "IAS", "trustType": "IAS"},
+    {"name": "Custom_App_Portal", "appType": "standard", "authenticationRules": [], "ipRestrictions": [], "mfaEnabled": false, "riskBasedAuth": false, "authenticationType": "IAS", "trustType": "IAS"}
+  ]
+}

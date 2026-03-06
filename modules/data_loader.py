@@ -55,6 +55,16 @@ class DataLoader:
         "role_details":      ["role_details.csv", "agr_define.csv"],
         "access_reviews":    ["access_reviews.csv", "arm_reviews.csv"],
         "user_groups":       ["user_groups.csv"],
+        # BTP Cloud Attack Surface data sources
+        "cloud_connector":      ["cloud_connector.json", "scc_config.json"],
+        "btp_service_bindings": ["btp_service_bindings.json", "service_bindings.json"],
+        "btp_destinations":     ["btp_destinations.json", "destinations.json"],
+        "ias_config":           ["ias_config.json", "ias_applications.json"],
+        "btp_entitlements":     ["btp_entitlements.json", "entitlements.json"],
+        "event_mesh":           ["event_mesh.json", "em_config.json"],
+        "cpi_artifacts":        ["cpi_artifacts.json", "cpi_security.json"],
+        "btp_network":          ["btp_network.json", "private_link.json"],
+        "btp_subaccounts":      ["btp_subaccounts.json", "subaccounts.json"],
     }
 
     def __init__(self, data_dir: Path):

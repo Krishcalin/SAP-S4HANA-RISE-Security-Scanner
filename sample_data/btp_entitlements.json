@@ -1,0 +1,18 @@
+{
+  "entitlements": [
+    {"serviceName": "xsuaa", "planName": "application", "quota": 10, "used": 5},
+    {"serviceName": "destination", "planName": "lite", "quota": 5, "used": 3},
+    {"serviceName": "connectivity", "planName": "lite", "quota": 2, "used": 1},
+    {"serviceName": "auditlog", "planName": "premium", "quota": 1, "used": 0},
+    {"serviceName": "credstore", "planName": "standard", "quota": 1, "used": 0},
+    {"serviceName": "malware-scanner", "planName": "cav", "quota": 1, "used": 0},
+    {"serviceName": "hana-cloud", "planName": "hana", "quota": 1, "used": 1},
+    {"serviceName": "identity", "planName": "application", "quota": 5, "used": 2},
+    {"serviceName": "enterprise-messaging", "planName": "default", "quota": 3, "used": 1},
+    {"serviceName": "cloud-logging", "planName": "standard", "quota": 1, "used": 0},
+    {"serviceName": "alert-notification", "planName": "standard", "quota": 1, "used": 0},
+    {"serviceName": "privatelink", "planName": "standard", "quota": 2, "used": 0},
+    {"serviceName": "application-logs", "planName": "lite", "quota": 5, "used": 0},
+    {"serviceName": "business-rules", "planName": "basic", "quota": 2, "used": 0}
+  ]
+}

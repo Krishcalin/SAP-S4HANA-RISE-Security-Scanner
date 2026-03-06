@@ -1,0 +1,11 @@
+{
+  "destinations": [
+    {"Name": "S4H_Backend", "URL": "https://10.0.1.50/sap/opu/odata", "Authentication": "BASIC_AUTHENTICATION", "User": "API_USER", "ProxyType": "OnPremise", "TrustAll": "false", "lastModified": "2024-11-01"},
+    {"Name": "SuccessFactors_API", "URL": "https://api.successfactors.com/odata/v2", "Authentication": "OAUTH2_CLIENT_CREDENTIALS", "ProxyType": "Internet", "TrustAll": "false", "lastModified": "2025-01-15"},
+    {"Name": "Ariba_Network", "URL": "https://openapi.ariba.com", "Authentication": "OAUTH2_CLIENT_CREDENTIALS", "ProxyType": "Internet", "TrustAll": "false", "lastModified": "2025-02-01"},
+    {"Name": "Legacy_ECC_SOAP", "URL": "http://10.0.2.100/sap/bc/soap", "Authentication": "BASIC_AUTHENTICATION", "User": "RFC_LEGACY", "ProxyType": "OnPremise", "TrustAll": "true", "lastModified": "2023-05-20"},
+    {"Name": "Bank_API", "URL": "https://api.bank.com/payments", "Authentication": "OAUTH2_PASSWORD", "User": "bank_svc", "ProxyType": "Internet", "TrustAll": "false", "lastModified": "2024-09-10"},
+    {"Name": "Test_System_Old", "URL": "https://10.0.3.10/sap/opu", "Authentication": "BASIC_AUTHENTICATION", "User": "TEST_USER", "ProxyType": "Internet", "TrustAll": "true", "lastModified": "2022-08-15"},
+    {"Name": "Analytics_DWC", "URL": "https://mycompany.eu10.hcs.cloud.sap", "Authentication": "OAUTH2_CLIENT_CREDENTIALS", "ProxyType": "Internet", "TrustAll": "false", "lastModified": "2025-02-20"}
+  ]
+}

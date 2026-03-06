@@ -1,0 +1,53 @@
+{
+  "backends": [
+    {
+      "name": "S4H_Production",
+      "internalHost": "10.0.1.50:443",
+      "protocol": "HTTPS",
+      "resources": [
+        {"path": "/", "exactMatchOnly": false},
+        {"path": "/sap/opu/odata/sap", "exactMatchOnly": false},
+        {"path": "/sap/bc/gui/sap/its/webgui", "exactMatchOnly": false},
+        {"path": "/sap/bc/adt", "exactMatchOnly": true}
+      ]
+    },
+    {
+      "name": "ECC_Legacy",
+      "internalHost": "10.0.2.100:443",
+      "protocol": "HTTPS",
+      "lastUsed": "2024-03-15",
+      "resources": [
+        {"path": "/sap/bc/soap/rfc", "exactMatchOnly": false},
+        {"path": "/sap/bc/webrfc", "exactMatchOnly": false}
+      ]
+    },
+    {
+      "name": "BW_Reporting",
+      "internalHost": "10.0.1.60:443",
+      "protocol": "HTTPS",
+      "lastUsed": "2025-02-28",
+      "resources": [
+        {"path": "/sap/bw/ina", "exactMatchOnly": true}
+      ]
+    },
+    {
+      "name": "Dev_System_Old",
+      "internalHost": "10.0.3.10:443",
+      "protocol": "HTTPS",
+      "status": "DISABLED",
+      "lastUsed": "2023-11-01",
+      "resources": [
+        {"path": "/*", "exactMatchOnly": false}
+      ]
+    }
+  ],
+  "accessControlLists": [
+    {"subaccount": "sa-prod-001", "allowedHosts": ["*"], "enabled": true},
+    {"subaccount": "sa-dev-002", "allowedHosts": ["*"], "enabled": true}
+  ],
+  "certificates": [
+    {"name": "SCC_System_Cert", "expiryDate": "2025-04-15", "keySize": 2048, "algorithm": "SHA256withRSA"},
+    {"name": "Backend_CA", "expiryDate": "2025-06-30", "keySize": 2048, "algorithm": "SHA256withRSA"},
+    {"name": "Legacy_Cert", "expiryDate": "2024-12-01", "keySize": 1024, "algorithm": "SHA1withRSA"}
+  ]
+}

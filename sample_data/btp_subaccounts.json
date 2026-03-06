@@ -1,0 +1,9 @@
+{
+  "subaccounts": [
+    {"name": "Production", "id": "sa-prod-001", "region": "eu10", "auditLogEnabled": true, "customIdp": "corp-aad-tenant", "environment": "cloudfoundry"},
+    {"name": "Quality", "id": "sa-qa-002", "region": "eu10", "auditLogEnabled": false, "customIdp": "corp-aad-tenant", "environment": "cloudfoundry"},
+    {"name": "Development", "id": "sa-dev-003", "region": "eu10", "auditLogEnabled": false, "customIdp": "sap.default", "environment": "cloudfoundry"},
+    {"name": "Sandbox", "id": "sa-sbx-004", "region": "us10", "auditLogEnabled": false, "customIdp": "", "environment": "cloudfoundry"},
+    {"name": "Integration_Test", "id": "sa-int-005", "region": "eu10", "auditLogEnabled": false, "customIdp": "corp-aad-tenant", "environment": "cloudfoundry"}
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "bindings": [
+    {"name": "xsuaa-prod-key", "service": "xsuaa", "created": "2023-06-15", "scopes": ["admin", "manage"], "instanceStatus": "active"},
+    {"name": "dest-prod-binding", "service": "destination", "created": "2024-01-10", "scopes": ["read", "write"], "instanceStatus": "active"},
+    {"name": "hana-cloud-key", "service": "hana-cloud", "created": "2023-03-01", "scopes": ["full_access"], "instanceStatus": "active"},
+    {"name": "connectivity-key", "service": "connectivity", "created": "2024-08-20", "scopes": ["read"], "instanceStatus": "active"},
+    {"name": "old-test-binding", "service": "xsuaa", "created": "2022-11-01", "scopes": ["Subaccount_Admin", "manage"], "instanceStatus": "DELETED"},
+    {"name": "credstore-key", "service": "credstore", "created": "2024-06-15", "scopes": ["read", "write"], "instanceStatus": "active"},
+    {"name": "em-binding-01", "service": "enterprise-messaging", "created": "2023-09-01", "scopes": ["publish", "consume"], "instanceStatus": "active"}
+  ]
+}

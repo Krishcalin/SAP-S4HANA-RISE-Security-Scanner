@@ -1,0 +1,9 @@
+{
+  "queues": [
+    {"name": "s4hana/salesorder/created", "topics": ["sap/s4/beh/salesorder/created/v1"], "accessPolicy": "restricted", "namespace": "sap/s4"},
+    {"name": "integration/events/all", "topics": ["sap/s4/beh/*/created/*", "sap/s4/beh/*/changed/*"], "accessPolicy": "none", "namespace": "sap/s4"},
+    {"name": "finance/journal/posted", "topics": ["sap/s4/beh/journalentry/posted/v1"], "accessPolicy": "restricted", "namespace": "sap/s4"},
+    {"name": "cross_domain/ariba", "topics": ["ariba/procurement/requisition/approved", "sap/s4/beh/purchaseorder/created/v1"], "accessPolicy": "none", "namespace": "sap/s4"},
+    {"name": "hr/employee/all", "topics": ["sap/successfactors/employee/*", "sap/s4/beh/employee/#"], "accessPolicy": "restricted", "namespace": "sap/sf"}
+  ]
+}

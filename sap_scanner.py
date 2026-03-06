@@ -25,6 +25,7 @@ from modules.security_params import SecurityParamAuditor
 from modules.network_services import NetworkServiceAuditor
 from modules.rise_btp_checks import RiseBtpAuditor
 from modules.iam_advanced import AdvancedIamAuditor
+from modules.btp_cloud_surface import BtpCloudSurfaceAuditor
 from modules.report_generator import ReportGenerator
 from modules.data_loader import DataLoader
 
@@ -59,7 +60,7 @@ def main():
     )
     parser.add_argument(
         "--modules", nargs="+",
-        choices=["users", "params", "network", "rise", "iam", "all"],
+        choices=["users", "params", "network", "rise", "iam", "btpcloud", "all"],
         default=["all"],
         help="Which audit modules to run (default: all)"
     )
@@ -88,7 +89,7 @@ def main():
         print(f"[*] Loaded custom baseline from {args.config}")
 
     run_modules = args.modules if "all" not in args.modules else [
-        "users", "params", "network", "rise", "iam"
+        "users", "params", "network", "rise", "iam", "btpcloud"
     ]
 
     all_findings = []
@@ -135,6 +136,14 @@ def main():
     if "iam" in run_modules:
         print("[*] Running Advanced IAM Checks (SoD, Firefighter, Role Expiry, Cross-ID)...")
         auditor = AdvancedIamAuditor(data, baseline_overrides)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- BTP Cloud Attack Surface ---
+    if "btpcloud" in run_modules:
+        print("[*] Running BTP Cloud Attack Surface Checks...")
+        auditor = BtpCloudSurfaceAuditor(data, baseline_overrides)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")

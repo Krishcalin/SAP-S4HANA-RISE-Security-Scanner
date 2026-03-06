@@ -1,0 +1,16 @@
+{
+  "credentials": [
+    {"name": "SF_EC_Credential", "type": "USER_CREDENTIAL", "deployedOn": "2023-08-15", "deployedBy": "ADMIN"},
+    {"name": "S4H_OAuth_Client", "type": "OAUTH2_CLIENT", "deployedOn": "2024-11-01", "deployedBy": "ADMIN"},
+    {"name": "Ariba_API_Key", "type": "PLAIN_TEXT", "deployedOn": "2023-03-20", "deployedBy": "INTEGRATOR"},
+    {"name": "Bank_SFTP_Key", "type": "KEYPAIR", "deployedOn": "2024-06-01", "deployedBy": "ADMIN"},
+    {"name": "Legacy_ECC_Basic", "type": "BASIC", "deployedOn": "2022-12-01", "deployedBy": "INTEGRATOR"}
+  ],
+  "iflows": [
+    {"name": "SF_Employee_Replication", "senderAuth": "CLIENT_CERTIFICATE", "endpoints": ["https://cpi.eu10.hana.ondemand.com/http/sf/employee"], "hardcodedCredentials": false},
+    {"name": "Ariba_PO_Sync", "senderAuth": "NONE", "endpoints": ["https://cpi.eu10.hana.ondemand.com/http/ariba/po"], "hardcodedCredentials": false},
+    {"name": "Bank_Statement_Import", "senderAuth": "BASIC", "endpoints": ["http://cpi.eu10.hana.ondemand.com/http/bank/statement"], "hardcodedCredentials": true},
+    {"name": "Legacy_IDOC_Bridge", "senderAuth": "ANONYMOUS", "endpoints": ["https://cpi.eu10.hana.ondemand.com/http/idoc/inbound"], "hardcodedCredentials": true},
+    {"name": "S4_Event_Handler", "senderAuth": "OAUTH2", "endpoints": ["https://cpi.eu10.hana.ondemand.com/http/events"], "hardcodedCredentials": false}
+  ]
+}
