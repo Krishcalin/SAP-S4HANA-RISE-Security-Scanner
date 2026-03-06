@@ -1,0 +1,10 @@
+{
+  "policies": [
+    {"name": "HR_MasterData_Retention", "dataObject": "PA0001", "retentionPeriod": 7, "unit": "YEARS", "destructionMethod": "AUTOMATIC", "endOfPurpose": "Employment End + Retention Period"},
+    {"name": "HR_Payroll_Retention", "dataObject": "PA0008", "retentionPeriod": 15, "unit": "YEARS", "destructionMethod": "MANUAL", "endOfPurpose": ""},
+    {"name": "FI_Documents", "dataObject": "BKPF", "retentionPeriod": 10, "unit": "YEARS", "destructionMethod": "AUTOMATIC", "endOfPurpose": "Fiscal Year Close + Retention"},
+    {"name": "Customer_Master", "dataObject": "KNA1", "retentionPeriod": 99, "unit": "YEARS", "destructionMethod": "NONE", "endOfPurpose": ""},
+    {"name": "Vendor_Master", "dataObject": "LFA1", "retentionPeriod": 10, "unit": "YEARS", "destructionMethod": "REVIEW", "endOfPurpose": "Last Transaction + Retention"},
+    {"name": "BP_Address", "dataObject": "ADRC", "retentionPeriod": 5, "unit": "YEARS", "destructionMethod": "AUTOMATIC", "endOfPurpose": "Relationship End"}
+  ]
+}

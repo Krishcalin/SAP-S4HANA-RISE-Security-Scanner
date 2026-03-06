@@ -1,0 +1,8 @@
+{
+  "configurations": [
+    {"name": "DEV_S4H", "systemType": "DEVELOPMENT", "piiMasked": false, "status": "ACTIVE"},
+    {"name": "QA_S4H", "systemType": "QUALITY", "piiMasked": true, "status": "ACTIVE"},
+    {"name": "SANDBOX_S4H", "systemType": "SANDBOX", "piiMasked": false, "status": "DISABLED"},
+    {"name": "TRAINING_S4H", "systemType": "TRAINING", "piiMasked": false, "status": "ACTIVE"}
+  ]
+}

@@ -1,0 +1,9 @@
+PURPOSE,LEGAL_BASIS,EXPIRY_DATE,DATA_CATEGORIES,STATUS
+Employment Administration,GDPR Art.6(1)(b) Contract,99991231,"Name,Address,DOB,Employee ID",ACTIVE
+Payroll Processing,GDPR Art.6(1)(b) Contract,99991231,"Bank Details,Salary,Tax ID",ACTIVE
+Customer Relationship Management,,99991231,"Name,Email,Phone,Address",ACTIVE
+Marketing Communications,GDPR Art.6(1)(a) Consent,20241231,"Email,Name,Preferences",ACTIVE
+Vendor Onboarding,GDPR Art.6(1)(b) Contract,99991231,"Company,Contact,Bank Details",ACTIVE
+Analytics and Reporting,,99991231,"Anonymized Transaction Data",ACTIVE
+Health & Safety Records,GDPR Art.9(2)(b) Employment,20250630,"Health Data,Incident Reports",ACTIVE
+Legacy CRM Migration,,20240101,"Name,Email,Phone",ACTIVE

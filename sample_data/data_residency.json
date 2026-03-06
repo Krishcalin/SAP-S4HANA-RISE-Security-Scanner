@@ -1,0 +1,10 @@
+{
+  "primaryRegion": "EU",
+  "transfers": [
+    {"name": "EU_to_India_HR", "sourceRegion": "EU", "destRegion": "IN", "adequacyDecision": false, "safeguard": "SCC", "dataTypes": ["Employee Personal Data", "Payroll"], "dpiaCompleted": true},
+    {"name": "EU_to_US_Analytics", "sourceRegion": "EU", "destRegion": "US", "adequacyDecision": false, "safeguard": "", "dataTypes": ["Customer Transaction Data", "Anonymized Reports"], "dpiaCompleted": false},
+    {"name": "EU_to_UK_Finance", "sourceRegion": "EU", "destRegion": "UK", "adequacyDecision": true, "safeguard": "ADEQUACY", "dataTypes": ["Financial Documents"], "dpiaCompleted": true},
+    {"name": "EU_to_CN_Supplier", "sourceRegion": "EU", "destRegion": "CN", "adequacyDecision": false, "safeguard": "none", "dataTypes": ["Supplier Contact Data", "Health and Safety Records"], "dpiaCompleted": false},
+    {"name": "IN_to_US_Support", "sourceRegion": "IN", "destRegion": "US", "adequacyDecision": false, "safeguard": "BCR", "dataTypes": ["Employee Data"], "dpiaCompleted": true}
+  ]
+}

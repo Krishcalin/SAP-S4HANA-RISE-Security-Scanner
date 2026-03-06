@@ -1,0 +1,8 @@
+{
+  "informationReport": true,
+  "deletionReport": false,
+  "changeOfPurpose": true,
+  "dataBlocking": true,
+  "consentManagement": false,
+  "dataBreachNotification": false
+}

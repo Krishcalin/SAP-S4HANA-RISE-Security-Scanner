@@ -27,6 +27,7 @@ from modules.rise_btp_checks import RiseBtpAuditor
 from modules.iam_advanced import AdvancedIamAuditor
 from modules.btp_cloud_surface import BtpCloudSurfaceAuditor
 from modules.integration_layer import IntegrationLayerAuditor
+from modules.data_protection import DataProtectionAuditor
 from modules.report_generator import ReportGenerator
 from modules.data_loader import DataLoader
 
@@ -61,7 +62,7 @@ def main():
     )
     parser.add_argument(
         "--modules", nargs="+",
-        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "all"],
+        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "all"],
         default=["all"],
         help="Which audit modules to run (default: all)"
     )
@@ -90,7 +91,7 @@ def main():
         print(f"[*] Loaded custom baseline from {args.config}")
 
     run_modules = args.modules if "all" not in args.modules else [
-        "users", "params", "network", "rise", "iam", "btpcloud", "intglayer"
+        "users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot"
     ]
 
     all_findings = []
@@ -153,6 +154,14 @@ def main():
     if "intglayer" in run_modules:
         print("[*] Running Network & Integration Layer Checks...")
         auditor = IntegrationLayerAuditor(data, baseline_overrides)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- Data Protection & Privacy ---
+    if "dataprot" in run_modules:
+        print("[*] Running Data Protection & Privacy Checks...")
+        auditor = DataProtectionAuditor(data, baseline_overrides)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")

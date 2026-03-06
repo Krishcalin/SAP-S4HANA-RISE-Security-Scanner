@@ -1,0 +1,7 @@
+CONFIG_NAME,STATUS,CHANNEL,PURPOSE
+HR_PersonalData,ACTIVE,DYNPRO,Employment Administration
+HR_PersonalData,ACTIVE,WEBDYNPRO,Employment Administration
+HR_BankDetails,ACTIVE,DYNPRO,Payroll Processing
+BP_CustomerData,INACTIVE,ODATA,Customer Management
+BP_VendorData,INACTIVE,RFC,Vendor Management
+Finance_BankAccounts,ACTIVE,DYNPRO,Financial Accounting

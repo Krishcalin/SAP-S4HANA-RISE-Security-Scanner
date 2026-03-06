@@ -509,9 +509,9 @@
       <div class="subtitle">Security Assessment Report</div>
     </div>
     <div class="header-right">
-      <span>Scan: 2026-03-06T10:36:07</span>
+      <span>Scan: 2026-03-06T11:06:03</span>
       <span>Source: sample_data</span>
-      <span>Modules: users, params, network, rise, iam, btpcloud, intglayer</span>
+      <span>Modules: users, params, network, rise, iam, btpcloud, intglayer, dataprot</span>
     </div>
   </div>
 
@@ -535,15 +535,15 @@
 
     <div class="severity-grid">
       <div class="sev-card critical">
-        <div class="sev-count">21</div>
+        <div class="sev-count">25</div>
         <div class="sev-label">Critical</div>
       </div>
       <div class="sev-card high">
-        <div class="sev-count">54</div>
+        <div class="sev-count">61</div>
         <div class="sev-label">High</div>
       </div>
       <div class="sev-card medium">
-        <div class="sev-count">37</div>
+        <div class="sev-count">44</div>
         <div class="sev-label">Medium</div>
       </div>
       <div class="sev-card low">
@@ -574,6 +574,12 @@
         <div class="cat-bar-label">Identity &amp; Access Management</div>
         <div class="cat-bar-track"><div class="cat-bar-fill" style="width: 82.75862068965517%"></div></div>
         <div class="cat-bar-count">24</div>
+      </div>
+
+      <div class="cat-bar-row">
+        <div class="cat-bar-label">Data Protection &amp; Privacy</div>
+        <div class="cat-bar-track"><div class="cat-bar-fill" style="width: 62.06896551724138%"></div></div>
+        <div class="cat-bar-count">18</div>
       </div>
 
       <div class="cat-bar-row">
@@ -647,16 +653,16 @@
   <!-- Filter Bar -->
   <div class="filter-bar">
     <label>Filter:</label>
-    <button class="filter-btn active" onclick="filterFindings('ALL')">All (123)</button>
-    <button class="filter-btn" onclick="filterFindings('CRITICAL')">Critical (21)</button>
-    <button class="filter-btn" onclick="filterFindings('HIGH')">High (54)</button>
-    <button class="filter-btn" onclick="filterFindings('MEDIUM')">Medium (37)</button>
+    <button class="filter-btn active" onclick="filterFindings('ALL')">All (141)</button>
+    <button class="filter-btn" onclick="filterFindings('CRITICAL')">Critical (25)</button>
+    <button class="filter-btn" onclick="filterFindings('HIGH')">High (61)</button>
+    <button class="filter-btn" onclick="filterFindings('MEDIUM')">Medium (44)</button>
     <button class="filter-btn" onclick="filterFindings('LOW')">Low (11)</button>
   </div>
 
   <!-- Findings -->
   <div class="findings-section">
-    <h2>Detailed Findings (123)</h2>
+    <h2>Detailed Findings (141)</h2>
     
     <div class="finding-card" data-severity="CRITICAL" data-category="User &amp; Authorization">
       <div class="finding-header">
@@ -1284,6 +1290,126 @@
                 <div class="finding-section">
                   <div class="finding-section-title">References</div>
                   <ul class="ref-list"><li>SAP Note 1503579 — SOAMANAGER Authentication</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Data Protection &amp; Privacy">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">Non-production systems without PII data masking</span>
+        <span class="finding-id">DPP-MASK-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 non-production system(s) do not have PII masking/anonymization enabled. Production data copies in dev/test systems expose personal data to broader user populations with weaker access controls.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>DEV_S4H (type: DEVELOPMENT) — PII masking: not enabled</li><li>SANDBOX_S4H (type: SANDBOX) — PII masking: not enabled</li><li>TRAINING_S4H (type: TRAINING) — PII masking: not enabled</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Implement data masking for all non-production system copies. Use SAP Data Privacy Integration (DPI), SAP Test Data Migration Server (TDMS), or third-party tools (e.g., Informatica TDM). Mask: names, addresses, phone numbers, bank details, tax IDs, and all fields classified as PII.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>GDPR Article 32 — Security of Processing</li><li>SAP TDMS — Test Data Migration Server</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Data Protection &amp; Privacy">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">Non-production systems identified as production copies without masking</span>
+        <span class="finding-id">DPP-MASK-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 non-production system(s) are flagged as copies of production but have no data masking. These contain full production personal data accessible to development teams.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>DEV (env: DEVELOPMENT) — production copy without masking</li><li>SBX (env: SANDBOX) — production copy without masking</li><li>TRN (env: TRAINING) — production copy without masking</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Immediately schedule data masking runs for all production copies. Implement a policy requiring masking within 48 hours of system copy. Block production copy requests without approved masking plans.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>GDPR Article 25 — Data Protection by Design</li><li>SAP Note 2667054 — Data Scrambling in System Copies</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Data Protection &amp; Privacy">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">Cross-border data transfers without legal safeguards</span>
+        <span class="finding-id">DPP-RES-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 cross-border data transfer(s) have neither an adequacy decision nor an appropriate safeguard mechanism. Under GDPR Chapter V, transfers to third countries require specific legal basis.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>EU_to_US_Analytics: EU → US — no adequacy decision or transfer safeguard</li><li>EU_to_CN_Supplier: EU → CN — no adequacy decision or transfer safeguard</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Implement appropriate transfer mechanisms for each cross-border flow: Standard Contractual Clauses (SCCs), Binding Corporate Rules (BCRs), or rely on an adequacy decision. Complete a Transfer Impact Assessment for each destination country.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>GDPR Articles 44-49 — Transfer of Personal Data to Third Countries</li><li>DPDP Act 2023 Section 16 — Transfer Outside India</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="CRITICAL" data-category="Data Protection &amp; Privacy">
+      <div class="finding-header">
+        <span class="sev-badge CRITICAL">CRITICAL</span>
+        <span class="finding-title">Data subject requests overdue (&gt;30 day SLA)</span>
+        <span class="finding-id">DPP-DEL-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>5 data subject request(s) have exceeded the 30-day SLA. GDPR Art.12(3) requires response within one month. Overdue requests expose the organization to regulatory enforcement.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (5)</div>
+                  <ul class="affected-list"><li>Request DSAR-2025-003 (DELETION, subject: vendor_9012) — open 410d (SLA: 30d), status: IN_PROGRESS</li><li>Request DSAR-2025-004 (DELETION, subject: employee_3456) — open 460d (SLA: 30d), status: IN_PROGRESS</li><li>Request DSAR-2025-006 (DELETION, subject: prospect_1111) — open 384d (SLA: 30d), status: OPEN</li><li>Request DSAR-2025-007 (ACCESS, subject: employee_2222) — open 379d (SLA: 30d), status: OPEN</li><li>Request DSAR-2025-008 (DELETION, subject: customer_3333) — open 476d (SLA: 30d), status: IN_PROGRESS</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Process all overdue requests immediately. Communicate delays to data subjects with justification. Implement automated SLA tracking and escalation workflows.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>GDPR Article 12(3) — Response Time Limits</li><li>DPDP Act 2023 Section 12 — Right of Grievance Redressal</li></ul>
                 </div>
       </div>
     </div>
@@ -2904,6 +3030,216 @@
       </div>
     </div>
 
+    <div class="finding-card" data-severity="HIGH" data-category="Data Protection &amp; Privacy">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Read Access Logging missing coverage for key channels</span>
+        <span class="finding-id">DPP-RAL-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 data access channel(s) are not covered by RAL. Personal data accessed through these channels goes unlogged.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>ODATA: OData API access (Fiori apps, external APIs)</li><li>RFC: Remote Function Call access</li><li>ALV: ALV report output / list displays</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Configure RAL rules for all listed channels in SRALMANAGER. OData is especially critical as Fiori apps use it exclusively. RFC channel is needed to capture BAPI-based data reads.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP Note 2089022 — RAL Channel Configuration</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Data Protection &amp; Privacy">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">ILM policies without end-of-purpose definitions</span>
+        <span class="finding-id">DPP-ILM-003</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 ILM policy/policies have no end-of-purpose trigger defined. Without this, there is no mechanism to determine when data should transition to blocking or deletion.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>HR_Payroll_Retention (object: PA0008)</li><li>Customer_Master (object: KNA1)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Define end-of-purpose conditions for every ILM policy: business transaction completion, contract termination, employment end, or explicit time-based trigger. Map to GDPR Article 6 legal basis for processing.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>GDPR Article 17 — Right to Erasure</li><li>SAP ILM — End of Purpose Configuration</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Data Protection &amp; Privacy">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Personal data tables without ILM retention policies</span>
+        <span class="finding-id">DPP-ILM-004</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>24 table(s) known to contain personal data have no ILM retention policy. Data in these tables will be retained indefinitely, violating data minimization principles.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (24)</div>
+                  <ul class="affected-list"><li>PA0000</li><li>PA0002</li><li>PA0003</li><li>PA0006</li><li>PA0009</li><li>PA0021</li><li>PA0077</li><li>PA0105</li><li>PA0185</li><li>HRP1000</li><li>HRP1001</li><li>BUT000</li><li>BUT020</li><li>BUT021</li><li>BUT050</li><li>BUT100</li><li>ADR2</li><li>ADR3</li><li>ADR6</li><li>KNB1</li><li>LFB1</li><li>BSEG</li><li>USR02</li><li>USR21</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Create ILM retention policies for all listed tables. Use SAP&#x27;s standard ILM objects where available. For custom tables, define custom ILM objects in transaction IRMPOL.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP ILM — Standard Retention Objects</li><li>GDPR Article 5(1)(c) — Data Minimisation</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Data Protection &amp; Privacy">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">DPP toolkit features not configured</span>
+        <span class="finding-id">DPP-TOOLKIT-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 DPP toolkit feature(s) are not enabled. These features are required for GDPR/DPDP compliance to support data subject rights and regulatory obligations.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>deletionReport: GDPR Art.17 — Right to Erasure / Deletion Report</li><li>consentManagement: GDPR Art.7 — Consent Recording &amp; Withdrawal</li><li>dataBreachNotification: GDPR Art.33/34 — Breach Notification Support</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Configure all DPP toolkit features in the S/4HANA system. Use Fiori apps: &#x27;Information Report&#x27;, &#x27;Deletion Report&#x27;, &#x27;Change of Purpose&#x27;, and &#x27;Data Blocking/Unblocking&#x27;. Ensure integration with your consent management platform.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP S/4HANA — Data Protection &amp; Privacy Toolkit</li><li>GDPR Articles 6, 7, 15, 17, 33, 34</li><li>DPDP Act 2023 Sections 6, 8, 11, 12, 13</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Data Protection &amp; Privacy">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Purposes of processing without documented legal basis</span>
+        <span class="finding-id">DPP-POP-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 purpose-of-processing definition(s) lack a documented legal basis (GDPR Art.6). Every processing activity must have a lawful basis: consent, contract, legal obligation, vital interest, public task, or legitimate interest.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>Purpose: Customer Relationship Management — legal basis: not documented</li><li>Purpose: Analytics and Reporting — legal basis: not documented</li><li>Purpose: Legacy CRM Migration — legal basis: not documented</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Document the legal basis for every purpose of processing. Map to GDPR Art.6(1)(a-f) or DPDP Act Section 4. Record in the S/4HANA DPP toolkit and your ROPA.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>GDPR Article 6 — Lawfulness of Processing</li><li>DPDP Act 2023 Section 4 — Grounds for Processing</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Data Protection &amp; Privacy">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Special category personal data in cross-border transfers</span>
+        <span class="finding-id">DPP-RES-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>1 cross-border transfer(s) involve special category data (health, biometric, genetic, racial/ethnic, etc.). These require additional safeguards under GDPR Art.9.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>EU_to_CN_Supplier: EU → CN — special categories: Health and Safety Records</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Conduct a Data Protection Impact Assessment (DPIA) for each transfer involving special category data. Ensure explicit consent or specific legal basis under Art.9(2). Implement supplementary technical measures (encryption, pseudonymization).</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>GDPR Article 9 — Special Categories of Personal Data</li><li>GDPR Article 35 — Data Protection Impact Assessment</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="HIGH" data-category="Data Protection &amp; Privacy">
+      <div class="finding-header">
+        <span class="sev-badge HIGH">HIGH</span>
+        <span class="finding-title">Data subject requests marked complete but incomplete</span>
+        <span class="finding-id">DPP-DEL-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>1 request(s) are marked as completed but have less than 100% completion. Partial deletions leave residual personal data in the system.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>Request DSAR-2025-005 (RECTIFICATION, subject: customer_7890) — status: COMPLETED, completion: 85%</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Reopen and complete all partially processed requests. Verify deletion across all systems (S/4, BTP, archives, backups). Use SAP DPP Deletion Report to confirm completeness.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>GDPR Article 17 — Right to Erasure</li></ul>
+                </div>
+      </div>
+    </div>
+
     <div class="finding-card" data-severity="MEDIUM" data-category="User &amp; Authorization">
       <div class="finding-header">
         <span class="sev-badge MEDIUM">MEDIUM</span>
@@ -4014,6 +4350,216 @@
       </div>
     </div>
 
+    <div class="finding-card" data-severity="MEDIUM" data-category="Data Protection &amp; Privacy">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">RAL log channels with retention below 365 days</span>
+        <span class="finding-id">DPP-RAL-003</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 RAL log channel(s) have retention periods shorter than 365 days. Regulatory requirements may mandate longer retention for data access audit trails.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>HR_ACCESS_LOG — retention: 180d (min: 365d)</li><li>FINANCE_ACCESS_LOG — retention: 90d (min: 365d)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Increase RAL log retention to at least 365 days. Configure archiving for long-term storage compliance. Verify retention aligns with GDPR Art.5(1)(e) storage limitation principle.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>GDPR Article 5(1)(e) — Storage Limitation</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Data Protection &amp; Privacy">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">ILM policies with retention exceeding 10 years</span>
+        <span class="finding-id">DPP-ILM-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>2 ILM retention policy/policies exceed 10 years. GDPR/DPDP requires data to be stored only as long as necessary for the processing purpose.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (2)</div>
+                  <ul class="affected-list"><li>HR_Payroll_Retention (object: PA0008) — retention: 15 years (max: 10)</li><li>Customer_Master (object: KNA1) — retention: 99 years (max: 10)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Review retention periods against business and legal requirements. Reduce to minimum necessary. Document legal basis for any retention exceeding standard periods.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>GDPR Article 5(1)(e) — Storage Limitation</li><li>DPDP Act 2023 Section 8(7) — Data Retention</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Data Protection &amp; Privacy">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">ILM policies without automatic data destruction</span>
+        <span class="finding-id">DPP-ILM-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 ILM policy/policies rely on manual destruction or have no destruction method configured. Manual processes are unreliable and frequently result in data hoarding.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>HR_Payroll_Retention (object: PA0008) — destruction: MANUAL</li><li>Customer_Master (object: KNA1) — destruction: NONE</li><li>Vendor_Master (object: LFA1) — destruction: REVIEW</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Configure automatic destruction workflows in ILM. Use SAP ILM destruction cockpit for scheduled execution. Implement approval workflows for destruction of regulated data.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP ILM — Data Destruction Configuration</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Data Protection &amp; Privacy">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Expired purposes of processing still active</span>
+        <span class="finding-id">DPP-POP-002</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>3 purpose(s) have passed their expiry date but are still active. Data processed under expired purposes lacks lawful basis and should be blocked or deleted.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (3)</div>
+                  <ul class="affected-list"><li>Purpose: Marketing Communications — expired: 20241231, status: ACTIVE</li><li>Purpose: Health &amp; Safety Records — expired: 20250630, status: ACTIVE</li><li>Purpose: Legacy CRM Migration — expired: 20240101, status: ACTIVE</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Deactivate expired purposes and trigger end-of-purpose data blocking. Review affected data for deletion eligibility. Update ROPA (Record of Processing Activities).</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>GDPR Article 5(1)(b) — Purpose Limitation</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Data Protection &amp; Privacy">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Known sensitive fields missing from data classification inventory</span>
+        <span class="finding-id">DPP-FIELD-003</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>19 commonly sensitive SAP field(s) are not present in the data classification inventory. Unclassified sensitive fields may lack proper protection.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (19)</div>
+                  <ul class="affected-list"><li>PERNR: Personnel number</li><li>PERID: Personal ID number</li><li>ICNUM: National ID / passport</li><li>NATIO: Nationality</li><li>BANKL: Bank routing number</li><li>SWIFT: SWIFT/BIC code</li><li>LGART: Wage type</li><li>GESCH: Gender</li><li>RACKY: Ethnicity/race</li><li>CONFG: Religion</li><li>PSTLZ: Postal code</li><li>NAME2: Name line 2</li><li>STCD2: Tax ID 2</li><li>LIFNR: Vendor number</li><li>WRBTR: Transaction amount</li><li>DMBTR: Local currency amount</li><li>BELNR: Document number</li><li>HKONT: GL account</li><li>SAESSION_COOKIE: Session identifiers</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Add all listed fields to the personal data classification inventory. Assign appropriate data classification levels. Use SAP&#x27;s Data Privacy Integration (DPI) for automated discovery.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>SAP DPI — Personal Data Discovery &amp; Classification</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Data Protection &amp; Privacy">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Data subject requests without documentation</span>
+        <span class="finding-id">DPP-DEL-003</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>5 request(s) have no documentation or justification recorded. Every data subject request must be documented for accountability purposes.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (5)</div>
+                  <ul class="affected-list"><li>Request DSAR-2025-003 (DELETION, subject: vendor_9012) — no documentation/justification recorded</li><li>Request DSAR-2025-005 (RECTIFICATION, subject: customer_7890) — no documentation/justification recorded</li><li>Request DSAR-2025-006 (DELETION, subject: prospect_1111) — no documentation/justification recorded</li><li>Request DSAR-2025-007 (ACCESS, subject: employee_2222) — no documentation/justification recorded</li><li>Request DSAR-2025-008 (DELETION, subject: customer_3333) — no documentation/justification recorded</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Document all data subject requests with: identity verification, scope of request, actions taken, any exemptions applied, and completion confirmation. Retain documentation per policy.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>GDPR Article 5(2) — Accountability Principle</li><li>DPDP Act 2023 Section 8(8) — Records of Processing</li></ul>
+                </div>
+      </div>
+    </div>
+
+    <div class="finding-card" data-severity="MEDIUM" data-category="Data Protection &amp; Privacy">
+      <div class="finding-header">
+        <span class="sev-badge MEDIUM">MEDIUM</span>
+        <span class="finding-title">Systems without data classification assignment</span>
+        <span class="finding-id">DPP-LAND-001</span>
+        <span class="finding-chevron">&#9654;</span>
+      </div>
+      <div class="finding-body">
+        <div class="finding-section">
+          <div class="finding-section-title">Description</div>
+          <p>1 system(s) in the landscape have no data classification level assigned. Without classification, appropriate protection measures cannot be determined.</p>
+        </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Affected Items (1)</div>
+                  <ul class="affected-list"><li>TRN (env: TRAINING)</li></ul>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">Remediation</div>
+                  <div class="remediation-text">Assign data classification levels to all systems: Public, Internal, Confidential, or Restricted. Classification drives access control, encryption, and monitoring requirements.</div>
+                </div>
+        
+                <div class="finding-section">
+                  <div class="finding-section-title">References</div>
+                  <ul class="ref-list"><li>ISO 27001 — Information Classification</li></ul>
+                </div>
+      </div>
+    </div>
+
     <div class="finding-card" data-severity="LOW" data-category="User &amp; Authorization">
       <div class="finding-header">
         <span class="sev-badge LOW">LOW</span>
@@ -4346,7 +4892,7 @@
   </div>
 
   <div class="footer">
-    SAP S/4HANA RISE Security Scanner &middot; Generated 2026-03-06T10:36:07 &middot;
+    SAP S/4HANA RISE Security Scanner &middot; Generated 2026-03-06T11:06:03 &middot;
     For authorized security assessments only
   </div>
 </div>

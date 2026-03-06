@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat-square" alt="Zero Dependencies"/>
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="MIT License"/>
   <img src="https://img.shields.io/badge/SAP-S%2F4HANA%20RISE-0FAAFF?style=flat-square&logo=sap&logoColor=white" alt="SAP S/4HANA"/>
-  <img src="https://img.shields.io/badge/checks-123%2B-red?style=flat-square" alt="123+ Checks"/>
+  <img src="https://img.shields.io/badge/checks-141%2B-red?style=flat-square" alt="123+ Checks"/>
 </p>
 
 ---
@@ -22,7 +22,7 @@
 
 - **No direct system connection required** — ideal for RISE environments with restricted RFC access
 - **Zero external dependencies** — runs on Python 3.8+ stdlib only
-- **123+ security checks** across 7 audit modules
+- **141+ security checks across 8 audit modules
 - **CIS SAP Benchmark aligned** — checks mapped to industry-standard baselines
 
 ---
@@ -38,6 +38,7 @@
 | ☁️ **RISE / BTP Core** | RISE-001→007 | Trust config, comm arrangements, API exposure |
 | 🔥 **BTP Cloud Attack Surface** | BTP-CC/SB/DST/IAS/ENT/EM/CPI/NET/GOV/MIG (29) | Cloud Connector, service bindings, destinations, IAS, Event Mesh, CPI, network isolation |
 | 🔗 **Network & Integration Layer** | INTG-APIM/IDOC/WS/WH/GW/MON/CPI/OAUTH/TOPO (27) | API Management, IDOC ports, web services, webhooks, gateway ACLs, OAuth, topology |
+| 🔏 **Data Protection & Privacy** | DPP-RAL/ILM/MASK/TOOLKIT/POP/FIELD/RES/DEL/LAND (18) | Read Access Logging, ILM retention, data masking, GDPR/DPDP toolkit, data residency |
 
 <details>
 <summary><strong>🛡️ Advanced IAM — Full Check List</strong></summary>
@@ -252,6 +253,68 @@ SoD checks support three data strategies: pre-computed matrix (`sod_matrix.csv`)
 
 </details>
 
+<details>
+<summary><strong>🔏 Data Protection & Privacy — Full Check List (NEW)</strong></summary>
+
+### Read Access Logging (DPP-RAL-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| DPP-RAL-001 | RAL disabled or no active configurations | CRITICAL |
+| DPP-RAL-002 | RAL missing coverage for key channels (OData, RFC, ALV) | HIGH |
+| DPP-RAL-003 | RAL log channels with insufficient retention | MEDIUM |
+
+### Information Lifecycle Management (DPP-ILM-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| DPP-ILM-001 | Retention policies exceeding maximum period | MEDIUM |
+| DPP-ILM-002 | Policies without automatic data destruction | MEDIUM |
+| DPP-ILM-003 | Policies without end-of-purpose definitions | HIGH |
+| DPP-ILM-004 | Personal data tables without ILM retention policies | HIGH |
+
+### Data Masking — Non-Production (DPP-MASK-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| DPP-MASK-001 | Non-production systems without PII data masking | CRITICAL |
+| DPP-MASK-002 | Production copies in non-prod without masking | CRITICAL |
+
+### DPP Toolkit (DPP-TOOLKIT-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| DPP-TOOLKIT-001 | DPP toolkit features not configured (deletion report, consent, breach notification) | HIGH |
+
+### Purpose of Processing (DPP-POP-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| DPP-POP-001 | Purposes without documented legal basis (GDPR Art.6) | HIGH |
+| DPP-POP-002 | Expired purposes still active | MEDIUM |
+
+### Sensitive Field Inventory (DPP-FIELD-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| DPP-FIELD-001 | PII fields without Read Access Logging | HIGH |
+| DPP-FIELD-002 | Sensitive fields not masked in non-production | MEDIUM |
+| DPP-FIELD-003 | Known sensitive SAP fields missing from classification inventory | MEDIUM |
+
+### Data Residency & Cross-Border (DPP-RES-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| DPP-RES-001 | Cross-border transfers without legal safeguards (SCCs/BCRs) | CRITICAL |
+| DPP-RES-002 | Special category data in cross-border transfers | HIGH |
+
+### Data Subject Requests (DPP-DEL-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| DPP-DEL-001 | Data subject requests overdue (>30 day SLA) | CRITICAL |
+| DPP-DEL-002 | Requests marked complete but incomplete | HIGH |
+| DPP-DEL-003 | Requests without documentation | MEDIUM |
+
+### System Landscape (DPP-LAND-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| DPP-LAND-001 | Systems without data classification assignment | MEDIUM |
+
+</details>
+
 ---
 
 ## Quick Start
@@ -284,6 +347,7 @@ network   — Network & Service Exposure (NET-*)
 rise      — RISE / BTP Core (RISE-*)
 btpcloud  — BTP Cloud Attack Surface (BTP-*)
 intglayer — Network & Integration Layer (INTG-*)
+dataprot  — Data Protection & Privacy (DPP-*)
 all       — Run everything (default)
 ```
 
@@ -358,6 +422,25 @@ All files are optional — the scanner runs only checks for which data is availa
 
 </details>
 
+<details>
+<summary><strong>📋 Data Protection & Privacy data files</strong></summary>
+
+| File | Source | Description |
+|------|--------|-------------|
+| `ral_config.csv` | SRALMANAGER | RAL configuration & active rules |
+| `ral_log_channels.csv` | SRALMANAGER | RAL log channel retention settings |
+| `ilm_policies.json` | IRMPOL / ILM Cockpit | ILM retention & destruction rules |
+| `data_masking.json` | TDMS / DPI config | Non-production masking configuration |
+| `dpp_config.json` | DPP Toolkit Fiori apps | DPP feature enablement status |
+| `purpose_of_processing.csv` | ROPA / DPP config | Purpose definitions with legal basis |
+| `sensitive_fields.csv` | Data classification inventory | PII field classification & protection status |
+| `data_residency.json` | Data governance / legal | Cross-border transfer configurations |
+| `personal_data_inventory.csv` | DPI / manual inventory | Personal data field-level inventory |
+| `deletion_requests.csv` | DSAR tracking system | Data subject request log |
+| `system_landscape.csv` | System landscape inventory | System classification & data protection status |
+
+</details>
+
 ---
 
 ## Custom Baseline
@@ -382,7 +465,10 @@ Override default thresholds by creating a JSON config file:
     "webhook_stale_days": 180,
     "oauth_client_stale_days": 180,
     "max_cpi_datastore_entries": 10000,
-    "max_system_connections": 15
+    "max_system_connections": 15,
+    "ral_min_retention_days": 365,
+    "max_retention_years": 10,
+    "deletion_sla_days": 30
 }
 ```
 
@@ -403,8 +489,9 @@ SAP-S4HANA-RISE-Security-Scanner/
 │   ├── rise_btp_checks.py          # RISE-* checks
 │   ├── btp_cloud_surface.py        # BTP-* checks
 │   ├── integration_layer.py        # INTG-* checks
+│   ├── data_protection.py          # DPP-* checks (NEW)
 │   └── report_generator.py         # HTML dashboard
-├── sample_data/                    # 35+ demo files
+├── sample_data/                    # 45+ demo files
 ├── docs/
 │   ├── banner.svg
 │   ├── EXPORT_GUIDE.md
@@ -444,7 +531,14 @@ SAP-S4HANA-RISE-Security-Scanner/
 - [x] Integration monitoring & alerting gaps
 - [x] OAuth client & scope governance
 - [x] Integration topology analysis
-- [ ] Data protection & privacy (RAL, ILM)
+- [x] Read Access Logging (RAL) configuration & coverage
+- [x] Information Lifecycle Management (ILM) retention policies
+- [x] Non-production data masking / anonymization
+- [x] GDPR/DPDP toolkit configuration (DPP)
+- [x] Purpose of processing & legal basis compliance
+- [x] Sensitive field inventory & classification
+- [x] Cross-border data transfer controls
+- [x] Data subject request (DSAR) compliance
 - [ ] Custom ABAP code security scanning
 - [ ] Fiori catalog/tile authorization review
 - [ ] Cryptographic posture assessment

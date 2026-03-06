@@ -77,6 +77,18 @@ class DataLoader:
         "cpi_datastores":       ["cpi_datastores.json", "cpi_variables.json"],
         "oauth_clients":        ["oauth_clients.json", "xsuaa_clients.json"],
         "integration_topology": ["integration_topology.json", "system_map.json"],
+        # Data Protection & Privacy data sources
+        "ral_config":              ["ral_config.csv", "sralmanager.csv"],
+        "ral_log_channels":        ["ral_log_channels.csv"],
+        "ilm_policies":            ["ilm_policies.json", "ilm_retention.json"],
+        "data_masking":            ["data_masking.json", "masking_config.json"],
+        "dpp_config":              ["dpp_config.json", "dpp_toolkit.json"],
+        "purpose_of_processing":   ["purpose_of_processing.csv", "pop_config.csv"],
+        "sensitive_fields":        ["sensitive_fields.csv", "pii_fields.csv"],
+        "data_residency":          ["data_residency.json", "cross_border.json"],
+        "personal_data_inventory": ["personal_data_inventory.csv", "pdi.csv"],
+        "deletion_requests":       ["deletion_requests.csv", "dsar_requests.csv"],
+        "system_landscape":        ["system_landscape.csv", "landscape.csv"],
     }
 
     def __init__(self, data_dir: Path):
