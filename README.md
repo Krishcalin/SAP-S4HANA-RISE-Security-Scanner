@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat-square" alt="Zero Dependencies"/>
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="MIT License"/>
   <img src="https://img.shields.io/badge/SAP-S%2F4HANA%20RISE-0FAAFF?style=flat-square&logo=sap&logoColor=white" alt="SAP S/4HANA"/>
-  <img src="https://img.shields.io/badge/checks-123%2B-red?style=flat-square" alt="96+ Checks"/>
+  <img src="https://img.shields.io/badge/checks-123%2B-red?style=flat-square" alt="123+ Checks"/>
 </p>
 
 ---
@@ -22,7 +22,7 @@
 
 - **No direct system connection required** — ideal for RISE environments with restricted RFC access
 - **Zero external dependencies** — runs on Python 3.8+ stdlib only
-- **123+ security checks across 7 audit modules
+- **123+ security checks** across 7 audit modules
 - **CIS SAP Benchmark aligned** — checks mapped to industry-standard baselines
 
 ---
@@ -32,7 +32,7 @@
 | Module | Checks | Focus |
 |--------|--------|-------|
 | 🔐 **User & Authorization** | USR-001→008 | Default users, SAP_ALL, dormant accounts, service accounts |
-| 🛡️ **Advanced IAM** | IAM-SOD/FF/EXP/XID/REV/ROLE/PRIV | SoD conflicts, firefighter access, role lifecycle, cross-system identity |
+| 🛡️ **Advanced IAM** | IAM-SOD/FF/EXP/XID/REV/ROLE/PRIV (28) | SoD conflicts, firefighter access, role lifecycle, cross-system identity |
 | ⚙️ **Security Parameters** | PARAM-* (25+) | Password policy, login security, RFC, gateway, TLS, audit logging |
 | 🌐 **Network & Services** | NET-001→008 | RFC destinations, ICF services, transports, audit config |
 | ☁️ **RISE / BTP Core** | RISE-001→007 | Trust config, comm arrangements, API exposure |
@@ -40,7 +40,70 @@
 | 🔗 **Network & Integration Layer** | INTG-APIM/IDOC/WS/WH/GW/MON/CPI/OAUTH/TOPO (27) | API Management, IDOC ports, web services, webhooks, gateway ACLs, OAuth, topology |
 
 <details>
-<summary><strong>🔥 BTP Cloud Attack Surface — Full Check List (NEW)</strong></summary>
+<summary><strong>🛡️ Advanced IAM — Full Check List</strong></summary>
+
+### Segregation of Duties (IAM-SOD-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| IAM-SOD-FIN-001 | SoD: Vendor Master ↔ Payment Processing | CRITICAL |
+| IAM-SOD-FIN-002 | SoD: Purchase Order ↔ Goods Receipt | HIGH |
+| IAM-SOD-FIN-003 | SoD: Journal Entry ↔ GL Account Master | HIGH |
+| IAM-SOD-FIN-004 | SoD: Customer Master ↔ Sales Order / Billing | HIGH |
+| IAM-SOD-HR-001 | SoD: HR Master Data ↔ Payroll Execution | CRITICAL |
+| IAM-SOD-SEC-001 | SoD: User Administration ↔ Role Administration | CRITICAL |
+| IAM-SOD-BASIS-001 | SoD: Transport Management ↔ Development | HIGH |
+
+SoD checks support three data strategies: pre-computed matrix (`sod_matrix.csv`), role resolution (`user_roles.csv` + `role_tcodes.csv`), or heuristic role-name matching.
+
+### Firefighter / Emergency Access (IAM-FF-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| IAM-FF-001 | Sessions exceeding max duration (default: 4h) | HIGH |
+| IAM-FF-002 | Sessions without documented justification | HIGH |
+| IAM-FF-003 | Sessions not reviewed by controller | CRITICAL |
+| IAM-FF-004 | Sessions self-approved (reviewer = requestor) | CRITICAL |
+| IAM-FF-005 | Users with excessive firefighter usage frequency | MEDIUM |
+
+### Role Expiry & Validity (IAM-EXP-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| IAM-EXP-001 | Role assignments without expiry dates (indefinite) | MEDIUM |
+| IAM-EXP-002 | Expired role assignments still present in user master | LOW |
+| IAM-EXP-003 | Role assignments with excessive validity periods | MEDIUM |
+
+### Cross-System Identity (IAM-XID-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| IAM-XID-001 | BTP users without corresponding S/4HANA account | MEDIUM |
+| IAM-XID-002 | S/4HANA locked users still active in BTP (incomplete offboarding) | HIGH |
+| IAM-XID-003 | BTP users with administrative role collections | HIGH |
+
+### Access Review Compliance (IAM-REV-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| IAM-REV-001 | Overdue access review campaigns | HIGH |
+| IAM-REV-002 | Reviews marked complete but with incomplete coverage | MEDIUM |
+| IAM-REV-003 | Reviews without assigned reviewer | MEDIUM |
+
+### Role Design Quality (IAM-ROLE-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| IAM-ROLE-001 | Custom roles without descriptions | LOW |
+| IAM-ROLE-002 | Custom roles without designated owners | MEDIUM |
+| IAM-ROLE-003 | Empty roles with no menu/transaction assignments | LOW |
+
+### Other IAM Checks
+| Check | Description | Severity |
+|-------|-------------|----------|
+| IAM-ORPH-001 | Users assigned to non-existent/deleted roles | MEDIUM |
+| IAM-USRGRP-001 | Active users in default/unassigned user groups | LOW |
+| IAM-REF-001 | Dialog users misused as reference users | HIGH |
+| IAM-PRIV-001 | Users with privilege escalation capability (self-escalation paths) | CRITICAL |
+
+</details>
+
+<details>
+<summary><strong>🔥 BTP Cloud Attack Surface — Full Check List</strong></summary>
 
 ### Cloud Connector (BTP-CC-*)
 | Check | Description | Severity |
@@ -117,7 +180,7 @@
 </details>
 
 <details>
-<summary><strong>🔗 Network & Integration Layer — Full Check List (NEW)</strong></summary>
+<summary><strong>🔗 Network & Integration Layer — Full Check List</strong></summary>
 
 ### API Management (INTG-APIM-*)
 | Check | Description | Severity |
@@ -202,7 +265,7 @@ python sap_scanner.py --data-dir ./sample_data --output report.html
 
 # Run specific modules
 python sap_scanner.py --data-dir ./exports --modules btpcloud iam
-python sap_scanner.py --data-dir ./exports --modules users params network
+python sap_scanner.py --data-dir ./exports --modules intglayer network
 
 # Filter by severity
 python sap_scanner.py --data-dir ./exports --severity HIGH
@@ -215,10 +278,10 @@ python sap_scanner.py --data-dir ./exports --config baseline.json
 
 ```
 users     — User & Authorization (USR-*)
+iam       — Advanced IAM (IAM-*)
 params    — Security Parameters (PARAM-*)
 network   — Network & Service Exposure (NET-*)
 rise      — RISE / BTP Core (RISE-*)
-iam       — Advanced IAM (IAM-*)
 btpcloud  — BTP Cloud Attack Surface (BTP-*)
 intglayer — Network & Integration Layer (INTG-*)
 all       — Run everything (default)
@@ -231,19 +294,67 @@ all       — Run everything (default)
 All files are optional — the scanner runs only checks for which data is available. See [`docs/EXPORT_GUIDE.md`](docs/EXPORT_GUIDE.md) for detailed export instructions.
 
 <details>
-<summary><strong>📋 BTP Cloud Attack Surface data files (NEW)</strong></summary>
+<summary><strong>📋 Core & IAM data files</strong></summary>
 
 | File | Source | Description |
 |------|--------|-------------|
-| `cloud_connector.json` | SCC Admin UI export | Backends, ACLs, certificates |
-| `btp_service_bindings.json` | BTP Service Manager API | Service instance bindings |
-| `btp_destinations.json` | BTP Destination Service API | Destination configurations |
+| `users.csv` | RSUSR002 / SU01 | User master data (BNAME, USTYP, UFLAG, TRDAT, etc.) |
+| `profiles.csv` | SU02 / USR04 | Profile assignments |
+| `user_roles.csv` | AGR_USERS | Role assignments |
+| `auth_objects.csv` | SUIM | Authorization object values |
+| `security_params.csv` | RSPARAM / RZ11 | Profile parameter values |
+| `rfc_destinations.csv` | SM59 | RFC destination configs |
+| `icf_services.csv` | SICF | ICF service tree |
+| `audit_config.csv` | SM19 | Audit log filter config |
+| `transports.csv` | SE09 / STMS | Transport requests |
+| `sod_matrix.csv` | SUIM / GRC ARA | Pre-computed user→tcode mapping |
+| `role_tcodes.csv` | AGR_1251 | Role→tcode mapping |
+| `sod_ruleset.json` | Custom | Custom SoD rule definitions |
+| `firefighter_log.csv` | GRC SPM | Emergency access usage log |
+| `role_expiry.csv` | AGR_USERS validity | Role assignments with dates |
+| `role_details.csv` | AGR_DEFINE | Role metadata (owner, description) |
+| `access_reviews.csv` | GRC ARM | Access review campaign data |
+| `user_groups.csv` | USR02 | User group assignments |
+
+</details>
+
+<details>
+<summary><strong>📋 BTP / RISE data files</strong></summary>
+
+| File | Source | Description |
+|------|--------|-------------|
+| `btp_trust.json` | BTP Cockpit → Trust Config | Trust configurations |
+| `comm_arrangements.json` | Fiori "Communication Arrangements" | Communication setups |
+| `api_endpoints.json` | OData service catalog | Published API endpoints |
+| `btp_users.json` | BTP Cockpit → Users | BTP user & role collections |
+| `cloud_connector.json` | SCC Admin UI | Backends, ACLs, certificates |
+| `btp_service_bindings.json` | BTP Service Manager API | Service bindings |
+| `btp_destinations.json` | Destination Service API | Destination configs |
 | `ias_config.json` | IAS Admin Console | Application & policy config |
 | `btp_entitlements.json` | BTP Cockpit / CLI | Entitlement quotas & usage |
-| `event_mesh.json` | Event Mesh Management API | Queue/topic configurations |
+| `event_mesh.json` | Event Mesh Management API | Queue/topic configs |
 | `cpi_artifacts.json` | CPI Operations API | Credentials & iFlow metadata |
 | `btp_network.json` | BTP Cockpit | Private Link / network config |
 | `btp_subaccounts.json` | BTP Cockpit / CLI | Multi-subaccount governance |
+
+</details>
+
+<details>
+<summary><strong>📋 Integration Layer data files</strong></summary>
+
+| File | Source | Description |
+|------|--------|-------------|
+| `apim_policies.json` | API Management admin | Proxy & policy configurations |
+| `idoc_ports.csv` | WE21 | IDOC port configurations |
+| `idoc_partners.csv` | WE20 | IDOC partner profiles |
+| `ws_endpoints.csv` | SOAMANAGER | Web service endpoints |
+| `webhooks.json` | Event / webhook registry | Callback registrations |
+| `gw_secinfo.csv` | Gateway secinfo file | Program start ACL rules |
+| `gw_reginfo.csv` | Gateway reginfo file | RFC registration ACL rules |
+| `integration_alerts.json` | Alert Notification Service | Monitoring alert config |
+| `cpi_datastores.json` | CPI Operations API | Data stores & global variables |
+| `oauth_clients.json` | XSUAA / IAS admin | OAuth client registrations |
+| `integration_topology.json` | Manual / discovery tool | System-to-system connection map |
 
 </details>
 
@@ -251,17 +362,27 @@ All files are optional — the scanner runs only checks for which data is availa
 
 ## Custom Baseline
 
+Override default thresholds by creating a JSON config file:
+
 ```json
 {
     "dormant_threshold_days": 60,
     "max_roles_per_user": 20,
+    "max_password_age_days": 60,
+    "max_role_validity_days": 365,
     "ff_max_duration_hours": 4,
     "ff_max_sessions_per_month": 5,
+    "access_review_cycle_days": 90,
     "binding_rotation_max_days": 180,
     "cpi_credential_rotation_days": 180,
     "cert_expiry_warning_days": 90,
     "max_cc_backends": 20,
-    "destination_stale_days": 365
+    "destination_stale_days": 365,
+    "max_active_ws_endpoints": 50,
+    "webhook_stale_days": 180,
+    "oauth_client_stale_days": 180,
+    "max_cpi_datastore_entries": 10000,
+    "max_system_connections": 15
 }
 ```
 
@@ -274,17 +395,23 @@ SAP-S4HANA-RISE-Security-Scanner/
 ├── sap_scanner.py                  # Main entry point & CLI
 ├── modules/
 │   ├── base_auditor.py             # Base class
-│   ├── data_loader.py              # CSV/JSON loader (30+ file types)
+│   ├── data_loader.py              # CSV/JSON loader (40+ file types)
 │   ├── user_auth_audit.py          # USR-* checks
-│   ├── iam_advanced.py             # IAM-* checks (SoD, firefighter, etc.)
+│   ├── iam_advanced.py             # IAM-* checks (SoD, firefighter, role lifecycle)
 │   ├── security_params.py          # PARAM-* checks
 │   ├── network_services.py         # NET-* checks
 │   ├── rise_btp_checks.py          # RISE-* checks
 │   ├── btp_cloud_surface.py        # BTP-* checks
-│   ├── integration_layer.py        # INTG-* checks (NEW)
+│   ├── integration_layer.py        # INTG-* checks
 │   └── report_generator.py         # HTML dashboard
-├── sample_data/                    # 25+ demo files
+├── sample_data/                    # 35+ demo files
 ├── docs/
+│   ├── banner.svg
+│   ├── EXPORT_GUIDE.md
+│   └── CHECKS_REFERENCE.md
+├── .gitignore
+├── LICENSE
+├── CONTRIBUTING.md
 └── README.md
 ```
 
@@ -299,6 +426,8 @@ SAP-S4HANA-RISE-Security-Scanner/
 - [x] Segregation of Duties (SoD) detection
 - [x] Emergency/firefighter access analysis
 - [x] Role lifecycle & cross-system identity
+- [x] Privilege escalation path detection
+- [x] Access review compliance checks
 - [x] Cloud Connector audit
 - [x] BTP service binding & destination review
 - [x] IAS policy & MFA enforcement
@@ -307,6 +436,14 @@ SAP-S4HANA-RISE-Security-Scanner/
 - [x] Network isolation / Private Link
 - [x] Multi-subaccount governance
 - [x] XSUAA → IAS migration status
+- [x] API Management policy enforcement
+- [x] IDOC port & partner profile security
+- [x] Web service (SOAMANAGER) endpoint audit
+- [x] Webhook & callback endpoint security
+- [x] Gateway secinfo/reginfo deep analysis
+- [x] Integration monitoring & alerting gaps
+- [x] OAuth client & scope governance
+- [x] Integration topology analysis
 - [ ] Data protection & privacy (RAL, ILM)
 - [ ] Custom ABAP code security scanning
 - [ ] Fiori catalog/tile authorization review
