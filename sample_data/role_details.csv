@@ -1,0 +1,24 @@
+AGR_NAME,TEXT,OWNER,TYPE,TCODE_COUNT
+Z_FI_ACCOUNTANT,Financial Accounting - Standard Postings,AGARCIA,S,12
+Z_FI_PAYMENT,Vendor Payment Processing,AGARCIA,S,8
+Z_FI_GL_ADMIN,GL Account Master Maintenance,,S,6
+Z_FI_VENDOR_MAINT,Vendor Master Data Maintenance,,S,5
+Z_FI_POSTING,General FI Posting,JSMITH,S,10
+Z_MM_BUYER,Purchasing - Buyer Role,KPATEL,S,15
+Z_MM_GR_POSTER,Goods Receipt Posting,,S,4
+Z_MM_BUYER_TEMP,Temporary Buyer Access,,S,8
+Z_SD_ORDER_MGMT,Sales Order Management,DLEE,S,12
+Z_SD_BILLING,Billing Document Processing,DLEE,S,6
+Z_HR_MASTER_DATA,HR Master Data Maintenance,TNGUYEN,S,10
+Z_HR_PAYROLL,Payroll Execution and Administration,,S,8
+Z_BC_USER_ADMIN,Basis - User Administration,LWANG,S,5
+Z_BC_ROLE_ADMIN,Basis - Role Administration,LWANG,S,4
+Z_BC_TRANSPORT,,LWANG,S,6
+Z_RFC_FULL,Full RFC Access for Integration,,S,0
+Z_BATCH_FI_PROC,Batch Financial Processing,,S,3
+Z_INT_ARIBA,Ariba Integration Role,,S,0
+Z_API_GW_FULL,,,S,0
+Z_MONITORING,System Monitoring Read Access,TECH_MONITOR,S,8
+Z_LEGACY_ROLE_01,,,S,0
+Z_DECOM_2023,,,S,0
+YTEST_ROLE,,,S,2

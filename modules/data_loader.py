@@ -45,6 +45,16 @@ class DataLoader:
         "btp_trust":         ["btp_trust.json"],
         "comm_arrangements": ["comm_arrangements.json", "comm_arr.json"],
         "api_endpoints":     ["api_endpoints.json", "odata_services.json"],
+        # Advanced IAM data sources
+        "sod_matrix":        ["sod_matrix.csv"],
+        "sod_ruleset":       ["sod_ruleset.json"],
+        "role_tcodes":       ["role_tcodes.csv", "agr_1251.csv"],
+        "firefighter_log":   ["firefighter_log.csv", "ff_log.csv", "spm_log.csv"],
+        "role_expiry":       ["role_expiry.csv", "agr_users_validity.csv"],
+        "btp_users":         ["btp_users.json"],
+        "role_details":      ["role_details.csv", "agr_define.csv"],
+        "access_reviews":    ["access_reviews.csv", "arm_reviews.csv"],
+        "user_groups":       ["user_groups.csv"],
     }
 
     def __init__(self, data_dir: Path):

@@ -1,0 +1,14 @@
+{
+  "users": [
+    {"userName": "jsmith@company.com", "email": "jsmith@company.com", "roleCollections": ["Subaccount Viewer", "Launchpad_User"]},
+    {"userName": "agarcia@company.com", "email": "agarcia@company.com", "roleCollections": ["Subaccount Viewer"]},
+    {"userName": "mwilson@company.com", "email": "mwilson@company.com", "roleCollections": ["Subaccount_Admin", "Security_Admin", "Destination_Admin", "Connectivity_Admin"]},
+    {"userName": "dlee@company.com", "email": "dlee@company.com", "roleCollections": ["Launchpad_User"]},
+    {"userName": "lwang@company.com", "email": "lwang@company.com", "roleCollections": ["Global_Account_Admin", "Subaccount_Admin", "Security_Admin", "Subaccount_Service_Admin"]},
+    {"userName": "ext_consultant1@partner.com", "email": "ext_consultant1@partner.com", "roleCollections": ["Subaccount_Admin", "Space_Developer"]},
+    {"userName": "ext_devops@vendor.io", "email": "ext_devops@vendor.io", "roleCollections": ["Space_Developer", "Connectivity_Admin"]},
+    {"userName": "old_admin@company.com", "email": "old_admin@company.com", "roleCollections": ["Subaccount_Admin"]},
+    {"userName": "tnguyen@company.com", "email": "tnguyen@company.com", "roleCollections": ["Launchpad_User"]},
+    {"userName": "test_user_btp@company.com", "email": "test_user_btp@company.com", "roleCollections": ["Subaccount Viewer"]}
+  ]
+}

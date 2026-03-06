@@ -2,151 +2,162 @@
 
 Step-by-step instructions for exporting the configuration data needed by the scanner.
 
-## Prerequisites
+---
 
-- SAP GUI access or Fiori Launchpad access to the target S/4HANA system
-- Authorization for the relevant transactions (SU01, RZ11, SM59, SICF, etc.)
-- For BTP exports: BTP Cockpit access with Security Administrator role
+## Core Data Exports
 
-## Export Methods
+### Users (`users.csv`)
+**Transaction:** `SU01` or Report `RSUSR002`  
+**Table:** `USR02`
 
-### Method 1: SAP GUI Transaction Exports
+```
+Required: BNAME, USTYP, UFLAG, TRDAT, ERDAT, PWDCHGDATE
+Optional: CLASS (user group), SMTP_ADDR (email), REF_USER
+```
 
-Each transaction below has a list/table view that can be exported to CSV:
-1. Navigate to the transaction
-2. Execute the report/display the list
-3. Use `System → List → Save → Local File → Spreadsheet (CSV)`
+Quick: `SA38 → RSUSR002 → Execute → Export`
 
-### Method 2: SE16/SE16N Table Exports
+### Profiles (`profiles.csv`)
+**Table:** `USR04`
+```
+Required: BNAME, PROFILE
+```
 
-For direct table access:
-1. Go to `SE16N`
-2. Enter the table name
-3. Execute and export results
+### Security Parameters (`security_params.csv`)
+**Report:** `RSPARAM` or **Transaction:** `RZ11`
+```
+Required: NAME, VALUE
+```
 
-### Method 3: ABAP Report Output
+### RFC Destinations (`rfc_destinations.csv`)
+**Transaction:** `SM59` | **Table:** `RFCDES`
+```
+Required: RFCDEST, RFCTYPE, RFCHOST, RFCUSER, RFCSNC
+```
 
-Some data is best extracted via standard reports:
-1. Go to `SA38` (ABAP Editor - Execute)
-2. Enter the report name
-3. Configure selection parameters
-4. Execute and export
+### ICF Services (`icf_services.csv`)
+**Transaction:** `SICF`
+```
+Required: ICF_NAME, ICF_ACTIVE, AUTH_REQUIRED
+```
+
+### Audit Config (`audit_config.csv`)
+**Transaction:** `SM19`
+```
+Required: FILTER_NAME, ACTIVE, EVENT_CLASS
+```
 
 ---
 
-## Data Sources
+## Advanced IAM Data Exports
 
-### 1. Users — `users.csv`
+### SoD Matrix (`sod_matrix.csv`)
+**Source:** SUIM → Users by Transaction or SAP GRC Access Risk Analysis export
 
-**Transaction:** `SU01` (User Maintenance) or Report `RSUSR002`
-
-**SE16N Table:** `USR02`
-
-| Export Field | Table Field | Description |
-|-------------|-------------|-------------|
-| BNAME | USR02-BNAME | Username |
-| USTYP | USR02-USTYP | User type (A=Dialog, B=System, C=Comm, S=Service) |
-| UFLAG | USR02-UFLAG | Lock status (0=unlocked) |
-| TRDAT | USR02-TRDAT | Last logon date |
-| ERDAT | USR02-ERDAT | Creation date |
-| PWDCHGDATE | USR02-PWDCHGDATE | Last password change |
-
-**Quick method:**
 ```
-SA38 → RSUSR002 → Execute with all users → Export
+Required: USERNAME, TCODES (comma-separated list of t-codes per user)
 ```
 
-### 2. Profiles — `profiles.csv`
+**Alternative:** Export `role_tcodes.csv` from table `AGR_1251` (role→tcode mapping) and `user_roles.csv` from `AGR_USERS`. The scanner will resolve user→tcode automatically.
 
-**SE16N Table:** `USR04`
-
-| Export Field | Table Field | Description |
-|-------------|-------------|-------------|
-| BNAME | USR04-BNAME | Username |
-| PROFILE | USR04-PROFN | Profile name |
-
-### 3. Security Parameters — `security_params.csv`
-
-**Transaction:** `RZ11` or Report `RSPARAM`
-
-**Quick method:**
+### Role-TCode Mapping (`role_tcodes.csv`)
+**Table:** `AGR_1251`
 ```
-SA38 → RSPARAM → Execute → Export full list
+Required: AGR_NAME, TCODE
+Optional: AUTH_OBJECT
 ```
 
-| Export Field | Description |
-|-------------|-------------|
-| NAME | Parameter name (e.g., login/min_password_lng) |
-| VALUE | Current active value |
+### Custom SoD Rules (`sod_ruleset.json`)
+Override default SoD rules with your own. Format:
+```json
+[
+  {
+    "rule_id": "SOD-CUSTOM-001",
+    "name": "My Custom Rule",
+    "severity": "HIGH",
+    "side_a": {
+      "description": "Activity A",
+      "tcodes": ["TCODE1", "TCODE2"]
+    },
+    "side_b": {
+      "description": "Activity B",
+      "tcodes": ["TCODE3", "TCODE4"]
+    }
+  }
+]
+```
 
-### 4. RFC Destinations — `rfc_destinations.csv`
+### Firefighter Log (`firefighter_log.csv`)
+**Source:** SAP GRC Superuser Privilege Management (SPM) log export
 
-**Transaction:** `SM59`
+```
+Required: FF_USER, ACTUAL_USER, LOGIN_TIME, LOGOUT_TIME, REASON, REVIEWED, REVIEWER
+```
 
-**SE16N Table:** `RFCDES`
+Timestamp format: `YYYY-MM-DD HH:MM:SS`
 
-| Export Field | Table Field | Description |
-|-------------|-------------|-------------|
-| RFCDEST | RFCDES-RFCDEST | Destination name |
-| RFCTYPE | RFCDES-RFCTYPE | Connection type (3, T, W, etc.) |
-| RFCHOST | RFCDES-RFCHOST | Target hostname/IP |
-| RFCUSER | RFCDES-RFCUSER | Stored username (if any) |
-| RFCSNC | RFCDES-RFCSNC | SNC enabled flag |
+### Role Expiry (`role_expiry.csv`)
+**Table:** `AGR_USERS` with validity dates
 
-### 5. ICF Services — `icf_services.csv`
+```
+Required: UNAME, AGR_NAME, FROM_DAT, TO_DAT
+```
 
-**Transaction:** `SICF`
+Note: `99991231` or `9999-12-31` is treated as "no expiry"
 
-Navigate the service tree and export. Focus on `/sap/bc/*` and `/sap/public/*` subtrees.
+### User Roles (`user_roles.csv`)
+**Table:** `AGR_USERS`
+```
+Required: UNAME, AGR_NAME
+```
 
-| Export Field | Description |
-|-------------|-------------|
-| ICF_NAME | Full service path |
-| ICF_ACTIVE | Active flag (X = active) |
-| AUTH_REQUIRED | Whether authentication is required |
+### Role Details (`role_details.csv`)
+**Table:** `AGR_DEFINE` + `AGR_TEXTS`
+```
+Required: AGR_NAME
+Optional: TEXT (description), OWNER, TYPE, TCODE_COUNT
+```
 
-### 6. Audit Configuration — `audit_config.csv`
+### Access Reviews (`access_reviews.csv`)
+**Source:** SAP GRC Access Request Management or manual tracking
 
-**Transaction:** `SM19`
+```
+Required: REVIEW_ID, REVIEW_NAME, DUE_DATE, STATUS, COMPLETION_PCT, REVIEWER
+```
 
-| Export Field | Description |
-|-------------|-------------|
-| FILTER_NAME | Audit filter name |
-| ACTIVE | Filter active status |
-| EVENT_CLASS | Event class being audited |
+---
 
-### 7. BTP Trust Configuration — `btp_trust.json`
+## BTP / RISE Exports
 
-**Source:** SAP BTP Cockpit
-
-1. Navigate to your subaccount
-2. Go to **Security → Trust Configuration**
-3. Note down each trust entry's properties
-4. Create JSON manually or use BTP CLI:
+### BTP Trust Config (`btp_trust.json`)
+**Source:** BTP Cockpit → Subaccount → Security → Trust Configuration
 
 ```bash
-btp list security/trust --subaccount <subaccount-id> --format json > btp_trust.json
+btp list security/trust --subaccount <id> --format json > btp_trust.json
 ```
 
-### 8. Communication Arrangements — `comm_arrangements.json`
+### BTP Users (`btp_users.json`)
+**Source:** BTP Cockpit → Subaccount → Users, or BTP CLI
 
-**Source:** Fiori app "Communication Arrangements" or API
+```json
+{
+  "users": [
+    {"userName": "user@email.com", "email": "user@email.com", "roleCollections": ["Role1", "Role2"]}
+  ]
+}
+```
 
-In S/4HANA Cloud, export from:
-- Fiori app: **Communication Arrangements** (F1962)
-- Or via API: `GET /sap/opu/odata/sap/MANAGE_COMM_ARRANGEMENTS_SRV`
+### Communication Arrangements (`comm_arrangements.json`)
+**Source:** Fiori app "Communication Arrangements" (F1962)
 
-### 9. API Endpoints — `api_endpoints.json`
-
-**Source:** Fiori app "Communication Scenarios" or service catalog
-
-Export the list of published OData/REST services with their authentication settings.
+### API Endpoints (`api_endpoints.json`)
+**Source:** OData service catalog or Communication Scenarios app
 
 ---
 
 ## Tips
 
-- **Anonymize before sharing** — replace real usernames with pseudonyms if exporting for external review
-- **Export from production** — always scan production configuration (not dev/QA)
-- **Regular exports** — schedule monthly exports to track configuration drift
-- **Delimiter detection** — the scanner auto-detects CSV delimiters (comma, semicolon, tab, pipe)
+- **Export from production** — always scan production configuration
+- **Anonymize before sharing** — replace real usernames with pseudonyms for external review
+- **Delimiter auto-detection** — the scanner handles comma, semicolon, tab, and pipe delimiters
+- **All files optional** — the scanner runs only checks for which data is available

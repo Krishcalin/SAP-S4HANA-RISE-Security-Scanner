@@ -11,7 +11,12 @@ Thanks for your interest in contributing! This guide will help you get started.
 
 ### Adding New Checks
 
-1. **Identify the right module** — user/auth checks go in `user_auth_audit.py`, parameter checks in `security_params.py`, etc.
+1. **Identify the right module:**
+   - `user_auth_audit.py` — Basic user/profile checks
+   - `iam_advanced.py` — SoD, firefighter, role lifecycle, cross-system identity
+   - `security_params.py` — Profile parameter baseline validation
+   - `network_services.py` — RFC, ICF, transport, audit log checks
+   - `rise_btp_checks.py` — RISE/BTP-specific checks
 
 2. **Follow the pattern** — each check method should:
    - Check if required data is available (`if not data: return`)
@@ -59,8 +64,8 @@ cd SAP-S4HANA-RISE-Security-Scanner
 # Verify it runs
 python sap_scanner.py --data-dir ./sample_data --output test_report.html
 
-# Run with specific modules during development
-python sap_scanner.py --data-dir ./sample_data --modules users --output test.html
+# Run specific modules during development
+python sap_scanner.py --data-dir ./sample_data --modules iam --output test.html
 ```
 
 ## Important Notes

@@ -24,6 +24,7 @@ from modules.user_auth_audit import UserAuthAuditor
 from modules.security_params import SecurityParamAuditor
 from modules.network_services import NetworkServiceAuditor
 from modules.rise_btp_checks import RiseBtpAuditor
+from modules.iam_advanced import AdvancedIamAuditor
 from modules.report_generator import ReportGenerator
 from modules.data_loader import DataLoader
 
@@ -58,7 +59,7 @@ def main():
     )
     parser.add_argument(
         "--modules", nargs="+",
-        choices=["users", "params", "network", "rise", "all"],
+        choices=["users", "params", "network", "rise", "iam", "all"],
         default=["all"],
         help="Which audit modules to run (default: all)"
     )
@@ -87,7 +88,7 @@ def main():
         print(f"[*] Loaded custom baseline from {args.config}")
 
     run_modules = args.modules if "all" not in args.modules else [
-        "users", "params", "network", "rise"
+        "users", "params", "network", "rise", "iam"
     ]
 
     all_findings = []
@@ -126,6 +127,14 @@ def main():
     if "rise" in run_modules:
         print("[*] Running RISE/BTP-Specific Checks...")
         auditor = RiseBtpAuditor(data, baseline_overrides)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- Advanced Identity & Access Management ---
+    if "iam" in run_modules:
+        print("[*] Running Advanced IAM Checks (SoD, Firefighter, Role Expiry, Cross-ID)...")
+        auditor = AdvancedIamAuditor(data, baseline_overrides)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
