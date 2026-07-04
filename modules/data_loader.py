@@ -125,6 +125,9 @@ class DataLoader:
         "hana_granted_roles":      ["hana_granted_roles.csv", "granted_roles.csv"],
         "hana_parameters":         ["hana_parameters.csv", "m_inifile_contents.csv", "hana_ini.csv"],
         "hana_audit_policies":     ["hana_audit_policies.csv", "audit_policies.csv"],
+        # SAP Security Notes / HotNews data sources
+        "applied_notes":           ["applied_notes.csv", "snote_status.csv", "implemented_notes.csv"],
+        "sap_security_notes":      ["sap_security_notes.json", "hotnews_catalog.json"],
     }
 
     def __init__(self, data_dir: Path):

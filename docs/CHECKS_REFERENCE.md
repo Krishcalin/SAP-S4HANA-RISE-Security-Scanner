@@ -144,3 +144,29 @@ Data sources (all optional; the check runs only if the file is present):
 `hana_db_users.csv` (SYS.USERS export), `hana_granted_privileges.csv`
 (GRANTED_PRIVILEGES), `hana_granted_roles.csv` (GRANTED_ROLES),
 `hana_parameters.csv` (M_INIFILE_CONTENTS), `hana_audit_policies.csv` (AUDIT_POLICIES).
+
+---
+
+## SAP Security Notes / HotNews (HOTNEWS-*)
+
+Flags missing critical SAP Security Notes by diffing the system's implemented
+notes (SNOTE export) against a **curated, verified catalog** of the highest-impact
+HotNews (Priority 1, CVSS 9.0-10.0) and High (Priority 2) notes released since 2020
+— RECON (CVE-2020-6287), ICMAD (CVE-2022-22536), the NetWeaver Visual Composer RCEs
+(incl. the actively-exploited CVE-2025-31324), Solution Manager auth bypass, and
+more. Every catalog entry (note ↔ CVE ↔ CVSS ↔ component ↔ date ↔ exploited) was
+verified against SAP Security Patch Day / NVD / CISA KEV. The catalog is a
+high-signal subset, not exhaustive; supply `sap_security_notes.json` to add the
+HotNews/High notes for your specific product versions and the module merges them.
+
+| ID | Title | Severity | Data Source |
+|----|-------|----------|-------------|
+| HOTNEWS-000 | SAP Note implementation status not provided | MEDIUM | (fires when applied_notes absent) |
+| HOTNEWS-001 | Missing HotNews (Priority 1) SAP Security Notes | CRITICAL | applied_notes.csv |
+| HOTNEWS-002 | Missing High-priority SAP Security Notes | HIGH | applied_notes.csv |
+| HOTNEWS-003 | Missing notes for actively-exploited vulnerabilities (CISA KEV) | CRITICAL | applied_notes.csv |
+| HOTNEWS-004 | Critical SAP Notes only partially implemented | HIGH | applied_notes.csv |
+
+Data sources: `applied_notes.csv` (SNOTE / SAP Note implementation status export:
+columns NOTE, STATUS [, TITLE]); `sap_security_notes.json` (optional catalog to
+merge — list of `{note, cve, cvss, priority, component, released, exploited, title}`).
