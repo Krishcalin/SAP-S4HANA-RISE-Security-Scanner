@@ -112,3 +112,35 @@ SoD checks support three data strategies:
 | RISE-005 | Sensitive APIs exposed | HIGH | api_endpoints.json |
 | RISE-006 | Shared communication users | MEDIUM | comm_arrangements.json |
 | RISE-007 | API weak authentication | HIGH | api_endpoints.json |
+
+---
+
+## HANA Database Security (HANADB-*)
+
+The database layer beneath S/4HANA — privileged access, auditing and security
+parameters. Aligned to the CIS SAP HANA Benchmark and the SAP HANA Security Guide.
+(Encryption-at-rest of the HANA data/log volumes is covered by CRYPTO-HANA-*.)
+
+| ID | Title | Severity | Data Source |
+|----|-------|----------|-------------|
+| HANADB-USER-001 | HANA SYSTEM superuser still active | CRITICAL | hana_db_users.csv |
+| HANADB-USER-002 | DB users with password lifetime check disabled | HIGH | hana_db_users.csv |
+| HANADB-USER-003 | Dormant HANA DB users (90+ days) | MEDIUM | hana_db_users.csv |
+| HANADB-PRIV-001 | Sensitive privileges granted to PUBLIC | CRITICAL | hana_granted_privileges.csv |
+| HANADB-PRIV-002 | Critical system privileges granted directly to users | CRITICAL | hana_granted_privileges.csv |
+| HANADB-PRIV-003 | Broad system privileges granted directly to users | HIGH | hana_granted_privileges.csv |
+| HANADB-PRIV-004 | Sensitive privileges granted WITH ADMIN/GRANT OPTION | MEDIUM | hana_granted_privileges.csv |
+| HANADB-PRIV-005 | Analytic-privilege bypass (_SYS_BI_CP_ALL) granted | CRITICAL | hana_granted_privileges.csv / hana_granted_roles.csv |
+| HANADB-ROLE-001 | Powerful predefined roles granted to users | HIGH | hana_granted_roles.csv |
+| HANADB-AUDIT-001 | HANA database auditing disabled | CRITICAL | hana_parameters.csv |
+| HANADB-AUDIT-002 | Audit trail written to CSV text file (tamperable) | HIGH | hana_parameters.csv |
+| HANADB-AUDIT-003 | No active HANA audit policies | HIGH | hana_audit_policies.csv |
+| HANADB-AUDIT-004 | Audit policies miss critical action groups | MEDIUM | hana_audit_policies.csv |
+| HANADB-PARAM-001 | Weak HANA password-policy parameters | HIGH | hana_parameters.csv |
+| HANADB-PARAM-002 | Detailed connect errors exposed to clients | MEDIUM | hana_parameters.csv |
+| HANADB-PARAM-003 | TLS not enforced for HANA SQL connections | HIGH | hana_parameters.csv |
+
+Data sources (all optional; the check runs only if the file is present):
+`hana_db_users.csv` (SYS.USERS export), `hana_granted_privileges.csv`
+(GRANTED_PRIVILEGES), `hana_granted_roles.csv` (GRANTED_ROLES),
+`hana_parameters.csv` (M_INIFILE_CONTENTS), `hana_audit_policies.csv` (AUDIT_POLICIES).

@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat-square" alt="Zero Dependencies"/>
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="MIT License"/>
   <img src="https://img.shields.io/badge/SAP-S%2F4HANA%20RISE-0FAAFF?style=flat-square&logo=sap&logoColor=white" alt="SAP S/4HANA"/>
-  <img src="https://img.shields.io/badge/checks-186%2B-red?style=flat-square" alt="123+ Checks"/>
+  <img src="https://img.shields.io/badge/checks-201%2B-red?style=flat-square" alt="201+ Checks"/>
 </p>
 
 ---
@@ -22,7 +22,7 @@
 
 - **No direct system connection required** — ideal for RISE environments with restricted RFC access
 - **Zero external dependencies** — runs on Python 3.8+ stdlib only
-- **186+ security checks across 12 audit modules
+- **201+ security checks across 13 audit modules
 - **CIS SAP Benchmark aligned** — checks mapped to industry-standard baselines
 
 ---
@@ -43,6 +43,7 @@
 | 📊 **Logging, Monitoring & IR** | LOG-AUD/SIEM/RET/TBL/LOGON/IR (11) | Audit log config, SIEM integration, log retention, table logging, brute-force detection |
 | 🖥️ **Fiori & UI Layer** | FIORI-CAT/APP/ODATA/SPACE/TILE/USAGE (8) | Catalog access, OData backend auth, sensitive app exposure, spaces/pages config |
 | 🔑 **Cryptographic Posture** | CRYPTO-TLS/CERT/SNC/HANA/LIB/PSE/KEY (13) | TLS config, certificate health, SNC, HANA encryption, crypto library, key management |
+| 🗄️ **HANA Database Security** | HANADB-USER/PRIV/ROLE/AUDIT/PARAM (15) | Privileged DB users (SYSTEM, password lifetime, dormancy), PUBLIC & system-privilege grants, _SYS_BI_CP_ALL analytic bypass, DB auditing, HANA security parameters |
 
 <details>
 <summary><strong>🛡️ Advanced IAM — Full Check List</strong></summary>

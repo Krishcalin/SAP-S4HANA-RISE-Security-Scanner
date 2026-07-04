@@ -1,0 +1,9 @@
+FILE_NAME,SECTION,KEY,VALUE
+global.ini,auditing configuration,global_auditing_state,false
+global.ini,auditing configuration,default_audit_trail_type,CSVTEXTFILE
+indexserver.ini,password policy,minimal_password_length,6
+indexserver.ini,password policy,force_first_password_change,false
+indexserver.ini,password policy,maximum_invalid_connect_attempts,10
+indexserver.ini,password policy,maximum_password_lifetime,730
+indexserver.ini,password policy,detailed_error_on_connect,true
+global.ini,communication,sslenforce,false

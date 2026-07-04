@@ -119,6 +119,12 @@ class DataLoader:
         "crypto_library":          ["crypto_library.csv", "commoncryptolib.csv"],
         "pse_inventory":           ["pse_inventory.csv", "strust_pse.csv"],
         "key_management":          ["key_management.json"],
+        # HANA Database Security data sources
+        "hana_db_users":           ["hana_db_users.csv", "sys_users.csv"],
+        "hana_granted_privileges": ["hana_granted_privileges.csv", "granted_privileges.csv"],
+        "hana_granted_roles":      ["hana_granted_roles.csv", "granted_roles.csv"],
+        "hana_parameters":         ["hana_parameters.csv", "m_inifile_contents.csv", "hana_ini.csv"],
+        "hana_audit_policies":     ["hana_audit_policies.csv", "audit_policies.csv"],
     }
 
     def __init__(self, data_dir: Path):
