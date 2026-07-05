@@ -17,8 +17,15 @@ access.
 - CIS SAP / DSAG-aligned; findings cite real SAP Notes / SAP Security Baseline / CIS.
 - **Flow** (illustrated by `docs/banner.svg`): `sap_scanner.py` **LOADs** the exports
   (`DataLoader`) → runs the 19 auditor **MODULES** → each emits severity-ranked findings
-  (**CHECKS** → **RANK**) → `ReportGenerator` writes the HTML **REPORT**. When you add a
-  module, refresh `docs/banner.svg`'s module/check counts too.
+  (**CHECKS** → **RANK**) → a **REPORT** is written. When you add a module, refresh
+  `docs/banner.svg`'s module/check counts too.
+- **Reports** (`--format html|pdf|both`): `report_generator.py` (HTML dashboard) and
+  `pdf_report.py` (multi-page hand-over PDF, on the stdlib `pdf_writer.py` engine — no
+  third-party PDF lib). Both render each finding's detailed **Security Risk** narrative +
+  step-by-step **Remediation** from the findings knowledge base (`finding_kb.py` loading
+  `data/finding_details.json`, keyed by check-id with family-prefix fallback), falling back
+  to the finding's own `description`/`remediation` when no KB entry exists. When you add
+  checks, add matching KB entries so the hand-over report stays detailed.
 
 ## Run it
 

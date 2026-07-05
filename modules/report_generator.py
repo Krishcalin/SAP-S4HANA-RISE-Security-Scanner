@@ -7,14 +7,18 @@ with findings summary, severity breakdown, and detailed findings.
 
 import json
 import html
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
+
+from modules.finding_kb import FindingKB
 
 
 class ReportGenerator:
 
-    def __init__(self, findings: List[Dict[str, Any]], meta: Dict[str, Any]):
+    def __init__(self, findings: List[Dict[str, Any]], meta: Dict[str, Any],
+                 kb: Optional[FindingKB] = None):
         self.findings = findings
         self.meta = meta
+        self.kb = kb if kb is not None else FindingKB()
 
     def generate(self, output_path: str):
         """Generate complete HTML report."""
@@ -476,6 +480,7 @@ class ReportGenerator:
     font-size: 0.825rem;
     color: var(--text-secondary);
     line-height: 1.7;
+    white-space: pre-line;
   }}
 
   .affected-list {{
@@ -523,6 +528,18 @@ class ReportGenerator:
     font-size: 0.825rem;
     color: var(--text-secondary);
     line-height: 1.7;
+    white-space: pre-line;
+  }}
+
+  .risk-text {{
+    background: rgba(239, 68, 68, 0.04);
+    border-left: 3px solid var(--high);
+    padding: 0.75rem 1rem;
+    border-radius: 0 6px 6px 0;
+    font-size: 0.825rem;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    white-space: pre-line;
   }}
 
   /* Footer */
@@ -701,12 +718,11 @@ window.addEventListener('beforeprint', () => {{
                   <ul class="ref-list">{ref_items}</ul>
                 </div>"""
 
-            remediation_html = ""
-            if f.get("remediation"):
-                remediation_html = f"""
+            risk_text, mitigation_text, _detailed = self.kb.detail_for(f)
+            remediation_html = f"""
                 <div class="finding-section">
-                  <div class="finding-section-title">Remediation</div>
-                  <div class="remediation-text">{html.escape(f['remediation'])}</div>
+                  <div class="finding-section-title">Remediation — Step by Step</div>
+                  <div class="remediation-text">{html.escape(mitigation_text)}</div>
                 </div>"""
 
             parts.append(f"""
@@ -719,8 +735,8 @@ window.addEventListener('beforeprint', () => {{
       </div>
       <div class="finding-body">
         <div class="finding-section">
-          <div class="finding-section-title">Description</div>
-          <p>{html.escape(f['description'])}</p>
+          <div class="finding-section-title">Security Risk</div>
+          <div class="risk-text">{html.escape(risk_text)}</div>
         </div>
         {affected_html}
         {remediation_html}

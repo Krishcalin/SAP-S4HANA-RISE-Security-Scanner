@@ -201,6 +201,58 @@ def test_report_handles_no_findings(tmp_path):
     assert out.read_text(encoding="utf-8").lstrip().startswith("<!DOCTYPE html>")
 
 
+# ── PDF report + findings knowledge base ─────────────────────────────────────
+_META = {"scan_time": "2026-01-01T00:00:00", "data_directory": "sample_data",
+         "modules_run": _IDS, "severity_filter": "ALL"}
+
+
+def test_pdf_writer_wraps_and_builds():
+    from modules.pdf_writer import PDFWriter
+    w = PDFWriter()
+    w.add_page()
+    w.text(50, 700, "Hello — world → SAP ≥ test", font="HB", size=12, color=(0.1, 0.1, 0.1))
+    w.rect(40, 40, 100, 20, fill=(0.9, 0.9, 0.9), stroke=(0, 0, 0))
+    lines = w.wrap("averylongword " * 60, "H", 10, 200)
+    assert len(lines) > 1  # wrapped to multiple lines
+    data = w.build()
+    assert data.startswith(b"%PDF-1.4") and data.rstrip().endswith(b"%%EOF")
+
+
+def test_pdf_report_generates(data, tmp_path):
+    from modules.pdf_report import PDFReportGenerator
+    from modules.finding_kb import FindingKB
+    findings = _all_findings(data)
+    out = tmp_path / "report.pdf"
+    PDFReportGenerator(findings, _META, FindingKB()).generate(str(out))
+    raw = out.read_bytes()
+    assert raw.startswith(b"%PDF-1.4")
+    assert raw.rstrip().endswith(b"%%EOF")
+    assert raw.count(b" 0 obj") > 5              # cover + summary + finding pages
+    assert b"/Type /Page" in raw and b"xref" in raw
+
+
+def test_pdf_report_handles_no_findings(tmp_path):
+    from modules.pdf_report import PDFReportGenerator
+    out = tmp_path / "empty.pdf"
+    PDFReportGenerator([], {"scan_time": "t", "modules_run": [], "severity_filter": "ALL"}).generate(str(out))
+    assert out.read_bytes().startswith(b"%PDF")
+
+
+def test_finding_kb_fallback_and_lookup(tmp_path):
+    from modules.finding_kb import FindingKB
+    # missing file → graceful fallback to the finding's own text
+    kb = FindingKB(path=str(tmp_path / "does_not_exist.json"))
+    risk, mit, detailed = kb.detail_for({"check_id": "X-1", "description": "d", "remediation": "r"})
+    assert (risk, mit, detailed) == ("d", "r", False)
+    # a real KB with a family entry resolves by prefix
+    import json
+    p = tmp_path / "kb.json"
+    p.write_text(json.dumps({"BTP-CC": {"risk": "R", "mitigation": "M"}}), encoding="utf-8")
+    kb2 = FindingKB(path=str(p))
+    r2, m2, d2 = kb2.detail_for({"check_id": "BTP-CC-001", "description": "d", "remediation": "r"})
+    assert (r2, m2, d2) == ("R", "M", True)
+
+
 # ── CLI end-to-end ───────────────────────────────────────────────────────────
 def test_cli_end_to_end(tmp_path):
     out = tmp_path / "cli_report.html"

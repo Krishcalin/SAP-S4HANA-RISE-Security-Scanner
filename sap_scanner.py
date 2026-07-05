@@ -40,6 +40,8 @@ from modules.baseline_params import BaselineParamAuditor
 from modules.s4_business_authz import S4BusinessAuthzAuditor
 from modules.access_risk_analysis import AccessRiskAnalysisAuditor
 from modules.report_generator import ReportGenerator
+from modules.pdf_report import PDFReportGenerator
+from modules.finding_kb import FindingKB
 from modules.data_loader import DataLoader
 
 
@@ -80,6 +82,10 @@ def main():
     parser.add_argument(
         "--config", default=None,
         help="Path to custom baseline config JSON (optional)"
+    )
+    parser.add_argument(
+        "--format", choices=["html", "pdf", "both"], default="html",
+        help="Report format: html (default), pdf (detailed hand-over report), or both"
     )
 
     args = parser.parse_args()
@@ -276,10 +282,26 @@ def main():
             if severity_order.get(f.get("severity", "INFO"), 4) <= threshold
         ]
 
-    # Generate report
-    print(f"\n[*] Generating HTML report: {args.output}")
-    generator = ReportGenerator(all_findings, scan_meta)
-    generator.generate(args.output)
+    # Resolve output paths for the requested format(s)
+    out = args.output
+    low = out.lower()
+    if low.endswith(".pdf"):
+        pdf_path, html_path = out, out[:-4] + ".html"
+    elif low.endswith(".html") or low.endswith(".htm"):
+        html_path, pdf_path = out, out.rsplit(".", 1)[0] + ".pdf"
+    else:
+        html_path, pdf_path = out + ".html", out + ".pdf"
+
+    # Generate report(s) — the findings knowledge base supplies the detailed
+    # risk narrative + step-by-step remediation for each finding (both formats).
+    kb = FindingKB()
+    detail = f"detailed knowledge base: {len(kb)} checks" if kb.loaded else "finding descriptions (no KB)"
+    if args.format in ("html", "both"):
+        print(f"\n[*] Generating HTML report: {html_path}  ({detail})")
+        ReportGenerator(all_findings, scan_meta, kb).generate(html_path)
+    if args.format in ("pdf", "both"):
+        print(f"[*] Generating PDF report: {pdf_path}  ({detail})")
+        PDFReportGenerator(all_findings, scan_meta, kb).generate(pdf_path)
 
     # Summary
     crit = sum(1 for f in all_findings if f["severity"] == "CRITICAL")
@@ -287,10 +309,16 @@ def main():
     med = sum(1 for f in all_findings if f["severity"] == "MEDIUM")
     low = sum(1 for f in all_findings if f["severity"] == "LOW")
 
+    saved = []
+    if args.format in ("html", "both"):
+        saved.append(html_path)
+    if args.format in ("pdf", "both"):
+        saved.append(pdf_path)
+
     print(f"\n{'='*55}")
     print(f"  SCAN COMPLETE — Total Findings: {len(all_findings)}")
     print(f"  CRITICAL: {crit}  |  HIGH: {high}  |  MEDIUM: {med}  |  LOW: {low}")
-    print(f"  Report saved to: {args.output}")
+    print(f"  Report(s) saved: {', '.join(saved)}")
     print(f"{'='*55}\n")
 
 

@@ -708,6 +708,10 @@ cd SAP-S4HANA-RISE-Security-Scanner
 # Run against sample data (included)
 python sap_scanner.py --data-dir ./sample_data --output report.html
 
+# Generate the detailed PDF hand-over report (or both formats)
+python sap_scanner.py --data-dir ./exports --output report.pdf  --format pdf
+python sap_scanner.py --data-dir ./exports --output report.html --format both
+
 # Run specific modules
 python sap_scanner.py --data-dir ./exports --modules btpcloud iam
 python sap_scanner.py --data-dir ./exports --modules intglayer network
@@ -756,6 +760,21 @@ python sap_scanner.py --data-dir ./exports --modules hanadb hotnews
 # System trust, standard users, and Security Baseline parameters
 python sap_scanner.py --data-dir ./exports --modules systrust baseline
 ```
+
+---
+
+## Reports
+
+Choose the output with `--format html` (default), `--format pdf`, or `--format both`. The output path's extension is respected; with `both`, the companion file is written alongside it.
+
+| Format | Best for | Contents |
+|--------|----------|----------|
+| **HTML** | Interactive triage | Dark dashboard with risk score, severity/category breakdown, live severity filter, and collapsible findings — each with its detailed risk narrative and step-by-step remediation. Single self-contained file. |
+| **PDF** | Formal hand-over to the SAP Basis / security team | A multi-page assessment report: **cover page** (scope, overall risk posture, severity summary), **executive summary** (posture narrative, severity table, category breakdown, top-priority findings), and **per-finding detail pages** — each with the affected objects, a detailed **Security Risk** explanation, and a numbered, step-by-step **Remediation** procedure, plus references. Running header/footer, page numbers, confidentiality banner. Built with a **pure-standard-library PDF engine** — no extra dependencies. |
+
+### Detailed findings — knowledge base
+
+Every finding is rendered with an in-depth **Security Risk** explanation (what the weakness is, the concrete attack/abuse scenario, and the business/compliance impact) and a **numbered, step-by-step remediation procedure** naming the exact SAP transactions, reports, IMG paths, parameters and tables to change, how to verify the fix, and rollout cautions. This content lives in a bundled knowledge base (`data/finding_details.json`) keyed by check-id (with family-prefix fallback); where an entry is absent, the report falls back to the finding's own description and remediation, so the report is always complete.
 
 ---
 
@@ -1009,6 +1028,9 @@ SAP-S4HANA-RISE-Security-Scanner/
 │   ├── base_auditor.py             # BaseAuditor: finding()/get_config() + severity constants
 │   ├── data_loader.py              # CSV/JSON loader (auto-delimiter, header normalize; 90+ file types)
 │   ├── report_generator.py         # Interactive HTML dashboard (XSS-safe, weighted risk score)
+│   ├── pdf_report.py               # Multi-page PDF assessment report (cover, exec summary, per-finding)
+│   ├── pdf_writer.py               # Dependency-free PDF engine (standard-14 fonts, wrapping, tables)
+│   ├── finding_kb.py               # Findings knowledge base loader (detailed risk + remediation)
 │   ├── user_auth_audit.py          # USR-*            User & Authorization
 │   ├── iam_advanced.py             # IAM-*            Advanced IAM (SoD, firefighter, role lifecycle)
 │   ├── security_params.py          # PARAM-*          Security Parameters
@@ -1029,6 +1051,8 @@ SAP-S4HANA-RISE-Security-Scanner/
 │   ├── s4_business_authz.py        # S4AUTHZ-*        S/4HANA & Cloud Authorization
 │   └── access_risk_analysis.py     # ARA-*            Access Risk Analysis (offline SoD)
 ├── sample_data/                    # 90 crafted demo exports (trigger every check)
+├── data/
+│   └── finding_details.json        # Knowledge base: detailed risk + step-by-step remediation per check
 ├── tests/
 │   ├── conftest.py                 # pytest fixtures (DataLoader over sample_data)
 │   └── test_scanner.py             # per-module + full-pipeline + CLI tests
