@@ -15,6 +15,10 @@ access.
 - **~278+ checks across 19 audit modules** (keep the README badge/count and
   `docs/CHECKS_REFERENCE.md` in sync when you add checks).
 - CIS SAP / DSAG-aligned; findings cite real SAP Notes / SAP Security Baseline / CIS.
+- **Flow** (illustrated by `docs/banner.svg`): `sap_scanner.py` **LOADs** the exports
+  (`DataLoader`) → runs the 19 auditor **MODULES** → each emits severity-ranked findings
+  (**CHECKS** → **RANK**) → `ReportGenerator` writes the HTML **REPORT**. When you add a
+  module, refresh `docs/banner.svg`'s module/check counts too.
 
 ## Run it
 

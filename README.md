@@ -21,10 +21,12 @@
 
 **SAP S/4HANA RISE Security Scanner** analyzes exported SAP configuration data (CSV/JSON) and produces an interactive HTML dashboard with findings, severity ratings, and actionable remediation guidance.
 
-- **No direct system connection required** — ideal for RISE environments with restricted RFC access
+- **No direct system connection required** — offline & agentless; ideal for RISE environments with restricted RFC access
 - **Zero external dependencies** — runs on Python 3.8+ stdlib only
-- **278+ security checks across 19 audit modules
-- **CIS SAP Benchmark aligned** — checks mapped to industry-standard baselines
+- **278+ security checks across 19 audit modules** — from ABAP authorizations and HANA DB to BTP/Cloud and permission-level Segregation of Duties
+- **Standards-aligned** — mapped to the CIS SAP Benchmark, DSAG best-practice guide, and the SAP Security Baseline
+
+**Pipeline:** &nbsp;`LOAD` CSV/JSON exports → `MODULES` (19 auditors) → `CHECKS` (278+ rules) → `RANK` by severity → interactive `REPORT` (HTML dashboard).
 
 ---
 
