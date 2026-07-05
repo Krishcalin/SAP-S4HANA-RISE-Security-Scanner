@@ -12,11 +12,11 @@ access.
 
 - **Zero external dependencies** — Python 3.8+ standard library only. Do **not** add
   third-party packages (no `requirements.txt` / `pyproject.toml` by design).
-- **~278+ checks across 19 audit modules** (keep the README badge/count and
+- **~289+ checks across 20 audit modules** (keep the README badge/count and
   `docs/CHECKS_REFERENCE.md` in sync when you add checks).
 - CIS SAP / DSAG-aligned; findings cite real SAP Notes / SAP Security Baseline / CIS.
 - **Flow** (illustrated by `docs/banner.svg`): `sap_scanner.py` **LOADs** the exports
-  (`DataLoader`) → runs the 19 auditor **MODULES** → each emits severity-ranked findings
+  (`DataLoader`) → runs the 20 auditor **MODULES** → each emits severity-ranked findings
   (**CHECKS** → **RANK**) → a **REPORT** is written. When you add a module, refresh
   `docs/banner.svg`'s module/check counts too.
 - **Reports** (`--format html|pdf|both`): `report_generator.py` (HTML dashboard) and
@@ -57,7 +57,7 @@ on the default cp1252 console. Always run with `PYTHONIOENCODING=utf-8` on Windo
 - **`modules/report_generator.py`** — HTML dashboard. Uses `html.escape` (XSS-safe) and a
   weighted risk score. Consumes the standard `finding()` dict.
 
-### The 19 modules (module key → class → focus)
+### The 20 modules (module key → class → focus)
 
 | key | module | focus |
 |---|---|---|
@@ -80,6 +80,7 @@ on the default cp1252 console. Always run with `PYTHONIOENCODING=utf-8` on Windo
 | `baseline` | baseline_params | SAP Security Baseline profile params: auth engine, SNC fallback, GUI scripting, weak hashes, sapstartsrv, gateway ACL, SSO cookies, ICM log |
 | `s4authz` | s4_business_authz | S/4HANA business roles/catalogs/restrictions, CDS auth-check, OData V4, Cloud Connector principal propagation, CF platform roles, birthright role collections |
 | `ara` | access_risk_analysis | offline GRC-style **permission-level SoD** from AGR_1251+AGR_USERS: 27-risk ruleset (P2P/O2C/R2R/H2R/Basis), mitigating controls, per-user risk score; iam SoD defers to it when role_auth_values present |
+| `jobcmd` | basis_job_command | **host-command-execution surface**: SM69/SXPGCOSTAB external cmds (shell-wrap/ADDPAR/path/danger-verb) + TBTCO/TBTCP armed job step users (SAP*/DDIC/SAP_ALL, RSBDCOS0, external steps, deleted/dialog, identity-borrow); reuses users/profiles |
 
 ## Adding a new module (the recipe)
 

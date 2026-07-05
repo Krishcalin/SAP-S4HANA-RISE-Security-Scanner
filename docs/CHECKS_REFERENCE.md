@@ -342,3 +342,32 @@ The ruleset was built and web-verified against SAP authorization-object document
 standard GRC/vendor rulesets; single-object critical actions already covered role-side by
 the ABAP Authorization module (debug-replace, S_RFCACL, table maintenance, OS command,
 run-any-report) and SAP_ALL (User module) are intentionally not duplicated here.
+
+---
+
+## Basis Jobs & OS Commands (JOBCMD-*)
+
+The realised **host-command-execution** and background-processing surface — where an SAP
+misconfiguration becomes operating-system code execution or batch privilege escalation.
+It inspects the actual command catalog (SM69 / SXPGCOSTAB) and the actual armed jobs
+(TBTCO/TBTCP), complementing the ABAP Authorization module, which covers who is *authorized*
+to run commands / set a foreign step user (S_LOG_COM, S_BTCH_NAM). Only *armed* jobs
+(STATUS scheduled/released/ready/active) are evaluated.
+
+| ID | Title | Severity | Source / condition |
+|----|-------|----------|--------------------|
+| JOBCMD-CMD-001 | External OS command wraps a shell / interpreter | CRITICAL | SXPGCOSTAB OPCOMMAND basename in {sh,bash,cmd,powershell,python,…} or shell metacharacter in OPCOMMAND/PARAMETERS |
+| JOBCMD-CMD-002 | External OS command allows runtime additional parameters | HIGH | SXPGCOSTAB ADDPAR truthy (X) |
+| JOBCMD-CMD-003 | External OS command on an unqualified or writable path | HIGH | OPCOMMAND bare name (PATH hijack) / relative / /tmp,/var/tmp,%TEMP%,C:\Users… |
+| JOBCMD-CMD-004 | Destructive / exfiltration command defined | MEDIUM | OPCOMMAND basename in {rm,dd,format,curl,wget,nc,scp,reg,certutil,…} |
+| JOBCMD-CMD-005 | External OS command not bound to a specific OS | LOW | OPSYSTEM blank / ANYOS / * |
+| JOBCMD-JOB-001 | Armed job runs under SAP*/DDIC or a SAP_ALL step user | CRITICAL | TBTCP/TBTCO AUTHCKNAM = SAP*/DDIC or a SAP_ALL/SAP_NEW holder (via profiles) |
+| JOBCMD-JOB-001B | Armed job runs under a standard/technical step user | HIGH | AUTHCKNAM in {SAPCPIC,EARLYWATCH,TMSADM} |
+| JOBCMD-JOB-002 | Job step executes an external OS command / program | HIGH | TBTCP XPGFLAG external / EXTCMD / XPGPROG populated |
+| JOBCMD-JOB-003 | Job runs RSBDCOS0 or unreviewed custom code under a privileged user | HIGH | PROGNAME=RSBDCOS0 (SM69 bypass) or Z/Y report under a privileged step user |
+| JOBCMD-JOB-004 | Armed job step user is deleted / locked / expired / dialog | MEDIUM | AUTHCKNAM absent from USR02, or UFLAG locked / GLTGB past / USTYP dialog |
+| JOBCMD-JOB-005 | Job step user differs from scheduler (identity borrowing) | MEDIUM | AUTHCKNAM ≠ SDLUNAME and AUTHCKNAM is a privileged/standard user |
+
+Data sources: `ext_os_commands.csv` (SXPGCOSTAB), `ext_os_commands_sap.csv` (SXPGCOTABE,
+optional), `background_jobs.csv` (TBTCO), `background_job_steps.csv` (TBTCP); reuses
+`users.csv` (USR02) and `profiles.csv` (USR04) to resolve privileged step users.

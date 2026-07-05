@@ -39,6 +39,7 @@ from modules.system_trust import SystemTrustAuditor
 from modules.baseline_params import BaselineParamAuditor
 from modules.s4_business_authz import S4BusinessAuthzAuditor
 from modules.access_risk_analysis import AccessRiskAnalysisAuditor
+from modules.basis_job_command import BasisJobCommandAuditor
 
 # (module key, auditor class) — mirrors sap_scanner.py's module registry.
 MODULES = [
@@ -51,7 +52,7 @@ MODULES = [
     ("hanadb", HanaDbSecurityAuditor), ("hotnews", SapHotNewsAuditor),
     ("authz", AbapAuthorizationAuditor), ("systrust", SystemTrustAuditor),
     ("baseline", BaselineParamAuditor), ("s4authz", S4BusinessAuthzAuditor),
-    ("ara", AccessRiskAnalysisAuditor),
+    ("ara", AccessRiskAnalysisAuditor), ("jobcmd", BasisJobCommandAuditor),
 ]
 _IDS = [m[0] for m in MODULES]
 
@@ -72,6 +73,8 @@ EXPECTED_CHECKS = {
     "s4authz": {"S4AUTHZ-001", "S4AUTHZ-002", "S4AUTHZ-003", "S4AUTHZ-004",
                 "S4AUTHZ-005", "S4AUTHZ-006", "S4AUTHZ-007", "S4AUTHZ-008"},
     "ara": {"ARA-P2P-01", "ARA-R2R-01", "ARA-BASIS-01", "ARA-H2R-01", "ARA-SCORE-001"},
+    "jobcmd": {"JOBCMD-CMD-001", "JOBCMD-CMD-002", "JOBCMD-CMD-003", "JOBCMD-JOB-001",
+               "JOBCMD-JOB-002", "JOBCMD-JOB-003", "JOBCMD-JOB-005"},
 }
 
 

@@ -32,6 +32,9 @@ desktop.ini
 # Scan outputs (don't commit real reports)
 *.html
 !sample_data/sample_report.html
+*.pdf
+!docs/*.pdf
+sample_report.*
 
 # Real export data (never commit production SAP exports)
 exports/

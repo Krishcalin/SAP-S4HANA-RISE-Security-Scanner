@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat-square" alt="Zero Dependencies"/>
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="MIT License"/>
   <img src="https://img.shields.io/badge/SAP-S%2F4HANA%20RISE-0FAAFF?style=flat-square&logo=sap&logoColor=white" alt="SAP S/4HANA"/>
-  <img src="https://img.shields.io/badge/checks-278%2B-red?style=flat-square" alt="278+ Checks"/>
+  <img src="https://img.shields.io/badge/checks-289%2B-red?style=flat-square" alt="289+ Checks"/>
 </p>
 
 ---
@@ -23,10 +23,10 @@
 
 - **No direct system connection required** — offline & agentless; ideal for RISE environments with restricted RFC access
 - **Zero external dependencies** — runs on Python 3.8+ stdlib only
-- **278+ security checks across 19 audit modules** — from ABAP authorizations and HANA DB to BTP/Cloud and permission-level Segregation of Duties
+- **289+ security checks across 20 audit modules** — from ABAP authorizations and HANA DB to BTP/Cloud and permission-level Segregation of Duties
 - **Standards-aligned** — mapped to the CIS SAP Benchmark, DSAG best-practice guide, and the SAP Security Baseline
 
-**Pipeline:** &nbsp;`LOAD` CSV/JSON exports → `MODULES` (19 auditors) → `CHECKS` (278+ rules) → `RANK` by severity → interactive `REPORT` (HTML dashboard).
+**Pipeline:** &nbsp;`LOAD` CSV/JSON exports → `MODULES` (20 auditors) → `CHECKS` (289+ rules) → `RANK` by severity → interactive `REPORT` (HTML dashboard).
 
 ---
 
@@ -53,6 +53,7 @@
 | 🧱 **Security Baseline Parameters** | BASELINE-001→010 (10) | SAP Security Baseline / DSAG / CIS profile parameters the other modules don't cover: RFC authorization engine (auth/rfc_authority_check, auth/no_check_in_some_cases), SNC insecure-connection fallback, SAP GUI Scripting, weak legacy password hashes (downwards compatibility), sapstartsrv / Host-Agent web methods, gateway ACL mode, SSO ticket & session-cookie transport, ICM security log & error disclosure |
 | 🧩 **S/4HANA & Cloud Authorization** | S4AUTHZ-001→008 (8) | The cloud-era authorization layer: super-admin business-role templates (SAP_BR_ADMINISTRATOR*), business-role restrictions left 'Unrestricted', business-catalog sprawl, CDS views with @AccessControl.authorizationCheck disabled, published OData V4 service groups without S_SERVICE, Cloud Connector system mappings without principal propagation, over-assigned Cloud Foundry Org Manager / Space Developer, and birthright role collections mapped to the Default IdP group |
 | ⚖️ **Access Risk Analysis (SoD)** | ARA-* (27 risks + user score) | GRC-style **offline Segregation-of-Duties** from AGR_1251 + AGR_USERS. Resolves each user's transactions **and** authorization object/field/activity across all roles, then evaluates a verified ruleset at the **permission level** (so display-only access is not a false positive): 25 SoD conflicts across Procure-to-Pay, Order-to-Cash, Record-to-Report, Hire-to-Retire and Basis/Security, plus 2 HR critical accesses. Honours documented **mitigating controls** (with expiry) and produces a **per-user risk profile**. Extensible via a custom ruleset JSON. (Supersedes the coarse transaction-level SoD in Advanced IAM, which now defers to this module when AGR_1251 is available.) |
+| ⚙️ **Basis Jobs & OS Commands** | JOBCMD-CMD/JOB-* (11) | The realised **host-command-execution** surface: external OS-command definitions (SM69 / SXPGCOSTAB) that wrap a shell/interpreter, allow runtime argument injection (ADDPAR), resolve to an unqualified/user-writable path, or wrap a destructive/exfil utility — plus armed background jobs (TBTCO/TBTCP) whose step user (AUTHCKNAM) is SAP*/DDIC/SAP_ALL, that shell out to an OS command/program, that run RSBDCOS0 (SM69-allowlist bypass) or unreviewed custom code, whose step user is deleted/locked/dialog, or differs from the scheduler (identity borrowing). Reuses `users`/`profiles` to resolve privileged step users. Complements the ABAP Authorization module (which covers who *can* act) with what is *actually* defined and scheduled. |
 
 <details>
 <summary><strong>🛡️ Advanced IAM — Full Check List</strong></summary>
@@ -697,6 +698,32 @@ GRC-style **offline, permission-level** Segregation of Duties from AGR_1251 + AG
 
 </details>
 
+<details>
+<summary><strong>⚙️ Basis Jobs & OS Commands — Full Check List</strong></summary>
+
+### External OS-command definitions (JOBCMD-CMD-*) — from SM69 / SXPGCOSTAB
+| Check | Description | Severity |
+|-------|-------------|----------|
+| JOBCMD-CMD-001 | External OS command wraps a shell/interpreter or embeds shell metacharacters | CRITICAL |
+| JOBCMD-CMD-002 | External OS command allows runtime additional parameters (ADDPAR = X) | HIGH |
+| JOBCMD-CMD-003 | External OS command resolves to an unqualified (PATH-hijack) or user-writable path | HIGH |
+| JOBCMD-CMD-004 | Destructive / exfiltration utility defined as a standing command (rm/dd/curl/nc/…) | MEDIUM |
+| JOBCMD-CMD-005 | External OS command not bound to a specific operating system | LOW |
+
+### Background jobs & step users (JOBCMD-JOB-*) — from TBTCO / TBTCP
+| Check | Description | Severity |
+|-------|-------------|----------|
+| JOBCMD-JOB-001 | Armed job runs under SAP*/DDIC or a SAP_ALL step user | CRITICAL |
+| JOBCMD-JOB-001B | Armed job runs under a standard/technical step user (SAPCPIC/EARLYWATCH/TMSADM) | HIGH |
+| JOBCMD-JOB-002 | Job step executes an external OS command / program | HIGH |
+| JOBCMD-JOB-003 | Job runs RSBDCOS0 (SM69-allowlist bypass) or unreviewed custom code under a privileged user | HIGH |
+| JOBCMD-JOB-004 | Armed job step user is deleted, locked, expired, or a dialog user | MEDIUM |
+| JOBCMD-JOB-005 | Job step user differs from scheduler (identity borrowing) | MEDIUM |
+
+Only *armed* jobs (STATUS scheduled/released/ready/active) are evaluated; finished/cancelled jobs are out of scope. Complements the ABAP Authorization module (`authz`), which covers who is *authorized* to run commands / set a foreign step user (S_LOG_COM, S_BTCH_NAM) — this module reports the *actual* command catalog and the *actual* scheduled jobs.
+
+</details>
+
 ---
 
 ## Quick Start
@@ -745,6 +772,7 @@ systrust  — System Trust & Standard Users (TRUST-*, STDUSR-*)
 baseline  — Security Baseline Parameters (BASELINE-*)
 s4authz   — S/4HANA & Cloud Authorization (S4AUTHZ-*)
 ara       — Access Risk Analysis / offline SoD (ARA-*)
+jobcmd    — Basis Jobs & OS Commands (JOBCMD-*)
 all       — Run everything (default)
 ```
 
@@ -980,6 +1008,20 @@ All files are optional — the scanner runs only checks for which data is availa
 
 </details>
 
+<details>
+<summary><strong>📋 Basis Jobs & OS Commands data files</strong></summary>
+
+| File | Source | Description |
+|------|--------|-------------|
+| `ext_os_commands.csv` | SM69 / table SXPGCOSTAB | Customer external OS commands: `NAME, OPSYSTEM, OPCOMMAND, PARAMETERS, ADDPAR` |
+| `ext_os_commands_sap.csv` | table SXPGCOTABE | *Optional* — SAP-delivered logical commands (to diff against) |
+| `background_jobs.csv` | SM37 / table TBTCO | Job header: `JOBNAME, JOBCOUNT, STATUS, SDLUNAME, AUTHCKNAM` (export STATUS in P/S/Y/R — armed jobs) |
+| `background_job_steps.csv` | table TBTCP | Job steps: `JOBNAME, JOBCOUNT, STEPCOUNT, PROGNAME, XPGFLAG, EXTCMD, XPGPROG, AUTHCKNAM` |
+
+Reuses `users.csv` (USR02) and `profiles.csv` (USR04) to resolve whether a job step user is SAP*/DDIC or a SAP_ALL holder, locked, expired or a dialog account.
+
+</details>
+
 ---
 
 ## Custom Baseline
@@ -1049,7 +1091,8 @@ SAP-S4HANA-RISE-Security-Scanner/
 │   ├── system_trust.py             # TRUST-*/STDUSR-* System Trust & Standard Users
 │   ├── baseline_params.py          # BASELINE-*       Security Baseline Parameters
 │   ├── s4_business_authz.py        # S4AUTHZ-*        S/4HANA & Cloud Authorization
-│   └── access_risk_analysis.py     # ARA-*            Access Risk Analysis (offline SoD)
+│   ├── access_risk_analysis.py     # ARA-*            Access Risk Analysis (offline SoD)
+│   └── basis_job_command.py        # JOBCMD-*         Basis Jobs & External OS Commands
 ├── sample_data/                    # 90 crafted demo exports (trigger every check)
 ├── data/
 │   └── finding_details.json        # Knowledge base: detailed risk + step-by-step remediation per check
@@ -1134,6 +1177,8 @@ SAP-S4HANA-RISE-Security-Scanner/
 - [x] SAP Security Baseline profile parameters (auth engine, SNC fallback, GUI scripting, gateway ACL, ICM log)
 - [x] S/4HANA & cloud authorization (business roles, CDS auth-check, OData V4, Cloud Connector principal propagation, CF roles)
 - [x] Offline permission-level Segregation of Duties / Access Risk Analysis (GRC-style ruleset, mitigating controls, user risk score)
+- [x] Basis background jobs & external OS-command hardening (SM69/SXPGCOSTAB shell-wrap/ADDPAR/path, TBTCO/TBTCP privileged step users, RSBDCOS0)
+- [x] Detailed PDF hand-over report + per-finding risk/remediation knowledge base
 - [ ] Scan comparison mode (diff two scans)
 - [ ] CI/CD integration with exit codes
 - [ ] PDF report export
