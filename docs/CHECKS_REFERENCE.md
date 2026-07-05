@@ -170,3 +170,35 @@ HotNews/High notes for your specific product versions and the module merges them
 Data sources: `applied_notes.csv` (SNOTE / SAP Note implementation status export:
 columns NOTE, STATUS [, TITLE]); `sap_security_notes.json` (optional catalog to
 merge — list of `{note, cve, cvss, priority, component, released, exploited, title}`).
+
+---
+
+## ABAP Authorization & Critical Access (AUTH-*)
+
+Evaluates the **content** of ABAP roles at the authorization-object / field / value
+level — the deep analysis a flat user-value scan cannot do — by parsing an
+`AGR_1251` export and attributing each risky role to its holders (`AGR_USERS`).
+Grounded in the SAP Security Baseline, DSAG audit guidelines, and SAP Notes
+65968 / 1416085 / 1481950.
+
+| ID | Title | Severity | Object / condition |
+|----|-------|----------|--------------------|
+| AUTH-001 | Debug & Replace (runtime authorization bypass) | CRITICAL | S_DEVELOP OBJTYPE=DEBUG + ACTVT=02 |
+| AUTH-002 | Trusted-RFC logon as any user | CRITICAL | S_RFCACL RFC_USER/RFC_SYSID=* (RFC_EQUSER≠Y) |
+| AUTH-003 | Unrestricted external OS-command execution | CRITICAL | S_LOG_COM COMMAND=* + HOST=* |
+| AUTH-004 | Authorization forging via role-content objects | CRITICAL | S_USER_AUT/S_USER_TCD/S_USER_VAL wildcard |
+| AUTH-005 | Role allows starting any transaction | CRITICAL | S_TCODE TCD=* |
+| AUTH-006 | Broad RFC authorization | HIGH | S_RFC RFC_NAME=* |
+| AUTH-007 | Generic table write via S_TABU_NAM | HIGH | S_TABU_NAM TABLE=* + ACTVT=02 |
+| AUTH-008 | Generic table maintenance via S_TABU_DIS | HIGH | S_TABU_DIS DICBERCLS=*/&NC& + ACTVT=02 |
+| AUTH-009 | Cross-client table maintenance | HIGH | S_TABU_CLI CLIIDMAINT=X |
+| AUTH-010 | Arbitrary OS file access from ABAP | HIGH | S_DATASET FILENAME=* + PROGRAM=* |
+| AUTH-011 | Run-any-report authorization | HIGH | S_PROGRAM P_ACTION=SUBMIT + P_GROUP=*/blank |
+| AUTH-012 | Background-job impersonation | HIGH | S_BTCH_NAM BTCUNAME=* |
+| AUTH-013 | Sensitive Basis / administration transactions in roles | HIGH | S_TCODE TCD ∈ critical-tcode catalog |
+| AUTH-014 | ABAP development change access | HIGH | S_DEVELOP ACTVT 01/02 on non-DEBUG object types |
+| AUTH-015 | Global authorization-object disabling active | MEDIUM | auth/object_disabling_active = Y |
+
+Data sources: `role_auth_values.csv` (AGR_1251: AGR_NAME, OBJECT, AUTH, FIELD, LOW,
+HIGH [, DELETED]); `user_roles.csv` (AGR_USERS, for holder attribution);
+`security_params.csv` (for AUTH-015). Runs only if `role_auth_values.csv` is present.

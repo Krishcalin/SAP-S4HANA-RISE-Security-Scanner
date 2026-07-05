@@ -1,4 +1,5 @@
 NAME,VALUE
+auth/object_disabling_active,Y
 login/min_password_lng,6
 login/min_password_digits,0
 login/min_password_letters,1

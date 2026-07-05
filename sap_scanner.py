@@ -34,6 +34,7 @@ from modules.fiori_ui import FioriUiAuditor
 from modules.crypto_posture import CryptoPostureAuditor
 from modules.hana_db_security import HanaDbSecurityAuditor
 from modules.sap_hotnews import SapHotNewsAuditor
+from modules.abap_authorizations import AbapAuthorizationAuditor
 from modules.report_generator import ReportGenerator
 from modules.data_loader import DataLoader
 
@@ -68,7 +69,7 @@ def main():
     )
     parser.add_argument(
         "--modules", nargs="+",
-        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "logmon", "fiori", "crypto", "hanadb", "hotnews", "all"],
+        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "logmon", "fiori", "crypto", "hanadb", "hotnews", "authz", "all"],
         default=["all"],
         help="Which audit modules to run (default: all)"
     )
@@ -98,7 +99,7 @@ def main():
 
     run_modules = args.modules if "all" not in args.modules else [
         "users", "params", "network", "rise", "iam", "btpcloud",
-        "intglayer", "dataprot", "codetrans", "logmon", "fiori", "crypto", "hanadb", "hotnews"
+        "intglayer", "dataprot", "codetrans", "logmon", "fiori", "crypto", "hanadb", "hotnews", "authz"
     ]
 
     all_findings = []
@@ -217,6 +218,14 @@ def main():
     if "hotnews" in run_modules:
         print("[*] Running SAP Security Notes / HotNews Checks (missing critical patches since 2020)...")
         auditor = SapHotNewsAuditor(data, baseline_overrides)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- ABAP Authorization & Critical Access ---
+    if "authz" in run_modules:
+        print("[*] Running ABAP Authorization & Critical Access Checks (AGR_1251 role analysis)...")
+        auditor = AbapAuthorizationAuditor(data, baseline_overrides)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")

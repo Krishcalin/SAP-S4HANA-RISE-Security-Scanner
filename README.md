@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat-square" alt="Zero Dependencies"/>
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="MIT License"/>
   <img src="https://img.shields.io/badge/SAP-S%2F4HANA%20RISE-0FAAFF?style=flat-square&logo=sap&logoColor=white" alt="SAP S/4HANA"/>
-  <img src="https://img.shields.io/badge/checks-206%2B-red?style=flat-square" alt="206+ Checks"/>
+  <img src="https://img.shields.io/badge/checks-221%2B-red?style=flat-square" alt="221+ Checks"/>
 </p>
 
 ---
@@ -22,7 +22,7 @@
 
 - **No direct system connection required** — ideal for RISE environments with restricted RFC access
 - **Zero external dependencies** — runs on Python 3.8+ stdlib only
-- **206+ security checks across 14 audit modules
+- **221+ security checks across 15 audit modules
 - **CIS SAP Benchmark aligned** — checks mapped to industry-standard baselines
 
 ---
@@ -45,6 +45,7 @@
 | 🔑 **Cryptographic Posture** | CRYPTO-TLS/CERT/SNC/HANA/LIB/PSE/KEY (13) | TLS config, certificate health, SNC, HANA encryption, crypto library, key management |
 | 🗄️ **HANA Database Security** | HANADB-USER/PRIV/ROLE/AUDIT/PARAM (15) | Privileged DB users (SYSTEM, password lifetime, dormancy), PUBLIC & system-privilege grants, _SYS_BI_CP_ALL analytic bypass, DB auditing, HANA security parameters |
 | 📰 **SAP Security Notes / HotNews** | HOTNEWS-000→004 (5) | Missing HotNews (Priority 1) & High (Priority 2) SAP Security Notes since 2020, actively-exploited (CISA KEV) unpatched CVEs, partially-implemented notes — diffed from your SNOTE export against a curated, verified catalog |
+| 🔓 **ABAP Authorization & Critical Access** | AUTH-001→015 (15) | Role-content analysis from AGR_1251: Debug&Replace (runtime auth bypass), trusted-RFC impersonation (S_RFCACL), OS command/file access (S_LOG_COM/S_DATASET), authorization forging (S_USER_AUT), broad S_RFC, generic table maintenance (S_TABU_*), run-any-report (S_PROGRAM), batch impersonation, and sensitive Basis transactions — attributed to the users who hold each role |
 
 <details>
 <summary><strong>🛡️ Advanced IAM — Full Check List</strong></summary>

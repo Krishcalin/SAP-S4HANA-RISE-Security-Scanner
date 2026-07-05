@@ -128,6 +128,8 @@ class DataLoader:
         # SAP Security Notes / HotNews data sources
         "applied_notes":           ["applied_notes.csv", "snote_status.csv", "implemented_notes.csv"],
         "sap_security_notes":      ["sap_security_notes.json", "hotnews_catalog.json"],
+        # ABAP Authorization & Critical Access data sources
+        "role_auth_values":        ["role_auth_values.csv", "role_authorizations.csv", "agr1251_values.csv"],
     }
 
     def __init__(self, data_dir: Path):
