@@ -1,5 +1,12 @@
 NAME,VALUE
 auth/object_disabling_active,Y
+login/no_automatic_user_sapstar,0
+rfc/selftrust,1
+rfc/allowoldticket4tt,yes
+rdisp/msserv_internal,0
+ms/monitor,1
+ucon/rfc/active,0
+gw/prxy_info,
 login/min_password_lng,6
 login/min_password_digits,0
 login/min_password_letters,1

@@ -1,0 +1,4 @@
+ACTION,SOURCE,DEST,PORT
+P,10.1.1.0/24,sapprd01,sapdp00
+P,*,*,3299
+D,*,*,*

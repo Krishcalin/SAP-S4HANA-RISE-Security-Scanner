@@ -35,6 +35,7 @@ from modules.crypto_posture import CryptoPostureAuditor
 from modules.hana_db_security import HanaDbSecurityAuditor
 from modules.sap_hotnews import SapHotNewsAuditor
 from modules.abap_authorizations import AbapAuthorizationAuditor
+from modules.system_trust import SystemTrustAuditor
 from modules.report_generator import ReportGenerator
 from modules.data_loader import DataLoader
 
@@ -69,7 +70,7 @@ def main():
     )
     parser.add_argument(
         "--modules", nargs="+",
-        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "logmon", "fiori", "crypto", "hanadb", "hotnews", "authz", "all"],
+        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "logmon", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust", "all"],
         default=["all"],
         help="Which audit modules to run (default: all)"
     )
@@ -99,7 +100,7 @@ def main():
 
     run_modules = args.modules if "all" not in args.modules else [
         "users", "params", "network", "rise", "iam", "btpcloud",
-        "intglayer", "dataprot", "codetrans", "logmon", "fiori", "crypto", "hanadb", "hotnews", "authz"
+        "intglayer", "dataprot", "codetrans", "logmon", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust"
     ]
 
     all_findings = []
@@ -226,6 +227,14 @@ def main():
     if "authz" in run_modules:
         print("[*] Running ABAP Authorization & Critical Access Checks (AGR_1251 role analysis)...")
         auditor = AbapAuthorizationAuditor(data, baseline_overrides)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- System Trust & Standard Users ---
+    if "systrust" in run_modules:
+        print("[*] Running System Trust & Standard Users Checks (trusted RFC, SAP*, default passwords)...")
+        auditor = SystemTrustAuditor(data, baseline_overrides)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")

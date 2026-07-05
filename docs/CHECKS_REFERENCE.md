@@ -202,3 +202,29 @@ Grounded in the SAP Security Baseline, DSAG audit guidelines, and SAP Notes
 Data sources: `role_auth_values.csv` (AGR_1251: AGR_NAME, OBJECT, AUTH, FIELD, LOW,
 HIGH [, DELETED]); `user_roles.csv` (AGR_USERS, for holder attribution);
 `security_params.csv` (for AUTH-015). Runs only if `role_auth_values.csv` is present.
+
+---
+
+## System Trust & Standard Users (TRUST-* / STDUSR-*)
+
+The landscape trust / connectivity surface (lateral-movement paths between SAP
+systems) and the standard/default accounts. Grounded in the SAP Security Baseline
+and SAP Notes 128447 / 3089413 / 3157268 / 1421005 / 910918 / 2383.
+
+| ID | Title | Severity | Source / condition |
+|----|-------|----------|--------------------|
+| STDUSR-001 | SAP* kernel emergency-user auto-logon enabled | CRITICAL | login/no_automatic_user_sapstar = 0 |
+| STDUSR-002 | Standard users still have SAP default passwords | CRITICAL | RSUSR003 default-password flag |
+| STDUSR-003 | Standard users not locked | HIGH | RSUSR003 lock status |
+| TRUST-001 | Inbound trusted-RFC relationships (verify tier) | HIGH/MEDIUM | RFCSYSACL (trusted SID, non-prod prefix) |
+| TRUST-002 | RFC self-trust enabled | HIGH | rfc/selftrust = 1 or self-SID trust |
+| TRUST-003 | Trust not migrated to current security method | HIGH | rfc/allowoldticket4tt = yes / unmigrated RFCSYSACL |
+| TRUST-004 | Trusted RFC destination with a fixed logon user | HIGH | RFCDES trusted + fixed RFCUSER |
+| TRUST-005 | SAProuter route table allows wildcard host/port | HIGH | saprouttab P/S wildcard rule |
+| TRUST-006 | Message-server internal/external separation weak | HIGH | rdisp/msserv_internal = 0 / ms/monitor ≠ 0 |
+| TRUST-007 | UCON RFC allowlist not active | HIGH | ucon/rfc/active ≠ 1 |
+| TRUST-008 | RFC Gateway proxy ACL (gw/prxy_info) not configured | MEDIUM | gw/prxy_info empty (and gw/acl_mode_proxy ≠ 1) |
+
+Data sources: `security_params.csv` (profile parameters), `rfc_trust.csv`
+(RFCSYSACL / SMT1 export), `standard_users.csv` (RSUSR003 export),
+`saprouttab.csv` (SAProuter route table), `rfc_destinations.csv` (SM59, for TRUST-004).

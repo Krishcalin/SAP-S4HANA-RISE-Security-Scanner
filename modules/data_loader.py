@@ -130,6 +130,10 @@ class DataLoader:
         "sap_security_notes":      ["sap_security_notes.json", "hotnews_catalog.json"],
         # ABAP Authorization & Critical Access data sources
         "role_auth_values":        ["role_auth_values.csv", "role_authorizations.csv", "agr1251_values.csv"],
+        # System Trust & Standard Users data sources
+        "rfc_trust":               ["rfc_trust.csv", "rfcsysacl.csv", "trusted_systems.csv"],
+        "standard_users":          ["standard_users.csv", "rsusr003.csv", "default_users.csv"],
+        "saprouttab":              ["saprouttab.csv", "route_permission.csv"],
     }
 
     def __init__(self, data_dir: Path):
