@@ -27,3 +27,15 @@ rsau/enable,0
 rec/client,
 rdisp/wpdbug_max_no,2
 ssl/ciphersuites,
+auth/rfc_authority_check,0
+auth/no_check_in_some_cases,N
+snc/accept_insecure_rfc,1
+sapgui/user_scripting,TRUE
+login/password_downwards_compatibility,1
+service/protectedwebmethods,NONE
+gw/acl_mode,0
+login/ticket_only_by_https,0
+icf/set_HTTPonly_flag_on_cookies,1
+icm/security_log,LOGFILE=dev_icm_sec LEVEL=1 MAXSIZEKB=1000
+is/HTTP/show_detailed_errors,TRUE
+login/password_compliance_to_current_policy,0

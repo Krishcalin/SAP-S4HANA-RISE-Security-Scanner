@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat-square" alt="Zero Dependencies"/>
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="MIT License"/>
   <img src="https://img.shields.io/badge/SAP-S%2F4HANA%20RISE-0FAAFF?style=flat-square&logo=sap&logoColor=white" alt="SAP S/4HANA"/>
-  <img src="https://img.shields.io/badge/checks-232%2B-red?style=flat-square" alt="232+ Checks"/>
+  <img src="https://img.shields.io/badge/checks-250%2B-red?style=flat-square" alt="250+ Checks"/>
 </p>
 
 ---
@@ -23,7 +23,7 @@
 
 - **No direct system connection required** — ideal for RISE environments with restricted RFC access
 - **Zero external dependencies** — runs on Python 3.8+ stdlib only
-- **232+ security checks across 16 audit modules
+- **250+ security checks across 18 audit modules
 - **CIS SAP Benchmark aligned** — checks mapped to industry-standard baselines
 
 ---
@@ -48,6 +48,8 @@
 | 📰 **SAP Security Notes / HotNews** | HOTNEWS-000→004 (5) | Missing HotNews (Priority 1) & High (Priority 2) SAP Security Notes since 2020, actively-exploited (CISA KEV) unpatched CVEs, partially-implemented notes — diffed from your SNOTE export against a curated, verified catalog |
 | 🔓 **ABAP Authorization & Critical Access** | AUTH-001→015 (15) | Role-content analysis from AGR_1251: Debug&Replace (runtime auth bypass), trusted-RFC impersonation (S_RFCACL), OS command/file access (S_LOG_COM/S_DATASET), authorization forging (S_USER_AUT), broad S_RFC, generic table maintenance (S_TABU_*), run-any-report (S_PROGRAM), batch impersonation, and sensitive Basis transactions — attributed to the users who hold each role |
 | 🔗 **System Trust & Standard Users** | TRUST-001→008, STDUSR-001→003 (11) | Trusted/trusting RFC (inbound trust from a lower tier, self-trust, unmigrated 2020 method, trusted destination with a fixed user), SAProuter wildcard routes, message-server port separation, UCON RFC allowlist, gateway proxy ACL — plus standard users (SAP* kernel auto-logon, default passwords, unlocked SAP*/DDIC/SAPCPIC/EARLYWATCH/TMSADM) |
+| 🧱 **Security Baseline Parameters** | BASELINE-001→010 (10) | SAP Security Baseline / DSAG / CIS profile parameters the other modules don't cover: RFC authorization engine (auth/rfc_authority_check, auth/no_check_in_some_cases), SNC insecure-connection fallback, SAP GUI Scripting, weak legacy password hashes (downwards compatibility), sapstartsrv / Host-Agent web methods, gateway ACL mode, SSO ticket & session-cookie transport, ICM security log & error disclosure |
+| 🧩 **S/4HANA & Cloud Authorization** | S4AUTHZ-001→008 (8) | The cloud-era authorization layer: super-admin business-role templates (SAP_BR_ADMINISTRATOR*), business-role restrictions left 'Unrestricted', business-catalog sprawl, CDS views with @AccessControl.authorizationCheck disabled, published OData V4 service groups without S_SERVICE, Cloud Connector system mappings without principal propagation, over-assigned Cloud Foundry Org Manager / Space Developer, and birthright role collections mapped to the Default IdP group |
 
 <details>
 <summary><strong>🛡️ Advanced IAM — Full Check List</strong></summary>

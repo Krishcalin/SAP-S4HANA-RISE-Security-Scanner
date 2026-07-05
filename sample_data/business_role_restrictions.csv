@@ -1,0 +1,5 @@
+ROLE,RESTRICTION_TYPE,ACCESS,WRITE
+Z_FINANCE_MANAGER,Company Code,Unrestricted,Restricted
+Z_SALES_ADMIN,Write,Unrestricted,Unrestricted
+Z_HR_DISPLAY,Cost Center,1000-1999,Restricted
+Z_PURCHASER,Purchasing Organization,Restricted,Restricted

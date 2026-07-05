@@ -228,3 +228,56 @@ and SAP Notes 128447 / 3089413 / 3157268 / 1421005 / 910918 / 2383.
 Data sources: `security_params.csv` (profile parameters), `rfc_trust.csv`
 (RFCSYSACL / SMT1 export), `standard_users.csv` (RSUSR003 export),
 `saprouttab.csv` (SAProuter route table), `rfc_destinations.csv` (SM59, for TRUST-004).
+
+---
+
+## Security Baseline Parameters (BASELINE-*)
+
+Profile parameters from the **SAP Security Baseline Template / DSAG / CIS** that the
+other modules do not already cover — the authorization engine, SNC insecure fallback,
+GUI scripting, weak legacy password hashes, sapstartsrv web methods, the RFC gateway
+ACL mode, SSO ticket/cookie transport, and the ICM security log / error disclosure.
+(Password length/complexity/expiry live in Security Parameters; `snc/enable` and data
+encryption in Cryptographic Posture; the message server and `gw/prxy_info` in System
+Trust; `auth/object_disabling_active` in ABAP Authorization — deliberately not repeated.)
+
+| ID | Title | Severity | Source / condition |
+|----|-------|----------|--------------------|
+| BASELINE-001 | RFC authorization check disabled | HIGH | auth/rfc_authority_check = 0 (harden to 9) |
+| BASELINE-002 | Profile-generator auth checks not active | HIGH | auth/no_check_in_some_cases = N (baseline requires Y) |
+| BASELINE-003 | SNC accepts insecure (unencrypted) connections | HIGH | snc/accept_insecure_rfc\|gui\|cpic\|r3int_rfc = 1 or U |
+| BASELINE-004 | SAP GUI Scripting enabled server-side | HIGH | sapgui/user_scripting = TRUE |
+| BASELINE-005 | Weak legacy password hashes retained | HIGH | login/password_downwards_compatibility > 0 |
+| BASELINE-006 | sapstartsrv / Host Agent web methods not protected | HIGH | service/protectedwebmethods not SDEFAULT/ALL |
+| BASELINE-007 | RFC Gateway default ACL not enforced | MEDIUM | gw/acl_mode = 0 (10KBLAZE misconfig class; CISA AA19-122A) |
+| BASELINE-008 | SSO ticket / session-cookie transport not hardened | MEDIUM | login/ticket_only_by_https = 0 / icf/set_HTTPonly_flag_on_cookies ≠ 0 / login/ticket_only_to_host = 0 |
+| BASELINE-009 | Web-tier logging / error disclosure weak (ICM) | MEDIUM | icm/security_log LEVEL < 3 / is/HTTP/show_detailed_errors = TRUE |
+| BASELINE-010 | Existing passwords not forced to current policy | MEDIUM | login/password_compliance_to_current_policy = 0 |
+
+Data source: `security_params.csv` (RSPARAM / RZ11 profile parameter export). The
+module self-skips when no parameter export is present.
+
+---
+
+## S/4HANA & Cloud Authorization (S4AUTHZ-*)
+
+The cloud-era authorization layer between the classic ABAP checks and BTP:
+S/4HANA business roles / catalogs / restrictions, CDS access-control, OData V4,
+Cloud Connector principal propagation, and Cloud Foundry platform roles. Each check
+self-skips when its data source is absent.
+
+| ID | Title | Severity | Source / condition |
+|----|-------|----------|--------------------|
+| S4AUTHZ-001 | Super-admin business role template assigned in production | CRITICAL | business_roles: SAP_BR_ADMINISTRATOR / _MDG assigned to a business user |
+| S4AUTHZ-002 | Business-role restriction left 'Unrestricted' | HIGH | business_role_restrictions: sensitive type or Write = Unrestricted |
+| S4AUTHZ-003 | Business role bundles more than 30 business catalogs | MEDIUM | business_role_catalogs: catalog count per role > threshold (default 30) |
+| S4AUTHZ-004 | CDS view exposes data with authorization checking disabled | HIGH | cds_views: @AccessControl.authorizationCheck #NOT_REQUIRED / #NOT_ALLOWED and exposed |
+| S4AUTHZ-005 | OData V4 service group published without authorization | HIGH | odata_v4_services: published (/IWFND/V4_ADMIN) + no S_SERVICE |
+| S4AUTHZ-006 | Cloud Connector system mapping without principal propagation | HIGH | cloud_connector: HTTP(S) mapping principalType = None |
+| S4AUTHZ-007 | Cloud Foundry privileged platform role over-assigned | HIGH | cf_roles: Org Manager / Space Manager / Space Developer > threshold (default 5) |
+| S4AUTHZ-008 | Birthright role collection auto-granted to all federated users | MEDIUM | btp_role_collection_mappings: role collection mapped to Default / wildcard IdP group |
+
+Data sources: `business_roles.csv`, `business_role_restrictions.csv`,
+`business_role_catalogs.csv`, `cds_views.csv`, `odata_v4_services.csv`,
+`cloud_connector.json` (SCC system mappings), `cf_roles.csv`,
+`btp_role_collection_mappings.csv`.

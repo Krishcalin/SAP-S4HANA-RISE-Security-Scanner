@@ -1,0 +1,9 @@
+USER,ROLE,SPACE
+jdoe@example.com,Space_Developer,PROD
+msmith@example.com,Space_Developer,PROD
+alee@example.com,Space_Developer,PROD
+kbrown@example.com,Space_Developer,PROD
+rgarcia@example.com,Space_Developer,PROD
+twong@example.com,Space_Developer,PROD
+admin@example.com,Org_Manager,ACME-PROD
+ops@example.com,Space_Auditor,PROD

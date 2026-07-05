@@ -36,6 +36,8 @@ from modules.hana_db_security import HanaDbSecurityAuditor
 from modules.sap_hotnews import SapHotNewsAuditor
 from modules.abap_authorizations import AbapAuthorizationAuditor
 from modules.system_trust import SystemTrustAuditor
+from modules.baseline_params import BaselineParamAuditor
+from modules.s4_business_authz import S4BusinessAuthzAuditor
 
 # (module key, auditor class) — mirrors sap_scanner.py's module registry.
 MODULES = [
@@ -47,6 +49,7 @@ MODULES = [
     ("fiori", FioriUiAuditor), ("crypto", CryptoPostureAuditor),
     ("hanadb", HanaDbSecurityAuditor), ("hotnews", SapHotNewsAuditor),
     ("authz", AbapAuthorizationAuditor), ("systrust", SystemTrustAuditor),
+    ("baseline", BaselineParamAuditor), ("s4authz", S4BusinessAuthzAuditor),
 ]
 _IDS = [m[0] for m in MODULES]
 
@@ -61,6 +64,11 @@ EXPECTED_CHECKS = {
     "authz": {"AUTH-001", "AUTH-002", "AUTH-003", "AUTH-004", "AUTH-005", "AUTH-013"},
     "systrust": {"STDUSR-001", "STDUSR-002", "STDUSR-003", "TRUST-001",
                  "TRUST-004", "TRUST-005", "TRUST-008"},
+    "baseline": {"BASELINE-001", "BASELINE-002", "BASELINE-003", "BASELINE-004",
+                 "BASELINE-005", "BASELINE-006", "BASELINE-007", "BASELINE-008",
+                 "BASELINE-009", "BASELINE-010"},
+    "s4authz": {"S4AUTHZ-001", "S4AUTHZ-002", "S4AUTHZ-003", "S4AUTHZ-004",
+                "S4AUTHZ-005", "S4AUTHZ-006", "S4AUTHZ-007", "S4AUTHZ-008"},
 }
 
 

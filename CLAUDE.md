@@ -12,7 +12,7 @@ access.
 
 - **Zero external dependencies** — Python 3.8+ standard library only. Do **not** add
   third-party packages (no `requirements.txt` / `pyproject.toml` by design).
-- **~232+ checks across 16 audit modules** (keep the README badge/count and
+- **~250+ checks across 18 audit modules** (keep the README badge/count and
   `docs/CHECKS_REFERENCE.md` in sync when you add checks).
 - CIS SAP / DSAG-aligned; findings cite real SAP Notes / SAP Security Baseline / CIS.
 
@@ -46,7 +46,7 @@ on the default cp1252 console. Always run with `PYTHONIOENCODING=utf-8` on Windo
 - **`modules/report_generator.py`** — HTML dashboard. Uses `html.escape` (XSS-safe) and a
   weighted risk score. Consumes the standard `finding()` dict.
 
-### The 16 modules (module key → class → focus)
+### The 18 modules (module key → class → focus)
 
 | key | module | focus |
 |---|---|---|
@@ -66,6 +66,8 @@ on the default cp1252 console. Always run with `PYTHONIOENCODING=utf-8` on Windo
 | `hotnews` | sap_hotnews | missing critical SAP Security Notes since 2020 |
 | `authz` | abap_authorizations | AGR_1251 role-content: critical auth objects & transactions |
 | `systrust` | system_trust | trusted RFC, SAProuter, msg server, UCON, SAP*/default passwords |
+| `baseline` | baseline_params | SAP Security Baseline profile params: auth engine, SNC fallback, GUI scripting, weak hashes, sapstartsrv, gateway ACL, SSO cookies, ICM log |
+| `s4authz` | s4_business_authz | S/4HANA business roles/catalogs/restrictions, CDS auth-check, OData V4, Cloud Connector principal propagation, CF platform roles, birthright role collections |
 
 ## Adding a new module (the recipe)
 

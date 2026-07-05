@@ -134,6 +134,15 @@ class DataLoader:
         "rfc_trust":               ["rfc_trust.csv", "rfcsysacl.csv", "trusted_systems.csv"],
         "standard_users":          ["standard_users.csv", "rsusr003.csv", "default_users.csv"],
         "saprouttab":              ["saprouttab.csv", "route_permission.csv"],
+        # (Security Baseline Parameters reuses security_params.csv)
+        # S/4HANA & Cloud Authorization data sources
+        "business_roles":              ["business_roles.csv", "business_role_users.csv"],
+        "business_role_restrictions":  ["business_role_restrictions.csv"],
+        "business_role_catalogs":      ["business_role_catalogs.csv"],
+        "cds_views":                   ["cds_views.csv", "cds_access_control.csv"],
+        "odata_v4_services":           ["odata_v4_services.csv", "iwfnd_v4.csv"],
+        "cf_roles":                    ["cf_roles.csv", "cf_org_space_roles.csv"],
+        "btp_role_collection_mappings": ["btp_role_collection_mappings.csv", "role_collection_groups.csv"],
     }
 
     def __init__(self, data_dir: Path):

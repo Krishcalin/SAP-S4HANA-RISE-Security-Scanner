@@ -4,6 +4,7 @@
       "name": "S4H_Production",
       "internalHost": "10.0.1.50:443",
       "protocol": "HTTPS",
+      "principalType": "None",
       "resources": [
         {"path": "/", "exactMatchOnly": false},
         {"path": "/sap/opu/odata/sap", "exactMatchOnly": false},
