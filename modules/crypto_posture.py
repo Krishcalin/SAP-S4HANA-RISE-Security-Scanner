@@ -320,7 +320,7 @@ class CryptoPostureAuditor(BaseAuditor):
                         "Deploy SAP Crypto Library on all application servers."
                     ),
                     references=[
-                        "SAP Note 460089 — SNC Configuration",
+                        "SAP Help — Secure Network Communications (SNC) configuration",
                         "CIS SAP Benchmark — SNC Requirements",
                     ],
                 )
@@ -343,7 +343,7 @@ class CryptoPostureAuditor(BaseAuditor):
                         "for full encryption. Level 2 (integrity) provides "
                         "tamper detection but not confidentiality."
                     ),
-                    references=["SAP Note 460089 — SNC Quality of Protection Levels"],
+                    references=["SAP Help — SNC Protection Levels (snc/data_protection: 1=auth, 2=integrity, 3=privacy)"],
                 )
             return
 
@@ -360,7 +360,7 @@ class CryptoPostureAuditor(BaseAuditor):
                     description="SNC is not enabled. RFC/GUI traffic is unencrypted.",
                     affected_items=[f"{name} = {value}"],
                     remediation="Enable SNC: set snc/enable = 1.",
-                    references=["SAP Note 460089"],
+                    references=["SAP Security Baseline — Secure Network Communications (SNC)"],
                 )
 
     def check_hana_encryption(self):

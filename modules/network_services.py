@@ -214,7 +214,7 @@ class NetworkServiceAuditor(BaseAuditor):
                     "for each active high-risk service."
                 ),
                 references=[
-                    "SAP Note 1439348",
+                    "SAP KBA 2661761 (ICF services: mandatory vs. deactivatable)",
                     "CIS SAP Benchmark Section 5.1",
                 ],
             )
@@ -255,7 +255,7 @@ class NetworkServiceAuditor(BaseAuditor):
                     "Configure appropriate logon procedure (Basic, SSO, Certificate). "
                     "Review and restrict the ICF handler chain."
                 ),
-                references=["SAP Note 1439348", "CIS SAP Benchmark Section 5.2"],
+                references=["SAP KBA 2661761 (ICF services: mandatory vs. deactivatable)", "CIS SAP Benchmark Section 5.2"],
             )
 
     def check_open_transports(self):
