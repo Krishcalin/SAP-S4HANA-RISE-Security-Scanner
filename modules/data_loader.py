@@ -143,6 +143,10 @@ class DataLoader:
         "odata_v4_services":           ["odata_v4_services.csv", "iwfnd_v4.csv"],
         "cf_roles":                    ["cf_roles.csv", "cf_org_space_roles.csv"],
         "btp_role_collection_mappings": ["btp_role_collection_mappings.csv", "role_collection_groups.csv"],
+        # Access Risk Analysis (SoD) data sources
+        # (reuses role_auth_values.csv [AGR_1251] + user_roles.csv [AGR_USERS])
+        "mitigating_controls":         ["mitigating_controls.csv", "mitigations.csv", "grc_mitigations.csv"],
+        "ara_ruleset":                 ["ara_ruleset.json", "sod_ruleset_custom.json"],
     }
 
     def __init__(self, data_dir: Path):

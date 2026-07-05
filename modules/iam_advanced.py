@@ -177,6 +177,14 @@ class AdvancedIamAuditor(BaseAuditor):
           - OR sod_matrix.csv (pre-computed: USERNAME, TCODE list)
           - OR sod_ruleset.json (custom rules overriding defaults)
         """
+        # The Access Risk Analysis module ('ara') performs permission-level SoD from
+        # the AGR_1251 export (role_auth_values.csv) — object/field/activity precision
+        # that suppresses the display-only false positives this transaction-level check
+        # cannot. When that export is present, defer to it to avoid duplicate, coarser
+        # findings; this coarse check remains as a fallback for matrix/role-name-only data.
+        if self.data.get("role_auth_values"):
+            return
+
         # Load custom SoD rules if provided
         sod_ruleset = self.data.get("sod_ruleset")
         rules = sod_ruleset if isinstance(sod_ruleset, list) else self.DEFAULT_SOD_RULES

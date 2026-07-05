@@ -281,3 +281,64 @@ Data sources: `business_roles.csv`, `business_role_restrictions.csv`,
 `business_role_catalogs.csv`, `cds_views.csv`, `odata_v4_services.csv`,
 `cloud_connector.json` (SCC system mappings), `cf_roles.csv`,
 `btp_role_collection_mappings.csv`.
+
+---
+
+## Access Risk Analysis — Segregation of Duties (ARA-*)
+
+GRC-style **offline** Access Risk Analysis. For each user, the module resolves — across
+all assigned roles — the transaction codes (S_TCODE) **and** the authorization
+object/field/value combinations held, from the AGR_1251 export, then evaluates a verified
+ruleset at the **permission level**. A conflict fires only when a user holds the maintaining
+**activity** (ACTVT 01/02, HR AUTHC W/E/S, release 43, …) — not mere display (ACTVT 03 /
+AUTHC R,M) — which removes the display-only false positives a transaction-level check
+produces. Each risk = one finding id `ARA-<risk_id>`; there is one aggregate `ARA-SCORE-001`
+user risk profile. Documented mitigating controls (with validity dates) suppress the
+matching user/risk and are reported as *residual*. When AGR_USERS is absent the analysis
+runs per role (a single role that already contains both functions).
+
+**Segregation-of-Duties conflicts (SOD, 25 risks):**
+
+| ID | Conflict | Severity |
+|----|----------|----------|
+| ARA-P2P-01 | Maintain Vendor Master ↔ Process/Execute Vendor Payment | CRITICAL |
+| ARA-P2P-02 | Maintain Vendor Bank Details ↔ Run Automatic Payment Program | CRITICAL |
+| ARA-P2P-03 | Create/Change Purchase Order ↔ Release Purchase Order | HIGH |
+| ARA-P2P-04 | Create Purchase Order ↔ Post Goods Receipt | HIGH |
+| ARA-P2P-05 | Create Purchase Order ↔ Post Vendor Invoice (MIRO) | HIGH |
+| ARA-P2P-06 | Maintain Vendor Master ↔ Post AP (Non-PO) Vendor Invoice | CRITICAL |
+| ARA-O2C-01 | Maintain Customer Master ↔ Create Sales Order | HIGH |
+| ARA-O2C-02 | Maintain Customer Credit Limit ↔ Release Credit-Blocked Order | HIGH |
+| ARA-O2C-03 | Post/Clear Incoming Customer Payments ↔ Maintain Customer Master | CRITICAL |
+| ARA-O2C-04 | Maintain Pricing/Condition Records ↔ Create Sales Order | HIGH |
+| ARA-O2C-05 | Post Billing Document ↔ Maintain Customer Master | HIGH |
+| ARA-O2C-06 | Create Sales Order ↔ Release Own Credit-Blocked Order | HIGH |
+| ARA-R2R-01 | Maintain G/L Account Master ↔ Post Journal Entries | CRITICAL |
+| ARA-R2R-02 | Maintain G/L Account Master ↔ Open/Close Posting Periods | HIGH |
+| ARA-R2R-03 | Enter/Park ↔ Post Journal Entries (four-eyes bypass) | HIGH |
+| ARA-R2R-04 | Maintain Exchange Rates ↔ Post Journal Entries | HIGH |
+| ARA-R2R-05 | Open/Close Posting Periods ↔ Post Journal Entries | HIGH |
+| ARA-H2R-01 | Maintain HR Master Data ↔ Execute Payroll Run | CRITICAL |
+| ARA-H2R-02 | Maintain Employee Bank Details ↔ Run Payroll / Generate Payments | CRITICAL |
+| ARA-H2R-03 | Maintain Personnel Actions (Hire/Terminate) ↔ Maintain Time Data | HIGH |
+| ARA-H2R-04 | Execute Payroll Run ↔ Post Payroll Results to Accounting | HIGH |
+| ARA-BASIS-01 | User Administration ↔ Authorization/Profile Administration | CRITICAL |
+| ARA-BASIS-02 | Maintain Role ↔ Assign Role to User | HIGH |
+| ARA-BASIS-03 | ABAP Development ↔ Transport Release/Import to Production | HIGH |
+| ARA-BASIS-04 | Maintain Table Data ↔ Administer Security Audit Log | HIGH |
+
+**Critical single-function access (H2R, 2 risks) + risk profile:**
+
+| ID | Risk | Severity |
+|----|------|----------|
+| ARA-CA-04 | Change Payroll Status / Delete Payroll Results (PU03/PU01) | HIGH |
+| ARA-CP-05 | Maintain Own HR Master Data (P_PERNR PSIGN=I) | HIGH |
+| ARA-SCORE-001 | Users concentrating ≥2 unmitigated access risks (severity-weighted) | HIGH/MEDIUM |
+
+Data sources: `role_auth_values.csv` (AGR_1251), `user_roles.csv` (AGR_USERS),
+`mitigating_controls.csv` (optional: USER, RISK_ID, CONTROL_ID, VALID_TO),
+`ara_ruleset.json` (optional: custom risks that extend/override the built-in ruleset).
+The ruleset was built and web-verified against SAP authorization-object documentation and
+standard GRC/vendor rulesets; single-object critical actions already covered role-side by
+the ABAP Authorization module (debug-replace, S_RFCACL, table maintenance, OS command,
+run-any-report) and SAP_ALL (User module) are intentionally not duplicated here.

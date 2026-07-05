@@ -38,6 +38,7 @@ from modules.abap_authorizations import AbapAuthorizationAuditor
 from modules.system_trust import SystemTrustAuditor
 from modules.baseline_params import BaselineParamAuditor
 from modules.s4_business_authz import S4BusinessAuthzAuditor
+from modules.access_risk_analysis import AccessRiskAnalysisAuditor
 from modules.report_generator import ReportGenerator
 from modules.data_loader import DataLoader
 
@@ -72,7 +73,7 @@ def main():
     )
     parser.add_argument(
         "--modules", nargs="+",
-        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "logmon", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust", "baseline", "s4authz", "all"],
+        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "logmon", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust", "baseline", "s4authz", "ara", "all"],
         default=["all"],
         help="Which audit modules to run (default: all)"
     )
@@ -103,7 +104,7 @@ def main():
     run_modules = args.modules if "all" not in args.modules else [
         "users", "params", "network", "rise", "iam", "btpcloud",
         "intglayer", "dataprot", "codetrans", "logmon", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust",
-        "baseline", "s4authz"
+        "baseline", "s4authz", "ara"
     ]
 
     all_findings = []
@@ -254,6 +255,14 @@ def main():
     if "s4authz" in run_modules:
         print("[*] Running S/4HANA & Cloud Authorization Checks (business roles, CDS, OData V4, CF, BTP)...")
         auditor = S4BusinessAuthzAuditor(data, baseline_overrides)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- Access Risk Analysis (Segregation of Duties) ---
+    if "ara" in run_modules:
+        print("[*] Running Access Risk Analysis (permission-level SoD, critical access, mitigations)...")
+        auditor = AccessRiskAnalysisAuditor(data, baseline_overrides)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")

@@ -38,6 +38,7 @@ from modules.abap_authorizations import AbapAuthorizationAuditor
 from modules.system_trust import SystemTrustAuditor
 from modules.baseline_params import BaselineParamAuditor
 from modules.s4_business_authz import S4BusinessAuthzAuditor
+from modules.access_risk_analysis import AccessRiskAnalysisAuditor
 
 # (module key, auditor class) — mirrors sap_scanner.py's module registry.
 MODULES = [
@@ -50,6 +51,7 @@ MODULES = [
     ("hanadb", HanaDbSecurityAuditor), ("hotnews", SapHotNewsAuditor),
     ("authz", AbapAuthorizationAuditor), ("systrust", SystemTrustAuditor),
     ("baseline", BaselineParamAuditor), ("s4authz", S4BusinessAuthzAuditor),
+    ("ara", AccessRiskAnalysisAuditor),
 ]
 _IDS = [m[0] for m in MODULES]
 
@@ -69,6 +71,7 @@ EXPECTED_CHECKS = {
                  "BASELINE-009", "BASELINE-010"},
     "s4authz": {"S4AUTHZ-001", "S4AUTHZ-002", "S4AUTHZ-003", "S4AUTHZ-004",
                 "S4AUTHZ-005", "S4AUTHZ-006", "S4AUTHZ-007", "S4AUTHZ-008"},
+    "ara": {"ARA-P2P-01", "ARA-R2R-01", "ARA-BASIS-01", "ARA-H2R-01", "ARA-SCORE-001"},
 }
 
 
@@ -148,6 +151,23 @@ def test_aggregating_module_ids_unique(key, cls, data):
     ids = [f["check_id"] for f in _run(cls, data)]
     dupes = [c for c, n in Counter(ids).items() if n > 1]
     assert not dupes, f"module '{key}' emits duplicate check_ids: {dupes}"
+
+
+def test_ara_permission_level_and_mitigation(data):
+    """ARA's headline behaviours: permission-level false-positive suppression (a user with
+    the maintain *transaction* but only display *activity* must not fire), an active
+    mitigating control suppresses the risk, and an EXPIRED mitigation re-surfaces it."""
+    findings = _run(AccessRiskAnalysisAuditor, data)
+    by_id = {f["check_id"]: f for f in findings}
+    p2p = by_id.get("ARA-P2P-01")
+    assert p2p is not None, "ARA-P2P-01 should fire on the crafted vendor↔payment conflict"
+    affected = " ".join(p2p["affected_items"])
+    assert "ARAFRAUD1" in affected, "expired mitigation must re-surface the risk"
+    assert "ARAMULTI" not in affected, "active mitigation must suppress the risk"
+    assert p2p["details"]["mitigated"] >= 1
+    # ARACLEAN holds the FK02 maintain transaction but only ACTVT 03 (display) → must not fire.
+    leaked = " ".join(i for f in findings for i in f["affected_items"])
+    assert "ARACLEAN" not in leaked, "display-only access must be suppressed at the permission level"
 
 
 def test_check_id_shape(data):
