@@ -268,7 +268,7 @@ SoD checks support three data strategies: pre-computed matrix (`sod_matrix.csv`)
 </details>
 
 <details>
-<summary><strong>🔏 Data Protection & Privacy — Full Check List (NEW)</strong></summary>
+<summary><strong>🔏 Data Protection & Privacy — Full Check List</strong></summary>
 
 ### Read Access Logging (DPP-RAL-*)
 | Check | Description | Severity |
@@ -330,7 +330,7 @@ SoD checks support three data strategies: pre-computed matrix (`sod_matrix.csv`)
 </details>
 
 <details>
-<summary><strong>💻 Code & Transport Security — Full Check List (NEW)</strong></summary>
+<summary><strong>💻 Code & Transport Security — Full Check List</strong></summary>
 
 ### Code Injection / SQL Injection (CODE-INJ-*)
 | Check | Description | Severity |
@@ -391,7 +391,7 @@ SoD checks support three data strategies: pre-computed matrix (`sod_matrix.csv`)
 </details>
 
 <details>
-<summary><strong>📊 Logging, Monitoring & IR — Full Check List (NEW)</strong></summary>
+<summary><strong>📊 Logging, Monitoring & IR — Full Check List</strong></summary>
 
 ### Security Audit Log (LOG-AUD-*)
 | Check | Description | Severity |
@@ -431,7 +431,7 @@ SoD checks support three data strategies: pre-computed matrix (`sod_matrix.csv`)
 </details>
 
 <details>
-<summary><strong>🖥️ Fiori & UI Layer — Full Check List (NEW)</strong></summary>
+<summary><strong>🖥️ Fiori & UI Layer — Full Check List</strong></summary>
 
 ### Catalog Access (FIORI-CAT-*)
 | Check | Description | Severity |
@@ -468,7 +468,7 @@ SoD checks support three data strategies: pre-computed matrix (`sod_matrix.csv`)
 </details>
 
 <details>
-<summary><strong>🔑 Cryptographic Posture — Full Check List (NEW)</strong></summary>
+<summary><strong>🔑 Cryptographic Posture — Full Check List</strong></summary>
 
 ### TLS Configuration (CRYPTO-TLS-*)
 | Check | Description | Severity |
@@ -515,6 +515,188 @@ SoD checks support three data strategies: pre-computed matrix (`sod_matrix.csv`)
 
 </details>
 
+<details>
+<summary><strong>🗄️ HANA Database Security — Full Check List</strong></summary>
+
+### Privileged DB Users (HANADB-USER-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| HANADB-USER-001 | HANA SYSTEM superuser is still active | CRITICAL |
+| HANADB-USER-002 | DB users with password-lifetime check disabled | HIGH |
+| HANADB-USER-003 | Dormant HANA DB users (no logon in N+ days) | MEDIUM |
+
+### Privilege Grants (HANADB-PRIV-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| HANADB-PRIV-001 | Sensitive privileges granted to PUBLIC | CRITICAL |
+| HANADB-PRIV-002 | Critical system privileges granted directly to users | CRITICAL |
+| HANADB-PRIV-003 | Broad system privileges granted directly to users | HIGH |
+| HANADB-PRIV-004 | Sensitive privileges granted WITH ADMIN OPTION | MEDIUM |
+| HANADB-PRIV-005 | Analytic-privilege bypass (`_SYS_BI_CP_ALL`) granted | CRITICAL |
+
+### Roles & Auditing (HANADB-ROLE-* / HANADB-AUDIT-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| HANADB-ROLE-001 | Powerful predefined roles granted to users | HIGH |
+| HANADB-AUDIT-001 | HANA database auditing is disabled | CRITICAL |
+| HANADB-AUDIT-002 | Audit trail written to a CSV text file (tamperable) | HIGH |
+| HANADB-AUDIT-003 | No active HANA audit policies | HIGH |
+| HANADB-AUDIT-004 | Audit policies do not cover critical action groups | MEDIUM |
+
+### Security Parameters (HANADB-PARAM-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| HANADB-PARAM-001 | Weak HANA password-policy parameters | HIGH |
+| HANADB-PARAM-002 | Detailed connect errors exposed to clients | MEDIUM |
+| HANADB-PARAM-003 | TLS not enforced for HANA SQL connections | HIGH |
+
+*Distinct from Cryptographic Posture's `CRYPTO-HANA-*` (encryption-at-rest); this module covers users, privileges, auditing and ini parameters.*
+
+</details>
+
+<details>
+<summary><strong>📰 SAP Security Notes / HotNews — Full Check List</strong></summary>
+
+| Check | Description | Severity |
+|-------|-------------|----------|
+| HOTNEWS-000 | SAP Note implementation status not provided (no SNOTE export) | MEDIUM |
+| HOTNEWS-001 | Missing HotNews (Priority 1) SAP Security Notes | CRITICAL |
+| HOTNEWS-002 | Missing High-priority (Priority 2) SAP Security Notes | HIGH |
+| HOTNEWS-003 | Missing notes for actively-exploited SAP vulnerabilities (CISA KEV) | CRITICAL |
+| HOTNEWS-004 | Critical SAP Notes only partially implemented | HIGH |
+
+Diffs your `applied_notes.csv` (SNOTE export) against a **built-in, verified catalog** of major SAP Security Notes since 2020 — including RECON (CVE-2020-6287), ICMAD (CVE-2022-22536), and the 2025 NetWeaver VC RCE (CVE-2025-31324). Note matching is leading-zero-insensitive; not-yet-implemented statuses fail safe to "missing". Extensible via an optional `sap_security_notes.json`.
+
+</details>
+
+<details>
+<summary><strong>🔓 ABAP Authorization & Critical Access — Full Check List</strong></summary>
+
+Role-content analysis of the **AGR_1251** export (role → object → field → value), attributing each risky role to the users who hold it.
+
+| Check | Description | Severity |
+|-------|-------------|----------|
+| AUTH-001 | Debug & Replace authorization (runtime authorization bypass) | CRITICAL |
+| AUTH-002 | Trusted-RFC logon as any user (S_RFCACL wildcard) | CRITICAL |
+| AUTH-003 | Unrestricted external OS-command execution (S_LOG_COM) | CRITICAL |
+| AUTH-004 | Authorization forging via role-content control objects (S_USER_AUT) | CRITICAL |
+| AUTH-005 | Role allows starting any transaction (S_TCODE = *) | CRITICAL |
+| AUTH-006 | Broad RFC authorization (S_RFC RFC_NAME = *) | HIGH |
+| AUTH-007 | Generic table write via S_TABU_NAM (TABLE = *) | HIGH |
+| AUTH-008 | Generic table maintenance via S_TABU_DIS (all / no auth group) | HIGH |
+| AUTH-009 | Cross-client table maintenance (S_TABU_CLI) | HIGH |
+| AUTH-010 | Arbitrary OS file access from ABAP (S_DATASET) | HIGH |
+| AUTH-011 | Run-any-report authorization (S_PROGRAM) | HIGH |
+| AUTH-012 | Background-job impersonation (S_BTCH_NAM BTCUNAME = *) | HIGH |
+| AUTH-013 | Sensitive Basis / administration transactions in roles | HIGH |
+| AUTH-014 | ABAP development change access (S_DEVELOP create/change) | HIGH |
+| AUTH-015 | Global authorization-object disabling is active | MEDIUM |
+
+</details>
+
+<details>
+<summary><strong>🔗 System Trust & Standard Users — Full Check List</strong></summary>
+
+### Standard / Default Users (STDUSR-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| STDUSR-001 | SAP* kernel emergency-user auto-logon enabled | CRITICAL |
+| STDUSR-002 | Standard users still have SAP default passwords | CRITICAL |
+| STDUSR-003 | Standard users not locked (SAP*/DDIC/SAPCPIC/EARLYWATCH/TMSADM) | HIGH |
+
+### System Trust (TRUST-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| TRUST-001 | Inbound trusted-RFC relationships (verify tier) | HIGH/MEDIUM |
+| TRUST-002 | RFC self-trust enabled | HIGH |
+| TRUST-003 | Trust not migrated to current security method | HIGH |
+| TRUST-004 | Trusted RFC destination with a fixed logon user | HIGH |
+| TRUST-005 | SAProuter route table allows wildcard host/port | HIGH |
+| TRUST-006 | Message-server internal/external separation weak | HIGH |
+| TRUST-007 | UCON RFC allowlist not active | HIGH |
+| TRUST-008 | RFC Gateway proxy ACL (gw/prxy_info) not configured | MEDIUM |
+
+</details>
+
+<details>
+<summary><strong>🧱 Security Baseline Parameters — Full Check List</strong></summary>
+
+SAP Security Baseline / DSAG / CIS profile parameters the other modules don't cover (from `security_params.csv`).
+
+| Check | Description | Severity |
+|-------|-------------|----------|
+| BASELINE-001 | RFC authorization check disabled (auth/rfc_authority_check = 0) | HIGH |
+| BASELINE-002 | Profile-generator auth checks not active (auth/no_check_in_some_cases) | HIGH |
+| BASELINE-003 | SNC accepts insecure (unencrypted) connections | HIGH |
+| BASELINE-004 | SAP GUI Scripting enabled server-side (sapgui/user_scripting) | HIGH |
+| BASELINE-005 | Weak legacy password hashes retained (downwards compatibility) | HIGH |
+| BASELINE-006 | sapstartsrv / Host Agent web methods not protected | HIGH |
+| BASELINE-007 | RFC Gateway default ACL not enforced (gw/acl_mode) | MEDIUM |
+| BASELINE-008 | SSO ticket / session-cookie transport not hardened | MEDIUM |
+| BASELINE-009 | Web-tier logging / error disclosure weak (ICM security log) | MEDIUM |
+| BASELINE-010 | Existing passwords not forced to current policy | MEDIUM |
+
+</details>
+
+<details>
+<summary><strong>🧩 S/4HANA & Cloud Authorization — Full Check List</strong></summary>
+
+| Check | Description | Severity |
+|-------|-------------|----------|
+| S4AUTHZ-001 | Super-admin business-role template assigned in production (SAP_BR_ADMINISTRATOR*) | CRITICAL |
+| S4AUTHZ-002 | Business-role restriction left 'Unrestricted' | HIGH |
+| S4AUTHZ-003 | Business role bundles more than 30 business catalogs | MEDIUM |
+| S4AUTHZ-004 | CDS view exposes data with authorization checking disabled | HIGH |
+| S4AUTHZ-005 | OData V4 service group published without authorization | HIGH |
+| S4AUTHZ-006 | Cloud Connector system mapping without principal propagation | HIGH |
+| S4AUTHZ-007 | Cloud Foundry privileged platform role over-assigned | HIGH |
+| S4AUTHZ-008 | Birthright role collection auto-granted to all federated users | MEDIUM |
+
+</details>
+
+<details>
+<summary><strong>⚖️ Access Risk Analysis (SoD) — Full Risk List</strong></summary>
+
+GRC-style **offline, permission-level** Segregation of Duties from AGR_1251 + AGR_USERS. Each risk resolves the user's transaction codes **and** authorization object/field/activity across all roles; a conflict fires only when the *maintain* activity is held (display-only access is not a false positive). Documented mitigating controls (with expiry) suppress a user/risk and are reported as residual.
+
+### Segregation-of-Duties conflicts (25)
+| Risk | Conflict | Severity |
+|------|----------|----------|
+| ARA-P2P-01 | Maintain Vendor Master ↔ Process/Execute Vendor Payment | CRITICAL |
+| ARA-P2P-02 | Maintain Vendor Bank Details ↔ Run Automatic Payment Program | CRITICAL |
+| ARA-P2P-03 | Create/Change Purchase Order ↔ Release Purchase Order | HIGH |
+| ARA-P2P-04 | Create Purchase Order ↔ Post Goods Receipt | HIGH |
+| ARA-P2P-05 | Create Purchase Order ↔ Post Vendor Invoice (MIRO) | HIGH |
+| ARA-P2P-06 | Maintain Vendor Master ↔ Post AP (Non-PO) Vendor Invoice | CRITICAL |
+| ARA-O2C-01 | Maintain Customer Master ↔ Create Sales Order | HIGH |
+| ARA-O2C-02 | Maintain Customer Credit Limit ↔ Release Credit-Blocked Order | HIGH |
+| ARA-O2C-03 | Post/Clear Incoming Customer Payments ↔ Maintain Customer Master | CRITICAL |
+| ARA-O2C-04 | Maintain Pricing/Condition Records ↔ Create Sales Order | HIGH |
+| ARA-O2C-05 | Post Billing Document ↔ Maintain Customer Master | HIGH |
+| ARA-O2C-06 | Create Sales Order ↔ Release Own Credit-Blocked Order | HIGH |
+| ARA-R2R-01 | Maintain G/L Account Master ↔ Post Journal Entries | CRITICAL |
+| ARA-R2R-02 | Maintain G/L Account Master ↔ Open/Close Posting Periods | HIGH |
+| ARA-R2R-03 | Enter/Park ↔ Post Journal Entries (four-eyes bypass) | HIGH |
+| ARA-R2R-04 | Maintain Exchange Rates ↔ Post Journal Entries | HIGH |
+| ARA-R2R-05 | Open/Close Posting Periods ↔ Post Journal Entries | HIGH |
+| ARA-H2R-01 | Maintain HR Master Data ↔ Execute Payroll Run | CRITICAL |
+| ARA-H2R-02 | Maintain Employee Bank Details ↔ Run Payroll / Generate Payments | CRITICAL |
+| ARA-H2R-03 | Maintain Personnel Actions (Hire/Terminate) ↔ Maintain Time Data | HIGH |
+| ARA-H2R-04 | Execute Payroll Run ↔ Post Payroll Results to Accounting | HIGH |
+| ARA-BASIS-01 | User Administration ↔ Authorization/Profile Administration | CRITICAL |
+| ARA-BASIS-02 | Maintain Role ↔ Assign Role to User | HIGH |
+| ARA-BASIS-03 | ABAP Development ↔ Transport Release/Import to Production | HIGH |
+| ARA-BASIS-04 | Maintain Table Data ↔ Administer Security Audit Log | HIGH |
+
+### Critical access + risk profile
+| Risk | Description | Severity |
+|------|-------------|----------|
+| ARA-CA-04 | Change Payroll Status / Delete Payroll Results (PU03/PU01) | HIGH |
+| ARA-CP-05 | Maintain Own HR Master Data (P_PERNR PSIGN=I) | HIGH |
+| ARA-SCORE-001 | Users concentrating ≥2 unmitigated access risks (severity-weighted) | HIGH/MEDIUM |
+
+</details>
+
 ---
 
 ## Quick Start
@@ -552,7 +734,27 @@ codetrans — Code & Transport Security (CODE-*)
 logmon    — Logging, Monitoring & IR (LOG-*)
 fiori     — Fiori & UI Layer (FIORI-*)
 crypto    — Cryptographic Posture (CRYPTO-*)
+hanadb    — HANA Database Security (HANADB-*)
+hotnews   — SAP Security Notes / HotNews (HOTNEWS-*)
+authz     — ABAP Authorization & Critical Access (AUTH-*)
+systrust  — System Trust & Standard Users (TRUST-*, STDUSR-*)
+baseline  — Security Baseline Parameters (BASELINE-*)
+s4authz   — S/4HANA & Cloud Authorization (S4AUTHZ-*)
+ara       — Access Risk Analysis / offline SoD (ARA-*)
 all       — Run everything (default)
+```
+
+Examples with the newer modules:
+
+```bash
+# Offline Segregation-of-Duties + ABAP critical-access review
+python sap_scanner.py --data-dir ./exports --modules ara authz
+
+# HANA DB hardening + missing SAP Security Notes
+python sap_scanner.py --data-dir ./exports --modules hanadb hotnews
+
+# System trust, standard users, and Security Baseline parameters
+python sap_scanner.py --data-dir ./exports --modules systrust baseline
 ```
 
 ---
@@ -645,6 +847,120 @@ All files are optional — the scanner runs only checks for which data is availa
 
 </details>
 
+<details>
+<summary><strong>📋 Code, Transport & Change data files</strong></summary>
+
+| File | Source | Description |
+|------|--------|-------------|
+| `custom_code_scan.csv` | ATC / Code Inspector / SCI | Static-analysis findings for custom ABAP |
+| `code_inventory.csv` | Custom object inventory | Z/Y objects, owner, last-used |
+| `transport_routes.csv` | STMS (transport routes) | TMS route/layer definitions |
+| `transport_history.csv` | STMS import history | Import log per system (who/when) |
+| `client_settings.csv` | SCC4 | Client role & change options |
+| `change_documents.csv` | CDHDR | Change-document header records |
+| `sap_modifications.csv` | SE95 / SPAU | Modifications to SAP standard objects |
+| `dev_access_prod.csv` | SUIM / user-auth export | Developer access present in production |
+
+</details>
+
+<details>
+<summary><strong>📋 Logging, Monitoring & IR data files</strong></summary>
+
+| File | Source | Description |
+|------|--------|-------------|
+| `security_audit_log.csv` | SM19 / RSAU_CONFIG | Security Audit Log filters & status |
+| `table_logging.csv` | DD09L | Table technical settings (change logging flag) |
+| `logon_events.csv` | Logon statistics / SM20 | Logon success/failure counts per user |
+| `siem_config.json` | SIEM / log-forwarding config | SIEM integration & forwarded sources |
+| `log_retention.json` | Log housekeeping config | Retention & archiving settings |
+| `incident_response.json` | IR readiness inventory | Incident-response process readiness |
+
+</details>
+
+<details>
+<summary><strong>📋 Fiori & UI data files</strong></summary>
+
+| File | Source | Description |
+|------|--------|-------------|
+| `fiori_catalogs.csv` | Launchpad Designer (FLPD) | Fiori catalogs & assigned roles |
+| `fiori_tiles.csv` | Launchpad Designer | Tiles → target-mapping / OData service |
+| `odata_auth.csv` | /IWFND/MAINT_SERVICE | OData services & authorization status |
+| `fiori_spaces.json` | Spaces & Pages | Space/page visibility & role config |
+| `fiori_app_usage.csv` | Usage statistics (ST03N / FLP) | App launch counts |
+
+</details>
+
+<details>
+<summary><strong>📋 Cryptographic Posture data files</strong></summary>
+
+| File | Source | Description |
+|------|--------|-------------|
+| `tls_config.csv` | ICM / Web Dispatcher SSL config | TLS protocols & cipher suites per endpoint |
+| `certificate_inventory.csv` | STRUST | Certificate inventory (expiry, key size, algorithm) |
+| `snc_config.csv` | RZ11 (snc/*) | SNC enablement & quality of protection |
+| `hana_encryption.json` | HANA encryption config | Data/log volume encryption & key management |
+| `crypto_library.csv` | CommonCryptoLib version export | SAP Crypto Library version |
+| `pse_inventory.csv` | STRUST (PSE list) | PSE files & health |
+| `key_management.json` | Key-management policy inventory | Rotation / backup policy status |
+
+</details>
+
+<details>
+<summary><strong>📋 HANA Database Security data files</strong></summary>
+
+| File | Source | Description |
+|------|--------|-------------|
+| `hana_db_users.csv` | HANA `SYS.USERS` | DB users (SYSTEM active, password lifetime, last connect) |
+| `hana_granted_privileges.csv` | `GRANTED_PRIVILEGES` | System/object/analytic privileges & grantee (incl. PUBLIC) |
+| `hana_granted_roles.csv` | `GRANTED_ROLES` | Role grants (predefined powerful roles) |
+| `hana_parameters.csv` | `M_INIFILE_CONTENTS` | HANA ini parameters (password policy, TLS, error verbosity) |
+| `hana_audit_policies.csv` | `AUDIT_POLICIES` | Audit policy status & covered action groups |
+
+</details>
+
+<details>
+<summary><strong>📋 Authorization, Trust & Security-Notes data files</strong></summary>
+
+| File | Source | Description |
+|------|--------|-------------|
+| `role_auth_values.csv` | AGR_1251 | Role → object/field/LOW/HIGH values (drives ABAP Authz **and** Access Risk Analysis) |
+| `rfc_trust.csv` | RFCSYSACL / SMT1 | Trusted/trusting RFC relationships |
+| `standard_users.csv` | RSUSR003 | Standard/default users: lock status & default-password flag |
+| `saprouttab.csv` | SAProuter route table | Route permission (P/S) rules |
+| `applied_notes.csv` | SNOTE / SNADM export | Implemented SAP Notes (diffed against the HotNews catalog) |
+| `sap_security_notes.json` | *Optional* | Custom HotNews catalog to extend/override the built-in one |
+
+</details>
+
+<details>
+<summary><strong>📋 S/4HANA & Cloud Authorization data files</strong></summary>
+
+| File | Source | Description |
+|------|--------|-------------|
+| `business_roles.csv` | Maintain Business Roles | User ↔ business-role assignments |
+| `business_role_restrictions.csv` | Business-role restrictions | Restriction fields & 'Unrestricted' access |
+| `business_role_catalogs.csv` | Business-role catalogs | Business catalogs per role (sprawl) |
+| `cds_views.csv` | CDS metadata / repository | `@AccessControl.authorizationCheck` per view |
+| `odata_v4_services.csv` | /IWFND/V4_ADMIN | Published OData V4 service groups & authorization |
+| `cf_roles.csv` | Cloud Foundry (cf CLI) | CF org/space platform-role assignments |
+| `btp_role_collection_mappings.csv` | BTP Cockpit (Trust → Role Collections) | Role-collection → IdP-group mappings |
+
+</details>
+
+<details>
+<summary><strong>📋 Access Risk Analysis (SoD) data files</strong></summary>
+
+| File | Source | Description |
+|------|--------|-------------|
+| `role_auth_values.csv` | AGR_1251 | Per-role authorization object/field/value (shared with ABAP Authz) |
+| `user_roles.csv` | AGR_USERS | User ↔ role assignments (shared with IAM) |
+| `mitigating_controls.csv` | *Optional* (GRC / manual) | `USER, RISK_ID, CONTROL_ID, VALID_TO` — suppresses a mitigated risk |
+| `ara_ruleset.json` | *Optional* | Custom SoD risks that extend/override the built-in 27-risk ruleset |
+
+*Security Baseline Parameters (`baseline`) reuses `security_params.csv`; it needs no additional export.*
+
+</details>
+
 ---
 
 ## Custom Baseline
@@ -672,9 +988,15 @@ Override default thresholds by creating a JSON config file:
     "max_system_connections": 15,
     "ral_min_retention_days": 365,
     "max_retention_years": 10,
-    "deletion_sla_days": 30
+    "deletion_sla_days": 30,
+    "hana_dormant_days": 90,
+    "max_business_catalogs": 30,
+    "max_cf_privileged_users": 5,
+    "ara_user_risk_threshold": 2
 }
 ```
+
+Access Risk Analysis can also be driven by a **custom SoD ruleset** — drop an `ara_ruleset.json` into your `--data-dir` to extend or override the built-in 27-risk ruleset (entries matching a built-in `risk_id` override it; new ids are added).
 
 ---
 
@@ -682,31 +1004,44 @@ Override default thresholds by creating a JSON config file:
 
 ```
 SAP-S4HANA-RISE-Security-Scanner/
-├── sap_scanner.py                  # Main entry point & CLI
+├── sap_scanner.py                  # Main entry point & CLI orchestrator
 ├── modules/
-│   ├── base_auditor.py             # Base class
-│   ├── data_loader.py              # CSV/JSON loader (40+ file types)
-│   ├── user_auth_audit.py          # USR-* checks
-│   ├── iam_advanced.py             # IAM-* checks (SoD, firefighter, role lifecycle)
-│   ├── security_params.py          # PARAM-* checks
-│   ├── network_services.py         # NET-* checks
-│   ├── rise_btp_checks.py          # RISE-* checks
-│   ├── btp_cloud_surface.py        # BTP-* checks
-│   ├── integration_layer.py        # INTG-* checks
-│   ├── data_protection.py          # DPP-* checks (NEW)
-│   ├── code_transport.py           # CODE-* checks (NEW)
-│   ├── log_monitoring.py           # LOG-* checks (NEW)
-│   ├── fiori_ui.py                 # FIORI-* checks (NEW)
-│   ├── crypto_posture.py           # CRYPTO-* checks (NEW)
-│   └── report_generator.py         # HTML dashboard
-├── sample_data/                    # 70+ demo files
+│   ├── base_auditor.py             # BaseAuditor: finding()/get_config() + severity constants
+│   ├── data_loader.py              # CSV/JSON loader (auto-delimiter, header normalize; 90+ file types)
+│   ├── report_generator.py         # Interactive HTML dashboard (XSS-safe, weighted risk score)
+│   ├── user_auth_audit.py          # USR-*            User & Authorization
+│   ├── iam_advanced.py             # IAM-*            Advanced IAM (SoD, firefighter, role lifecycle)
+│   ├── security_params.py          # PARAM-*          Security Parameters
+│   ├── network_services.py         # NET-*            Network & Service Exposure
+│   ├── rise_btp_checks.py          # RISE-*           RISE / BTP Core
+│   ├── btp_cloud_surface.py        # BTP-*            BTP Cloud Attack Surface
+│   ├── integration_layer.py        # INTG-*           Network & Integration Layer
+│   ├── data_protection.py          # DPP-*            Data Protection & Privacy
+│   ├── code_transport.py           # CODE-*           Code & Transport Security
+│   ├── log_monitoring.py           # LOG-*            Logging, Monitoring & IR
+│   ├── fiori_ui.py                 # FIORI-*          Fiori & UI Layer
+│   ├── crypto_posture.py           # CRYPTO-*         Cryptographic Posture
+│   ├── hana_db_security.py         # HANADB-*         HANA Database Security
+│   ├── sap_hotnews.py              # HOTNEWS-*        SAP Security Notes / HotNews
+│   ├── abap_authorizations.py      # AUTH-*           ABAP Authorization & Critical Access
+│   ├── system_trust.py             # TRUST-*/STDUSR-* System Trust & Standard Users
+│   ├── baseline_params.py          # BASELINE-*       Security Baseline Parameters
+│   ├── s4_business_authz.py        # S4AUTHZ-*        S/4HANA & Cloud Authorization
+│   └── access_risk_analysis.py     # ARA-*            Access Risk Analysis (offline SoD)
+├── sample_data/                    # 90 crafted demo exports (trigger every check)
+├── tests/
+│   ├── conftest.py                 # pytest fixtures (DataLoader over sample_data)
+│   └── test_scanner.py             # per-module + full-pipeline + CLI tests
 ├── docs/
-│   ├── banner.svg
-│   ├── EXPORT_GUIDE.md
-│   └── CHECKS_REFERENCE.md
+│   ├── banner.svg                  # README banner
+│   ├── EXPORT_GUIDE.md             # how to export each data file from SAP
+│   └── CHECKS_REFERENCE.md         # complete per-check reference
+├── .github/workflows/tests.yml     # CI: pytest matrix (Python 3.8–3.12) + scanner smoke run
+├── requirements-dev.txt            # dev-only dependency: pytest
+├── CLAUDE.md                       # contributor / AI-assistant guidance
+├── CONTRIBUTING.md
 ├── .gitignore
 ├── LICENSE
-├── CONTRIBUTING.md
 └── README.md
 ```
 
@@ -768,6 +1103,13 @@ SAP-S4HANA-RISE-Security-Scanner/
 - [x] HANA encryption at rest & log encryption
 - [x] CommonCryptoLib version auditing
 - [x] PSE health & key management policies
+- [x] HANA database security (privileged DB users, PUBLIC & system-privilege grants, DB auditing, ini parameters)
+- [x] SAP Security Notes / HotNews gap analysis (missing P1/P2 notes since 2020, CISA-KEV exploited CVEs)
+- [x] ABAP authorization & critical-access analysis (AGR_1251 role content: Debug&Replace, S_RFCACL, S_TABU_*, S_PROGRAM, …)
+- [x] System trust & standard users (trusted RFC, SAProuter, message server, SAP*/DDIC/default passwords)
+- [x] SAP Security Baseline profile parameters (auth engine, SNC fallback, GUI scripting, gateway ACL, ICM log)
+- [x] S/4HANA & cloud authorization (business roles, CDS auth-check, OData V4, Cloud Connector principal propagation, CF roles)
+- [x] Offline permission-level Segregation of Duties / Access Risk Analysis (GRC-style ruleset, mitigating controls, user risk score)
 - [ ] Scan comparison mode (diff two scans)
 - [ ] CI/CD integration with exit codes
 - [ ] PDF report export
