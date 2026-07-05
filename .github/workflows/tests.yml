@@ -1,0 +1,33 @@
+name: tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install test dependencies
+        run: python -m pip install --upgrade pip pytest
+
+      - name: Run unit tests
+        run: pytest -q
+
+      - name: Smoke-run the scanner (all modules over sample_data)
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python sap_scanner.py --data-dir ./sample_data --output /tmp/sap_report.html

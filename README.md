@@ -7,6 +7,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner/actions/workflows/tests.yml"><img src="https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner/actions/workflows/tests.yml/badge.svg" alt="tests"/></a>
   <img src="https://img.shields.io/badge/python-3.8%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python 3.8+"/>
   <img src="https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat-square" alt="Zero Dependencies"/>
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="MIT License"/>
@@ -770,7 +771,24 @@ SAP-S4HANA-RISE-Security-Scanner/
 
 ## Requirements
 
-**Python 3.8+** — No external packages required.
+**Python 3.8+** — No external packages required to run the scanner.
+
+## Testing
+
+The scanner has a `pytest` suite that runs every audit module against the bundled
+`sample_data` (crafted to trigger each check) and validates the full pipeline —
+no SAP system needed. It checks that each module fires, handles empty input
+without crashing, honours the finding contract (field types / severities — this
+catches bugs like a description accidentally being a tuple), has no cross-module
+check-id collisions, renders the HTML report, and runs end-to-end via the CLI.
+
+```bash
+python -m pip install -r requirements-dev.txt   # just pytest
+python -m pytest -q
+```
+
+CI (GitHub Actions, `.github/workflows/tests.yml`) runs the suite on Python
+3.8–3.12 plus a full `sap_scanner.py` smoke run on every push and pull request.
 
 ## Contributing
 

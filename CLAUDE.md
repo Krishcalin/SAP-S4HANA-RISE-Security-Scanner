@@ -103,9 +103,14 @@ on the default cp1252 console. Always run with `PYTHONIOENCODING=utf-8` on Windo
   *present with a risky value*, not merely absent from the export (absence ≠ secure/insecure).
 - **CSV header normalization:** the loader upper-cases headers and replaces spaces with `_`,
   so match `row.get("USER_NAME")` etc. Values are stripped but keep their case.
-- **No tests / no CI exist yet.** This is the biggest quality gap — a pytest suite (per-module
-  fixtures over `sample_data`) + a GitHub Actions workflow would be high-value. If you add
-  tests, they must stay stdlib + `pytest`-only.
+- **Tests + CI exist** (`tests/`, `.github/workflows/tests.yml`, `requirements-dev.txt`). Run
+  `python -m pytest -q` (stdlib + pytest only; no SAP system needed). The suite runs every
+  module over `sample_data` and validates the finding contract, cross-module id collisions, the
+  report render, and a CLI end-to-end run. **When you add a module:** it is picked up
+  automatically by the parametrized tests via the `MODULES` list in `tests/test_scanner.py` —
+  add your class there, and add a set of key check ids to `EXPECTED_CHECKS` so a regression that
+  stops your checks firing is caught. Keep tests stdlib + `pytest`-only. CI matrix is Python
+  3.8–3.12; keep type hints `typing`-based (`List`/`Dict`/`Optional`, not `list[...]`/`X | Y`).
 
 ## Git / commits
 
