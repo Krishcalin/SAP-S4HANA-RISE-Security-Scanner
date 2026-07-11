@@ -43,6 +43,7 @@ from modules.basis_job_command import BasisJobCommandAuditor
 from modules.report_generator import ReportGenerator
 from modules.pdf_report import PDFReportGenerator
 from modules.finding_kb import FindingKB
+from modules.risk_prioritizer import RiskPrioritizer
 from modules.data_loader import DataLoader
 
 
@@ -301,13 +302,23 @@ def main():
     else:
         html_path, pdf_path = out + ".html", out + ".pdf"
 
+    # Risk prioritization (P1-P4): score every finding on severity x exploitability
+    # (HotNews / actively-exploited) x exposure, so the report leads with a fix-first
+    # tier queue instead of an unranked wall of CRITICAL/HIGH findings.
+    prio_results = RiskPrioritizer().prioritize(all_findings)
+    tiers = {"P1": 0, "P2": 0, "P3": 0, "P4": 0}
+    for r in prio_results:
+        tiers[r.tier] = tiers.get(r.tier, 0) + 1
+    print(f"[*] Risk prioritization: P1 {tiers['P1']}  P2 {tiers['P2']}  "
+          f"P3 {tiers['P3']}  P4 {tiers['P4']}")
+
     # Generate report(s) — the findings knowledge base supplies the detailed
     # risk narrative + step-by-step remediation for each finding (both formats).
     kb = FindingKB()
     detail = f"detailed knowledge base: {len(kb)} checks" if kb.loaded else "finding descriptions (no KB)"
     if args.format in ("html", "both"):
         print(f"\n[*] Generating HTML report: {html_path}  ({detail})")
-        ReportGenerator(all_findings, scan_meta, kb).generate(html_path)
+        ReportGenerator(all_findings, scan_meta, kb, priorities=prio_results).generate(html_path)
     if args.format in ("pdf", "both"):
         print(f"[*] Generating PDF report: {pdf_path}  ({detail})")
         PDFReportGenerator(all_findings, scan_meta, kb).generate(pdf_path)
