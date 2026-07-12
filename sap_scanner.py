@@ -36,6 +36,7 @@ from modules.hana_db_security import HanaDbSecurityAuditor
 from modules.sap_hotnews import SapHotNewsAuditor
 from modules.abap_authorizations import AbapAuthorizationAuditor
 from modules.system_trust import SystemTrustAuditor
+from modules.grc_access_control import GrcAccessControlAuditor
 from modules.baseline_params import BaselineParamAuditor
 from modules.s4_business_authz import S4BusinessAuthzAuditor
 from modules.access_risk_analysis import AccessRiskAnalysisAuditor
@@ -77,7 +78,7 @@ def main():
     )
     parser.add_argument(
         "--modules", nargs="+",
-        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "logmon", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust", "baseline", "s4authz", "ara", "jobcmd", "all"],
+        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "logmon", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust", "baseline", "s4authz", "ara", "jobcmd", "grcac", "all"],
         default=["all"],
         help="Which audit modules to run (default: all)"
     )
@@ -112,7 +113,7 @@ def main():
     run_modules = args.modules if "all" not in args.modules else [
         "users", "params", "network", "rise", "iam", "btpcloud",
         "intglayer", "dataprot", "codetrans", "logmon", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust",
-        "baseline", "s4authz", "ara", "jobcmd"
+        "baseline", "s4authz", "ara", "jobcmd", "grcac"
     ]
 
     all_findings = []
@@ -279,6 +280,14 @@ def main():
     if "jobcmd" in run_modules:
         print("[*] Running Basis Jobs & OS-Command Checks (external commands, background job step users)...")
         auditor = BasisJobCommandAuditor(data, baseline_overrides)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- GRC Access Control (Firefighter/EAM, ARM, GRC-native SoD & mitigations) ---
+    if "grcac" in run_modules:
+        print("[*] Running GRC Access Control Checks (firefighter/EAM, access requests, SoD & mitigations)...")
+        auditor = GrcAccessControlAuditor(data, baseline_overrides)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")

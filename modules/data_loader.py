@@ -55,6 +55,13 @@ class DataLoader:
         "role_details":      ["role_details.csv", "agr_define.csv"],
         "access_reviews":    ["access_reviews.csv", "arm_reviews.csv"],
         "user_groups":       ["user_groups.csv"],
+        # GRC Access Control (native GRAC* exports from the GRC AC ABAP system)
+        "grac_firefighter_log":     ["grac_firefighter_log.csv", "gracfflog.csv"],
+        "grac_firefighter_owners":  ["grac_firefighter_owners.csv", "gracffowner.csv"],
+        "grac_access_requests":     ["grac_access_requests.csv", "gracreq.csv"],
+        "grac_sod_violations":      ["grac_sod_violations.csv", "gracuserprmvl.csv"],
+        "grac_mitigating_controls": ["grac_mitigating_controls.csv", "gracmitcnt.csv"],
+        "grac_sod_risks":           ["grac_sod_risks.csv", "gracsodrisk.csv"],
         # BTP Cloud Attack Surface data sources
         "cloud_connector":      ["cloud_connector.json", "scc_config.json"],
         "btp_service_bindings": ["btp_service_bindings.json", "service_bindings.json"],

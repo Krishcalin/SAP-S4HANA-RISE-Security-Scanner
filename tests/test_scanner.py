@@ -40,6 +40,7 @@ from modules.baseline_params import BaselineParamAuditor
 from modules.s4_business_authz import S4BusinessAuthzAuditor
 from modules.access_risk_analysis import AccessRiskAnalysisAuditor
 from modules.basis_job_command import BasisJobCommandAuditor
+from modules.grc_access_control import GrcAccessControlAuditor
 
 # (module key, auditor class) — mirrors sap_scanner.py's module registry.
 MODULES = [
@@ -53,6 +54,7 @@ MODULES = [
     ("authz", AbapAuthorizationAuditor), ("systrust", SystemTrustAuditor),
     ("baseline", BaselineParamAuditor), ("s4authz", S4BusinessAuthzAuditor),
     ("ara", AccessRiskAnalysisAuditor), ("jobcmd", BasisJobCommandAuditor),
+    ("grcac", GrcAccessControlAuditor),
 ]
 _IDS = [m[0] for m in MODULES]
 
@@ -75,6 +77,8 @@ EXPECTED_CHECKS = {
     "ara": {"ARA-P2P-01", "ARA-R2R-01", "ARA-BASIS-01", "ARA-H2R-01", "ARA-SCORE-001"},
     "jobcmd": {"JOBCMD-CMD-001", "JOBCMD-CMD-002", "JOBCMD-CMD-003", "JOBCMD-JOB-001",
                "JOBCMD-JOB-002", "JOBCMD-JOB-003", "JOBCMD-JOB-005"},
+    "grcac": {"GRC-FF-001", "GRC-FF-002", "GRC-FF-002B", "GRC-ARM-001", "GRC-ARM-001B",
+              "GRC-ARA-001", "GRC-MIT-001", "GRC-RS-001", "GRC-RS-003"},
 }
 
 
