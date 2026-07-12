@@ -40,3 +40,4 @@ icm/security_log,LOGFILE=dev_icm_sec LEVEL=1 MAXSIZEKB=1000
 is/HTTP/show_detailed_errors,TRUE
 login/password_compliance_to_current_policy,0
 rsau/integrity,0
+login/password_hash_algorithm,"encoding=RFC2307, algorithm=iSSHA-1, iterations=1024, saltsize=96"

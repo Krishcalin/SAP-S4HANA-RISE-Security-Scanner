@@ -69,6 +69,7 @@ class AbapAuthorizationAuditor(BaseAuditor):
         self.check_auth_forging()
         self.check_start_any_tcode()
         self.check_broad_s_rfc()
+        self.check_icf_destination()
         self.check_table_name_write()
         self.check_table_dis_generic()
         self.check_table_cross_client()
@@ -286,6 +287,39 @@ class AbapAuthorizationAuditor(BaseAuditor):
             "Scope S_RFC to the specific function groups (RFC_NAME) each interface needs; never "
             "'*'. Enable UCON RFC allowlisting to further restrict externally-callable modules.",
             ["SAP Note 1416085", "SAP Help — S_RFC authorization", "Onapsis — RFC FM abuse"])
+
+    def check_icf_destination(self):
+        """S_ICF ICF_FIELD=DEST + ICF_VALUE=* → use any RFC/HTTP destination (stored creds)."""
+        bad = []
+        for i in self._objects("S_ICF"):
+            field_vals = self._field(i, "ICF_FIELD")   # DEST (destinations) / SERVICE
+            value_vals = self._field(i, "ICF_VALUE")
+            # A grant that covers the DEST field (or is '*') combined with ICF_VALUE='*'
+            # lets the role select ANY destination maintained in the system.
+            if self._covers(field_vals, "DEST") and self._has_star(value_vals):
+                bad.append(self._role_label(i["role"], "S_ICF ICF_FIELD=DEST, ICF_VALUE=*"))
+        self._emit(
+            "AUTH-016", "Use of any RFC/HTTP destination (S_ICF ICF_FIELD=DEST, ICF_VALUE=*)",
+            self.SEVERITY_HIGH,
+            f"{len(bad)} role(s) grant S_ICF with the DEST field and ICF_VALUE='*', which lets "
+            "the holder use ANY RFC or HTTP destination defined in the system (SM59/RFCDES). "
+            "Destinations frequently store embedded logon credentials or are configured for "
+            "trusted-RFC, so the ability to pick an arbitrary destination is effectively the "
+            "ability to authenticate to the connected target systems as whatever principal that "
+            "destination carries — including high-privilege service accounts and connections to "
+            "more sensitive systems (e.g. from a sandbox toward production). Combined with a "
+            "generic RFC/OData caller this becomes a credential-reuse and lateral-movement path "
+            "that bypasses the intent of per-interface destination scoping, and it is easy to "
+            "overlook because S_ICF is often copied wholesale from a template role.",
+            bad,
+            "Restrict S_ICF ICF_FIELD=DEST to the specific destination names (ICF_VALUE) a role "
+            "legitimately needs, and never grant ICF_VALUE='*'. Review which destinations store "
+            "credentials or use trusted-RFC and treat authorization to those as privileged. "
+            "Prefer destinations without stored credentials (current-user / SSO propagation) so "
+            "that destination selection cannot escalate privilege, and reconcile S_ICF grants "
+            "against the trusted-RFC findings (S_RFCACL, AUTH-002).",
+            ["SAP Help — S_ICF authorization object (DEST/SERVICE)",
+             "SAP Note 1416085 — RFC / destination authorization risks"])
 
     def check_table_name_write(self):
         """S_TABU_NAM TABLE=* + ACTVT=02 → write any table (bypasses table auth groups)."""

@@ -39,6 +39,7 @@ class BaselineParamAuditor(BaseAuditor):
         self.check_sso_ticket_cookie()
         self.check_icm_security_log()
         self.check_password_compliance()
+        self.check_password_hash_algorithm()
         return self.findings
 
     # ------------------------------------------------------------------ helpers
@@ -66,6 +67,61 @@ class BaselineParamAuditor(BaseAuditor):
                      references=references)
 
     # --------------------------------------------------------------------- checks
+    def check_password_hash_algorithm(self):
+        """MEDIUM/HIGH: login/password_hash_algorithm uses a weak hash or low work factor."""
+        v = self._p("login/password_hash_algorithm")
+        if v is None:
+            return
+        val = str(v)
+        low = val.lower()
+        issues = []
+        # Algorithm strength: iSSHA-1/SHA-1/MD5 are obsolete; want iSSHA-256/384/512.
+        weak_alg = any(t in low for t in ("issha-1", "issha1", "sha-1", "=sha1", " sha1",
+                                          "md5"))
+        strong_alg = any(t in low for t in ("issha-256", "issha-384", "issha-512",
+                                            "issha256", "issha384", "issha512"))
+        if weak_alg or (("algorithm" in low) and not strong_alg):
+            issues.append(f"weak/obsolete hash algorithm in: {val}")
+        # Iteration (work-factor) count.
+        iters = None
+        for part in low.replace(";", ",").split(","):
+            if "iteration" in part:
+                digits = "".join(ch for ch in part if ch.isdigit())
+                if digits:
+                    iters = int(digits)
+        if iters is not None and iters < 10000:
+            issues.append(f"iterations = {iters} (< 10000 work factor)")
+
+        if issues:
+            sev = self.SEVERITY_HIGH if weak_alg else self.SEVERITY_MEDIUM
+            self._flag(
+                "BASELINE-011",
+                "Weak password hash algorithm (login/password_hash_algorithm)",
+                sev,
+                "login/password_hash_algorithm configures the one-way function used to store "
+                f"the current (CODVN H) password hash in USR02: {val}. The exported value uses "
+                "a weak or obsolete algorithm and/or a low iteration/work-factor. SAP password "
+                "hashes are a routine offline-cracking target once an attacker reads USR02 (for "
+                "example via broad S_TABU_DIS/S_TABU_NAM access, a table download, or a stolen "
+                "backup): a SHA-1-based (iSSHA-1) or MD5-based hash and a low iteration count "
+                "collapse the cost of recovering plaintext passwords, and any recovered password "
+                "is then usable for lateral movement, especially where the same credentials are "
+                "reused across the landscape. Because this parameter governs how EVERY dialog "
+                "user's password is protected at rest, a weak setting is a systemic exposure that "
+                "undermines the entire password policy no matter how strong the complexity rules "
+                "are. This is independent of, and should be fixed alongside, "
+                "login/password_downwards_compatibility (BASELINE-005).",
+                issues,
+                "Set login/password_hash_algorithm to a current, salted, iterated SHA-2 "
+                "configuration, e.g. encoding=RFC2307, algorithm=iSSHA-512, iterations=15000, "
+                "saltsize=256. After changing the parameter, force affected users to set a new "
+                "password so the strong hash is generated, ensure "
+                "login/password_downwards_compatibility = 0, and run CLEANUP_PASSWORD_HASH_VALUES "
+                "to purge any residual weak BCODE/PASSCODE hashes. Validate against the SAP "
+                "Security Baseline recommended value and re-export security_params to confirm.",
+                ["SAP Security Baseline — Password hash algorithm",
+                 "SAP Help Portal — Profile parameter login/password_hash_algorithm"])
+
     def check_rfc_authority_check(self):
         v = self._p("auth/rfc_authority_check")
         if v is not None and v.strip() == "0":
