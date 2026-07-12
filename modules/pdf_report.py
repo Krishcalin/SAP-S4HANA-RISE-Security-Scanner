@@ -19,6 +19,7 @@ from typing import Dict, List, Any, Optional, Tuple
 
 from modules.pdf_writer import PDFWriter
 from modules.finding_kb import FindingKB
+from modules.compliance_mapping import ComplianceMapper
 
 
 # ── palette (print-friendly) ──
@@ -44,8 +45,13 @@ SEV_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
 class PDFReportGenerator:
     ML, MR, MT, MB = 45, 45, 56, 44
 
+    _TIER_RANK = {"P1": 0, "P2": 1, "P3": 2, "P4": 3}
+    _SEV_RANK = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
+    TIER_COLOR = {"P1": SEV_COLOR["CRITICAL"], "P2": SEV_COLOR["HIGH"],
+                  "P3": SEV_COLOR["MEDIUM"], "P4": SEV_COLOR["LOW"]}
+
     def __init__(self, findings: List[Dict[str, Any]], meta: Dict[str, Any],
-                 kb: Optional[FindingKB] = None):
+                 kb: Optional[FindingKB] = None, priorities: Optional[List[Any]] = None):
         self.findings = findings
         self.meta = meta
         self.kb = kb or FindingKB()
@@ -54,6 +60,30 @@ class PDFReportGenerator:
         self.cw = self.pw - self.ML - self.MR
         self.y = 0.0
         self._content_pages = 0
+
+        # Risk-prioritization overlay (P1-P4) — mirrors the HTML report so the PDF
+        # presents findings in the same fix-first order. Compute here if not passed.
+        if priorities is None:
+            try:
+                from modules.risk_prioritizer import RiskPrioritizer
+                priorities = RiskPrioritizer().prioritize(findings)
+            except Exception:
+                priorities = []
+        try:
+            from modules.risk_prioritizer import TIER_META
+            self.tier_meta = TIER_META
+        except Exception:
+            self.tier_meta = {}
+        self._prio_by_id = {}
+        for p in (priorities or []):
+            fnd = getattr(p, "finding", None)
+            if fnd is not None:
+                self._prio_by_id[id(fnd)] = p
+        self.tier_counts = {"P1": 0, "P2": 0, "P3": 0, "P4": 0}
+        for p in (priorities or []):
+            t = getattr(p, "tier", None)
+            if t in self.tier_counts:
+                self.tier_counts[t] += 1
 
         # stats
         self.by_sev: Dict[str, int] = {}
@@ -78,6 +108,19 @@ class PDFReportGenerator:
         if score >= 25:
             return "Medium", SEV_COLOR["MEDIUM"]
         return "Low", SEV_COLOR["LOW"]
+
+    def _tier_of(self, f):
+        return self._prio_by_id.get(id(f))
+
+    def _fix_first(self) -> List[Dict[str, Any]]:
+        """Findings in the exact fix-first order the HTML uses: tier (P1->P4),
+        then severity, then descending priority score."""
+        def key(f):
+            pr = self._tier_of(f)
+            trank = self._TIER_RANK.get(getattr(pr, "tier", None), 9) if pr is not None else 9
+            score = -getattr(pr, "score", 0) if pr is not None else 0
+            return (trank, self._SEV_RANK.get(f.get("severity"), 4), score)
+        return sorted(self.findings, key=key)
 
     # ── low-level cursor helpers (top-down) ──
     def _new_content_page(self):
@@ -110,11 +153,13 @@ class PDFReportGenerator:
         self.w.text(self.ML, self.y - 8, text.upper(), font="HB", size=7.5, color=color)
         self.y -= 15
 
-    # ── sections ──
+    # ── sections (same chronological order as the HTML report) ──
     def generate(self, output_path: str):
-        self._cover_page()
-        self._exec_summary()
-        self._detailed_findings()
+        self._cover_page()                 # header + risk posture + severity summary
+        self._priority_section()           # Risk-Prioritized Remediation Queue (P1-P4 + top-10)
+        self._categories_section()         # Findings by Category
+        self._compliance_section()         # Compliance & Control-Framework Mapping
+        self._detailed_findings()          # Detailed Findings (fix-first order)
         self._footers()
         self.w.save(output_path)
 
@@ -130,23 +175,32 @@ class PDFReportGenerator:
                font="H", size=10.5, color=(0.72, 0.79, 0.88))
 
         y = self.ph - 210
-        # scope / metadata card
-        w.rect(self.ML, y - 96, self.cw, 96, fill=LIGHT, stroke=RULE, line_width=0.8)
+        # scope / metadata card — value column wraps; the card height grows to fit
+        # (so long values like the full module list are printed in full).
         mods = ", ".join(self.meta.get("modules_run", [])) or "all"
         kv = [
             ("Assessment date", str(self.meta.get("scan_time", ""))[:19].replace("T", "  ")),
             ("Data source", str(self.meta.get("data_directory", "N/A"))),
             ("Severity filter", str(self.meta.get("severity_filter", "ALL"))),
-            ("Modules in scope", mods if len(mods) < 92 else mods[:89] + "..."),
+            ("Modules in scope", mods),
         ]
-        yy = y - 20
-        for k, v in kv:
+        val_x = self.ML + 150
+        val_w = self.cw - 150 - 16
+        wrapped = [(k, w.wrap(v, "H", 9.5, val_w) or [""]) for k, v in kv]
+        pad_top, line_h, row_gap, pad_bot = 20, 13, 6, 10
+        content_h = sum(len(lines) * line_h + row_gap for _, lines in wrapped) - row_gap
+        card_h = pad_top + content_h + pad_bot
+        w.rect(self.ML, y - card_h, self.cw, card_h, fill=LIGHT, stroke=RULE, line_width=0.8)
+        yy = y - pad_top
+        for k, lines in wrapped:
             w.text(self.ML + 16, yy, k, font="HB", size=8.5, color=MUTED)
-            w.text(self.ML + 150, yy, v, font="H", size=9.5, color=INK)
-            yy -= 19
+            for ln in lines:
+                w.text(val_x, yy, ln, font="H", size=9.5, color=INK)
+                yy -= line_h
+            yy -= row_gap
 
-        # risk posture + severity summary
-        y2 = y - 128
+        # risk posture + severity summary (positioned below the dynamic card)
+        y2 = (y - card_h) - 18
         box_h = 118
         # left: risk posture
         lw = 170
@@ -187,71 +241,160 @@ class PDFReportGenerator:
         w.text(self.ML, self.MB + 6,
                "Generated by SAP S/4HANA RISE Security Scanner", font="HB", size=8, color=FAINT)
 
-    def _exec_summary(self):
+    def _priority_section(self):
         self._new_content_page()
-        self._section_title("Executive Summary")
+        self._section_title("Risk-Prioritized Remediation Queue")
+        self._para(
+            "Findings ranked by severity x real-world exploitability (SAP HotNews / actively-"
+            "exploited notes) x exposure. Work the queue top-down: P1 first.",
+            size=9, color=MUTED, gap_after=12)
 
-        total = len(self.findings)
-        posture = (
-            f"This assessment reviewed the exported SAP configuration and produced {total} "
-            f"finding(s): {self.crit} Critical, {self.high} High, {self.med} Medium and "
-            f"{self.low} Low. The computed risk score is {self.risk_score}/100, an overall "
-            f"'{self.risk_label}' risk posture. Critical and High findings represent issues that "
-            "are directly exploitable or materially weaken the system's security or compliance "
-            "posture and should be remediated first, in that order. Each finding in the detailed "
-            "section below states the specific security risk, the affected objects, and a "
-            "step-by-step remediation procedure the Basis / security team can execute."
-        )
-        self._para(posture, gap_after=8)
+        # tier cards (row of 4)
+        if self.tier_meta:
+            gap = 10
+            cw4 = (self.cw - 3 * gap) / 4
+            self._ensure(70)
+            top = self.y
+            for i, t in enumerate(("P1", "P2", "P3", "P4")):
+                m = self.tier_meta.get(t, {})
+                x = self.ML + i * (cw4 + gap)
+                col = self.TIER_COLOR[t]
+                self.w.rect(x, top - 60, cw4, 60, fill=WHITE, stroke=RULE, line_width=0.8)
+                self.w.rect(x, top - 4, cw4, 4, fill=col)
+                self.w.text(x + 10, top - 28, t, font="HB", size=18, color=col)
+                cnt = str(self.tier_counts.get(t, 0))
+                self.w.text(x + cw4 - 10 - self.w.string_width(cnt, "HB", 18), top - 28, cnt,
+                            font="HB", size=18, color=INK)
+                self.w.text(x + 10, top - 43, self._fit(m.get("label", ""), "HB", 7.5, cw4 - 20),
+                            font="HB", size=7.5, color=MUTED)
+                self.w.text(x + 10, top - 53, self._fit(m.get("window", ""), "H", 7, cw4 - 20),
+                            font="H", size=7, color=FAINT)
+            self.y = top - 60 - 16
 
-        # severity table
-        self._label("Severity breakdown")
-        rows = [("Severity", "Count", "Share")]
-        for name in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"):
-            n = self.by_sev.get(name, 0)
-            if n == 0 and name == "INFO":
-                continue
-            pct = (n / total * 100) if total else 0
-            rows.append((name.title(), str(n), f"{pct:.0f}%"))
-        self._sev_table(rows)
-        self.y -= 8
+        # top-10 to fix first (P1/P2 by score) — same selection/order as the HTML
+        ranked = [(f, self._tier_of(f)) for f in self.findings if self._tier_of(f) is not None]
+        ranked.sort(key=lambda x: (self._TIER_RANK.get(x[1].tier, 9), -getattr(x[1], "score", 0)))
+        top = [(f, pr) for f, pr in ranked if pr.tier in ("P1", "P2")][:10]
+        if top:
+            self._label("Top %d to fix first" % len(top))
+            tx = self.ML + 76
+            for i, (f, pr) in enumerate(top, 1):
+                # wrap title (right gutter reserved for the check-id) and rationale
+                tlines = self.w.wrap(f.get("title", ""), "HB", 9, self.cw - 76 - 108) or [""]
+                wlines = self.w.wrap(getattr(pr, "rationale", "") or "", "H", 7.5, self.cw - 84)
+                self._ensure(13 + len(tlines) * 12 + len(wlines) * 11)
+                col = self.TIER_COLOR.get(pr.tier, MUTED)
+                self.w.text(self.ML, self.y - 10, str(i), font="HB", size=9, color=MUTED)
+                badge = "%s  %d" % (pr.tier, getattr(pr, "score", 0))
+                self.w.rect(self.ML + 15, self.y - 12, 52, 12, fill=col)
+                self.w.text(self.ML + 19, self.y - 10, badge, font="HB", size=7.5, color=WHITE)
+                cid = f.get("check_id", "")
+                self.w.text(self.pw - self.MR - self.w.string_width(cid, "H", 8), self.y - 10,
+                            cid, font="H", size=8, color=MUTED)
+                for ln in tlines:
+                    self.w.text(tx, self.y - 10, ln, font="HB", size=9, color=INK)
+                    self.y -= 12
+                for ln in wlines:
+                    self.w.text(tx, self.y - 8, ln, font="H", size=7.5, color=MUTED)
+                    self.y -= 11
+                self.y -= 4
 
-        # category breakdown
-        self._label("Findings by category")
+    def _categories_section(self):
+        self.y -= 6
+        self._ensure(150)
+        self._section_title("Findings by Category")
         maxc = max(self.by_cat.values()) if self.by_cat else 1
         for cat, n in sorted(self.by_cat.items(), key=lambda x: -x[1]):
             self._ensure(16)
-            self.w.text(self.ML, self.y - 8, cat[:46], font="H", size=8.5, color=INK)
-            bar_x = self.ML + 210
-            bar_w = self.cw - 210 - 30
+            self.w.text(self.ML, self.y - 8, self._fit(cat, "H", 8.5, 205), font="H", size=8.5, color=INK)
+            bar_x = self.ML + 220
+            bar_w = self.cw - 220 - 30
             self.w.rect(bar_x, self.y - 10, bar_w, 8, fill=LIGHT)
             self.w.rect(bar_x, self.y - 10, max(2, bar_w * n / maxc), 8, fill=ACCENT)
             self.w.text(self.ML + self.cw - 20, self.y - 8, str(n), font="HB", size=8.5, color=MUTED)
             self.y -= 15
-        self.y -= 8
 
-        # top priority
-        crits = [f for f in self.findings if f["severity"] in ("CRITICAL", "HIGH")]
-        crits.sort(key=lambda f: SEV_ORDER.get(f["severity"], 9))
-        if crits:
-            self._label("Top-priority findings (Critical & High)")
-            for f in crits[:18]:
-                self._ensure(15)
-                col = SEV_COLOR[f["severity"]]
-                self.w.rect(self.ML, self.y - 11, 46, 11, fill=col)
-                self.w.text(self.ML + 4, self.y - 9, f["severity"][:4], font="HB", size=7, color=WHITE)
-                self.w.text(self.ML + 54, self.y - 9,
-                            (f["check_id"] + "  " + f["title"])[:82], font="H", size=8.5, color=INK)
-                self.y -= 14.5
-            if len(crits) > 18:
-                self._para(f"... and {len(crits) - 18} more Critical/High finding(s) in the detailed section.",
-                           font="HO", size=8, color=MUTED)
+    def _compliance_section(self):
+        frameworks = ComplianceMapper(self.findings).assess()
+        frameworks = [fw for fw in frameworks if fw["controls"]]
+        if not frameworks:
+            return
+        self._new_content_page()
+        self._section_title("Compliance & Control-Framework Mapping")
+        self._para(
+            "Each detected finding is attributed to the control areas it is evidence against, so "
+            "results can be navigated by standard. Counts reflect controls with OPEN findings in "
+            "the assessed configuration — this is a gap-mapping for audit navigation and "
+            "remediation scoping, not a certification, attestation, or statement of full "
+            "compliance.", size=8.5, color=MUTED, leading=12, gap_after=12)
+        for fw in frameworks:
+            self._compliance_framework(fw)
+
+    def _compliance_framework(self, fw: Dict[str, Any]):
+        self._ensure(64)
+        self.y -= 2
+        self.w.text(self.ML, self.y - 11, fw["name"], font="HB", size=11.5, color=NAVY)
+        sub = ("%s   —   %d of %d control areas flagged   ·   %d findings mapped"
+               % (fw["subtitle"], fw["controls_flagged"], fw["total_controls"], fw["mapped_findings"]))
+        self.w.text(self.ML, self.y - 23, sub, font="H", size=8, color=MUTED)
+        self.y -= 30
+
+        # numeric columns anchored to the right
+        num_w = 30
+        xs = [self.pw - self.MR - num_w * k for k in (5, 4, 3, 2, 1)]  # C H M L Tot
+        heads = ["Crit", "High", "Med", "Low", "Tot"]
+        x_id = self.ML + 6
+        x_area = self.ML + 74
+
+        # header
+        self._ensure(18)
+        self.w.rect(self.ML, self.y - 15, self.cw, 15, fill=NAVY)
+        self.w.text(x_id, self.y - 11, "Control", font="HB", size=7.5, color=WHITE)
+        self.w.text(x_area, self.y - 11, "Area & mapped themes", font="HB", size=7.5, color=WHITE)
+        for xh, h in zip(xs, heads):
+            self.w.text(xh + num_w - 3 - self.w.string_width(h, "HB", 7.5), self.y - 11, h,
+                        font="HB", size=7.5, color=WHITE)
+        self.y -= 15
+
+        def num_cell(x, val, color):
+            s = str(val) if val else "-"
+            c = color if val else RULE
+            self.w.text(x + num_w - 3 - self.w.string_width(s, "HB", 8), self.y - 11, s,
+                        font="HB", size=8, color=c)
+
+        area_w = xs[0] - x_area - 8
+        for ri, c in enumerate(fw["controls"]):
+            # wrap the control name + themes so nothing is clipped; row grows to fit
+            nlines = self.w.wrap(c["name"], "HB", 8, area_w) or [""]
+            themes = " · ".join(c.get("themes", []))
+            tlines = self.w.wrap(themes, "H", 7, area_w) if themes else []
+            row_h = max(21, 6 + len(nlines) * 10 + len(tlines) * 9 + 4)
+            self._ensure(row_h)
+            if ri % 2 == 0:
+                self.w.rect(self.ML, self.y - row_h, self.cw, row_h, fill=LIGHT)
+            # control id + numeric cells align to the top line of the row
+            self.w.text(x_id, self.y - 10, self._fit(c["id"], "HB", 8, 64), font="HB", size=8, color=INK)
+            num_cell(xs[0], c["crit"], SEV_COLOR["CRITICAL"])
+            num_cell(xs[1], c["high"], SEV_COLOR["HIGH"])
+            num_cell(xs[2], c["med"], SEV_COLOR["MEDIUM"])
+            num_cell(xs[3], c["low"], SEV_COLOR["LOW"])
+            self.w.text(xs[4] + num_w - 3 - self.w.string_width(str(c["total"]), "HB", 8),
+                        self.y - 11, str(c["total"]), font="HB", size=8, color=INK)
+            # area name + themes, wrapped
+            ay = self.y - 10
+            for ln in nlines:
+                self.w.text(x_area, ay, ln, font="HB", size=8, color=INK)
+                ay -= 10
+            for ln in tlines:
+                self.w.text(x_area, ay, ln, font="H", size=7, color=MUTED)
+                ay -= 9
+            self.y -= row_h
+        self.y -= 12
 
     def _detailed_findings(self):
         self._new_content_page()
         self._section_title("Detailed Findings")
-        ordered = sorted(self.findings, key=lambda f: (SEV_ORDER.get(f["severity"], 9), f["check_id"]))
-        for f in ordered:
+        for f in self._fix_first():
             self._finding_block(f)
 
     def _finding_block(self, f: Dict[str, Any]):
@@ -259,24 +402,40 @@ class PDFReportGenerator:
         col = SEV_COLOR.get(sev, MUTED)
         risk, mitigation, detailed = self.kb.detail_for(f)
 
-        # keep the header + first lines together
-        self._ensure(58)
+        # Title wraps to as many lines as needed (never truncated); the header
+        # bar grows to fit. A right gutter is reserved for the check-id so the
+        # wrapped title never runs under it.
+        title = f["title"]
+        title_x = self.ML + 74
+        title_w = self.cw - 74 - 120
+        tlines = self.w.wrap(title, "HB", 10, title_w) or [""]
+        bar_h = max(30, 12 + len(tlines) * 13)
+
+        # keep the whole header bar + category line together on one page
+        self._ensure(bar_h + 22)
         self.y -= 6
-        # header bar
         top = self.y
-        self.w.rect(self.ML, top - 30, self.cw, 30, fill=LIGHT, stroke=RULE, line_width=0.7)
-        self.w.rect(self.ML, top - 30, 4, 30, fill=col)
+        self.w.rect(self.ML, top - bar_h, self.cw, bar_h, fill=LIGHT, stroke=RULE, line_width=0.7)
+        self.w.rect(self.ML, top - bar_h, 4, bar_h, fill=col)
         self.w.rect(self.ML + 12, top - 21, 54, 13, fill=col)
         self.w.text(self.ML + 16, top - 18.5, sev[:8], font="HB", size=7.5, color=WHITE)
-        title = f["title"]
-        # title (truncate to fit alongside id)
-        self.w.text(self.ML + 74, top - 19, self._fit(title, "HB", 10, self.cw - 74 - 120),
-                    font="HB", size=10, color=INK)
+        ty = top - 19
+        for ln in tlines:
+            self.w.text(title_x, ty, ln, font="HB", size=10, color=INK)
+            ty -= 13
         cid = f["check_id"]
         self.w.text(self.pw - self.MR - 10 - self.w.string_width(cid, "H", 8.5), top - 19,
                     cid, font="H", size=8.5, color=MUTED)
-        self.y = top - 38
+        self.y = top - bar_h - 8
         self.w.text(self.ML, self.y, "Category: " + f.get("category", ""), font="H", size=8, color=MUTED)
+        # priority tier chip (mirrors the HTML P-badge)
+        pr = self._tier_of(f)
+        if pr is not None:
+            tcol = self.TIER_COLOR.get(pr.tier, MUTED)
+            chip = "%s  %d" % (pr.tier, getattr(pr, "score", 0))
+            cwid = self.w.string_width(chip, "HB", 7.5) + 14
+            self.w.rect(self.pw - self.MR - cwid, self.y - 2, cwid, 12, fill=tcol)
+            self.w.text(self.pw - self.MR - cwid + 7, self.y + 1, chip, font="HB", size=7.5, color=WHITE)
         self.y -= 14
 
         # affected items
@@ -284,10 +443,12 @@ class PDFReportGenerator:
         if items:
             self._label("Affected items (%d)" % f.get("affected_count", len(items)))
             for it in items[:12]:
-                self._ensure(12)
-                self.w.text(self.ML + 8, self.y - 8, "· " + self._fit(str(it), "C", 8, self.cw - 20),
-                            font="C", size=8, color=INK)
-                self.y -= 11.5
+                ilines = self.w.wrap("· " + str(it), "C", 8, self.cw - 20) or [""]
+                for j, ln in enumerate(ilines):
+                    self._ensure(12)
+                    self.w.text(self.ML + 8 + (0 if j == 0 else 10), self.y - 8, ln,
+                                font="C", size=8, color=INK)
+                    self.y -= 11.5
             if len(items) > 12:
                 self._para("... and %d more affected item(s)." % (len(items) - 12),
                            font="HO", size=8, color=MUTED, x0=self.ML + 8)
@@ -301,15 +462,17 @@ class PDFReportGenerator:
         self._label("Remediation — step-by-step")
         self._para(mitigation, gap_after=6, x0=self.ML)
 
-        # references
+        # references (wrap fully — never truncated)
         refs = f.get("references") or []
         if refs:
             self._label("References")
             for r in refs:
-                self._ensure(12)
-                self.w.text(self.ML + 8, self.y - 8, self._fit("- " + r, "H", 8, self.cw - 16),
-                            font="H", size=8, color=ACCENT)
-                self.y -= 11.5
+                rlines = self.w.wrap("- " + str(r), "H", 8, self.cw - 16) or [""]
+                for j, ln in enumerate(rlines):
+                    self._ensure(12)
+                    self.w.text(self.ML + 8 + (0 if j == 0 else 8), self.y - 8, ln,
+                                font="H", size=8, color=ACCENT)
+                    self.y -= 11.5
 
         if not detailed:
             self._para("(Detailed knowledge-base entry not available for this check; "

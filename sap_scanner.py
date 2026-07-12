@@ -45,6 +45,7 @@ from modules.access_risk_analysis import AccessRiskAnalysisAuditor
 from modules.basis_job_command import BasisJobCommandAuditor
 from modules.report_generator import ReportGenerator
 from modules.pdf_report import PDFReportGenerator
+from modules.pptx_report import PPTXReportGenerator
 from modules.finding_kb import FindingKB
 from modules.risk_prioritizer import RiskPrioritizer
 from modules.data_loader import DataLoader
@@ -89,8 +90,14 @@ def main():
         help="Path to custom baseline config JSON (optional)"
     )
     parser.add_argument(
-        "--format", choices=["html", "pdf", "both"], default="html",
-        help="Report format: html (default), pdf (detailed hand-over report), or both"
+        "--format", choices=["html", "pdf", "pptx", "both", "all"], default="html",
+        help="Report format: html (default), pdf (detailed hand-over report), "
+             "pptx (presentation deck), both (html+pdf), or all (html+pdf+pptx)"
+    )
+    parser.add_argument(
+        "--pptx-mode", choices=["full", "summary"], default="full",
+        help="PPTX deck scope: full (executive summary + compliance mapping + one slide "
+             "per finding, 300+ slides; default) or summary (short executive deck only)"
     )
 
     args = parser.parse_args()
@@ -319,15 +326,18 @@ def main():
             if severity_order.get(f.get("severity", "INFO"), 4) <= threshold
         ]
 
-    # Resolve output paths for the requested format(s)
+    # Resolve output paths for the requested format(s) — a common base name, one
+    # file per format, so `--format all` produces .html/.pdf/.pptx side by side.
     out = args.output
     low = out.lower()
-    if low.endswith(".pdf"):
-        pdf_path, html_path = out, out[:-4] + ".html"
-    elif low.endswith(".html") or low.endswith(".htm"):
-        html_path, pdf_path = out, out.rsplit(".", 1)[0] + ".pdf"
-    else:
-        html_path, pdf_path = out + ".html", out + ".pdf"
+    base = out
+    for ext in (".pptx", ".pdf", ".html", ".htm"):
+        if low.endswith(ext):
+            base = out[: -len(ext)]
+            break
+    html_path = base + ".html"
+    pdf_path = base + ".pdf"
+    pptx_path = base + ".pptx"
 
     # Risk prioritization (P1-P4): score every finding on severity x exploitability
     # (HotNews / actively-exploited) x exposure, so the report leads with a fix-first
@@ -343,12 +353,18 @@ def main():
     # risk narrative + step-by-step remediation for each finding (both formats).
     kb = FindingKB()
     detail = f"detailed knowledge base: {len(kb)} checks" if kb.loaded else "finding descriptions (no KB)"
-    if args.format in ("html", "both"):
+    if args.format in ("html", "both", "all"):
         print(f"\n[*] Generating HTML report: {html_path}  ({detail})")
         ReportGenerator(all_findings, scan_meta, kb, priorities=prio_results).generate(html_path)
-    if args.format in ("pdf", "both"):
+    if args.format in ("pdf", "both", "all"):
         print(f"[*] Generating PDF report: {pdf_path}  ({detail})")
-        PDFReportGenerator(all_findings, scan_meta, kb).generate(pdf_path)
+        PDFReportGenerator(all_findings, scan_meta, kb, priorities=prio_results).generate(pdf_path)
+    if args.format in ("pptx", "all"):
+        full = args.pptx_mode == "full"
+        kind = "full per-finding deck" if full else "summarised meeting deck"
+        print(f"[*] Generating PPTX presentation: {pptx_path}  ({kind})")
+        PPTXReportGenerator(all_findings, scan_meta, kb, priorities=prio_results).generate(
+            pptx_path, full=full)
 
     # Summary
     crit = sum(1 for f in all_findings if f["severity"] == "CRITICAL")
@@ -357,10 +373,12 @@ def main():
     low = sum(1 for f in all_findings if f["severity"] == "LOW")
 
     saved = []
-    if args.format in ("html", "both"):
+    if args.format in ("html", "both", "all"):
         saved.append(html_path)
-    if args.format in ("pdf", "both"):
+    if args.format in ("pdf", "both", "all"):
         saved.append(pdf_path)
+    if args.format in ("pptx", "all"):
+        saved.append(pptx_path)
 
     print(f"\n{'='*55}")
     print(f"  SCAN COMPLETE — Total Findings: {len(all_findings)}")

@@ -13,20 +13,23 @@
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="MIT License"/>
   <img src="https://img.shields.io/badge/SAP-S%2F4HANA%20RISE-0FAAFF?style=flat-square&logo=sap&logoColor=white" alt="SAP S/4HANA"/>
   <img src="https://img.shields.io/badge/checks-300%2B-red?style=flat-square" alt="300+ Checks"/>
+  <img src="https://img.shields.io/badge/reports-HTML%20%C2%B7%20PDF%20%C2%B7%20PPTX-8A2BE2?style=flat-square" alt="HTML · PDF · PPTX Reports"/>
 </p>
 
 ---
 
 ## Overview
 
-**SAP S/4HANA RISE Security Scanner** analyzes exported SAP configuration data (CSV/JSON) and produces an interactive HTML dashboard with findings, severity ratings, and actionable remediation guidance.
+**SAP S/4HANA RISE Security Scanner** analyzes exported SAP configuration data (CSV/JSON) and produces an interactive HTML dashboard — plus a formal multi-page **PDF** hand-over report and a per-finding **PowerPoint (PPTX)** deck — with findings, severity ratings, risk prioritization, compliance mapping, and actionable remediation guidance.
 
 - **No direct system connection required** — offline & agentless; ideal for RISE environments with restricted RFC access
-- **Zero external dependencies** — runs on Python 3.8+ stdlib only
+- **Zero external dependencies** — runs on Python 3.8+ stdlib only (the HTML, PDF **and** PPTX engines are all hand-built on the standard library)
 - **300+ security checks across 23 audit modules** — from ABAP authorizations and HANA DB to BTP/Cloud, GRC Access Control, SOX financial-config controls, and permission-level Segregation of Duties
+- **Risk-prioritized (P1–P4)** — every finding is ranked by severity × exploitability (actively-exploited / HotNews) × exposure × privilege, so remediation starts with what matters
+- **Compliance mapping** — findings are mapped to **ISO/IEC 27001:2022, NIST CSF 2.0, CIS Controls v8, TISAX/VDA ISA, SOC 2, and EU GDPR** in the report
 - **Standards-aligned** — mapped to the CIS SAP Benchmark, DSAG best-practice guide, and the SAP Security Baseline
 
-**Pipeline:** &nbsp;`LOAD` CSV/JSON exports → `MODULES` (23 auditors) → `CHECKS` (300+ rules) → `RANK` by severity → interactive `REPORT` (HTML dashboard).
+**Pipeline:** &nbsp;`LOAD` CSV/JSON exports → `MODULES` (23 auditors) → `CHECKS` (300+ rules) → `RANK` by severity & P1–P4 priority → `MAP` to compliance frameworks → `REPORT` (interactive HTML dashboard · PDF hand-over · PPTX deck).
 
 ---
 
@@ -39,13 +42,13 @@
 | ⚙️ **Security Parameters** | PARAM-* (25+) | Password policy, login security, RFC, gateway, TLS, audit logging |
 | 🌐 **Network & Services** | NET-001→008 | RFC destinations, ICF services, transports, audit config |
 | ☁️ **RISE / BTP Core** | RISE-001→007 | Trust config, comm arrangements, API exposure |
-| 🔥 **BTP Cloud Attack Surface** | BTP-CC/SB/DST/IAS/ENT/EM/CPI/NET/GOV/MIG (38) | Cloud Connector (incl. version/CVE-2024-25642), service bindings, destinations, IAS (incl. password policy & corporate-IdP enforcement), Event Mesh, CPI, network isolation |
+| 🔥 **BTP Cloud Attack Surface** | BTP-CC/SB/DST/IAS/ENT/EM/CPI/NET/GOV/MIG (35) | Cloud Connector (incl. version/CVE-2024-25642), service bindings, destinations, IAS (incl. password policy & corporate-IdP enforcement), Event Mesh, CPI, network isolation |
 | 🔗 **Network & Integration Layer** | INTG-APIM/IDOC/WS/WH/GW/MON/CPI/OAUTH/TOPO (27) | API Management, IDOC ports, web services, webhooks, gateway ACLs, OAuth, topology |
 | 🔏 **Data Protection & Privacy** | DPP-RAL/ILM/MASK/TOOLKIT/POP/FIELD/RES/DEL/LAND (18) | Read Access Logging, ILM retention, data masking, GDPR/DPDP toolkit, data residency |
 | 💻 **Code & Transport Security** | CODE-INJ/STMT/ATC/TMS/CLIENT/CHG/DEV/MOD/DEAD (21) | SQL injection, hardcoded creds, ATC findings, transport workflow, client config, SAP mods |
 | 📊 **Logging, Monitoring & IR** | LOG-AUD/SIEM/RET/TBL/LOGON/IR (11) | Audit log config, SIEM integration, log retention, table logging, brute-force detection |
 | 🖥️ **Fiori & UI Layer** | FIORI-CAT/APP/ODATA/SPACE/TILE/USAGE (8) | Catalog access, OData backend auth, sensitive app exposure, spaces/pages config |
-| 🔑 **Cryptographic Posture** | CRYPTO-TLS/CERT/SNC/HANA/LIB/PSE/KEY (18) | TLS config, certificate health, SNC, HANA encryption at rest (data/log/**backup**), **system-replication TLS**, crypto library, key management |
+| 🔑 **Cryptographic Posture** | CRYPTO-TLS/CERT/SNC/HANA/LIB/PSE/KEY (17) | TLS config, certificate health, SNC, HANA encryption at rest (data/log/**backup**), **system-replication TLS**, crypto library, key management |
 | 🗄️ **HANA Database Security** | HANADB-USER/PRIV/ROLE/AUDIT/PARAM (19) | Privileged DB users (SYSTEM, password lifetime, dormancy), PUBLIC & system-privilege grants, _SYS_BI_CP_ALL analytic bypass, **DEBUG/ATTACH DEBUGGER** grants, DB auditing, HANA security parameters incl. **log_mode/PITR** and **MDC cross-database access** |
 | 📰 **SAP Security Notes / HotNews** | HOTNEWS-000→004 (5) | Missing HotNews (Priority 1) & High (Priority 2) SAP Security Notes since 2020, actively-exploited (CISA KEV) unpatched CVEs, partially-implemented notes — diffed from your SNOTE export against a curated, verified catalog |
 | 🔓 **ABAP Authorization & Critical Access** | AUTH-001→016 (16) | Role-content analysis from AGR_1251: Debug&Replace (runtime auth bypass), trusted-RFC impersonation (S_RFCACL), OS command/file access (S_LOG_COM/S_DATASET), authorization forging (S_USER_AUT), broad S_RFC, generic table maintenance (S_TABU_*), run-any-report (S_PROGRAM), batch impersonation, unrestricted destination authorization (S_ICF DEST=*), and sensitive Basis transactions — attributed to the users who hold each role |
@@ -134,6 +137,7 @@ SoD checks support three data strategies: pre-computed matrix (`sod_matrix.csv`)
 | BTP-CC-005 | Certificates expiring or expired | HIGH |
 | BTP-CC-006 | Certificates with weak cryptography (SHA-1, <2048 bit) | HIGH |
 | BTP-CC-007 | Stale/unused backend configurations | MEDIUM |
+| BTP-CC-008 | Cloud Connector version vulnerable to CVE-2024-25642 (improper cert validation / MITM, regression 2.15.0–2.16.1) or out-of-maintenance | HIGH/MEDIUM |
 
 ### Service Bindings (BTP-SB-*)
 | Check | Description | Severity |
@@ -156,6 +160,8 @@ SoD checks support three data strategies: pre-computed matrix (`sod_matrix.csv`)
 | BTP-IAS-001 | Apps without conditional authentication rules | MEDIUM |
 | BTP-IAS-002 | Apps without IP-based restrictions | MEDIUM |
 | BTP-IAS-003 | Apps without multi-factor authentication | HIGH |
+| BTP-IAS-004 | IAS password policy for local users is weak (length/complexity/lockout) | HIGH/MEDIUM |
+| BTP-IAS-005 | Corporate IdP not enforced — local password fallback allowed | HIGH |
 
 ### Entitlement Governance (BTP-ENT-*)
 | Check | Description | Severity |
@@ -501,6 +507,8 @@ SoD checks support three data strategies: pre-computed matrix (`sod_matrix.csv`)
 | CRYPTO-HANA-001 | HANA data volume encryption disabled | HIGH |
 | CRYPTO-HANA-002 | HANA log volume encryption disabled | MEDIUM |
 | CRYPTO-HANA-003 | HANA using internal/default key management | MEDIUM |
+| CRYPTO-HANA-004 | HANA backup encryption is disabled | HIGH |
+| CRYPTO-HANA-005 | HANA system replication is not TLS-encrypted | HIGH |
 
 ### Crypto Library (CRYPTO-LIB-*)
 | Check | Description | Severity |
@@ -537,6 +545,7 @@ SoD checks support three data strategies: pre-computed matrix (`sod_matrix.csv`)
 | HANADB-PRIV-003 | Broad system privileges granted directly to users | HIGH |
 | HANADB-PRIV-004 | Sensitive privileges granted WITH ADMIN OPTION | MEDIUM |
 | HANADB-PRIV-005 | Analytic-privilege bypass (`_SYS_BI_CP_ALL`) granted | CRITICAL |
+| HANADB-PRIV-006 | Debug privileges (DEBUG / ATTACH DEBUGGER) granted to users | HIGH |
 
 ### Roles & Auditing (HANADB-ROLE-* / HANADB-AUDIT-*)
 | Check | Description | Severity |
@@ -553,6 +562,8 @@ SoD checks support three data strategies: pre-computed matrix (`sod_matrix.csv`)
 | HANADB-PARAM-001 | Weak HANA password-policy parameters | HIGH |
 | HANADB-PARAM-002 | Detailed connect errors exposed to clients | MEDIUM |
 | HANADB-PARAM-003 | TLS not enforced for HANA SQL connections | HIGH |
+| HANADB-PARAM-004 | `log_mode = overwrite` — no point-in-time recovery | HIGH |
+| HANADB-PARAM-005 | Cross-database (MDC) access is enabled | MEDIUM |
 
 *Distinct from Cryptographic Posture's `CRYPTO-HANA-*` (encryption-at-rest); this module covers users, privileges, auditing and ini parameters.*
 
@@ -595,6 +606,7 @@ Role-content analysis of the **AGR_1251** export (role → object → field → 
 | AUTH-013 | Sensitive Basis / administration transactions in roles | HIGH |
 | AUTH-014 | ABAP development change access (S_DEVELOP create/change) | HIGH |
 | AUTH-015 | Global authorization-object disabling is active | MEDIUM |
+| AUTH-016 | Unrestricted destination authorization (S_ICF ICF_FIELD=DEST, ICF_VALUE=*) | HIGH |
 
 </details>
 
@@ -639,6 +651,7 @@ SAP Security Baseline / DSAG / CIS profile parameters the other modules don't co
 | BASELINE-008 | SSO ticket / session-cookie transport not hardened | MEDIUM |
 | BASELINE-009 | Web-tier logging / error disclosure weak (ICM security log) | MEDIUM |
 | BASELINE-010 | Existing passwords not forced to current policy | MEDIUM |
+| BASELINE-011 | Weak password hash algorithm (login/password_hash_algorithm) | HIGH |
 
 </details>
 
@@ -738,9 +751,12 @@ cd SAP-S4HANA-RISE-Security-Scanner
 # Run against sample data (included)
 python sap_scanner.py --data-dir ./sample_data --output report.html
 
-# Generate the detailed PDF hand-over report (or both formats)
+# Generate the detailed PDF hand-over report, the PPTX deck, or several at once
 python sap_scanner.py --data-dir ./exports --output report.pdf  --format pdf
-python sap_scanner.py --data-dir ./exports --output report.html --format both
+python sap_scanner.py --data-dir ./exports --output report.html --format both   # HTML + PDF
+python sap_scanner.py --data-dir ./exports --output report.pptx --format pptx    # one slide per finding
+python sap_scanner.py --data-dir ./exports --output report.pptx --format pptx --pptx-mode summary  # short exec deck
+python sap_scanner.py --data-dir ./exports --output report.html --format all     # HTML + PDF + PPTX
 
 # Run specific modules
 python sap_scanner.py --data-dir ./exports --modules btpcloud iam
@@ -776,6 +792,9 @@ baseline  — Security Baseline Parameters (BASELINE-*)
 s4authz   — S/4HANA & Cloud Authorization (S4AUTHZ-*)
 ara       — Access Risk Analysis / offline SoD (ARA-*)
 jobcmd    — Basis Jobs & OS Commands (JOBCMD-*)
+grcac     — GRC Access Control (GRC-*)
+rolegov   — Role Design & Governance (RG-*)
+fincontrols — Financial Controls / SOX (FIN-*)
 all       — Run everything (default)
 ```
 
@@ -796,12 +815,21 @@ python sap_scanner.py --data-dir ./exports --modules systrust baseline
 
 ## Reports
 
-Choose the output with `--format html` (default), `--format pdf`, or `--format both`. The output path's extension is respected; with `both`, the companion file is written alongside it.
+Choose the output with `--format html` (default), `pdf`, `pptx`, `both` (html+pdf), or `all` (html+pdf+pptx). The output path's extension is respected; companion files are written alongside it. All three engines are **pure standard library** — no `python-pptx`, no `reportlab`.
 
 | Format | Best for | Contents |
 |--------|----------|----------|
-| **HTML** | Interactive triage | Dark dashboard with risk score, severity/category breakdown, live severity filter, and collapsible findings — each with its detailed risk narrative and step-by-step remediation. Single self-contained file. |
-| **PDF** | Formal hand-over to the SAP Basis / security team | A multi-page assessment report: **cover page** (scope, overall risk posture, severity summary), **executive summary** (posture narrative, severity table, category breakdown, top-priority findings), and **per-finding detail pages** — each with the affected objects, a detailed **Security Risk** explanation, and a numbered, step-by-step **Remediation** procedure, plus references. Running header/footer, page numbers, confidentiality banner. Built with a **pure-standard-library PDF engine** — no extra dependencies. |
+| **HTML** | Interactive triage | Clean, light-themed dashboard (PhalanxCyber + SAP branding) with an overall risk score, the P1–P4 priority queue, severity/category breakdown, a compliance-mapping panel, a live severity filter, and collapsible findings — each with its detailed risk narrative and step-by-step remediation. Single self-contained file (logos embedded as data URIs). |
+| **PDF** | Formal hand-over to the SAP Basis / security team | A multi-page assessment report ordered **cover → risk-priority queue (P1–P4) → findings-by-area → compliance mapping → per-finding detail pages** (fix-first order), each with the affected objects, a detailed **Security Risk** explanation, a numbered step-by-step **Remediation** procedure, and references. Running header/footer, page numbers, confidentiality banner. Built with a **pure-standard-library PDF engine**. |
+| **PPTX** | Presenting findings in a meeting / to leadership | A PowerPoint deck. `--pptx-mode full` (default) = title, executive summary, priority queue, findings-by-area, recommended actions, a compliance snapshot + one slide per framework, then **one slide per finding** (fix-first, ~300+ slides) with severity/priority chips, exploit tags, and a summarized Security Risk + High-Level Mitigation. `--pptx-mode summary` = a short executive-only deck. Built with a **pure-standard-library OOXML/PPTX engine**. |
+
+### Risk prioritization (P1–P4)
+
+Findings are ranked **P1 (fix now) → P4 (backlog)** by combining severity with exploitability (actively-exploited / CISA-KEV, HotNews), internet/exposure, and privilege. The reports lead with this queue and order the detailed findings fix-first, so the highest-leverage work is unmistakable.
+
+### Compliance mapping
+
+Every category is mapped to control frameworks and rendered as a per-framework panel (flagged controls with severity counts) in the HTML and PDF, and as dedicated slides in the PPTX deck. Frameworks: **ISO/IEC 27001:2022** (Annex A), **NIST CSF 2.0**, **CIS Controls v8**, **TISAX / VDA ISA**, **SOC 2** (Trust Services Criteria), and **EU GDPR**. All control IDs are verified against the published frameworks.
 
 ### Detailed findings — knowledge base
 
@@ -1072,9 +1100,13 @@ SAP-S4HANA-RISE-Security-Scanner/
 ├── modules/
 │   ├── base_auditor.py             # BaseAuditor: finding()/get_config() + severity constants
 │   ├── data_loader.py              # CSV/JSON loader (auto-delimiter, header normalize; 90+ file types)
-│   ├── report_generator.py         # Interactive HTML dashboard (XSS-safe, weighted risk score)
-│   ├── pdf_report.py               # Multi-page PDF assessment report (cover, exec summary, per-finding)
+│   ├── report_generator.py         # Interactive HTML dashboard (light theme, XSS-safe, weighted risk score, compliance panel)
+│   ├── pdf_report.py               # Multi-page PDF report (cover → priority → categories → compliance → fix-first findings)
 │   ├── pdf_writer.py               # Dependency-free PDF engine (standard-14 fonts, wrapping, tables)
+│   ├── pptx_report.py              # PPTX deck composer (exec summary, compliance, one slide per finding)
+│   ├── pptx_writer.py              # Dependency-free OOXML/PPTX engine (slides, shapes, text, images)
+│   ├── compliance_mapping.py       # Category → framework control mapping (ISO/NIST/CIS/TISAX/SOC 2/GDPR)
+│   ├── risk_prioritizer.py         # P1–P4 risk prioritizer (severity × exploitability × exposure × privilege)
 │   ├── finding_kb.py               # Findings knowledge base loader (detailed risk + remediation)
 │   ├── user_auth_audit.py          # USR-*            User & Authorization
 │   ├── iam_advanced.py             # IAM-*            Advanced IAM (SoD, firefighter, role lifecycle)
@@ -1095,7 +1127,11 @@ SAP-S4HANA-RISE-Security-Scanner/
 │   ├── baseline_params.py          # BASELINE-*       Security Baseline Parameters
 │   ├── s4_business_authz.py        # S4AUTHZ-*        S/4HANA & Cloud Authorization
 │   ├── access_risk_analysis.py     # ARA-*            Access Risk Analysis (offline SoD)
-│   └── basis_job_command.py        # JOBCMD-*         Basis Jobs & External OS Commands
+│   ├── basis_job_command.py        # JOBCMD-*         Basis Jobs & External OS Commands
+│   ├── grc_access_control.py       # GRC-*            GRC Access Control (EAM/ARM/SoD governance)
+│   ├── role_governance.py          # RG-*             Role Design & Governance (SU24/profile-gen/derived drift)
+│   └── financial_controls.py       # FIN-*            Financial Controls (SOX ITGC / FI config)
+├── assets/                         # PhalanxCyber + SAP logos (embedded in reports as data URIs)
 ├── sample_data/                    # 90 crafted demo exports (trigger every check)
 ├── data/
 │   └── finding_details.json        # Knowledge base: detailed risk + step-by-step remediation per check
@@ -1181,10 +1217,15 @@ SAP-S4HANA-RISE-Security-Scanner/
 - [x] S/4HANA & cloud authorization (business roles, CDS auth-check, OData V4, Cloud Connector principal propagation, CF roles)
 - [x] Offline permission-level Segregation of Duties / Access Risk Analysis (GRC-style ruleset, mitigating controls, user risk score)
 - [x] Basis background jobs & external OS-command hardening (SM69/SXPGCOSTAB shell-wrap/ADDPAR/path, TBTCO/TBTCP privileged step users, RSBDCOS0)
+- [x] GRC Access Control process layer (EAM/firefighter, access-request workflow, SoD governance)
+- [x] Role design & governance (SU24 proposals, profile generation, derived-role drift)
+- [x] SOX ITGC / FI financial-config controls (posting periods, tolerances, dual control, number ranges)
 - [x] Detailed PDF hand-over report + per-finding risk/remediation knowledge base
+- [x] Risk prioritization (P1–P4: severity × exploitability × exposure × privilege)
+- [x] Compliance mapping (ISO 27001:2022, NIST CSF 2.0, CIS v8, TISAX/VDA ISA, SOC 2, GDPR)
+- [x] PowerPoint (PPTX) deck export — executive summary + one slide per finding
 - [ ] Scan comparison mode (diff two scans)
 - [ ] CI/CD integration with exit codes
-- [ ] PDF report export
 
 ---
 

@@ -6,9 +6,10 @@ Guidance for Claude Code (and humans) working in this repository.
 
 An **offline SAP S/4HANA RISE + BTP security config-review tool**. It reads exported
 SAP configuration (CSV / JSON) from a `--data-dir`, runs a set of auditor modules, and
-produces an interactive **HTML report** with findings, severity ratings and remediation.
-No live system / RFC connection is needed — ideal for RISE environments with restricted
-access.
+produces an interactive **HTML report** — plus a multi-page **PDF** hand-over report and a
+per-finding **PowerPoint (PPTX)** deck — with findings, severity ratings, P1–P4 risk
+prioritization, compliance mapping and remediation. No live system / RFC connection is
+needed — ideal for RISE environments with restricted access.
 
 - **Zero external dependencies** — Python 3.8+ standard library only. Do **not** add
   third-party packages (no `requirements.txt` / `pyproject.toml` by design).
@@ -19,13 +20,20 @@ access.
   (`DataLoader`) → runs the 23 auditor **MODULES** → each emits severity-ranked findings
   (**CHECKS** → **RANK**) → a **REPORT** is written. When you add a module, refresh
   `docs/banner.svg`'s module/check counts too.
-- **Reports** (`--format html|pdf|both`): `report_generator.py` (HTML dashboard) and
-  `pdf_report.py` (multi-page hand-over PDF, on the stdlib `pdf_writer.py` engine — no
-  third-party PDF lib). Both render each finding's detailed **Security Risk** narrative +
+- **Reports** (`--format html|pdf|pptx|both|all`, `--pptx-mode full|summary`):
+  `report_generator.py` (light-themed HTML dashboard, PhalanxCyber + SAP branding),
+  `pdf_report.py` (multi-page hand-over PDF on the stdlib `pdf_writer.py` engine), and
+  `pptx_report.py` (PowerPoint deck on the stdlib `pptx_writer.py` OOXML engine — one slide
+  per finding in `full` mode). **All three engines are pure standard library** — do not add
+  `reportlab` / `python-pptx`. The HTML and PDF are ordered *priority queue → categories →
+  compliance mapping → fix-first findings*; `risk_prioritizer.py` computes the P1–P4 order and
+  `compliance_mapping.py` maps categories to ISO 27001:2022 / NIST CSF 2.0 / CIS v8 / TISAX /
+  SOC 2 / GDPR controls. Each finding renders its detailed **Security Risk** narrative +
   step-by-step **Remediation** from the findings knowledge base (`finding_kb.py` loading
   `data/finding_details.json`, keyed by check-id with family-prefix fallback), falling back
   to the finding's own `description`/`remediation` when no KB entry exists. When you add
-  checks, add matching KB entries so the hand-over report stays detailed.
+  checks, add matching KB entries so the hand-over report stays detailed. Report logos live in
+  `assets/` and are embedded as base64 data URIs so reports stay self-contained/offline.
 
 ## Run it
 
@@ -33,6 +41,9 @@ access.
 python sap_scanner.py --data-dir ./sample_data --output report.html            # all modules
 python sap_scanner.py --data-dir ./sample_data --output report.html --modules hanadb authz
 python sap_scanner.py --data-dir ./exports --output report.html --severity HIGH  # min severity
+python sap_scanner.py --data-dir ./sample_data --output report.pdf  --format pdf   # PDF hand-over
+python sap_scanner.py --data-dir ./sample_data --output report.pptx --format pptx  # PPTX deck (full)
+python sap_scanner.py --data-dir ./sample_data --output report.html --format all   # HTML + PDF + PPTX
 ```
 
 ⚠️ **Windows console gotcha:** `banner()` prints box-drawing characters (`╔═╗`) that crash
@@ -54,8 +65,15 @@ on the default cp1252 console. Always run with `PYTHONIOENCODING=utf-8` on Windo
   list of candidate filenames. CSV → list of dicts with **headers normalized to
   UPPERCASE, spaces→underscores** and values stripped; JSON → the parsed object. Missing
   files load as `None`, so checks self-skip when their data is absent.
-- **`modules/report_generator.py`** — HTML dashboard. Uses `html.escape` (XSS-safe) and a
-  weighted risk score. Consumes the standard `finding()` dict.
+- **`modules/report_generator.py`** — light-themed HTML dashboard. Uses `html.escape`
+  (XSS-safe) and a weighted risk score; renders the P1–P4 priority queue and the
+  compliance-mapping panel. Consumes the standard `finding()` dict plus optional
+  `priorities` (from `risk_prioritizer.py`). `pdf_report.py` / `pptx_report.py` consume the
+  same inputs so all three formats stay consistent.
+- **Report-side helpers (not auditors):** `risk_prioritizer.py` (P1–P4 tiering),
+  `compliance_mapping.py` (category → framework controls), `pdf_writer.py` / `pptx_writer.py`
+  (stdlib PDF / OOXML engines). Keep these in sync when a new **category** is introduced — add
+  it to `compliance_mapping.CATEGORY_THEMES` so its findings map to controls.
 
 ### The 23 modules (module key → class → focus)
 
@@ -100,7 +118,11 @@ on the default cp1252 console. Always run with `PYTHONIOENCODING=utf-8` on Windo
    bundled `sample_data` run (and verify a benign row does NOT fire).
 5. **Docs** — bump the README badge + "N+ checks across M modules" line, add a README module-
    table row, and add a section to `docs/CHECKS_REFERENCE.md`.
-6. **Smoke test end-to-end** (see below), then commit.
+6. **Reports** — add a `data/finding_details.json` KB entry per new check (detailed risk +
+   step-by-step remediation) so the PDF/PPTX hand-over stays detailed, and if the module
+   introduces a **new category** string, add it to `compliance_mapping.CATEGORY_THEMES` so its
+   findings map to framework controls.
+7. **Smoke test end-to-end** (see below), then commit.
 
 ## Conventions & gotchas (learned the hard way)
 
