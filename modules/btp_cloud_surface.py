@@ -439,64 +439,74 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
             return
 
         vt = self._ver_tuple(version)
-        # CVE-2024-25642: improper deserialization in SCC administration allowing
-        # code injection; fixed in Cloud Connector 2.16.2 (CVSS 9.1).
+        # CVE-2024-25642 (CWE-295, improper certificate validation, CVSS 7.4): SCC
+        # trusts self-signed server certificates on outbound cloud connections, so
+        # an attacker can impersonate the server and man-in-the-middle the tunnel.
+        # It is a REGRESSION present only in 2.15.0–2.16.1; fixed in 2.16.2.
+        cve_intro = (2, 15, 0)
         cve_fixed = (2, 16, 2)
-        # General minimum-supported floor for currency (rounded conservatively).
-        supported_floor = (2, 16, 0)
 
-        if vt < cve_fixed:
+        if cve_intro <= vt < cve_fixed:
             self.finding(
                 check_id="BTP-CC-008",
                 title=f"Cloud Connector {version} is vulnerable to CVE-2024-25642",
                 severity=self.SEVERITY_HIGH,
                 category="BTP Cloud Attack Surface",
                 description=(
-                    f"The SAP Cloud Connector reports software version {version}, which "
-                    "predates 2.16.2 — the release that fixes CVE-2024-25642 (CVSS 9.1), an "
-                    "improper-deserialization flaw in the Cloud Connector administration "
-                    "component that allows an authenticated administrator to inject and "
-                    "execute arbitrary code, leading to full compromise of the Cloud "
-                    "Connector host. Because the Cloud Connector sits at the trust boundary "
-                    "between the BTP tenant and the on-premise/private network — it holds "
-                    "the system certificates and the backend allow-list that reach into "
-                    "S/4HANA — code execution on this host is effectively a pivot into the "
-                    "internal landscape. The Cloud Connector is customer-managed even in "
-                    "RISE, so patching it is the customer's responsibility, and outdated "
-                    "installations are a recurring finding in BTP security reviews."
+                    f"The SAP Cloud Connector reports software version {version}, which falls "
+                    "in the 2.15.0–2.16.1 range affected by CVE-2024-25642 (CWE-295, improper "
+                    "certificate validation, CVSS 7.4). In these versions the Cloud Connector "
+                    "does not properly validate the server certificate on its outbound cloud "
+                    "connections and will trust a self-signed / untrusted certificate, so an "
+                    "attacker positioned on the network path can impersonate the genuine "
+                    "endpoint and perform a man-in-the-middle attack, breaking the mutual "
+                    "authentication and confidentiality/integrity of the tunnel (no privileges "
+                    "or user interaction required; no availability impact). Because the Cloud "
+                    "Connector sits at the trust boundary between the BTP tenant and the "
+                    "on-premise/private network — it holds the system certificates and the "
+                    "backend allow-list that reach into S/4HANA — a compromised tunnel is a "
+                    "direct exposure of the internal landscape. The Cloud Connector is "
+                    "customer-managed even in RISE, so patching it is the customer's "
+                    "responsibility, and this flaw was introduced by a regression, so systems "
+                    "that were patched to 2.15.x/2.16.0/2.16.1 are affected."
                 ),
-                affected_items=[f"Cloud Connector version: {version} (fix: 2.16.2+)"],
+                affected_items=[f"Cloud Connector version: {version} (affected 2.15.0–2.16.1; fix: 2.16.2+)"],
                 remediation=(
-                    "Upgrade the Cloud Connector to the latest patch of the current major "
-                    "line (at minimum 2.16.2 to remediate CVE-2024-25642). Plan the upgrade "
-                    "using the master/shadow high-availability pair so the tunnel is not "
+                    "Upgrade the Cloud Connector to at least 2.16.2 (ideally the latest patch "
+                    "of the current line) to remediate CVE-2024-25642. Plan the upgrade using "
+                    "the master/shadow high-availability pair so the tunnel is not "
                     "interrupted: upgrade the shadow, fail over, then upgrade the former "
-                    "master. Subscribe to the SAP Cloud Connector release notes and treat "
-                    "SCC patching as part of monthly SAP Security Patch Day handling. After "
+                    "master. Subscribe to the SAP Cloud Connector release notes and treat SCC "
+                    "patching as part of monthly SAP Security Patch Day handling. After "
                     "upgrade, confirm the reported version, re-establish the subaccount "
                     "tunnels, and re-validate the backend allow-list and certificates."
                 ),
                 references=[
-                    "CVE-2024-25642 — SAP Cloud Connector code injection",
+                    "CVE-2024-25642 — SAP Cloud Connector improper certificate validation (CWE-295)",
+                    "SAP Security Note 3424610",
                     "SAP BTP Cloud Connector — Release Notes and Upgrade",
                 ],
             )
-        elif vt < supported_floor:
+        elif vt < cve_intro:
             self.finding(
                 check_id="BTP-CC-008",
-                title=f"Cloud Connector {version} is below the supported version floor",
+                title=f"Cloud Connector {version} is an old, out-of-maintenance release",
                 severity=self.SEVERITY_MEDIUM,
                 category="BTP Cloud Attack Surface",
                 description=(
-                    f"The SAP Cloud Connector reports version {version}, which is below the "
-                    "current supported baseline. Running an out-of-maintenance Cloud "
-                    "Connector means security fixes are no longer delivered for a component "
-                    "that bridges BTP and the internal network."
+                    f"The SAP Cloud Connector reports version {version}, which predates the "
+                    "2.15 line and is well below any currently-supported baseline. This "
+                    "specific version is not in the CVE-2024-25642 regression range (that flaw "
+                    "was introduced in 2.15.0), but running such an old, out-of-maintenance "
+                    "Cloud Connector means security fixes are no longer delivered for a "
+                    "component that bridges BTP and the internal network, and it will be "
+                    "missing numerous later hardening and vulnerability fixes."
                 ),
                 affected_items=[f"Cloud Connector version: {version}"],
                 remediation=(
-                    "Upgrade the Cloud Connector to a currently-supported release and keep "
-                    "it patched via the HA master/shadow procedure."
+                    "Upgrade the Cloud Connector to a currently-supported release (2.16.2+) "
+                    "and keep it patched via the HA master/shadow procedure. Treat SCC "
+                    "patching as part of monthly SAP Security Patch Day handling."
                 ),
                 references=["SAP BTP Cloud Connector — Release Notes and Upgrade"],
             )
@@ -943,36 +953,48 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
             return
 
         issues = []
-        # Minimum length
-        try:
-            min_len = int(policy.get("minLength", policy.get("minimumLength", 0)) or 0)
-        except (TypeError, ValueError):
-            min_len = 0
-        if min_len and min_len < 8:
-            issues.append(f"minimum length = {min_len} (< 8)")
-        # Account lockout after failed attempts
+        weak_len = False
+        # Minimum length — distinguish an ABSENT field (not asserted) from an
+        # explicit value; an explicit 0 (no minimum enforced) is the worst case.
+        raw_len = policy.get("minLength", policy.get("minimumLength"))
+        if raw_len is not None and str(raw_len) != "":
+            try:
+                min_len = int(raw_len)
+            except (TypeError, ValueError):
+                min_len = None
+            if min_len is not None and min_len < 8:
+                issues.append(f"minimum length = {min_len} (< 8)")
+                weak_len = True
+        # Account lockout after failed attempts — only evaluate when the field is
+        # actually present (absence is not evidence of a missing lockout).
         lockout = policy.get("maxFailedAttempts", policy.get("lockoutThreshold",
                  policy.get("failedLogonAttempts")))
-        try:
-            lockout_n = int(lockout) if lockout not in (None, "") else 0
-        except (TypeError, ValueError):
-            lockout_n = 0
-        if lockout_n == 0 or lockout_n > 10:
-            issues.append(
-                f"account lockout threshold = {lockout if lockout not in (None, '') else 'not set'}"
-            )
+        if lockout not in (None, ""):
+            try:
+                lockout_n = int(lockout)
+            except (TypeError, ValueError):
+                lockout_n = None
+            if lockout_n is not None and (lockout_n == 0 or lockout_n > 10):
+                issues.append(f"account lockout threshold = {lockout}")
         # Complexity
         complexity = policy.get("requireComplexity", policy.get("complexityEnabled",
                     policy.get("requireMixedCase")))
         if complexity is not None and str(complexity).lower() in ("false", "0", "no", "disabled"):
             issues.append("password complexity not enforced")
-        # Policy tier (IAS 'standard' is weaker than 'enterprise')
-        tier = str(policy.get("policyType", policy.get("level", ""))).strip().lower()
-        if tier == "standard":
-            issues.append("policy tier = 'standard' (weaker than 'enterprise')")
+        # Password expiry / max age — the genuine gap of IAS's built-in 'Standard'
+        # policy vs 'Enterprise' (Standard already enforces length 8 / 3-of-4
+        # complexity / 5-attempt lockout, so the tier alone is NOT a weakness).
+        raw_age = policy.get("passwordExpiryDays", policy.get("maxPasswordAge"))
+        if raw_age is not None and str(raw_age) != "":
+            try:
+                age = int(raw_age)
+            except (TypeError, ValueError):
+                age = None
+            if age == 0:
+                issues.append("password expiry = 0 (passwords never expire)")
 
         if issues:
-            sev = self.SEVERITY_HIGH if min_len and min_len < 8 else self.SEVERITY_MEDIUM
+            sev = self.SEVERITY_HIGH if weak_len else self.SEVERITY_MEDIUM
             self.finding(
                 check_id="BTP-IAS-004",
                 title="IAS password policy for local users is weak",
@@ -980,16 +1002,20 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                 category="BTP Cloud Attack Surface",
                 description=(
                     "The SAP Cloud Identity Services (IAS) tenant password policy that "
-                    "governs locally-stored user credentials does not meet hardening "
-                    "expectations. IAS local users are a frequent authentication fallback "
-                    "even in landscapes that federate to a corporate IdP, and any weakness "
-                    "here — short minimum length, no account lockout, no complexity — "
-                    "directly lowers the cost of password guessing and credential stuffing "
-                    "against the identity provider that fronts the entire BTP account and, "
-                    "via trust, the S/4HANA Fiori launchpad. Because IAS authenticates "
+                    "governs locally-stored user credentials falls below hardening "
+                    "expectations in the specific dimensions listed under affected items "
+                    "below. IAS local users are a frequent authentication fallback even in "
+                    "landscapes that federate to a corporate IdP, and each such weakness "
+                    "lowers the cost of password guessing and credential stuffing against "
+                    "the identity provider that fronts the entire BTP account and, via "
+                    "trust, the S/4HANA Fiori launchpad. Because IAS authenticates "
                     "administrators of the BTP cockpit itself, a weak local-user policy is "
-                    "an account-wide exposure, not an application-local one. The following "
-                    "weaknesses were detected in the exported policy."
+                    "an account-wide exposure, not an application-local one. Note that IAS's "
+                    "built-in 'Standard' policy already enforces minimum length 8, 3-of-4 "
+                    "character complexity and lockout after 5 failed attempts; the main gap "
+                    "versus the 'Enterprise' policy is password expiry/history, so only the "
+                    "concretely-detected deviations below are reported (the policy tier name "
+                    "alone is not treated as a finding)."
                 ),
                 affected_items=issues,
                 remediation=(

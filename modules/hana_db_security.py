@@ -111,13 +111,17 @@ class HanaDbSecurityAuditor(BaseAuditor):
                 idx[key] = value  # loose lookup by key alone
         return idx
 
-    def _get_param(self, idx: dict, key: str, section: str = None):
+    def _get_param(self, idx: dict, key: str, section: str = None, strict: bool = False):
         key = key.lower()
         if section:
             section = section.lower()
             for keytuple, v in idx.items():
                 if isinstance(keytuple, tuple) and keytuple[1] == section and keytuple[2] == key:
                     return v
+            if strict:
+                # do not fall back to a same-named key from a DIFFERENT section
+                # (e.g. [expensive_statement] enabled) — that would misattribute the value
+                return None
         return idx.get(key)
 
     @staticmethod
@@ -776,7 +780,7 @@ class HanaDbSecurityAuditor(BaseAuditor):
         idx = self._param_index()
         if not idx:
             return
-        val = self._get_param(idx, "enabled", "cross_database_access")
+        val = self._get_param(idx, "enabled", "cross_database_access", strict=True)
         if val is None:
             return
         if self._truthy(val):
@@ -791,18 +795,22 @@ class HanaDbSecurityAuditor(BaseAuditor):
                     "access allows queries in one tenant database to read objects in another "
                     "tenant via associated remote users, weakening the isolation boundary "
                     "that is the main security rationale for tenant separation. If the set "
-                    "of permitted target tenants (targets_<db>) is broad or unmanaged, a "
+                    "of permitted target tenants (targets_for_<source_db_name>) is broad or "
+                    "unmanaged, a "
                     "compromise or privilege escalation in a low-sensitivity tenant can be "
                     "pivoted into a high-sensitivity one, and data-residency/segregation "
-                    "assumptions no longer hold."
+                    "assumptions no longer hold. Access is scoped per source tenant via the "
+                    "targets_for_<source_db_name> parameter (one-directional: it lists the "
+                    "databases the named source tenant is allowed to read)."
                 ),
                 affected_items=[f"[cross_database_access] enabled = {val}"],
                 remediation=(
                     "Disable cross-database access unless there is a documented business "
                     "requirement: [cross_database_access] enabled = false. Where it is "
-                    "required, scope it explicitly with targets_<db> to the minimum set of "
-                    "tenant pairs, restrict the associated remote users to least privilege, "
-                    "and review the cross-tenant grants periodically."
+                    "required, scope it explicitly with targets_for_<source_db_name> to the "
+                    "minimum set of tenant pairs (e.g. targets_for_DB2 = DB1 to let DB2 read "
+                    "DB1), restrict the associated remote users to least privilege, and "
+                    "review the cross-tenant grants periodically."
                 ),
                 references=[
                     "SAP HANA Administration Guide — Cross-Database Access in MDC",

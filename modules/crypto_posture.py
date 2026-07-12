@@ -389,9 +389,10 @@ class CryptoPostureAuditor(BaseAuditor):
                 affected_items=["Data volume encryption: disabled"],
                 remediation=(
                     "Enable HANA data volume encryption via "
-                    "ALTER SYSTEM ENCRYPTION ON. "
+                    "ALTER SYSTEM PERSISTENCE ENCRYPTION ON. "
                     "Configure with AES-256-CBC or AES-256-XTS. "
-                    "Enable backup encryption separately."
+                    "Enable log volume and backup encryption separately "
+                    "(ALTER SYSTEM LOG ENCRYPTION ON / ALTER SYSTEM BACKUP ENCRYPTION ON)."
                 ),
                 references=["SAP HANA Security Guide — Data Volume Encryption"],
             )
@@ -462,8 +463,11 @@ class CryptoPostureAuditor(BaseAuditor):
                 ),
                 affected_items=["Backup encryption: disabled"],
                 remediation=(
-                    "Enable backup encryption: ALTER SYSTEM ENCRYPTION CONFIGURATION SET "
-                    "('backup' = 'on'); (or via the cockpit Data Encryption page). Confirm "
+                    "Enable backup encryption: ALTER SYSTEM BACKUP ENCRYPTION ON; (or via "
+                    "the cockpit Data Encryption page). This requires that a backup "
+                    "encryption root key already exists — if not, first run ALTER SYSTEM SET "
+                    "ENCRYPTION ROOT KEYS BACKUP PASSWORD \"<passphrase>\" (privilege "
+                    "ENCRYPTION KEY ADMIN). Confirm "
                     "the backup encryption root key has been created and backed up to a "
                     "secure location separate from the backups themselves — losing the key "
                     "makes encrypted backups unrecoverable. Re-run a full data backup after "
@@ -478,14 +482,31 @@ class CryptoPostureAuditor(BaseAuditor):
                 ],
             )
 
+    # M_INIFILE_CONTENTS returns one row per configured layer for the same
+    # section+key; the EFFECTIVE value is the highest-precedence layer, not the
+    # first row in the export. Rank layers so we evaluate the value HANA actually
+    # uses (and never let a lone DEFAULT row masquerade as the effective setting).
+    _HANA_LAYER_RANK = {"database": 4, "host": 3, "system": 2, "default": 1, "": 0}
+
     def _hana_param(self, section, key):
-        """Loose lookup into hana_parameters (M_INIFILE_CONTENTS export)."""
+        """Layer-aware lookup into hana_parameters (M_INIFILE_CONTENTS export).
+
+        Returns the VALUE from the highest-precedence layer among rows matching
+        section+key. Falls back gracefully when no LAYER column is exported
+        (all rows rank 0 → first match wins, i.e. prior behaviour)."""
+        best_val = None
+        best_rank = -1
         for row in (self.data.get("hana_parameters") or []):
             sec = str(row.get("SECTION", row.get("SECTION_NAME", ""))).strip().lower()
             k = str(row.get("KEY", row.get("PARAMETER", row.get("NAME", "")))).strip().lower()
-            if k == key.lower() and (section is None or sec == section.lower()):
-                return row.get("VALUE", row.get("PARAM_VALUE", row.get("VALUE_1", "")))
-        return None
+            if k != key.lower() or (section is not None and sec != section.lower()):
+                continue
+            layer = str(row.get("LAYER_NAME", row.get("LAYER", ""))).strip().lower()
+            rank = self._HANA_LAYER_RANK.get(layer, 0)
+            if rank > best_rank:
+                best_rank = rank
+                best_val = row.get("VALUE", row.get("PARAM_VALUE", row.get("VALUE_1", "")))
+        return best_val
 
     def check_hana_transport_security(self):
         """HIGH: HANA system-replication traffic not TLS-encrypted."""

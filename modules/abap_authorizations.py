@@ -299,27 +299,35 @@ class AbapAuthorizationAuditor(BaseAuditor):
             if self._covers(field_vals, "DEST") and self._has_star(value_vals):
                 bad.append(self._role_label(i["role"], "S_ICF ICF_FIELD=DEST, ICF_VALUE=*"))
         self._emit(
-            "AUTH-016", "Use of any RFC/HTTP destination (S_ICF ICF_FIELD=DEST, ICF_VALUE=*)",
+            "AUTH-016", "Unrestricted destination authorization (S_ICF ICF_FIELD=DEST, ICF_VALUE=*)",
             self.SEVERITY_HIGH,
-            f"{len(bad)} role(s) grant S_ICF with the DEST field and ICF_VALUE='*', which lets "
-            "the holder use ANY RFC or HTTP destination defined in the system (SM59/RFCDES). "
-            "Destinations frequently store embedded logon credentials or are configured for "
-            "trusted-RFC, so the ability to pick an arbitrary destination is effectively the "
-            "ability to authenticate to the connected target systems as whatever principal that "
-            "destination carries — including high-privilege service accounts and connections to "
-            "more sensitive systems (e.g. from a sandbox toward production). Combined with a "
-            "generic RFC/OData caller this becomes a credential-reuse and lateral-movement path "
-            "that bypasses the intent of per-interface destination scoping, and it is easy to "
-            "overlook because S_ICF is often copied wholesale from a template role.",
+            f"{len(bad)} role(s) grant S_ICF with the DEST field and ICF_VALUE='*'. For "
+            "ICF_FIELD=DEST, ICF_VALUE is NOT the destination name — it is the per-destination "
+            "'Authorization for Destination' authorization-group value maintained on the SM59 "
+            "Logon & Security tab; S_ICF is only enforced for destinations that have such a "
+            "value assigned. A value of '*' therefore grants use of every destination that is "
+            "protected by ANY authorization group (and, combined with the fact that "
+            "unprotected destinations are usable regardless, effectively removes destination "
+            "scoping for the role). Destinations frequently store embedded logon credentials or "
+            "are configured for trusted-RFC, so the ability to use an arbitrary protected "
+            "destination is effectively the ability to authenticate to the connected target "
+            "systems as whatever principal that destination carries — including high-privilege "
+            "service accounts and connections to more sensitive systems (e.g. from a sandbox "
+            "toward production). Combined with a generic RFC/OData caller this becomes a "
+            "credential-reuse and lateral-movement path, and it is easy to overlook because "
+            "S_ICF is often copied wholesale from a template role.",
             bad,
-            "Restrict S_ICF ICF_FIELD=DEST to the specific destination names (ICF_VALUE) a role "
-            "legitimately needs, and never grant ICF_VALUE='*'. Review which destinations store "
-            "credentials or use trusted-RFC and treat authorization to those as privileged. "
-            "Prefer destinations without stored credentials (current-user / SSO propagation) so "
-            "that destination selection cannot escalate privilege, and reconcile S_ICF grants "
-            "against the trusted-RFC findings (S_RFCACL, AUTH-002).",
-            ["SAP Help — S_ICF authorization object (DEST/SERVICE)",
-             "SAP Note 1416085 — RFC / destination authorization risks"])
+            "Do not grant S_ICF ICF_VALUE='*' for the DEST field. Instead: (1) assign distinct "
+            "'Authorization for Destination' group values to sensitive destinations on the SM59 "
+            "Logon & Security tab so they are actually protected by S_ICF, and (2) restrict "
+            "S_ICF ICF_VALUE in each role to only those specific authorization-group values the "
+            "role legitimately needs (not the destination names, and never '*'). Review which "
+            "destinations store credentials or use trusted-RFC and treat authorization to those "
+            "as privileged; prefer destinations without stored credentials (current-user / SSO "
+            "propagation) so that destination use cannot escalate privilege, and reconcile "
+            "S_ICF grants against the trusted-RFC findings (S_RFCACL, AUTH-002).",
+            ["SAP Help — Authorization object S_ICF (ICF_FIELD DEST/SERVICE, ICF_VALUE)",
+             "SAP Note 1416085 — S_RFCACL trusted-RFC wildcard risk (cross-reference)"])
 
     def check_table_name_write(self):
         """S_TABU_NAM TABLE=* + ACTVT=02 → write any table (bypasses table auth groups)."""
