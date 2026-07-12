@@ -25,7 +25,7 @@ Data sources:
   - logon_events.csv         → Recent logon success/failure stats
 """
 
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from datetime import datetime
 from collections import defaultdict
 from modules.base_auditor import BaseAuditor
@@ -57,15 +57,114 @@ class LogMonitoringAuditor(BaseAuditor):
     ]
 
     def run_all_checks(self) -> List[Dict[str, Any]]:
+        self.check_sal_enablement()
         self.check_audit_log_filters()
         self.check_audit_event_coverage()
         self.check_siem_integration()
         self.check_siem_log_sources()
         self.check_log_retention()
         self.check_table_logging()
+        self.check_table_logging_master()
         self.check_logon_anomalies()
         self.check_incident_response_readiness()
         return self.findings
+
+    # ------------------------------------------------------------------ params
+    def _param(self, name: str) -> Optional[str]:
+        """Read an SAP profile parameter (RZ10/RZ11 export) by name (case-insensitive)."""
+        if not hasattr(self, "_pidx"):
+            self._pidx: Dict[str, str] = {}
+            for row in (self.data.get("security_params") or []):
+                if not isinstance(row, dict):
+                    continue
+                n = str(row.get("NAME", row.get("PARAMETER", row.get("PARAM", "")))).strip().lower()
+                v = str(row.get("VALUE", row.get("PARAM_VALUE", row.get("VAL", "")))).strip()
+                if n:
+                    self._pidx[n] = v
+        return self._pidx.get(name.lower())
+
+    def check_sal_enablement(self):
+        """The Security Audit Log filter checks give false assurance if the SAL is not
+        actually switched on. rsau/enable=0 means NOTHING is recorded even with perfect
+        filters; rsau/integrity=0 means the trail has no tamper protection."""
+        if not self.data.get("security_params"):
+            return  # no profile-parameter export -> cannot assess (avoid false positive)
+        enable = self._param("rsau/enable")
+        if enable is not None and enable.strip() in ("0", ""):
+            self.finding(
+                check_id="LOG-AUD-010",
+                title="Security Audit Log is not enabled (rsau/enable = 0)",
+                severity=self.SEVERITY_HIGH,
+                category="Logging, Monitoring & IR",
+                description=(
+                    "Profile parameter rsau/enable = 0, so the Security Audit Log (SM20/RSAU) records "
+                    "NOTHING regardless of how the audit filters (SM19/RSAU_CONFIG) are configured. "
+                    "A system can therefore look 'audited' — filters defined for logons, RFC calls, "
+                    "transaction starts — while capturing zero events, leaving no forensic trail for "
+                    "incident response and no evidence for SOX/ISO logging controls."
+                ),
+                affected_items=[f"rsau/enable = {enable or '(empty)'}"],
+                remediation=(
+                    "Set rsau/enable = 1 (activate on the next restart) or activate dynamically via "
+                    "RSAU_CONFIG 'Kernel Parameters', and confirm the audit filters are active. "
+                    "Verify events appear in SM20/RSAU_READ_LOG."
+                ),
+                references=["SAP Note 2191612 — Audit log parameters (rsau/*)",
+                            "SAP Security Baseline — Security Audit Log activation",
+                            "SOX ITGC / ISO 27001 A.12.4 — event logging"],
+            )
+        integ = self._param("rsau/integrity")
+        if integ is not None and integ.strip() in ("0", ""):
+            self.finding(
+                check_id="LOG-AUD-011",
+                title="Security Audit Log integrity protection not active (rsau/integrity = 0)",
+                severity=self.SEVERITY_MEDIUM,
+                category="Logging, Monitoring & IR",
+                description=(
+                    "Profile parameter rsau/integrity = 0. Without the tamper-evident (integrity) audit "
+                    "log format, a local attacker or administrator can alter or delete audit records to "
+                    "cover their tracks, undermining the chain of custody that makes the SAL usable as "
+                    "forensic evidence."
+                ),
+                affected_items=[f"rsau/integrity = {integ or '(empty)'}"],
+                remediation="Set rsau/integrity = 1 to enable the integrity-protected audit log format.",
+                references=["SAP Note 2033317 — Security Audit Log integrity protection",
+                            "SOX ITGC — log integrity / chain of custody"],
+            )
+
+    def check_table_logging_master(self):
+        """rec/client is the MASTER switch for table change logging. If it is off, every
+        per-table DD09L 'log data changes' flag is inert — so LOG-TBL-001 can pass while
+        no table changes are actually recorded."""
+        if not self.data.get("security_params"):
+            return
+        rc = self._param("rec/client")
+        if rc is None:
+            return
+        val = rc.strip().upper()
+        if val in ("", "OFF"):
+            self.finding(
+                check_id="LOG-TBL-010",
+                title="Table change logging master switch off (rec/client not set)",
+                severity=self.SEVERITY_HIGH,
+                category="Logging, Monitoring & IR",
+                description=(
+                    "Profile parameter rec/client is empty/OFF, so table change logging is disabled at "
+                    "the system level. Even for tables flagged 'log data changes' in DD09L (technical "
+                    "settings), NO change records are written to DBTABLOG. Customizing/config changes to "
+                    "sensitive tables therefore leave no audit trail — a SOX change-management gap and a "
+                    "blind spot the per-table logging check (LOG-TBL-001) cannot detect on its own."
+                ),
+                affected_items=[f"rec/client = {rc or '(empty)'}"],
+                remediation=(
+                    "Set rec/client to ALL (or the explicit list of productive/relevant clients, e.g. "
+                    "'100,200') in the instance profile and restart, so DD09L-flagged tables are logged "
+                    "to DBTABLOG. Confirm logging via SCU3 / RSTBHIST."
+                ),
+                references=["SAP Note 1916 / SAP Help — rec/client table logging",
+                            "SOX ITGC — change logging of critical configuration tables",
+                            "DSAG Prüfleitfaden — Tabellenprotokollierung"],
+            )
 
     def check_audit_log_filters(self):
         """Check SM19/SM20 audit log filter configuration."""

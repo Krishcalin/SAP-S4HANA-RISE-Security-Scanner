@@ -80,6 +80,8 @@ class DataLoader:
         "webhooks":             ["webhooks.json", "callbacks.json"],
         "gw_secinfo":           ["gw_secinfo.csv", "secinfo.csv"],
         "gw_reginfo":           ["gw_reginfo.csv", "reginfo.csv"],
+        "ms_acl":               ["ms_acl.csv", "ms_acl_info.csv", "msacl.csv"],
+        "system_change":        ["system_change.csv", "se06.csv", "system_change_option.csv"],
         "integration_alerts":   ["integration_alerts.json", "alert_config.json"],
         "cpi_datastores":       ["cpi_datastores.json", "cpi_variables.json"],
         "oauth_clients":        ["oauth_clients.json", "xsuaa_clients.json"],

@@ -95,11 +95,24 @@ class CodeTransportAuditor(BaseAuditor):
         self.check_transport_workflow()
         self.check_direct_prod_imports()
         self.check_client_settings()
+        self.check_system_change_option()
         self.check_change_document_gaps()
         self.check_dev_access_in_prod()
         self.check_sap_modifications()
         self.check_dead_custom_code()
         return self.findings
+
+    @staticmethod
+    def _get(row: dict, *names: str) -> str:
+        """Case-insensitive first-non-empty column accessor."""
+        if not isinstance(row, dict):
+            return ""
+        low = {str(k).strip().upper(): v for k, v in row.items()}
+        for n in names:
+            v = low.get(n.upper())
+            if v not in (None, ""):
+                return str(v).strip()
+        return ""
 
     # ════════════════════════════════════════════════════════════════
     #  CODE-INJ-*: Code Injection / SQL Injection Patterns
@@ -703,6 +716,82 @@ class CodeTransportAuditor(BaseAuditor):
                     "SAP Note 135028 — Client Settings for Production",
                     "CIS SAP Benchmark — Client Configuration",
                 ],
+            )
+
+    # ════════════════════════════════════════════════════════════════
+    #  CODE-SYSCHG-*: System Change Option (SE06 / SE03)
+    # ════════════════════════════════════════════════════════════════
+
+    def check_system_change_option(self):
+        """SE06 'System Change Option' is the second, INDEPENDENT lock beside the SCC4
+        client lock (CODE-CLIENT-001). If the GLOBAL setting is 'Modifiable', Repository
+        and cross-client Customizing objects can be changed directly in production even
+        when the client is 'not modifiable' — the classic un-transported-change ITGC gap.
+        Also flags individual namespaces / software components left Modifiable."""
+        rows = self.data.get("system_change")
+        if not rows:
+            return
+        global_modifiable = False
+        global_val = ""
+        modifiable_scopes = []
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            scope = self._get(r, "SCOPE", "SETTING", "OBJECT", "NAMESPACE", "COMPONENT", "NAME")
+            value = self._get(r, "MODIFIABLE", "VALUE", "SETTING_VALUE", "CHANGEABILITY", "STATUS", "EDTFLAG")
+            v = value.strip().lower()
+            is_mod = v in ("modifiable", "changeable", "x", "1", "yes", "true", "everything", "all")
+            if scope.strip().lower() in ("global", "global setting", "system", "*", ""):
+                if value:
+                    global_val = value
+                    global_modifiable = is_mod
+            elif is_mod:
+                modifiable_scopes.append(f"{scope} = {value}")
+        if global_modifiable:
+            self.finding(
+                check_id="CODE-SYSCHG-001",
+                title="SE06 global system change option is 'Modifiable' (production changeable)",
+                severity=self.SEVERITY_CRITICAL,
+                category="Code & Transport Security",
+                description=(
+                    f"The SE06/SE03 global system change option is set to 'Modifiable' ({global_val}). "
+                    "This is the system-wide lock that is SEPARATE from the SCC4 client setting: with it "
+                    "open, developers/administrators can change Repository objects (programs, DDIC, "
+                    "config) and cross-client Customizing DIRECTLY in the production system, bypassing "
+                    "the transport/change-management process. That defeats SOX change-management ITGC "
+                    "(all changes developed, approved and transported from a development system) and "
+                    "leaves untracked, unreviewed changes in production."
+                ),
+                affected_items=[f"Global system change option = {global_val}"]
+                + [f"scope: {s}" for s in modifiable_scopes[:20]],
+                remediation=(
+                    "In SE06 → 'System Change Option', set the global setting to 'Not modifiable' on all "
+                    "productive systems; set individual namespaces/software components to 'Not "
+                    "modifiable' as appropriate. Make changes only in the development system and import "
+                    "via STMS. (Combine with the SCC4 client lock — CODE-CLIENT-001.)"
+                ),
+                references=["SAP KBA 2682744 — System change option (SE06)",
+                            "SOX ITGC — change management (no direct changes in production)",
+                            "DSAG Prüfleitfaden — Systemänderbarkeit"],
+                details={"modifiable_scopes": len(modifiable_scopes)},
+            )
+        elif modifiable_scopes:
+            self.finding(
+                check_id="CODE-SYSCHG-002",
+                title="Individual namespaces / software components left modifiable in production",
+                severity=self.SEVERITY_HIGH,
+                category="Code & Transport Security",
+                description=(
+                    f"The global system change option is closed, but {len(modifiable_scopes)} "
+                    "namespace(s)/software component(s) are set to 'Modifiable', allowing direct, "
+                    "un-transported changes to those objects in production — a partial change-management "
+                    "gap that is easy to overlook because the global setting looks locked."
+                ),
+                affected_items=modifiable_scopes[:50],
+                remediation="Set the listed namespaces/software components to 'Not modifiable' in SE06.",
+                references=["SAP KBA 2682744 — System change option (SE06)",
+                            "SOX ITGC — change management"],
+                details={"modifiable_scopes": len(modifiable_scopes)},
             )
 
     # ════════════════════════════════════════════════════════════════

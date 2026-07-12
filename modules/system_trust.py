@@ -55,6 +55,7 @@ class SystemTrustAuditor(BaseAuditor):
         self.check_trusted_dest_fixed_user()
         self.check_saprouttab_wildcard()
         self.check_message_server_ports()
+        self.check_message_server_acl()
         self.check_ucon_allowlist()
         self.check_gateway_proxy_acl()
         return self.findings
@@ -471,4 +472,54 @@ class SystemTrustAuditor(BaseAuditor):
                 references=["SAP Note 910918 — Parameter gw/prxy_info",
                             "SAP Note 3224889 — gw/acl_mode_proxy default settings",
                             "SAP Security Baseline — RFC Gateway ACLs"],
+            )
+
+    def check_message_server_acl(self):
+        """Message-server ACL FILE CONTENT (ms/acl_info): a wildcard/permit-all or
+        missing ACL lets ANY host register as an application server ('rogue app server'
+        — the 10KBLAZE class). check_message_server_ports() only inspects the ms/*
+        parameters; this parses the actual rule lines."""
+        rows = self.data.get("ms_acl")
+        if rows is None:
+            return  # no ACL export -> params check (check_message_server_ports) still applies
+        permit_all = []
+        rule_count = 0
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            host = self._get(r, "HOST", "HOSTNAME", "ADDR", "IP")
+            line = self._get(r, "LINE", "RULE", "ACL", "ENTRY", "RAW")
+            text = (host + " " + line).strip()
+            if not text:
+                continue
+            rule_count += 1
+            # HOST=* (any) / bare '*' / a permit-all line = unrestricted registration.
+            if host in ("*", "0.0.0.0", "0.0.0.0/0") or "HOST=*" in line.upper().replace(" ", "") \
+                    or line.strip() == "*":
+                permit_all.append(text[:80])
+        if permit_all or rule_count == 0:
+            detail = (f"{len(permit_all)} permit-all/wildcard rule(s)" if permit_all
+                      else "the ACL file is present but contains no rules")
+            self.finding(
+                check_id="TRUST-010",
+                title="Message-server ACL permits any host to register (rogue app server)",
+                severity=self.SEVERITY_HIGH,
+                category=self.CATEGORY,
+                description=(
+                    "The message-server ACL (ms/acl_info file) " + detail + ". With a wildcard or empty "
+                    "ACL, any host that can reach the internal message-server port can register as an "
+                    "application server of the SAP system, join the work-process pool, and intercept or "
+                    "inject traffic — the rogue-application-server attack (CISA AA19-122A / '10KBLAZE'). "
+                    "The ms/* parameter checks cannot see this; it is in the ACL rule content."
+                ),
+                affected_items=(permit_all[:50] or ["ms/acl_info file present but empty"]),
+                remediation=(
+                    "Populate ms/acl_info with explicit HOST rules listing ONLY the known application "
+                    "servers of this system (no HOST=* / wildcard), and ensure ms/acl_info points at "
+                    "the file. Combine with reginfo/secinfo gateway ACLs."
+                ),
+                references=["SAP Note 821875 — Security settings in the message server (ms/acl_info)",
+                            "CISA AA19-122A / '10KBLAZE' — rogue SAP application server",
+                            "SAP Security Baseline — Message Server ACL"],
+                details={"count": len(permit_all)},
             )

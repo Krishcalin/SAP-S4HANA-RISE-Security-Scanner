@@ -68,7 +68,9 @@ EXPECTED_CHECKS = {
     "hotnews": {"HOTNEWS-001", "HOTNEWS-002", "HOTNEWS-003", "HOTNEWS-004"},
     "authz": {"AUTH-001", "AUTH-002", "AUTH-003", "AUTH-004", "AUTH-005", "AUTH-013"},
     "systrust": {"STDUSR-001", "STDUSR-002", "STDUSR-003", "TRUST-001",
-                 "TRUST-004", "TRUST-005", "TRUST-008"},
+                 "TRUST-004", "TRUST-005", "TRUST-008", "TRUST-010"},
+    "logmon": {"LOG-AUD-010", "LOG-AUD-011", "LOG-TBL-010"},
+    "codetrans": {"CODE-SYSCHG-001"},
     "baseline": {"BASELINE-001", "BASELINE-002", "BASELINE-003", "BASELINE-004",
                  "BASELINE-005", "BASELINE-006", "BASELINE-007", "BASELINE-008",
                  "BASELINE-009", "BASELINE-010"},
@@ -150,11 +152,18 @@ def test_no_cross_module_check_id_collision(data):
     assert not shared, f"check_ids emitted by multiple modules: {shared}"
 
 
+# Modules that emit at most ONE finding per check_id (aggregated). Excludes modules
+# that legitimately repeat an id once per affected item (e.g. codetrans CODE-STMT-001,
+# users USR-*, rise RISE-*), which are covered by the cross-module-collision test only.
+AGGREGATING_MODULES = {"hanadb", "hotnews", "authz", "systrust", "baseline", "s4authz",
+                       "ara", "jobcmd", "grcac", "logmon"}
+
+
 @pytest.mark.parametrize(
-    "key,cls", [(k, c) for k, c in MODULES if k in EXPECTED_CHECKS],
-    ids=[k for k, _ in MODULES if k in EXPECTED_CHECKS])
+    "key,cls", [(k, c) for k, c in MODULES if k in AGGREGATING_MODULES],
+    ids=[k for k, _ in MODULES if k in AGGREGATING_MODULES])
 def test_aggregating_module_ids_unique(key, cls, data):
-    """The newer modules aggregate one finding per check_id — no repeats within a run."""
+    """The aggregating modules emit one finding per check_id — no repeats within a run."""
     ids = [f["check_id"] for f in _run(cls, data)]
     dupes = [c for c, n in Counter(ids).items() if n > 1]
     assert not dupes, f"module '{key}' emits duplicate check_ids: {dupes}"
