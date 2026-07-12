@@ -37,6 +37,7 @@ from modules.sap_hotnews import SapHotNewsAuditor
 from modules.abap_authorizations import AbapAuthorizationAuditor
 from modules.system_trust import SystemTrustAuditor
 from modules.grc_access_control import GrcAccessControlAuditor
+from modules.role_governance import RoleGovernanceAuditor
 from modules.baseline_params import BaselineParamAuditor
 from modules.s4_business_authz import S4BusinessAuthzAuditor
 from modules.access_risk_analysis import AccessRiskAnalysisAuditor
@@ -78,7 +79,7 @@ def main():
     )
     parser.add_argument(
         "--modules", nargs="+",
-        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "logmon", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust", "baseline", "s4authz", "ara", "jobcmd", "grcac", "all"],
+        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "logmon", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust", "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov", "all"],
         default=["all"],
         help="Which audit modules to run (default: all)"
     )
@@ -113,7 +114,7 @@ def main():
     run_modules = args.modules if "all" not in args.modules else [
         "users", "params", "network", "rise", "iam", "btpcloud",
         "intglayer", "dataprot", "codetrans", "logmon", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust",
-        "baseline", "s4authz", "ara", "jobcmd", "grcac"
+        "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov"
     ]
 
     all_findings = []
@@ -288,6 +289,14 @@ def main():
     if "grcac" in run_modules:
         print("[*] Running GRC Access Control Checks (firefighter/EAM, access requests, SoD & mitigations)...")
         auditor = GrcAccessControlAuditor(data, baseline_overrides)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- Role Design & Governance (SU24 hygiene, ungenerated profiles, derived drift) ---
+    if "rolegov" in run_modules:
+        print("[*] Running Role Design & Governance Checks (SU24 proposals, profile generation, derived drift)...")
+        auditor = RoleGovernanceAuditor(data, baseline_overrides)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")

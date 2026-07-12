@@ -41,6 +41,7 @@ from modules.s4_business_authz import S4BusinessAuthzAuditor
 from modules.access_risk_analysis import AccessRiskAnalysisAuditor
 from modules.basis_job_command import BasisJobCommandAuditor
 from modules.grc_access_control import GrcAccessControlAuditor
+from modules.role_governance import RoleGovernanceAuditor
 
 # (module key, auditor class) — mirrors sap_scanner.py's module registry.
 MODULES = [
@@ -54,7 +55,7 @@ MODULES = [
     ("authz", AbapAuthorizationAuditor), ("systrust", SystemTrustAuditor),
     ("baseline", BaselineParamAuditor), ("s4authz", S4BusinessAuthzAuditor),
     ("ara", AccessRiskAnalysisAuditor), ("jobcmd", BasisJobCommandAuditor),
-    ("grcac", GrcAccessControlAuditor),
+    ("grcac", GrcAccessControlAuditor), ("rolegov", RoleGovernanceAuditor),
 ]
 _IDS = [m[0] for m in MODULES]
 
@@ -81,6 +82,7 @@ EXPECTED_CHECKS = {
                "JOBCMD-JOB-002", "JOBCMD-JOB-003", "JOBCMD-JOB-005"},
     "grcac": {"GRC-FF-001", "GRC-FF-002", "GRC-FF-002B", "GRC-ARM-001", "GRC-ARM-001B",
               "GRC-ARA-001", "GRC-MIT-001", "GRC-RS-001", "GRC-RS-003"},
+    "rolegov": {"RG-SU24-001", "RG-GEN-001", "RG-DRV-001"},
 }
 
 
@@ -156,7 +158,7 @@ def test_no_cross_module_check_id_collision(data):
 # that legitimately repeat an id once per affected item (e.g. codetrans CODE-STMT-001,
 # users USR-*, rise RISE-*), which are covered by the cross-module-collision test only.
 AGGREGATING_MODULES = {"hanadb", "hotnews", "authz", "systrust", "baseline", "s4authz",
-                       "ara", "jobcmd", "grcac", "logmon"}
+                       "ara", "jobcmd", "grcac", "logmon", "rolegov"}
 
 
 @pytest.mark.parametrize(

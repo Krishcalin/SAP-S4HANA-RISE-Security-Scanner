@@ -62,6 +62,9 @@ class DataLoader:
         "grac_sod_violations":      ["grac_sod_violations.csv", "gracuserprmvl.csv"],
         "grac_mitigating_controls": ["grac_mitigating_controls.csv", "gracmitcnt.csv"],
         "grac_sod_risks":           ["grac_sod_risks.csv", "gracsodrisk.csv"],
+        # Role Design & Governance (PFCG build-quality)
+        "su24_proposals":           ["su24_proposals.csv", "usobt_c.csv", "su24.csv"],
+        "role_profiles":            ["role_profiles.csv", "agr_1016.csv"],
         # BTP Cloud Attack Surface data sources
         "cloud_connector":      ["cloud_connector.json", "scc_config.json"],
         "btp_service_bindings": ["btp_service_bindings.json", "service_bindings.json"],
