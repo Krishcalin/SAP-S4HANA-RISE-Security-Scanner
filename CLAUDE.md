@@ -12,11 +12,11 @@ access.
 
 - **Zero external dependencies** — Python 3.8+ standard library only. Do **not** add
   third-party packages (no `requirements.txt` / `pyproject.toml` by design).
-- **~289+ checks across 20 audit modules** (keep the README badge/count and
+- **~300+ checks across 23 audit modules** (keep the README badge/count and
   `docs/CHECKS_REFERENCE.md` in sync when you add checks).
 - CIS SAP / DSAG-aligned; findings cite real SAP Notes / SAP Security Baseline / CIS.
 - **Flow** (illustrated by `docs/banner.svg`): `sap_scanner.py` **LOADs** the exports
-  (`DataLoader`) → runs the 20 auditor **MODULES** → each emits severity-ranked findings
+  (`DataLoader`) → runs the 23 auditor **MODULES** → each emits severity-ranked findings
   (**CHECKS** → **RANK**) → a **REPORT** is written. When you add a module, refresh
   `docs/banner.svg`'s module/check counts too.
 - **Reports** (`--format html|pdf|both`): `report_generator.py` (HTML dashboard) and
@@ -57,7 +57,7 @@ on the default cp1252 console. Always run with `PYTHONIOENCODING=utf-8` on Windo
 - **`modules/report_generator.py`** — HTML dashboard. Uses `html.escape` (XSS-safe) and a
   weighted risk score. Consumes the standard `finding()` dict.
 
-### The 20 modules (module key → class → focus)
+### The 23 modules (module key → class → focus)
 
 | key | module | focus |
 |---|---|---|
@@ -72,8 +72,8 @@ on the default cp1252 console. Always run with `PYTHONIOENCODING=utf-8` on Windo
 | `codetrans` | code_transport | ABAP SQLi, ATC, transports, client config, SAP mods |
 | `logmon` | log_monitoring | Security Audit Log, SIEM, retention, table logging |
 | `fiori` | fiori_ui | catalog access, OData backend auth, spaces/tiles |
-| `crypto` | crypto_posture | TLS, certs, SNC, **HANA encryption-at-rest**, PSE, keys |
-| `hanadb` | hana_db_security | HANA DB users/privileges/roles/audit/parameters (not encryption) |
+| `crypto` | crypto_posture | TLS, certs, SNC, **HANA encryption-at-rest** (data/log/**backup**), **system-replication TLS**, PSE, keys |
+| `hanadb` | hana_db_security | HANA DB users/privileges/roles/audit/parameters (not encryption); **log_mode/PITR, MDC cross-DB, DEBUG privileges** |
 | `hotnews` | sap_hotnews | missing critical SAP Security Notes since 2020 |
 | `authz` | abap_authorizations | AGR_1251 role-content: critical auth objects & transactions |
 | `systrust` | system_trust | trusted RFC, SAProuter, msg server, UCON, SAP*/default passwords |
@@ -81,6 +81,9 @@ on the default cp1252 console. Always run with `PYTHONIOENCODING=utf-8` on Windo
 | `s4authz` | s4_business_authz | S/4HANA business roles/catalogs/restrictions, CDS auth-check, OData V4, Cloud Connector principal propagation, CF platform roles, birthright role collections |
 | `ara` | access_risk_analysis | offline GRC-style **permission-level SoD** from AGR_1251+AGR_USERS: 27-risk ruleset (P2P/O2C/R2R/H2R/Basis), mitigating controls, per-user risk score; iam SoD defers to it when role_auth_values present |
 | `jobcmd` | basis_job_command | **host-command-execution surface**: SM69/SXPGCOSTAB external cmds (shell-wrap/ADDPAR/path/danger-verb) + TBTCO/TBTCP armed job step users (SAP*/DDIC/SAP_ALL, RSBDCOS0, external steps, deleted/dialog, identity-borrow); reuses users/profiles |
+| `grcac` | grc_access_control | **GRC Access Control**: EAM/Firefighter usage+ownership, ARM access-request workflow, GRC-native SoD violations, mitigating controls, SoD ruleset governance |
+| `rolegov` | role_governance | **role design**: SU24 proposal hygiene for custom tcodes, ungenerated profiles (AGR_1016), derived-role authorization-value drift vs parent |
+| `fincontrols` | financial_controls | **SOX ITGC / FI config**: posting-period controls (T001B), tolerance groups (T043T), payment dual-control (T055F), document-change rules (TBAER), FI number-range buffering (TNRO) |
 
 ## Adding a new module (the recipe)
 

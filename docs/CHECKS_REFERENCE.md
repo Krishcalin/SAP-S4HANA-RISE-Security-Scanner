@@ -139,6 +139,9 @@ parameters. Aligned to the CIS SAP HANA Benchmark and the SAP HANA Security Guid
 | HANADB-PARAM-001 | Weak HANA password-policy parameters | HIGH | hana_parameters.csv |
 | HANADB-PARAM-002 | Detailed connect errors exposed to clients | MEDIUM | hana_parameters.csv |
 | HANADB-PARAM-003 | TLS not enforced for HANA SQL connections | HIGH | hana_parameters.csv |
+| HANADB-PARAM-004 | log_mode = overwrite (no point-in-time recovery) | HIGH | hana_parameters.csv |
+| HANADB-PARAM-005 | Cross-database (MDC) access enabled | MEDIUM | hana_parameters.csv |
+| HANADB-PRIV-006 | DEBUG / ATTACH DEBUGGER privileges granted (runtime data exposure) | HIGH | hana_granted_privileges.csv |
 
 Data sources (all optional; the check runs only if the file is present):
 `hana_db_users.csv` (SYS.USERS export), `hana_granted_privileges.csv`
@@ -198,6 +201,7 @@ Grounded in the SAP Security Baseline, DSAG audit guidelines, and SAP Notes
 | AUTH-013 | Sensitive Basis / administration transactions in roles | HIGH | S_TCODE TCD ∈ critical-tcode catalog |
 | AUTH-014 | ABAP development change access | HIGH | S_DEVELOP ACTVT 01/02 on non-DEBUG object types |
 | AUTH-015 | Global authorization-object disabling active | MEDIUM | auth/object_disabling_active = Y |
+| AUTH-016 | Unrestricted destination authorization | HIGH | S_ICF ICF_FIELD=DEST + ICF_VALUE=* (SM59 auth-group value) |
 
 Data sources: `role_auth_values.csv` (AGR_1251: AGR_NAME, OBJECT, AUTH, FIELD, LOW,
 HIGH [, DELETED]); `user_roles.csv` (AGR_USERS, for holder attribution);
@@ -253,6 +257,7 @@ Trust; `auth/object_disabling_active` in ABAP Authorization — deliberately not
 | BASELINE-008 | SSO ticket / session-cookie transport not hardened | MEDIUM | login/ticket_only_by_https = 0 / icf/set_HTTPonly_flag_on_cookies ≠ 0 / login/ticket_only_to_host = 0 |
 | BASELINE-009 | Web-tier logging / error disclosure weak (ICM) | MEDIUM | icm/security_log LEVEL < 3 / is/HTTP/show_detailed_errors = TRUE |
 | BASELINE-010 | Existing passwords not forced to current policy | MEDIUM | login/password_compliance_to_current_policy = 0 |
+| BASELINE-011 | Weak password hash algorithm | HIGH/MEDIUM | login/password_hash_algorithm uses iSSHA-1/MD5 or iterations < 10000 |
 
 Data source: `security_params.csv` (RSPARAM / RZ11 profile parameter export). The
 module self-skips when no parameter export is present.
@@ -371,3 +376,100 @@ to run commands / set a foreign step user (S_LOG_COM, S_BTCH_NAM). Only *armed* 
 Data sources: `ext_os_commands.csv` (SXPGCOSTAB), `ext_os_commands_sap.csv` (SXPGCOTABE,
 optional), `background_jobs.csv` (TBTCO), `background_job_steps.csv` (TBTCP); reuses
 `users.csv` (USR02) and `profiles.csv` (USR04) to resolve privileged step users.
+
+---
+
+## Cryptographic Posture — HANA at-rest & transport (CRYPTO-HANA-*)
+
+The HANA data-at-rest and internal-transport encryption subgroup of the Cryptographic
+Posture module (which also covers ICM/TLS, certificates, SNC, crypto library and PSE).
+Aligned to the SAP HANA Security Guide. Backup encryption is keyed independently of
+volume encryption, and system-replication is evaluated on the **effective** (highest
+inifile-layer) value.
+
+| ID | Title | Severity | Data Source |
+|----|-------|----------|-------------|
+| CRYPTO-HANA-001 | HANA data volume encryption disabled | HIGH | hana_encryption.json |
+| CRYPTO-HANA-002 | HANA log volume encryption disabled | MEDIUM | hana_encryption.json |
+| CRYPTO-HANA-003 | HANA encryption uses internal/default root-key management | MEDIUM | hana_encryption.json |
+| CRYPTO-HANA-004 | HANA backup encryption disabled | HIGH | hana_encryption.json |
+| CRYPTO-HANA-005 | HANA system replication not TLS-encrypted | HIGH | hana_parameters.csv (`[system_replication_communication] enable_ssl`; fires only when present) |
+
+---
+
+## BTP Cloud — Identity & Cloud Connector (BTP-IAS-* / BTP-CC-*)
+
+The identity and connectivity subgroup of the BTP Cloud Attack Surface module. IAS
+password/IdP checks apply to the SAP Cloud Identity Services tenant; the Cloud
+Connector is customer-managed even under RISE, so its version currency is the
+customer's responsibility.
+
+| ID | Title | Severity | Data Source |
+|----|-------|----------|-------------|
+| BTP-IAS-001/002/003 | IAS conditional-auth / IP restriction / MFA gaps | MEDIUM–HIGH | ias_config.json |
+| BTP-IAS-004 | Weak IAS password policy for local users | HIGH/MEDIUM | ias_config.json (`passwordPolicy`) |
+| BTP-IAS-005 | Corporate IdP configured but not enforced (local password fallback) | HIGH | ias_config.json (`corporateIdP`) |
+| BTP-CC-008 | Cloud Connector version vulnerable to CVE-2024-25642 (CWE-295, 2.15.0–2.16.1) or out-of-maintenance | HIGH/MEDIUM | cloud_connector.json (`version`) |
+
+(The module additionally covers Cloud Connector backends/ACLs/certs/staleness (BTP-CC-001…007),
+service bindings, destinations, entitlements, Event Mesh, CPI, network isolation, governance,
+and XSUAA→IAS migration — see `modules/btp_cloud_surface.py`.)
+
+---
+
+## GRC Access Control (GRC-*)
+
+The **SAP GRC Access Control** process layer — Emergency Access Management (Firefighter),
+Access Request Management, GRC-native SoD, mitigating controls and ruleset governance.
+This is the control *process* (who reviews, who approves, is risk analysis run), distinct
+from the permission-level SoD computed in Access Risk Analysis (ARA-*).
+
+| ID | Title | Severity | Data Source |
+|----|-------|----------|-------------|
+| GRC-FF-001 | Firefighter usage without owner/controller log review | HIGH | grac_firefighter_log.csv |
+| GRC-FF-001B | Firefighter sessions with no reason/activity captured | MEDIUM | grac_firefighter_log.csv |
+| GRC-FF-002 | Firefighter ID owned by (or usable by) the same person | HIGH | grac_firefighter_owners.csv |
+| GRC-FF-002B | Firefighter IDs without an assigned owner/controller | HIGH | grac_firefighter_owners.csv |
+| GRC-FF-002C | Firefighter access outside a controlled session | MEDIUM | grac_firefighter_log.csv |
+| GRC-ARM-001 | Access requests provisioned without SoD risk analysis | HIGH | grac_access_requests.csv |
+| GRC-ARM-001B | Access requests auto-approved / no approver | HIGH | grac_access_requests.csv |
+| GRC-ARM-002 | Access requests approved despite open risks | HIGH | grac_access_requests.csv |
+| GRC-ARA-001 | Open GRC SoD violations past remediation SLA | HIGH | grac_sod_violations.csv |
+| GRC-MIT-001 | Mitigating controls without a monitor or past validity | MEDIUM | grac_mitigating_controls.csv |
+| GRC-RS-001 | SoD risks with blank/invalid criticality level | MEDIUM | grac_sod_risks.csv |
+| GRC-RS-002 | Critical SoD risks in the ruleset (inventory/attention) | INFO/MEDIUM | grac_sod_risks.csv |
+| GRC-RS-003 | SoD ruleset not maintained / stale | MEDIUM | grac_sod_risks.csv |
+
+Data sources (all optional; module self-skips per check): `grac_firefighter_log.csv`,
+`grac_firefighter_owners.csv`, `grac_access_requests.csv`, `grac_sod_violations.csv`,
+`grac_mitigating_controls.csv`, `grac_sod_risks.csv` (GRC AC exports).
+
+---
+
+## Role Design & Governance (RG-*)
+
+Role-build hygiene from the PFCG role tables — the defects that make roles either
+over-entitled or inert.
+
+| ID | Title | Severity | Data Source |
+|----|-------|----------|-------------|
+| RG-SU24-001 | Custom Z*/Y* transactions with unmaintained SU24 proposals | MEDIUM | su24_proposals.csv |
+| RG-GEN-001 | Roles whose authorization profiles were never generated | HIGH | role_profiles.csv (AGR_1016) |
+| RG-DRV-001 | Derived roles whose authorization values drifted from the parent | MEDIUM | role_details.csv + role_auth_values.csv |
+
+---
+
+## Financial Controls — SOX ITGC (FIN-*)
+
+SOX IT general controls at the FI configuration level — posting periods, tolerances,
+payment dual-control, document-change rules and number-range integrity. Grounded in
+standard SAP FI customizing tables.
+
+| ID | Title | Severity | Data Source |
+|----|-------|----------|-------------|
+| FIN-PP-001 | Posting-period variant left wide open | HIGH | posting_periods.csv (T001B) |
+| FIN-TOL-001 | Posting tolerance group unlimited or unset | HIGH | tolerance_groups.csv (T043T) |
+| FIN-TOL-002 | Excessive per-document / per-open-item tolerance | MEDIUM | tolerance_groups.csv (T043T) |
+| FIN-SF-001 | Payment-relevant master fields not under dual control | HIGH | dual_control_fields.csv (T055F) |
+| FIN-DOC-001 | Document-change rules allow post-posting edits to bank/payment fields | HIGH | doc_change_rules.csv (TBAER) |
+| FIN-NR-001 | FI accounting-document number ranges main-memory buffered | MEDIUM | fi_number_ranges.csv (TNRO) |
