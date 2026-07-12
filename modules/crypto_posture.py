@@ -46,6 +46,7 @@ class CryptoPostureAuditor(BaseAuditor):
         self.check_certificate_inventory()
         self.check_snc_configuration()
         self.check_hana_encryption()
+        self.check_hana_transport_security()
         self.check_crypto_library_version()
         self.check_pse_health()
         self.check_key_management()
@@ -433,6 +434,98 @@ class CryptoPostureAuditor(BaseAuditor):
                     "This enables key separation from data."
                 ),
                 references=["SAP HANA — External Key Management"],
+            )
+
+        # Backup encryption (distinct scope from data/log volume encryption:
+        # a backup written to object storage in RISE is a separate exfiltration
+        # target and is NOT covered by data-volume encryption).
+        backup_enc = config.get("backupEncryption", config.get("backup_encryption",
+                    config.get("dataBackupEncryption", "")))
+        if not backup_enc or str(backup_enc).lower() in ("false", "0", "no", "disabled", "off"):
+            self.finding(
+                check_id="CRYPTO-HANA-004",
+                title="HANA backup encryption is disabled",
+                severity=self.SEVERITY_HIGH,
+                category="Cryptographic Posture",
+                description=(
+                    "HANA backup (data backup) encryption is not enabled. Backup "
+                    "encryption is configured and keyed independently of data-volume "
+                    "encryption at rest, so enabling volume encryption does NOT imply "
+                    "backups are encrypted. In a RISE/hyperscaler deployment, complete "
+                    "data and log backups are written to object storage; if those backups "
+                    "are unencrypted, anyone who obtains a copy — via mis-scoped storage "
+                    "permissions, a snapshot, a support dump, or the hosting provider's "
+                    "operational staff — can restore the full database on an attacker- "
+                    "controlled system and read every record offline, entirely outside the "
+                    "source system's authorization and audit controls. This is one of the "
+                    "highest-impact and most frequently overlooked HANA data-at-rest gaps."
+                ),
+                affected_items=["Backup encryption: disabled"],
+                remediation=(
+                    "Enable backup encryption: ALTER SYSTEM ENCRYPTION CONFIGURATION SET "
+                    "('backup' = 'on'); (or via the cockpit Data Encryption page). Confirm "
+                    "the backup encryption root key has been created and backed up to a "
+                    "secure location separate from the backups themselves — losing the key "
+                    "makes encrypted backups unrecoverable. Re-run a full data backup after "
+                    "enabling so a usable encrypted baseline exists, and verify that both "
+                    "data and log backups report as encrypted. Reconcile this with the "
+                    "data-volume and log-volume encryption settings so all three at-rest "
+                    "scopes are protected consistently."
+                ),
+                references=[
+                    "SAP HANA Security Guide — Backup Encryption",
+                    "SAP HANA Administration Guide — Data and Log Backup Encryption",
+                ],
+            )
+
+    def _hana_param(self, section, key):
+        """Loose lookup into hana_parameters (M_INIFILE_CONTENTS export)."""
+        for row in (self.data.get("hana_parameters") or []):
+            sec = str(row.get("SECTION", row.get("SECTION_NAME", ""))).strip().lower()
+            k = str(row.get("KEY", row.get("PARAMETER", row.get("NAME", "")))).strip().lower()
+            if k == key.lower() and (section is None or sec == section.lower()):
+                return row.get("VALUE", row.get("PARAM_VALUE", row.get("VALUE_1", "")))
+        return None
+
+    def check_hana_transport_security(self):
+        """HIGH: HANA system-replication traffic not TLS-encrypted."""
+        # Only meaningful when the parameter is present (i.e. system replication
+        # is configured); absence must not produce a false positive.
+        val = self._hana_param("system_replication_communication", "enable_ssl")
+        if val is None:
+            return
+        if str(val).strip().lower() in ("false", "0", "no", "off", "disabled"):
+            self.finding(
+                check_id="CRYPTO-HANA-005",
+                title="HANA system replication is not TLS-encrypted",
+                severity=self.SEVERITY_HIGH,
+                category="Cryptographic Posture",
+                description=(
+                    "global.ini [system_replication_communication] enable_ssl = false while "
+                    "system replication is configured. HANA system replication continuously "
+                    "streams the primary's redo log — i.e. the complete change data of the "
+                    "database, including every inserted and updated business record — to the "
+                    "secondary site. With TLS disabled this replication stream crosses the "
+                    "network in clear text, so an attacker positioned between the primary and "
+                    "secondary (a particular concern for cross-datacentre or cross-zone "
+                    "replication in a hosted RISE landscape) can passively reconstruct the "
+                    "entire dataset or tamper with the stream, without ever authenticating "
+                    "to either database."
+                ),
+                affected_items=[f"[system_replication_communication] enable_ssl = {val}"],
+                remediation=(
+                    "Enable TLS for system replication: set [system_replication_communication] "
+                    "enable_ssl = true on both primary and secondary, provision the "
+                    "system-PKI (or enterprise) certificates used for internal communication, "
+                    "and restart replication. Verify the replication status returns to ACTIVE "
+                    "and that the hand-shake uses TLS. Enforce this together with sslenforce "
+                    "for SQL and the ICM HTTPS configuration so no HANA-facing channel remains "
+                    "in clear text."
+                ),
+                references=[
+                    "SAP HANA Administration Guide — Secure System Replication (TLS)",
+                    "SAP HANA Security Guide — Secure Internal Communication",
+                ],
             )
 
     def check_crypto_library_version(self):

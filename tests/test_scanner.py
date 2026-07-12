@@ -67,7 +67,9 @@ VALID_SEVERITIES = {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}
 # regression guard for the modules authored with tightly-crafted samples).
 EXPECTED_CHECKS = {
     "hanadb": {"HANADB-USER-001", "HANADB-PRIV-001", "HANADB-PRIV-005",
-               "HANADB-AUDIT-001", "HANADB-PARAM-001"},
+               "HANADB-AUDIT-001", "HANADB-PARAM-001", "HANADB-PARAM-004",
+               "HANADB-PARAM-005", "HANADB-PRIV-006"},
+    "crypto": {"CRYPTO-HANA-004", "CRYPTO-HANA-005"},
     "hotnews": {"HOTNEWS-001", "HOTNEWS-002", "HOTNEWS-003", "HOTNEWS-004"},
     "authz": {"AUTH-001", "AUTH-002", "AUTH-003", "AUTH-004", "AUTH-005", "AUTH-013"},
     "systrust": {"STDUSR-001", "STDUSR-002", "STDUSR-003", "TRUST-001",

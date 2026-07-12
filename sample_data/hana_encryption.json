@@ -1,1 +1,1 @@
-{"dataVolumeEncryption": false, "logVolumeEncryption": false, "backupEncryption": true, "rootKeyType": "INTERNAL", "algorithm": "AES-256-CBC"}
+{"dataVolumeEncryption": false, "logVolumeEncryption": false, "backupEncryption": false, "rootKeyType": "INTERNAL", "algorithm": "AES-256-CBC"}

@@ -7,3 +7,6 @@ indexserver.ini,password policy,maximum_invalid_connect_attempts,10
 indexserver.ini,password policy,maximum_password_lifetime,730
 indexserver.ini,password policy,detailed_error_on_connect,true
 global.ini,communication,sslenforce,false
+global.ini,persistence,log_mode,overwrite
+global.ini,cross_database_access,enabled,true
+global.ini,system_replication_communication,enable_ssl,false

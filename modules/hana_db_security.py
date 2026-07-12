@@ -83,6 +83,9 @@ class HanaDbSecurityAuditor(BaseAuditor):
         self.check_password_policy()
         self.check_error_disclosure()
         self.check_sql_tls_enforced()
+        self.check_log_mode()
+        self.check_cross_database_access()
+        self.check_debug_privileges()
         return self.findings
 
     # ------------------------------------------------------------------ helpers
@@ -722,5 +725,134 @@ class HanaDbSecurityAuditor(BaseAuditor):
                 references=[
                     "CIS SAP HANA Benchmark — Enforce SSL for SQL",
                     "SAP HANA Security Guide — Secure Client Communication",
+                ],
+            )
+
+    # ---------------------------------------------------------------- recovery
+    def check_log_mode(self):
+        """HIGH: log_mode = overwrite disables point-in-time recovery."""
+        idx = self._param_index()
+        if not idx:
+            return
+        val = self._get_param(idx, "log_mode", "persistence")
+        if val is None:
+            val = self._get_param(idx, "log_mode", None)
+        if val is not None and str(val).strip().lower() == "overwrite":
+            self.finding(
+                check_id="HANADB-PARAM-004",
+                title="HANA log_mode = overwrite (no point-in-time recovery)",
+                severity=self.SEVERITY_HIGH,
+                category=self.CATEGORY,
+                description=(
+                    "global.ini [persistence] log_mode = overwrite. In this mode HANA "
+                    "reuses redo-log segments after each savepoint instead of retaining "
+                    "them, so no log backups are produced and the database cannot be "
+                    "recovered to a point in time after the last complete data backup. "
+                    "Any corruption, ransomware event, or erroneous mass change that "
+                    "occurs after that backup is therefore unrecoverable, and the "
+                    "recovery-point objective collapses to the age of the last full/delta "
+                    "data backup. 'overwrite' is intended only for sandbox or bulk-loading "
+                    "systems and must never be used on production or any system whose data "
+                    "is subject to SOX/audit retention obligations."
+                ),
+                affected_items=[f"[persistence] log_mode = {val}"],
+                remediation=(
+                    "Set [persistence] log_mode = normal and restart the database. Take a "
+                    "full data backup immediately afterwards — log backups only begin once "
+                    "a data backup exists. Schedule automatic log backups (bound "
+                    "log_backup_timeout_s) to a secure, encrypted target, verify that log "
+                    "backups are actually being written, and perform a test recovery to "
+                    "confirm the point-in-time recovery chain is intact. Ensure backup "
+                    "encryption is enabled so the retained logs are protected at rest."
+                ),
+                references=[
+                    "SAP HANA Administration Guide — Log Modes",
+                    "SAP HANA Administration Guide — Backup and Recovery",
+                ],
+            )
+
+    def check_cross_database_access(self):
+        """MEDIUM: MDC cross-database access enabled (tenant isolation weakened)."""
+        idx = self._param_index()
+        if not idx:
+            return
+        val = self._get_param(idx, "enabled", "cross_database_access")
+        if val is None:
+            return
+        if self._truthy(val):
+            self.finding(
+                check_id="HANADB-PARAM-005",
+                title="HANA cross-database (MDC) access is enabled",
+                severity=self.SEVERITY_MEDIUM,
+                category=self.CATEGORY,
+                description=(
+                    "global.ini [cross_database_access] enabled = true on the system "
+                    "database. In a multi-tenant (MDC) HANA system, enabling cross-database "
+                    "access allows queries in one tenant database to read objects in another "
+                    "tenant via associated remote users, weakening the isolation boundary "
+                    "that is the main security rationale for tenant separation. If the set "
+                    "of permitted target tenants (targets_<db>) is broad or unmanaged, a "
+                    "compromise or privilege escalation in a low-sensitivity tenant can be "
+                    "pivoted into a high-sensitivity one, and data-residency/segregation "
+                    "assumptions no longer hold."
+                ),
+                affected_items=[f"[cross_database_access] enabled = {val}"],
+                remediation=(
+                    "Disable cross-database access unless there is a documented business "
+                    "requirement: [cross_database_access] enabled = false. Where it is "
+                    "required, scope it explicitly with targets_<db> to the minimum set of "
+                    "tenant pairs, restrict the associated remote users to least privilege, "
+                    "and review the cross-tenant grants periodically."
+                ),
+                references=[
+                    "SAP HANA Administration Guide — Cross-Database Access in MDC",
+                    "SAP HANA Security Guide — Tenant Database Isolation",
+                ],
+            )
+
+    def check_debug_privileges(self):
+        """HIGH: DEBUG / ATTACH DEBUGGER privileges expose runtime data."""
+        if not self.data.get("hana_granted_privileges"):
+            return
+        offenders = []
+        for grantee, gtype, priv, obj, _ in self._iter_priv_rows():
+            gu = grantee.upper()
+            if gu.startswith("_SYS") or gu == "SYS":
+                continue
+            if priv in ("DEBUG", "ATTACH DEBUGGER"):
+                label = f"{grantee} ← {priv}" + (f" ON {obj}" if obj else "")
+                offenders.append(label)
+        if offenders:
+            self.finding(
+                check_id="HANADB-PRIV-006",
+                title="Debug privileges (DEBUG / ATTACH DEBUGGER) granted to users",
+                severity=self.SEVERITY_HIGH,
+                category=self.CATEGORY,
+                description=(
+                    f"{len(offenders)} grant(s) of the DEBUG or ATTACH DEBUGGER privilege "
+                    "were found. These privileges let a user attach the SQLScript debugger "
+                    "to procedures or to another user's sessions, single-step through "
+                    "server-side logic and inspect the live values of every variable and "
+                    "intermediate result — including data the debugged code reads from "
+                    "protected tables. ATTACH DEBUGGER in particular can expose the runtime "
+                    "data of another user's session, bypassing analytic-privilege and "
+                    "authorization filtering that would normally restrict what that data "
+                    "consumer can see. On a production database these privileges are almost "
+                    "never legitimate and are a strong candidate for both data exfiltration "
+                    "and logic tampering."
+                ),
+                affected_items=offenders,
+                remediation=(
+                    "Revoke DEBUG and ATTACH DEBUGGER from all users on production: "
+                    "REVOKE DEBUG ON <object> FROM <user>; and revoke ATTACH DEBUGGER "
+                    "accordingly. Perform SQLScript debugging only in non-productive "
+                    "systems that do not contain real business data. If a break-glass "
+                    "debugging need arises in production, grant the privilege through a "
+                    "firefighter/EAM session that is time-boxed, logged and reviewed, and "
+                    "revoke it immediately afterwards."
+                ),
+                references=[
+                    "SAP HANA Security Guide — Debugging Privileges",
+                    "SAP HANA SQLScript Reference — Debugging",
                 ],
             )
