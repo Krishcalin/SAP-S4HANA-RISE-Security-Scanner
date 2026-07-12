@@ -70,6 +70,9 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
         self.check_btp_destinations()
         self.check_ias_policies()
         self.check_ias_mfa()
+        self.check_ias_password_policy()
+        self.check_ias_idp_enforcement()
+        self.check_cloud_connector_version()
         self.check_entitlement_sprawl()
         self.check_event_mesh_topics()
         self.check_cpi_credential_stores()
@@ -409,6 +412,93 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Archive configuration before deletion for reference."
                 ),
                 references=["SAP BTP Cloud Connector — Lifecycle Management"],
+            )
+
+    @staticmethod
+    def _ver_tuple(v):
+        """Parse a dotted version like '2.16.2' into a comparable int tuple."""
+        parts = []
+        for chunk in str(v).strip().split("."):
+            num = ""
+            for ch in chunk:
+                if ch.isdigit():
+                    num += ch
+                else:
+                    break
+            parts.append(int(num) if num else 0)
+        return tuple(parts) if parts else (0,)
+
+    def check_cloud_connector_version(self):
+        """HIGH: Cloud Connector software version exposed to known CVEs / EOL."""
+        cc_data = self.data.get("cloud_connector")
+        if not isinstance(cc_data, dict):
+            return
+        version = cc_data.get("version", cc_data.get("sccVersion",
+                 cc_data.get("softwareVersion")))
+        if not version:
+            return
+
+        vt = self._ver_tuple(version)
+        # CVE-2024-25642: improper deserialization in SCC administration allowing
+        # code injection; fixed in Cloud Connector 2.16.2 (CVSS 9.1).
+        cve_fixed = (2, 16, 2)
+        # General minimum-supported floor for currency (rounded conservatively).
+        supported_floor = (2, 16, 0)
+
+        if vt < cve_fixed:
+            self.finding(
+                check_id="BTP-CC-008",
+                title=f"Cloud Connector {version} is vulnerable to CVE-2024-25642",
+                severity=self.SEVERITY_HIGH,
+                category="BTP Cloud Attack Surface",
+                description=(
+                    f"The SAP Cloud Connector reports software version {version}, which "
+                    "predates 2.16.2 — the release that fixes CVE-2024-25642 (CVSS 9.1), an "
+                    "improper-deserialization flaw in the Cloud Connector administration "
+                    "component that allows an authenticated administrator to inject and "
+                    "execute arbitrary code, leading to full compromise of the Cloud "
+                    "Connector host. Because the Cloud Connector sits at the trust boundary "
+                    "between the BTP tenant and the on-premise/private network — it holds "
+                    "the system certificates and the backend allow-list that reach into "
+                    "S/4HANA — code execution on this host is effectively a pivot into the "
+                    "internal landscape. The Cloud Connector is customer-managed even in "
+                    "RISE, so patching it is the customer's responsibility, and outdated "
+                    "installations are a recurring finding in BTP security reviews."
+                ),
+                affected_items=[f"Cloud Connector version: {version} (fix: 2.16.2+)"],
+                remediation=(
+                    "Upgrade the Cloud Connector to the latest patch of the current major "
+                    "line (at minimum 2.16.2 to remediate CVE-2024-25642). Plan the upgrade "
+                    "using the master/shadow high-availability pair so the tunnel is not "
+                    "interrupted: upgrade the shadow, fail over, then upgrade the former "
+                    "master. Subscribe to the SAP Cloud Connector release notes and treat "
+                    "SCC patching as part of monthly SAP Security Patch Day handling. After "
+                    "upgrade, confirm the reported version, re-establish the subaccount "
+                    "tunnels, and re-validate the backend allow-list and certificates."
+                ),
+                references=[
+                    "CVE-2024-25642 — SAP Cloud Connector code injection",
+                    "SAP BTP Cloud Connector — Release Notes and Upgrade",
+                ],
+            )
+        elif vt < supported_floor:
+            self.finding(
+                check_id="BTP-CC-008",
+                title=f"Cloud Connector {version} is below the supported version floor",
+                severity=self.SEVERITY_MEDIUM,
+                category="BTP Cloud Attack Surface",
+                description=(
+                    f"The SAP Cloud Connector reports version {version}, which is below the "
+                    "current supported baseline. Running an out-of-maintenance Cloud "
+                    "Connector means security fixes are no longer delivered for a component "
+                    "that bridges BTP and the internal network."
+                ),
+                affected_items=[f"Cloud Connector version: {version}"],
+                remediation=(
+                    "Upgrade the Cloud Connector to a currently-supported release and keep "
+                    "it patched via the HA master/shadow procedure."
+                ),
+                references=["SAP BTP Cloud Connector — Release Notes and Upgrade"],
             )
 
     # ════════════════════════════════════════════════════════════════
@@ -841,6 +931,145 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Configure IAS to require MFA as a second authentication factor."
                 ),
                 references=["SAP IAS — Multi-Factor Authentication Configuration"],
+            )
+
+    def check_ias_password_policy(self):
+        """HIGH/MEDIUM: weak IAS tenant password policy for local users."""
+        ias = self.data.get("ias_config")
+        if not isinstance(ias, dict):
+            return
+        policy = ias.get("passwordPolicy", ias.get("password_policy"))
+        if not isinstance(policy, dict):
+            return
+
+        issues = []
+        # Minimum length
+        try:
+            min_len = int(policy.get("minLength", policy.get("minimumLength", 0)) or 0)
+        except (TypeError, ValueError):
+            min_len = 0
+        if min_len and min_len < 8:
+            issues.append(f"minimum length = {min_len} (< 8)")
+        # Account lockout after failed attempts
+        lockout = policy.get("maxFailedAttempts", policy.get("lockoutThreshold",
+                 policy.get("failedLogonAttempts")))
+        try:
+            lockout_n = int(lockout) if lockout not in (None, "") else 0
+        except (TypeError, ValueError):
+            lockout_n = 0
+        if lockout_n == 0 or lockout_n > 10:
+            issues.append(
+                f"account lockout threshold = {lockout if lockout not in (None, '') else 'not set'}"
+            )
+        # Complexity
+        complexity = policy.get("requireComplexity", policy.get("complexityEnabled",
+                    policy.get("requireMixedCase")))
+        if complexity is not None and str(complexity).lower() in ("false", "0", "no", "disabled"):
+            issues.append("password complexity not enforced")
+        # Policy tier (IAS 'standard' is weaker than 'enterprise')
+        tier = str(policy.get("policyType", policy.get("level", ""))).strip().lower()
+        if tier == "standard":
+            issues.append("policy tier = 'standard' (weaker than 'enterprise')")
+
+        if issues:
+            sev = self.SEVERITY_HIGH if min_len and min_len < 8 else self.SEVERITY_MEDIUM
+            self.finding(
+                check_id="BTP-IAS-004",
+                title="IAS password policy for local users is weak",
+                severity=sev,
+                category="BTP Cloud Attack Surface",
+                description=(
+                    "The SAP Cloud Identity Services (IAS) tenant password policy that "
+                    "governs locally-stored user credentials does not meet hardening "
+                    "expectations. IAS local users are a frequent authentication fallback "
+                    "even in landscapes that federate to a corporate IdP, and any weakness "
+                    "here — short minimum length, no account lockout, no complexity — "
+                    "directly lowers the cost of password guessing and credential stuffing "
+                    "against the identity provider that fronts the entire BTP account and, "
+                    "via trust, the S/4HANA Fiori launchpad. Because IAS authenticates "
+                    "administrators of the BTP cockpit itself, a weak local-user policy is "
+                    "an account-wide exposure, not an application-local one. The following "
+                    "weaknesses were detected in the exported policy."
+                ),
+                affected_items=issues,
+                remediation=(
+                    "In the IAS admin console (Applications & Resources → Tenant Settings → "
+                    "Password Policy) move the tenant to the 'Enterprise' password policy or "
+                    "a custom policy that enforces: minimum length ≥ 8 (12+ for privileged "
+                    "tenants), password complexity (mixed case, digits, special characters), "
+                    "account lockout after ≤ 5–10 failed attempts, a bounded maximum "
+                    "password age, and password-history reuse prevention. Where a corporate "
+                    "IdP is available, prefer delegating authentication to it and disabling "
+                    "local-user password logon entirely (see BTP-IAS-005) so this policy "
+                    "governs only unavoidable break-glass accounts. Re-export and re-scan to "
+                    "confirm the tightened values."
+                ),
+                references=[
+                    "SAP Cloud Identity Services — Configure Password Policy",
+                    "SAP BTP Security Recommendations — Identity Authentication",
+                ],
+            )
+
+    def check_ias_idp_enforcement(self):
+        """HIGH: corporate IdP configured but local password fallback still allowed."""
+        ias = self.data.get("ias_config")
+        if not isinstance(ias, dict):
+            return
+        idp = ias.get("corporateIdP", ias.get("corporateIdp", ias.get("corporate_idp")))
+        if not isinstance(idp, dict):
+            return
+
+        enabled = idp.get("enabled", idp.get("configured"))
+        if enabled is None or str(enabled).lower() in ("false", "0", "no"):
+            return  # no corporate IdP configured -> this control does not apply
+
+        enforced = idp.get("enforced", idp.get("enforce"))
+        local_fallback = idp.get("localFallbackAllowed",
+                        idp.get("allowLocalLogon", idp.get("passwordLogonAllowed")))
+
+        reasons = []
+        if enforced is not None and str(enforced).lower() in ("false", "0", "no"):
+            reasons.append("corporate IdP configured but not enforced (users may pick local logon)")
+        if local_fallback is not None and str(local_fallback).lower() in ("true", "1", "yes", "enabled"):
+            reasons.append("local IAS password logon still permitted alongside corporate IdP")
+
+        if reasons:
+            self.finding(
+                check_id="BTP-IAS-005",
+                title="Corporate IdP not enforced — local password fallback allowed",
+                severity=self.SEVERITY_HIGH,
+                category="BTP Cloud Attack Surface",
+                description=(
+                    "A corporate identity provider is configured in IAS, but local IAS "
+                    "password authentication has not been disabled/enforced away. This "
+                    "leaves a parallel authentication path that bypasses the corporate "
+                    "IdP's controls — conditional access, MFA, session policies, joiner/"
+                    "mover/leaver deprovisioning and central logging. An attacker who "
+                    "obtains or guesses a local IAS password (or targets a former employee "
+                    "whose corporate account was disabled but whose IAS local user was not) "
+                    "can authenticate to BTP and the trusting S/4HANA applications without "
+                    "ever touching the corporate IdP, defeating the single-sign-on security "
+                    "model the organisation believes is in force. Enforcement gaps of this "
+                    "kind are a common root cause of 'we had MFA but the breach still "
+                    "happened' incidents in federated SAP landscapes."
+                ),
+                affected_items=reasons,
+                remediation=(
+                    "Enforce the corporate IdP as the sole authenticating authority: in IAS, "
+                    "set the corporate identity provider as default and disable local "
+                    "password authentication for end users (Applications → Authentication & "
+                    "Access → Identity Providers / Logon Alternatives). Retain at most a "
+                    "small number of explicitly-documented break-glass local accounts, each "
+                    "with MFA and monitoring. Verify that conditional-authentication rules "
+                    "route every business application to the corporate IdP, and reconcile "
+                    "IAS local users against the corporate directory to remove orphaned "
+                    "accounts. Confirm no application still offers a 'log on with password' "
+                    "alternative after the change."
+                ),
+                references=[
+                    "SAP Cloud Identity Services — Corporate Identity Providers",
+                    "SAP BTP Security Recommendations — Enforce Single Sign-On",
+                ],
             )
 
     # ════════════════════════════════════════════════════════════════

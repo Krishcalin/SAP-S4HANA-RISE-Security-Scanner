@@ -6,5 +6,7 @@
     {"name": "Build_WorkZone", "appType": "standard", "authenticationRules": [], "ipRestrictions": [], "mfaEnabled": false, "riskBasedAuth": false, "authenticationType": "XSUAA", "trustType": "LEGACY"},
     {"name": "Analytics_Cloud", "appType": "standard", "authenticationRules": [{"condition": "ip_range", "action": "mfa"}], "ipRestrictions": [], "mfaEnabled": false, "riskBasedAuth": false, "authenticationType": "IAS", "trustType": "IAS"},
     {"name": "Custom_App_Portal", "appType": "standard", "authenticationRules": [], "ipRestrictions": [], "mfaEnabled": false, "riskBasedAuth": false, "authenticationType": "IAS", "trustType": "IAS"}
-  ]
+  ],
+  "passwordPolicy": {"policyType": "standard", "minLength": 6, "maxFailedAttempts": 0, "requireComplexity": false, "passwordExpiryDays": 0},
+  "corporateIdP": {"enabled": true, "enforced": false, "localFallbackAllowed": true, "type": "SAML2"}
 }

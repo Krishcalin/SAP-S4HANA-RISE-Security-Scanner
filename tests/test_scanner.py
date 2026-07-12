@@ -70,6 +70,7 @@ EXPECTED_CHECKS = {
                "HANADB-AUDIT-001", "HANADB-PARAM-001", "HANADB-PARAM-004",
                "HANADB-PARAM-005", "HANADB-PRIV-006"},
     "crypto": {"CRYPTO-HANA-004", "CRYPTO-HANA-005"},
+    "btpcloud": {"BTP-IAS-004", "BTP-IAS-005", "BTP-CC-008"},
     "hotnews": {"HOTNEWS-001", "HOTNEWS-002", "HOTNEWS-003", "HOTNEWS-004"},
     "authz": {"AUTH-001", "AUTH-002", "AUTH-003", "AUTH-004", "AUTH-005", "AUTH-013"},
     "systrust": {"STDUSR-001", "STDUSR-002", "STDUSR-003", "TRUST-001",

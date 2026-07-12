@@ -1,4 +1,5 @@
 {
+  "version": "2.15.2",
   "backends": [
     {
       "name": "S4H_Production",
