@@ -65,6 +65,12 @@ class DataLoader:
         # Role Design & Governance (PFCG build-quality)
         "su24_proposals":           ["su24_proposals.csv", "usobt_c.csv", "su24.csv"],
         "role_profiles":            ["role_profiles.csv", "agr_1016.csv"],
+        # Financial Controls (SOX FI/CO application configuration)
+        "posting_periods":          ["posting_periods.csv", "t001b.csv", "ob52.csv"],
+        "tolerance_groups":         ["tolerance_groups.csv", "t043t.csv", "oba4.csv"],
+        "dual_control_fields":      ["dual_control_fields.csv", "t055f.csv", "sensitive_fi_fields.csv"],
+        "doc_change_rules":         ["doc_change_rules.csv", "tbaer.csv", "ob32.csv"],
+        "fi_number_ranges":         ["fi_number_ranges.csv", "tnro.csv", "number_ranges.csv"],
         # BTP Cloud Attack Surface data sources
         "cloud_connector":      ["cloud_connector.json", "scc_config.json"],
         "btp_service_bindings": ["btp_service_bindings.json", "service_bindings.json"],

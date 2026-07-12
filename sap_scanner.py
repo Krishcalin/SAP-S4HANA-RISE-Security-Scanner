@@ -38,6 +38,7 @@ from modules.abap_authorizations import AbapAuthorizationAuditor
 from modules.system_trust import SystemTrustAuditor
 from modules.grc_access_control import GrcAccessControlAuditor
 from modules.role_governance import RoleGovernanceAuditor
+from modules.financial_controls import FinancialControlsAuditor
 from modules.baseline_params import BaselineParamAuditor
 from modules.s4_business_authz import S4BusinessAuthzAuditor
 from modules.access_risk_analysis import AccessRiskAnalysisAuditor
@@ -79,7 +80,7 @@ def main():
     )
     parser.add_argument(
         "--modules", nargs="+",
-        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "logmon", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust", "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov", "all"],
+        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "logmon", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust", "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov", "fincontrols", "all"],
         default=["all"],
         help="Which audit modules to run (default: all)"
     )
@@ -114,7 +115,7 @@ def main():
     run_modules = args.modules if "all" not in args.modules else [
         "users", "params", "network", "rise", "iam", "btpcloud",
         "intglayer", "dataprot", "codetrans", "logmon", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust",
-        "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov"
+        "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov", "fincontrols"
     ]
 
     all_findings = []
@@ -297,6 +298,14 @@ def main():
     if "rolegov" in run_modules:
         print("[*] Running Role Design & Governance Checks (SU24 proposals, profile generation, derived drift)...")
         auditor = RoleGovernanceAuditor(data, baseline_overrides)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- Financial Controls (SOX: posting periods, tolerances, dual control, doc change) ---
+    if "fincontrols" in run_modules:
+        print("[*] Running Financial Controls Checks (posting periods, tolerances, dual control, doc change rules)...")
+        auditor = FinancialControlsAuditor(data, baseline_overrides)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
