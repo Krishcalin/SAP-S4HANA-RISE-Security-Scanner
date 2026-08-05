@@ -44,6 +44,8 @@ python sap_scanner.py --data-dir ./exports --output report.html --severity HIGH 
 python sap_scanner.py --data-dir ./sample_data --output report.pdf  --format pdf   # PDF hand-over
 python sap_scanner.py --data-dir ./sample_data --output report.pptx --format pptx  # PPTX deck (full)
 python sap_scanner.py --data-dir ./sample_data --output report.html --format all   # HTML + PDF + PPTX
+python sap_scanner.py --data-dir ./sample_data --output report.html --format both --crq \
+    --crq-revenue 2000000000 --crq-industry manufacturing --crq-org-name "Acme Mfg"   # + FAIR $ loss exposure
 ```
 
 ⚠️ **Windows console gotcha:** `banner()` prints box-drawing characters (`╔═╗`) that crash
@@ -74,6 +76,30 @@ on the default cp1252 console. Always run with `PYTHONIOENCODING=utf-8` on Windo
   `compliance_mapping.py` (category → framework controls), `pdf_writer.py` / `pptx_writer.py`
   (stdlib PDF / OOXML engines). Keep these in sync when a new **category** is introduced — add
   it to `compliance_mapping.CATEGORY_THEMES` so its findings map to controls.
+- **`modules/fair_adapter.py` + `data/fair_scenarios.json`** — optional FAIR cyber-risk
+  quantification (`--crq`). The adapter maps findings onto **5 scoped SAP loss scenarios**,
+  calibrates the FAIR factor ranges, emits the sibling CRQ engine's scenario JSON, and (if
+  `crq_engine.py` is locatable) runs the Monte Carlo to embed a $ ALE + loss-exceedance curve
+  in the HTML/PDF. **Invariants to preserve when you touch this** (all covered by
+  `tests/test_fair_adapter.py`):
+  - *A finding is not a risk.* Findings are **evidence that shifts a scenario's factors**;
+    never give a finding its own ALE and sum them. The portfolio ALE is the **element-wise
+    Monte-Carlo sum** of per-scenario draws — **never a sum of percentiles**.
+  - *Calibration is range-selection, not arithmetic on CVSS/ordinals.* Worst open prevention
+    finding → Resistance-Strength band; `exposed`/`exploited` (RiskPrioritizer's own flags) →
+    Contact-Frequency / Probability-of-Action bands. Logging/monitoring findings are **not** a
+    scenario — they set a **dwell-time loss multiplier** on the dwell-sensitive loss components.
+  - *Report filters must not move the number.* FAIR always runs on the **complete** finding set
+    (`fair_findings` captured before the `--severity` display filter).
+  - *No hard dependency on the sibling repo.* If the engine isn't found, still export the
+    `*.crq.json` and degrade gracefully (summary = None).
+  - *Routing lives in the catalog.* When you add a **new module**, add its `check_id` prefix (or
+    category) to the right scenario's `routing` in `fair_scenarios.json`, else its findings fall
+    to the `SAP-PRIV-03` fallback and the report discloses the `unrouted` count. Routing is
+    prefix-first, then exact-category — so category strings must match the module's emitted
+    `category` **byte-for-byte**.
+  - **Loss ranges are modelled estimates from public benchmarks, not measurements** — cite real
+    sources in the catalog's `sources[]`, and keep the report's "modelled estimate" disclaimer.
 
 ### The 23 modules (module key → class → focus)
 

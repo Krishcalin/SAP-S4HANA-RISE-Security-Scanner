@@ -1,0 +1,211 @@
+{
+  "_meta": {
+    "purpose": "FAIR scenario catalog for the SAP scanner's cyber-risk-quantification adapter (fair_adapter.py). Maps the scanner's technical findings onto a small set of scoped SAP loss scenarios and supplies the baseline (best-case) FAIR factor ranges + loss-magnitude ranges the Monte Carlo engine (crq_engine.py) consumes.",
+    "important": "Loss ranges are MODELLED ESTIMATES from public benchmarks, NOT measurements. They assume a mid/large enterprise (default revenue $1B). Validate against the customer's revenue, records-at-risk and threat context before presenting any figure as an organisation's actual risk. Override org via --crq-revenue / --crq-industry / --crq-org-name.",
+    "fair_note": "A finding is not a risk. Findings are evidence that shifts a scenario's FAIR factors: prevention gaps -> frequency side (Resistance Strength / Contact Frequency / Probability of Action); detection & response gaps -> magnitude side (dwell-time cost). Factor ranges are SELECTED from qualitative signals (worst severity, exposed, exploited) - never computed by arithmetic on ordinal severities/CVSS.",
+    "frequency_note": "Contact Frequency is the number of MEANINGFUL engagement opportunities per year for THIS scoped loss event (a capable adversary actually engaging this asset for this effect) - NOT raw probe/scan volume. CF x Probability-of-Action = Threat Event Frequency (attempts/yr); x Vulnerability = Loss Event Frequency (successful loss events/yr), which for a major compromise should land well under a few per year.",
+    "currency": "USD",
+    "loss_ranges_are": "per single loss event (min / likely / max), before the engine's industry multiplier",
+    "version": "1.1"
+  },
+
+  "organization_default": {
+    "name": "SAP S/4HANA RISE Customer (illustrative)",
+    "revenue": 1000000000,
+    "industry": "manufacturing",
+    "employees": 5000
+  },
+
+  "detection": {
+    "_comment": "Findings in these buckets do NOT get their own scenario. They set a loss-magnitude MULTIPLIER applied to the DWELL-SENSITIVE loss components (productivity, response, fines, reputation) of every scenario except the fraud scenario (whose loss anchors already assume a 12-month undetected dwell). Weak detection/response => longer dwell => larger loss. Only the CRITICAL tier is IBM-anchored (lifecycle >200 days $5.46M vs <200 days $4.07M ~= 1.34x); the HIGH/MEDIUM/LOW tiers are modelled interpolations.",
+    "categories": ["Logging, Monitoring & IR", "Audit Logging"],
+    "check_prefixes": ["LOG-"],
+    "dwell_sensitive_components": ["productivity", "response", "fines", "reputation"],
+    "exempt_scenarios": ["SAP-FRAUD-02"],
+    "multiplier_by_worst_severity": {
+      "CRITICAL": 1.35,
+      "HIGH": 1.20,
+      "MEDIUM": 1.10,
+      "LOW": 1.05,
+      "NONE": 1.0
+    },
+    "sources": [
+      "IBM Cost of a Data Breach 2024 - lifecycle >200d $5.46M vs <200d $4.07M (CRITICAL tier only; lower tiers interpolated)",
+      "ACFE Report to the Nations 2024 - median occupational fraud duration 12 months (already baked into SAP-FRAUD-02, hence exempt)"
+    ]
+  },
+
+  "resistance_strength_bands": {
+    "_comment": "Global RS percentile bands (min/likely/max) SELECTED by the worst-severity open PREVENTION finding routed to a scenario; 'hardened' = target posture with no open prevention gaps. Calibrated so engine Vulnerability = clamp((TC-RS+50)/100,0,1) stays in a DISCRIMINATING range against the scenarios' threat-capability likelies (~50-72): hardened ~0.3-0.4, CRITICAL ~0.8-0.85 at the likely point - i.e. not saturating at 1.0 across the bulk of the distribution, so the threat/control axis still modulates loss-event frequency (the extreme tail of the CRITICAL band can reach 1.0 for the highest-capability threats, which is intended: an open critical gap means 'if engaged, near-certain success'). Framed as calibrated ranges (classic FAIR control-strength percentile bands), never ordinal arithmetic.",
+    "hardened": { "min": 68, "likely": 82, "max": 95 },
+    "MEDIUM":   { "min": 50, "likely": 65, "max": 80 },
+    "HIGH":     { "min": 38, "likely": 52, "max": 68 },
+    "CRITICAL": { "min": 22, "likely": 38, "max": 55 }
+  },
+
+  "scenarios": [
+    {
+      "id": "SAP-RCE-01",
+      "name": "Internet-facing SAP compromise -> ransomware / breach",
+      "description": "An external criminal group exploits an unpatched or exposed SAP application (e.g. NetWeaver RCE, open gateway/message server, SAProuter) to gain code execution, then deploys ransomware and/or exfiltrates data for double extortion.",
+      "threat_community": "organized_crime",
+      "effect": "C-I-A",
+      "routing": { "categories": ["SAP Security Notes (HotNews)", "Network & Service Exposure"], "check_prefixes": ["HOTNEWS-", "NET-", "TRUST-"] },
+      "threat_capability": { "min": 55, "likely": 72, "max": 85 },
+      "contact_frequency": {
+        "baseline": { "min": 0.2, "likely": 1, "max": 4 },
+        "exposed":  { "min": 2,   "likely": 5, "max": 12 }
+      },
+      "probability_of_action": {
+        "baseline":  { "min": 0.02, "likely": 0.08, "max": 0.2 },
+        "exploited": { "min": 0.05, "likely": 0.15, "max": 0.4 }
+      },
+      "primary_loss": {
+        "productivity": { "min": 1000000, "likely": 6000000, "max": 30000000 },
+        "response":     { "min": 500000,  "likely": 3000000, "max": 12000000 },
+        "replacement":  { "min": 100000,  "likely": 1000000, "max": 5000000 }
+      },
+      "secondary_loss": {
+        "fines":                 { "min": 0,      "likely": 2000000, "max": 20000000 },
+        "reputation":            { "min": 500000, "likely": 4000000, "max": 20000000 },
+        "competitive_advantage": { "min": 0,      "likely": 1000000, "max": 5000000 }
+      },
+      "sources": [
+        "Onapsis/SAP 2021 - SAP patches weaponised <72h; new cloud SAP compromised <3h; 300+/1500 exploitations Jun2020-Mar2021",
+        "RECON CVE-2020-6287, ICMAD CVE-2022-22536, CVE-2025-31324 (581 backdoored) - all CISA KEV",
+        "Ransomware downtime: ITIC 2024 (>$300k/hr for 90% of enterprises); Norsk Hydro ~$70M; Sophos 2024 recovery avg $2.73M"
+      ]
+    },
+    {
+      "id": "SAP-FRAUD-02",
+      "name": "SoD / weak financial controls -> payment fraud",
+      "description": "A user whose access breaches Segregation of Duties (e.g. maintain vendor master AND run the payment program) or weak SOX financial-config controls commits or conceals payment/vendor fraud, possibly with collusion.",
+      "threat_community": "insider_malicious",
+      "effect": "Integrity (financial)",
+      "routing": { "categories": ["Access Risk Analysis (SoD)", "GRC Access Control", "Financial Controls (SOX)"], "check_prefixes": ["ARA-", "GRC-", "FIN-"] },
+      "threat_capability": { "min": 50, "likely": 60, "max": 78 },
+      "contact_frequency": {
+        "baseline": { "min": 0.5, "likely": 2, "max": 6 },
+        "exposed":  { "min": 0.5, "likely": 2, "max": 6 }
+      },
+      "probability_of_action": {
+        "baseline":  { "min": 0.02, "likely": 0.08, "max": 0.2 },
+        "exploited": { "min": 0.05, "likely": 0.15, "max": 0.35 }
+      },
+      "primary_loss": {
+        "productivity": { "min": 0,      "likely": 50000,  "max": 500000 },
+        "response":     { "min": 50000,  "likely": 250000, "max": 1500000 },
+        "replacement":  { "min": 100000, "likely": 500000, "max": 3000000 }
+      },
+      "secondary_loss": {
+        "fines":                 { "min": 0,      "likely": 200000,  "max": 3000000 },
+        "reputation":            { "min": 100000, "likely": 1000000, "max": 8000000 },
+        "competitive_advantage": { "min": 0,      "likely": 100000,  "max": 1000000 }
+      },
+      "sources": [
+        "ACFE Report to the Nations 2024 - billing scheme median $100k; financial-statement fraud median $766k; avg case >$1.5M; collusion (3+) ~4x single-perpetrator; 12-month median duration",
+        "FBI IC3 2024 - BEC avg ~$129k/incident (terminates in ERP AP/payment run)",
+        "SAP canonical SoD: create vendor (XK01) + run payment program (F110)"
+      ]
+    },
+    {
+      "id": "SAP-PRIV-03",
+      "name": "Privileged / standard-user takeover -> full system control",
+      "description": "An attacker (external or insider) abuses default standard users (SAP*/DDIC), broad or critical authorizations (S_RFCACL, Debug & Replace, SAP_ALL), transport/dev access, or host-command execution to take full control of the SAP system.",
+      "threat_community": "organized_crime",
+      "effect": "C-I-A",
+      "routing": {
+        "categories": ["ABAP Authorization & Critical Access", "User & Authorization", "Identity & Access Management", "S/4HANA & Cloud Authorization", "Role Design & Governance", "Security Parameters", "Security Baseline Parameters", "Code & Transport Security", "Fiori & UI Layer", "Basis Jobs & OS Commands", "System Trust & Standard Users"],
+        "check_prefixes": ["AUTH-", "USR-", "IAM-", "S4AUTHZ-", "RG-", "PARAM-", "BASELINE-", "CODE-", "FIORI-", "JOBCMD-", "STDUSR-"]
+      },
+      "threat_capability": { "min": 55, "likely": 68, "max": 85 },
+      "contact_frequency": {
+        "baseline": { "min": 0.2, "likely": 1, "max": 4 },
+        "exposed":  { "min": 2,   "likely": 5, "max": 12 }
+      },
+      "probability_of_action": {
+        "baseline":  { "min": 0.02, "likely": 0.08, "max": 0.2 },
+        "exploited": { "min": 0.05, "likely": 0.15, "max": 0.4 }
+      },
+      "primary_loss": {
+        "productivity": { "min": 500000, "likely": 3000000, "max": 15000000 },
+        "response":     { "min": 300000, "likely": 1500000, "max": 8000000 },
+        "replacement":  { "min": 100000, "likely": 500000,  "max": 3000000 }
+      },
+      "secondary_loss": {
+        "fines":                 { "min": 0,      "likely": 1000000, "max": 10000000 },
+        "reputation":            { "min": 300000, "likely": 2000000, "max": 12000000 },
+        "competitive_advantage": { "min": 0,      "likely": 500000,  "max": 4000000 }
+      },
+      "sources": [
+        "Onapsis/SAP 2021 - default/standard SAP users and broad authorizations among top exploited vectors",
+        "IBM Cost of a Data Breach 2024 - compromised credentials most common vector, avg $4.81M, longest lifecycle 292d",
+        "SAP* kernel auto-logon, S_RFCACL trusted-RFC, Debug & Replace = full-takeover primitives"
+      ]
+    },
+    {
+      "id": "SAP-DATA-04",
+      "name": "HANA data exfiltration -> GDPR-regulated breach",
+      "description": "Sensitive/regulated data in the HANA database or SAP application is exfiltrated due to weak DB privileges, missing encryption, or inadequate data-protection controls, triggering a personal-data breach with regulatory exposure.",
+      "threat_community": "organized_crime",
+      "effect": "Confidentiality",
+      "routing": { "categories": ["HANA Database Security", "Cryptographic Posture", "Data Protection & Privacy"], "check_prefixes": ["HANADB-", "CRYPTO-", "DPP-"] },
+      "threat_capability": { "min": 55, "likely": 72, "max": 85 },
+      "contact_frequency": {
+        "baseline": { "min": 0.2, "likely": 1, "max": 4 },
+        "exposed":  { "min": 2,   "likely": 5, "max": 12 }
+      },
+      "probability_of_action": {
+        "baseline":  { "min": 0.02, "likely": 0.08, "max": 0.2 },
+        "exploited": { "min": 0.05, "likely": 0.15, "max": 0.4 }
+      },
+      "primary_loss": {
+        "productivity": { "min": 100000, "likely": 500000,  "max": 2000000 },
+        "response":     { "min": 500000, "likely": 2000000, "max": 8000000 },
+        "replacement":  { "min": 50000,  "likely": 300000,  "max": 1500000 }
+      },
+      "secondary_loss": {
+        "fines":                 { "min": 100000, "likely": 3000000, "max": 25000000 },
+        "reputation":            { "min": 500000, "likely": 4000000, "max": 20000000 },
+        "competitive_advantage": { "min": 100000, "likely": 1000000, "max": 10000000 }
+      },
+      "sources": [
+        "GDPR Art.83(5) higher tier (up to 4% global turnover / EUR 20M) applies via the Art.5(1)(f) integrity & confidentiality PRINCIPLE - the hook used against British Airways (GBP 20M) and Marriott (GBP 18.4M); a pure Art.32 security-measures breach is Art.83(4) LOWER tier (2% / EUR 10M)",
+        "Representative security-breach fines (unauthorised-access/exfiltration): British Airways GBP 20M, Marriott GBP 18.4M",
+        "IBM Cost of a Data Breach 2024 - global avg $4.88M; employee/customer PII costliest record types"
+      ]
+    },
+    {
+      "id": "SAP-INTF-05",
+      "name": "Interface / integration compromise -> lateral movement",
+      "description": "An attacker abuses an SAP integration or interface (RFC trust, IDoc, web services, OAuth clients, webhooks, CPI, BTP destinations, API management) to move laterally, tamper with data flows, or reach connected systems.",
+      "threat_community": "organized_crime",
+      "effect": "C-I-A across connected systems",
+      "routing": { "categories": ["Network & Integration Layer", "RISE / BTP Security", "BTP Cloud Attack Surface"], "check_prefixes": ["INTG-", "RISE-", "BTP-"] },
+      "threat_capability": { "min": 55, "likely": 68, "max": 85 },
+      "contact_frequency": {
+        "baseline": { "min": 0.5, "likely": 2, "max": 6 },
+        "exposed":  { "min": 2,   "likely": 6, "max": 14 }
+      },
+      "probability_of_action": {
+        "baseline":  { "min": 0.02, "likely": 0.08, "max": 0.2 },
+        "exploited": { "min": 0.05, "likely": 0.15, "max": 0.4 }
+      },
+      "primary_loss": {
+        "productivity": { "min": 100000, "likely": 800000,  "max": 4000000 },
+        "response":     { "min": 200000, "likely": 1000000, "max": 5000000 },
+        "replacement":  { "min": 50000,  "likely": 300000,  "max": 1500000 }
+      },
+      "secondary_loss": {
+        "fines":                 { "min": 0,      "likely": 500000,  "max": 5000000 },
+        "reputation":            { "min": 100000, "likely": 1000000, "max": 6000000 },
+        "competitive_advantage": { "min": 0,      "likely": 300000,  "max": 3000000 }
+      },
+      "sources": [
+        "Verizon DBIR 2025 - third-party involvement in breaches roughly doubled to ~30%; System Intrusion the leading incident pattern",
+        "SAP integration surface: RFC trust, IDoc, SOAMANAGER web services, OAuth, CPI, BTP destinations",
+        "Onapsis - Cloud Connector / integration abuse enables reach into connected S/4 systems"
+      ]
+    }
+  ]
+}

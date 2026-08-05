@@ -48,6 +48,7 @@ from modules.pdf_report import PDFReportGenerator
 from modules.pptx_report import PPTXReportGenerator
 from modules.finding_kb import FindingKB
 from modules.risk_prioritizer import RiskPrioritizer
+from modules import fair_adapter
 from modules.data_loader import DataLoader
 
 
@@ -99,8 +100,28 @@ def main():
         help="PPTX deck scope: full (executive summary + compliance mapping + one slide "
              "per finding, 300+ slides; default) or summary (short executive deck only)"
     )
+    parser.add_argument(
+        "--crq", action="store_true",
+        help="Run FAIR cyber-risk quantification: map findings to SAP loss scenarios, "
+             "write <output>.crq.json, and (if the CRQ engine is available) embed the "
+             "annualized loss exposure (ALE) + loss-exceedance curve in the HTML/PDF report."
+    )
+    parser.add_argument("--crq-engine", default=None,
+        help="Path to the CRQ engine (crq_engine.py). Defaults to the CRQ_ENGINE env var "
+             "or an auto-detected sibling Cyber-Risk-Quantification repo.")
+    parser.add_argument("--crq-revenue", type=float, default=None,
+        help="Organization annual revenue (USD) for the FAIR analysis (default: illustrative $1B).")
+    parser.add_argument("--crq-industry", default=None,
+        help="Industry for the FAIR loss multiplier (financial_services, healthcare, "
+             "technology, retail, manufacturing, government, energy, education).")
+    parser.add_argument("--crq-org-name", default=None, help="Organization name for the FAIR report.")
+    parser.add_argument("--crq-sims", type=int, default=10000,
+        help="Monte Carlo iterations per scenario (default: 10000).")
 
     args = parser.parse_args()
+
+    if args.crq and args.crq_sims < 1:
+        parser.error("--crq-sims must be >= 1")
 
     data_dir = Path(args.data_dir)
     if not data_dir.exists():
@@ -317,7 +338,13 @@ def main():
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
 
-    # Filter by severity
+    # Keep the COMPLETE finding set for the FAIR analysis — a FAIR quantification
+    # must reflect total scenario risk from all evidence (including LOW/MEDIUM
+    # detection/exposure signals), so the report's severity filter (a display
+    # option) must not silently change the dollar figure.
+    fair_findings = list(all_findings)
+
+    # Filter by severity (affects the displayed findings / tiers only)
     severity_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
     if args.severity != "ALL":
         threshold = severity_order.get(args.severity, 4)
@@ -349,16 +376,55 @@ def main():
     print(f"[*] Risk prioritization: P1 {tiers['P1']}  P2 {tiers['P2']}  "
           f"P3 {tiers['P3']}  P4 {tiers['P4']}")
 
+    # FAIR cyber-risk quantification (optional): translate findings into a
+    # dollar-denominated annual loss exposure (ALE) via the FAIR Monte Carlo
+    # engine. Always exports the CRQ scenario JSON; embeds numbers in the
+    # HTML/PDF report when the CRQ engine can be located.
+    fair_summary = None
+    if args.crq:
+        print("[*] FAIR cyber-risk quantification (mapping findings to SAP loss scenarios)...")
+        org_overrides = {"name": args.crq_org_name, "revenue": args.crq_revenue,
+                         "industry": args.crq_industry}
+        # FAIR runs on the UNFILTERED finding set (see fair_findings above) so a
+        # report severity filter never changes the quantified loss exposure.
+        fair_prio = (prio_results if args.severity == "ALL"
+                     else RiskPrioritizer().prioritize(fair_findings))
+        crq_out = fair_adapter.run(
+            fair_findings, fair_prio, org_overrides=org_overrides,
+            engine_path=args.crq_engine, simulations=args.crq_sims)
+        crq_json_path = base + ".crq.json"
+        with open(crq_json_path, "w", encoding="utf-8") as fh:
+            json.dump(crq_out["crq_input"], fh, indent=2)
+        print(f"    CRQ scenario input written: {crq_json_path}")
+        if crq_out["unrouted"]:
+            print(f"    (note: {crq_out['unrouted']} finding(s) had no explicit scenario route "
+                  f"- assigned to the privileged-access scenario)")
+        if crq_out["engine_found"] and crq_out["summary"]:
+            fair_summary = crq_out["summary"]
+            pf = fair_summary["portfolio"]
+            print("    Annual loss exposure (ALE):  P50 ${:,.0f}   P90 ${:,.0f}   mean ${:,.0f}".format(
+                pf["ale_p50"], pf["ale_p90"], pf["mean_ale"]))
+            print("    Reducible toward hardened posture: ~${:,.0f} (P90)".format(
+                fair_summary["reducible_ale_p90"]))
+        else:
+            print("    CRQ engine not found - scenario JSON exported only. Quantify it with:")
+            print(f"      python crq_engine.py {crq_json_path} --html")
+            print("      (per-scenario detail + dashboard; the standalone engine's portfolio total")
+            print("       sums per-scenario percentiles as an upper bound - this scanner's embedded")
+            print("       ALE uses the correct element-wise Monte Carlo aggregation.)")
+
     # Generate report(s) — the findings knowledge base supplies the detailed
     # risk narrative + step-by-step remediation for each finding (both formats).
     kb = FindingKB()
     detail = f"detailed knowledge base: {len(kb)} checks" if kb.loaded else "finding descriptions (no KB)"
     if args.format in ("html", "both", "all"):
         print(f"\n[*] Generating HTML report: {html_path}  ({detail})")
-        ReportGenerator(all_findings, scan_meta, kb, priorities=prio_results).generate(html_path)
+        ReportGenerator(all_findings, scan_meta, kb, priorities=prio_results,
+                        fair=fair_summary).generate(html_path)
     if args.format in ("pdf", "both", "all"):
         print(f"[*] Generating PDF report: {pdf_path}  ({detail})")
-        PDFReportGenerator(all_findings, scan_meta, kb, priorities=prio_results).generate(pdf_path)
+        PDFReportGenerator(all_findings, scan_meta, kb, priorities=prio_results,
+                           fair=fair_summary).generate(pdf_path)
     if args.format in ("pptx", "all"):
         full = args.pptx_mode == "full"
         kind = "full per-finding deck" if full else "summarised meeting deck"

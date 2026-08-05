@@ -18,10 +18,14 @@ from modules.compliance_mapping import ComplianceMapper
 class ReportGenerator:
 
     def __init__(self, findings: List[Dict[str, Any]], meta: Dict[str, Any],
-                 kb: Optional[FindingKB] = None, priorities: Optional[List[Any]] = None):
+                 kb: Optional[FindingKB] = None, priorities: Optional[List[Any]] = None,
+                 fair: Optional[Dict[str, Any]] = None):
         self.findings = findings
         self.meta = meta
         self.kb = kb if kb is not None else FindingKB()
+        # Optional FAIR cyber-risk-quantification summary (from fair_adapter.run
+        # -> summary). None unless --crq ran and the CRQ engine was located.
+        self.fair = fair
         # Risk-prioritization overlay (P1-P4). Supplied by the scanner; if absent,
         # compute here so a standalone report still shows tiers. Degrades to none.
         self._prio_by_id = {}
@@ -130,6 +134,7 @@ class ReportGenerator:
 
         findings_html = self._render_findings()
         compliance_html = self._render_compliance()
+        fair_html = self._render_fair()
         category_chart_data = json.dumps([
             {"name": k, "count": v} for k, v in sorted(by_category.items(), key=lambda x: -x[1])
         ])
@@ -1004,6 +1009,9 @@ class ReportGenerator:
   <!-- Compliance / Control-Framework Mapping -->
   {compliance_html}
 
+  <!-- Financial Risk Exposure (FAIR cyber-risk quantification) -->
+  {fair_html}
+
   <!-- Filter Bar -->
   <div class="filter-bar">
     <label>Filter:</label>
@@ -1204,6 +1212,179 @@ window.addEventListener('beforeprint', () => {{
         <div class="cat-bar-count">{count}</div>
       </div>""")
         return "\n".join(rows)
+
+    # ── FAIR cyber-risk quantification ────────────────────────────────────
+    @staticmethod
+    def _fmt_money(v: float) -> str:
+        v = float(v or 0)
+        sign = "-" if v < 0 else ""
+        a = abs(v)
+        # Thresholds are rounding-aware: promote a tier when the mantissa would
+        # round up to 1000 in that tier's format (else e.g. $999,999 -> "$1000K"
+        # instead of "$1.0M", and $999.99M -> "$1000.0M" instead of "$1.00B").
+        if a >= 999.95e6:            # .2f rounds to 1000.00 at >= 999.95e6
+            return f"{sign}${a / 1e9:.2f}B"
+        if a >= 999.5e3:             # .1f rounds to 1000.0 at >= 999.5e3
+            return f"{sign}${a / 1e6:.1f}M"
+        if a >= 999.5:               # .0f rounds to 1000 at >= 999.5
+            return f"{sign}${a / 1e3:.0f}K"
+        return f"{sign}${a:.0f}"
+
+    def _svg_lec(self, points) -> str:
+        """Render the loss-exceedance curve [(loss, P(loss>=x)), ...] as an SVG."""
+        pts = [(float(t), float(p)) for t, p in (points or [])
+               if t is not None and p is not None]
+        pts = [(t, p) for t, p in pts if t >= 0]
+        if len(pts) < 2:
+            return ""
+        max_t = max(t for t, _ in pts) or 1.0
+        x0, x1, y0, y1 = 56, 664, 210, 22
+        def X(t):
+            return x0 + (t / max_t) * (x1 - x0)
+        def Y(p):
+            return y0 - max(0.0, min(1.0, p)) * (y0 - y1)
+        line = " ".join(f"{X(t):.1f},{Y(p):.1f}" for t, p in pts)
+        area = f"{x0:.1f},{y0:.1f} " + line + f" {X(pts[-1][0]):.1f},{y0:.1f}"
+        # y grid + labels (probability)
+        grid = []
+        for gp in (0.0, 0.25, 0.5, 0.75, 1.0):
+            y = Y(gp)
+            grid.append(f'<line x1="{x0}" y1="{y:.1f}" x2="{x1}" y2="{y:.1f}" class="lec-grid"/>')
+            grid.append(f'<text x="{x0 - 8}" y="{y + 3:.1f}" class="lec-ytick">{int(gp * 100)}%</text>')
+        # x labels (loss $)
+        xlab = []
+        for gx in (0.0, 0.5, 1.0):
+            t = max_t * gx
+            xlab.append(f'<text x="{X(t):.1f}" y="{y0 + 20}" class="lec-xtick">{self._fmt_money(t)}</text>')
+        return f"""<svg viewBox="0 0 700 240" class="lec-svg" role="img" aria-label="Loss exceedance curve">
+      {''.join(grid)}
+      <polygon points="{area}" class="lec-area"/>
+      <polyline points="{line}" class="lec-line"/>
+      {''.join(xlab)}
+      <text x="{(x0 + x1) / 2:.0f}" y="238" class="lec-axis">Annual loss ($)</text>
+    </svg>"""
+
+    def _render_fair(self) -> str:
+        """Financial risk exposure (FAIR): annualized loss expectancy, loss
+        exceedance curve, per-scenario breakdown, and remediation upside."""
+        fair = self.fair
+        if not fair or not fair.get("portfolio"):
+            return ""
+        pf = fair["portfolio"]
+        org = fair.get("organization", {})
+        sims = fair.get("simulations", 0)
+        reducible = fair.get("reducible_ale_p90", 0)
+        m = self._fmt_money
+        rows = []
+        for sc in sorted(fair.get("scenarios", []), key=lambda s: -(s.get("ale_p90") or 0)):
+            sev = str(sc.get("severity", "LOW"))
+            fc = sc.get("finding_count")
+            fc_txt = f'{fc}' if fc is not None else "—"
+            flags = []
+            if sc.get("exposed"):
+                flags.append("exposed")
+            if sc.get("exploited"):
+                flags.append("exploited")
+            flag_txt = (" · " + ", ".join(flags)) if flags else ""
+            rows.append(f"""
+        <tr>
+          <td>{html.escape(str(sc.get('name', sc.get('id', ''))))}<span class="fair-scn-tc">{html.escape(str(sc.get('threat_community','')).replace('_',' '))}{flag_txt}</span></td>
+          <td class="fair-num">{fc_txt}</td>
+          <td class="fair-num">{m(sc.get('mean_ale'))}</td>
+          <td class="fair-num">{m(sc.get('ale_p90'))}</td>
+          <td><span class="fair-sev fair-sev-{sev.lower()}">{html.escape(sev)}</span></td>
+        </tr>""")
+        table_rows = "".join(rows)
+        lec = self._svg_lec(pf.get("loss_exceedance"))
+        rev = org.get("revenue")
+        rev_txt = f" &middot; revenue {m(rev)}" if rev else ""
+        ind = html.escape(str(org.get("industry", "")).replace("_", " "))
+        # Disclose any findings that could not be attributed to a specific loss
+        # scenario (conservatively folded into the privileged-access scenario).
+        unrouted = int(fair.get("unrouted", 0) or 0)
+        unrouted_html = (
+            f"""<p class="fair-note" style="color:var(--high); font-style:normal;">&#9888;
+      {unrouted} finding(s) could not be mapped to a specific SAP loss scenario and were conservatively folded into the
+      privileged-access scenario (SAP-PRIV-03), which may overstate that scenario&rsquo;s exposure. Add explicit routing in
+      <code>data/fair_scenarios.json</code> to attribute them correctly.</p>""" if unrouted else "")
+        return f"""<div class="fair-section">
+    <style>
+      .fair-section {{ margin: 2.5rem 0; }}
+      .fair-section h2 {{ display:flex; align-items:baseline; gap:.6rem; }}
+      .fair-eyebrow {{ font-size:.72rem; letter-spacing:.12em; text-transform:uppercase; color:var(--accent); font-weight:700; }}
+      .fair-sub {{ color:var(--text-muted); font-size:.86rem; margin:.2rem 0 1.1rem; }}
+      .fair-cards {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:1rem; margin-bottom:1.3rem; }}
+      .fair-card {{ background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-sm); padding:1.1rem 1.2rem; box-shadow:var(--shadow-sm); }}
+      .fair-card .lbl {{ font-size:.74rem; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); font-weight:600; }}
+      .fair-card .big {{ font-size:1.85rem; font-weight:750; margin-top:.25rem; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }}
+      .fair-card .cap {{ font-size:.78rem; color:var(--text-muted); margin-top:.15rem; }}
+      .fair-card.accent {{ border-color:var(--accent); background:var(--accent-dim); }}
+      .fair-card.accent .big {{ color:var(--accent); }}
+      .fair-grid {{ display:grid; grid-template-columns:1.3fr 1fr; gap:1.2rem; align-items:start; }}
+      @media (max-width:760px) {{ .fair-grid {{ grid-template-columns:1fr; }} }}
+      .lec-box, .fair-tbl-box {{ background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-sm); padding:1rem 1.1rem; box-shadow:var(--shadow-sm); }}
+      .lec-box h3, .fair-tbl-box h3 {{ font-size:.9rem; margin:0 0 .5rem; }}
+      .lec-svg {{ width:100%; height:auto; }}
+      .lec-grid {{ stroke:var(--border); stroke-width:1; }}
+      .lec-area {{ fill:var(--accent); opacity:.12; }}
+      .lec-line {{ fill:none; stroke:var(--accent); stroke-width:2.5; stroke-linejoin:round; }}
+      .lec-ytick, .lec-xtick {{ fill:var(--text-muted); font-size:11px; font-family:var(--font-mono); }}
+      .lec-ytick {{ text-anchor:end; }} .lec-xtick {{ text-anchor:middle; }}
+      .lec-axis {{ fill:var(--text-muted); font-size:11px; text-anchor:middle; }}
+      .lec-cap {{ font-size:.78rem; color:var(--text-muted); margin-top:.4rem; }}
+      table.fair-tbl {{ width:100%; border-collapse:collapse; font-size:.82rem; }}
+      table.fair-tbl th {{ text-align:left; font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); padding:.4rem .5rem; border-bottom:1px solid var(--border); }}
+      table.fair-tbl td {{ padding:.5rem .5rem; border-bottom:1px solid var(--border); vertical-align:top; }}
+      table.fair-tbl tr:last-child td {{ border-bottom:none; }}
+      .fair-num {{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }}
+      .fair-scn-tc {{ display:block; font-size:.72rem; color:var(--text-muted); }}
+      .fair-sev {{ font-size:.68rem; font-weight:700; padding:.1rem .45rem; border-radius:5px; }}
+      .fair-sev-critical {{ color:var(--critical); background:var(--critical-bg); }}
+      .fair-sev-high {{ color:var(--high); background:var(--high-bg); }}
+      .fair-sev-medium {{ color:var(--medium); background:var(--medium-bg); }}
+      .fair-sev-low {{ color:var(--low); background:var(--low-bg); }}
+      .fair-note {{ font-size:.76rem; color:var(--text-muted); margin-top:1rem; font-style:italic; line-height:1.5; }}
+    </style>
+    <h2><span class="fair-eyebrow">Cyber Risk Quantification</span> Financial Risk Exposure &middot; FAIR</h2>
+    <div class="fair-sub">Annualized loss exposure from a FAIR Monte Carlo simulation ({sims:,} iterations/scenario) &mdash;
+      {html.escape(str(org.get('name','')))}{rev_txt}{(' &middot; ' + ind) if ind else ''}. Modelled estimate, not a measurement.</div>
+    <div class="fair-cards">
+      <div class="fair-card">
+        <div class="lbl">Expected annual loss (mean ALE)</div>
+        <div class="big">{m(pf.get('mean_ale'))}</div>
+        <div class="cap">across {len(fair.get('scenarios', []))} SAP loss scenarios</div>
+      </div>
+      <div class="fair-card">
+        <div class="lbl">1-in-10 bad year (ALE P90)</div>
+        <div class="big">{m(pf.get('ale_p90'))}</div>
+        <div class="cap">median (P50) {m(pf.get('ale_p50'))}</div>
+      </div>
+      <div class="fair-card accent">
+        <div class="lbl">Reducible by remediation</div>
+        <div class="big">{m(reducible)}</div>
+        <div class="cap">how far the 1-in-10 loss (P90) drops toward a fully-hardened posture</div>
+      </div>
+    </div>
+    <div class="fair-grid">
+      <div class="lec-box">
+        <h3>Loss exceedance curve</h3>
+        {lec if lec else '<p class="lec-cap">Curve unavailable.</p>'}
+        <div class="lec-cap">Read as: the probability (y) that annual loss exceeds a given amount (x). The steeper it drops, the more contained the risk.</div>
+      </div>
+      <div class="fair-tbl-box">
+        <h3>By loss scenario</h3>
+        <table class="fair-tbl">
+          <thead><tr><th>Scenario</th><th class="fair-num">Findings</th><th class="fair-num">Mean ALE</th><th class="fair-num">ALE P90</th><th>Sev</th></tr></thead>
+          <tbody>{table_rows}</tbody>
+        </table>
+      </div>
+    </div>
+    <p class="fair-note">FAIR (Factor Analysis of Information Risk): a finding is not a risk &mdash; findings are evidence that shifts the frequency
+      and magnitude factors of scoped SAP loss scenarios. Loss magnitudes are modelled estimates from public benchmarks (IBM, Verizon DBIR,
+      ACFE, Sophos, GDPR enforcement) scaled to the stated revenue/industry; validate against your own loss data before treating any figure as
+      your organisation's actual risk. Scenario input exported alongside this report as <code>*.crq.json</code>.</p>
+    {unrouted_html}
+  </div>"""
 
     def _render_compliance(self) -> str:
         """Map findings onto control frameworks (ISO 27001 / NIST CSF / CIS /

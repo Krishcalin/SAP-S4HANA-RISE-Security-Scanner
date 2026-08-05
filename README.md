@@ -27,9 +27,10 @@
 - **300+ security checks across 23 audit modules** — from ABAP authorizations and HANA DB to BTP/Cloud, GRC Access Control, SOX financial-config controls, and permission-level Segregation of Duties
 - **Risk-prioritized (P1–P4)** — every finding is ranked by severity × exploitability (actively-exploited / HotNews) × exposure × privilege, so remediation starts with what matters
 - **Compliance mapping** — findings are mapped to **ISO/IEC 27001:2022, NIST CSF 2.0, CIS Controls v8, TISAX/VDA ISA, SOC 2, and EU GDPR** in the report
+- **Cyber-risk quantification (FAIR)** *(optional `--crq`)* — translates the technical findings into a **dollar-denominated Annualized Loss Exposure (ALE)** and a loss-exceedance curve via a FAIR Monte-Carlo simulation, so the board sees financial risk and the **$ reducible by remediation**, not just a severity count
 - **Standards-aligned** — mapped to the CIS SAP Benchmark, DSAG best-practice guide, and the SAP Security Baseline
 
-**Pipeline:** &nbsp;`LOAD` CSV/JSON exports → `MODULES` (23 auditors) → `CHECKS` (300+ rules) → `RANK` by severity & P1–P4 priority → `MAP` to compliance frameworks → `REPORT` (interactive HTML dashboard · PDF hand-over · PPTX deck).
+**Pipeline:** &nbsp;`LOAD` CSV/JSON exports → `MODULES` (23 auditors) → `CHECKS` (300+ rules) → `RANK` by severity & P1–P4 priority → `MAP` to compliance frameworks → *(optional)* `QUANTIFY` FAIR loss exposure ($) → `REPORT` (interactive HTML dashboard · PDF hand-over · PPTX deck).
 
 ---
 
@@ -767,6 +768,10 @@ python sap_scanner.py --data-dir ./exports --severity HIGH
 
 # Custom thresholds
 python sap_scanner.py --data-dir ./exports --config baseline.json
+
+# Cyber-risk quantification (FAIR): embed a dollar-denominated loss exposure in the report
+python sap_scanner.py --data-dir ./exports --output report.html --format both --crq \
+    --crq-revenue 2000000000 --crq-industry manufacturing --crq-org-name "Acme Manufacturing"
 ```
 
 ### Available Modules
@@ -834,6 +839,29 @@ Every category is mapped to control frameworks and rendered as a per-framework p
 ### Detailed findings — knowledge base
 
 Every finding is rendered with an in-depth **Security Risk** explanation (what the weakness is, the concrete attack/abuse scenario, and the business/compliance impact) and a **numbered, step-by-step remediation procedure** naming the exact SAP transactions, reports, IMG paths, parameters and tables to change, how to verify the fix, and rollout cautions. This content lives in a bundled knowledge base (`data/finding_details.json`) keyed by check-id (with family-prefix fallback); where an entry is absent, the report falls back to the finding's own description and remediation, so the report is always complete.
+
+### Cyber-risk quantification — FAIR *(optional, `--crq`)*
+
+Run with `--crq` to translate the technical findings into **financial risk** using the [FAIR](https://www.fairinstitute.org/) (Factor Analysis of Information Risk) model and a Monte-Carlo simulation. The report gains a **Financial Risk Exposure** section: the expected annual loss (mean ALE), the **1-in-10 bad year (ALE P90)**, a **loss-exceedance curve**, a per-scenario breakdown, and the **dollar amount reducible by remediation** (as-is posture vs. a fully-hardened target).
+
+How it stays methodologically honest:
+
+- **A finding is not a risk.** Findings are treated as *evidence that shifts the FAIR factors* of a small set of scoped SAP loss scenarios (internet-facing RCE→ransomware, SoD/financial-controls→payment fraud, privileged/standard-user takeover, HANA data exfiltration→GDPR breach, interface/integration→lateral movement) — never assigned their own dollar figure and summed.
+- **Calibration is range-selection, not arithmetic on CVSS.** The worst open *prevention* finding selects a Resistance-Strength band; the scanner's existing `exposed`/`exploited` signals select the Contact-Frequency and Probability-of-Action bands. Logging/monitoring gaps aren't a scenario — they set a **dwell-time loss multiplier** (weak detection ⇒ longer dwell ⇒ larger loss, per FAIR-CAM).
+- **Correct aggregation.** The portfolio ALE is the element-wise Monte-Carlo sum of the independent per-scenario loss distributions — *never* a sum of percentiles.
+- **Report filters never move the number.** The quantification always runs on the **complete** finding set, so a display `--severity` filter can't change the dollar figure.
+- **Honest by construction.** Loss magnitudes are **modelled estimates** from public benchmarks (IBM Cost of a Data Breach, Verizon DBIR, ACFE, Sophos, GDPR enforcement) scaled to `--crq-revenue`/`--crq-industry`; the report says so, and the scenario input is exported alongside as `*.crq.json`.
+
+The Monte-Carlo engine lives in the sibling [Cyber-Risk-Quantification](https://github.com/Krishcalin/Cyber-Risk-Quantification) project; the scanner **auto-detects** it (or point `--crq-engine` / the `CRQ_ENGINE` env var at `crq_engine.py`). If the engine can't be found, the scanner still exports the `*.crq.json` scenario input so you can quantify it standalone — the scanner has **no hard dependency** on the sibling repo.
+
+| Flag | Purpose |
+|------|---------|
+| `--crq` | Enable FAIR quantification; write `<output>.crq.json` and embed the ALE + loss-exceedance curve in the HTML/PDF report |
+| `--crq-revenue` | Organization annual revenue (USD) for the loss scaling (default: illustrative $1B) |
+| `--crq-industry` | Industry for the loss multiplier (`financial_services`, `healthcare`, `technology`, `retail`, `manufacturing`, `government`, `energy`, `education`) |
+| `--crq-org-name` | Organization name shown in the report |
+| `--crq-sims` | Monte-Carlo iterations per scenario (default: 10000) |
+| `--crq-engine` | Explicit path to `crq_engine.py` (overrides auto-detect / `CRQ_ENGINE`) |
 
 ---
 
@@ -1107,6 +1135,7 @@ SAP-S4HANA-RISE-Security-Scanner/
 │   ├── pptx_writer.py              # Dependency-free OOXML/PPTX engine (slides, shapes, text, images)
 │   ├── compliance_mapping.py       # Category → framework control mapping (ISO/NIST/CIS/TISAX/SOC 2/GDPR)
 │   ├── risk_prioritizer.py         # P1–P4 risk prioritizer (severity × exploitability × exposure × privilege)
+│   ├── fair_adapter.py             # FAIR CRQ adapter (--crq): findings → SAP loss scenarios → $ ALE via crq_engine
 │   ├── finding_kb.py               # Findings knowledge base loader (detailed risk + remediation)
 │   ├── user_auth_audit.py          # USR-*            User & Authorization
 │   ├── iam_advanced.py             # IAM-*            Advanced IAM (SoD, firefighter, role lifecycle)
@@ -1134,7 +1163,8 @@ SAP-S4HANA-RISE-Security-Scanner/
 ├── assets/                         # PhalanxCyber + SAP logos (embedded in reports as data URIs)
 ├── sample_data/                    # 90 crafted demo exports (trigger every check)
 ├── data/
-│   └── finding_details.json        # Knowledge base: detailed risk + step-by-step remediation per check
+│   ├── finding_details.json        # Knowledge base: detailed risk + step-by-step remediation per check
+│   └── fair_scenarios.json         # FAIR catalog: 5 SAP loss scenarios + factor/loss ranges (--crq)
 ├── tests/
 │   ├── conftest.py                 # pytest fixtures (DataLoader over sample_data)
 │   └── test_scanner.py             # per-module + full-pipeline + CLI tests
@@ -1224,6 +1254,7 @@ SAP-S4HANA-RISE-Security-Scanner/
 - [x] Risk prioritization (P1–P4: severity × exploitability × exposure × privilege)
 - [x] Compliance mapping (ISO 27001:2022, NIST CSF 2.0, CIS v8, TISAX/VDA ISA, SOC 2, GDPR)
 - [x] PowerPoint (PPTX) deck export — executive summary + one slide per finding
+- [x] Cyber-risk quantification — FAIR loss exposure ($ ALE + loss-exceedance curve, `--crq`)
 - [ ] Scan comparison mode (diff two scans)
 - [ ] CI/CD integration with exit codes
 

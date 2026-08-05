@@ -51,10 +51,12 @@ class PDFReportGenerator:
                   "P3": SEV_COLOR["MEDIUM"], "P4": SEV_COLOR["LOW"]}
 
     def __init__(self, findings: List[Dict[str, Any]], meta: Dict[str, Any],
-                 kb: Optional[FindingKB] = None, priorities: Optional[List[Any]] = None):
+                 kb: Optional[FindingKB] = None, priorities: Optional[List[Any]] = None,
+                 fair: Optional[Dict[str, Any]] = None):
         self.findings = findings
         self.meta = meta
         self.kb = kb or FindingKB()
+        self.fair = fair
         self.w = PDFWriter()
         self.pw, self.ph = self.w.pw, self.w.ph
         self.cw = self.pw - self.ML - self.MR
@@ -159,6 +161,7 @@ class PDFReportGenerator:
         self._priority_section()           # Risk-Prioritized Remediation Queue (P1-P4 + top-10)
         self._categories_section()         # Findings by Category
         self._compliance_section()         # Compliance & Control-Framework Mapping
+        self._fair_section()               # Financial Risk Exposure (FAIR) — if quantified
         self._detailed_findings()          # Detailed Findings (fix-first order)
         self._footers()
         self.w.save(output_path)
@@ -390,6 +393,127 @@ class PDFReportGenerator:
                 ay -= 9
             self.y -= row_h
         self.y -= 12
+
+    @staticmethod
+    def _money(v) -> str:
+        v = float(v or 0)
+        sign = "-" if v < 0 else ""
+        a = abs(v)
+        # Rounding-aware tiers (match report_generator._fmt_money): promote a
+        # tier when the mantissa would round up to 1000 in that tier's format.
+        if a >= 999.95e6:
+            return "%s$%.2fB" % (sign, a / 1e9)
+        if a >= 999.5e3:
+            return "%s$%.1fM" % (sign, a / 1e6)
+        if a >= 999.5:
+            return "%s$%.0fK" % (sign, a / 1e3)
+        return "%s$%.0f" % (sign, a)
+
+    def _fair_section(self):
+        fair = self.fair
+        if not fair or not fair.get("portfolio"):
+            return
+        pf = fair["portfolio"]
+        org = fair.get("organization", {})
+        self._new_content_page()
+        self._section_title("Financial Risk Exposure (FAIR)")
+        rev = org.get("revenue")
+        rev_txt = ("  ·  revenue %s" % self._money(rev)) if rev else ""
+        ind = str(org.get("industry", "")).replace("_", " ")
+        self._para(
+            "Annualized loss exposure from a FAIR (Factor Analysis of Information Risk) Monte Carlo "
+            "simulation (%s iterations per scenario) for %s%s%s. Findings are not risks - they are "
+            "evidence that shifts the frequency and magnitude factors of scoped SAP loss scenarios. "
+            "Loss magnitudes are modelled estimates from public benchmarks scaled to the stated "
+            "revenue/industry; validate before treating any figure as actual risk."
+            % ("{:,}".format(fair.get("simulations", 0)), org.get("name", "the organization"),
+               rev_txt, ("  ·  " + ind) if ind else ""),
+            size=8.5, color=MUTED, leading=12, gap_after=14)
+
+        # ── headline stat cards ──────────────────────────────────────────
+        self._ensure(60)
+        gap = 12
+        card_w = (self.cw - 2 * gap) / 3.0
+        cards = [
+            ("EXPECTED ANNUAL LOSS (MEAN ALE)", self._money(pf.get("mean_ale")), NAVY),
+            ("1-IN-10 BAD YEAR (ALE P90)", self._money(pf.get("ale_p90")), NAVY),
+            ("REDUCIBLE BY REMEDIATION", self._money(fair.get("reducible_ale_p90")), ACCENT),
+        ]
+        cy = self.y
+        for i, (lbl, val, col) in enumerate(cards):
+            cx = self.ML + i * (card_w + gap)
+            self.w.rect(cx, cy - 52, card_w, 52, fill=LIGHT)
+            self.w.rect(cx, cy - 52, 3, 52, fill=col)
+            self.w.text(cx + 10, cy - 16, self._fit(lbl, "HB", 6.8, card_w - 16),
+                        font="HB", size=6.8, color=MUTED)
+            self.w.text(cx + 10, cy - 38, val, font="HB", size=17, color=col)
+        p50 = self._money(pf.get("ale_p50"))
+        self.w.text(self.ML + card_w + gap + 10, cy - 50, "median (P50) " + p50, font="H", size=7, color=MUTED)
+        self.y = cy - 52 - 16
+
+        # ── per-scenario table ────────────────────────────────────────────
+        scns = sorted(fair.get("scenarios", []), key=lambda s: -(s.get("ale_p90") or 0))
+        x_sev = self.ML + self.cw - 54
+        x_p90 = x_sev - 74
+        x_mean = x_p90 - 74
+        x_find = x_mean - 42
+        x_name = self.ML + 6
+        name_w = x_find - x_name - 8
+
+        self._ensure(18)
+        self.w.rect(self.ML, self.y - 15, self.cw, 15, fill=NAVY)
+        self.w.text(x_name, self.y - 11, "Loss scenario", font="HB", size=7.5, color=WHITE)
+        for x, colw, h in ((x_find, 42, "Findings"), (x_mean, 74, "Mean ALE"),
+                           (x_p90, 74, "ALE P90")):
+            self.w.text(x + colw - 3 - self.w.string_width(h, "HB", 7.5), self.y - 11, h,
+                        font="HB", size=7.5, color=WHITE)
+        self.w.text(x_sev, self.y - 11, "Sev", font="HB", size=7.5, color=WHITE)
+        self.y -= 15
+
+        def rcell(x, colw, s, color, size=8):
+            self.w.text(x + colw - 3 - self.w.string_width(s, "HB", size), self.y - 11, s,
+                        font="HB", size=size, color=color)
+
+        for ri, sc in enumerate(scns):
+            nlines = self.w.wrap(sc.get("name", sc.get("id", "")), "HB", 8, name_w) or [""]
+            tc = str(sc.get("threat_community", "")).replace("_", " ")
+            flags = []
+            if sc.get("exposed"):
+                flags.append("exposed")
+            if sc.get("exploited"):
+                flags.append("exploited")
+            sub = tc + (("  ·  " + ", ".join(flags)) if flags else "")
+            row_h = max(21, 6 + len(nlines) * 10 + (9 if sub else 0) + 4)
+            self._ensure(row_h)
+            if ri % 2 == 0:
+                self.w.rect(self.ML, self.y - row_h, self.cw, row_h, fill=LIGHT)
+            fc = sc.get("finding_count")
+            rcell(x_find, 42, str(fc) if fc is not None else "-", INK)
+            rcell(x_mean, 74, self._money(sc.get("mean_ale")), INK)
+            rcell(x_p90, 74, self._money(sc.get("ale_p90")), INK)
+            sev = str(sc.get("severity", "LOW")).upper()
+            self.w.text(x_sev, self.y - 11, sev[:4], font="HB", size=7.5,
+                        color=SEV_COLOR.get(sev, MUTED))
+            ay = self.y - 10
+            for ln in nlines:
+                self.w.text(x_name, ay, ln, font="HB", size=8, color=INK)
+                ay -= 10
+            if sub:
+                self.w.text(x_name, ay, self._fit(sub, "H", 7, name_w), font="H", size=7, color=MUTED)
+            self.y -= row_h
+        self.y -= 6
+        self._para(
+            "Portfolio ALE aggregates the per-scenario loss distributions by Monte Carlo (per-iteration "
+            "sum of independent scenarios) - never by summing percentiles. The full scenario input is "
+            "exported alongside this report as a *.crq.json file for the standalone CRQ engine.",
+            size=7.5, color=MUTED, leading=11, gap_after=6)
+        if int(fair.get("unrouted", 0) or 0):
+            self._para(
+                "Note: %d finding(s) could not be mapped to a specific SAP loss scenario and were "
+                "conservatively folded into the privileged-access scenario (SAP-PRIV-03), which may "
+                "overstate that scenario's exposure. Add explicit routing in data/fair_scenarios.json "
+                "to attribute them correctly." % int(fair["unrouted"]),
+                size=7.5, color=SEV_COLOR.get("HIGH", MUTED), leading=11, gap_after=6)
 
     def _detailed_findings(self):
         self._new_content_page()
