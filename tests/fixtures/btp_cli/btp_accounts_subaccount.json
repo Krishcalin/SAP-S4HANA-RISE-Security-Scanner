@@ -1,0 +1,59 @@
+{
+  "value": [
+    {
+      "guid": "a1b2c3d4-1111-4aaa-8bbb-000000000001",
+      "technicalName": "acme-prod",
+      "displayName": "Production",
+      "globalAccountGUID": "ga-0000-0000-0000-000000000000",
+      "parentGUID": "ga-0000-0000-0000-000000000000",
+      "parentType": "ROOT",
+      "region": "eu10",
+      "subdomain": "acme-prod",
+      "betaEnabled": false,
+      "usedForProduction": "USED_FOR_PRODUCTION",
+      "state": "OK",
+      "stateMessage": "Subaccount created.",
+      "createdDate": "2024-02-11T09:14:02.000Z",
+      "modifiedDate": "2026-05-30T16:41:55.000Z",
+      "description": "S/4HANA RISE production extensions",
+      "labels": {},
+      "customProperties": []
+    },
+    {
+      "guid": "a1b2c3d4-1111-4aaa-8bbb-000000000002",
+      "technicalName": "acme-qa",
+      "displayName": "Quality",
+      "globalAccountGUID": "ga-0000-0000-0000-000000000000",
+      "parentGUID": "ga-0000-0000-0000-000000000000",
+      "parentType": "ROOT",
+      "region": "eu10",
+      "subdomain": "acme-qa",
+      "betaEnabled": false,
+      "usedForProduction": "NOT_USED_FOR_PRODUCTION",
+      "state": "OK",
+      "createdDate": "2024-02-11T09:20:31.000Z",
+      "modifiedDate": "2026-04-02T11:03:12.000Z",
+      "description": "Quality assurance",
+      "labels": {},
+      "customProperties": []
+    },
+    {
+      "guid": "a1b2c3d4-1111-4aaa-8bbb-000000000003",
+      "technicalName": "acme-sbx",
+      "displayName": "Sandbox",
+      "globalAccountGUID": "ga-0000-0000-0000-000000000000",
+      "parentGUID": "ga-0000-0000-0000-000000000000",
+      "parentType": "ROOT",
+      "region": "us10",
+      "subdomain": "acme-sbx",
+      "betaEnabled": true,
+      "usedForProduction": "UNSET",
+      "state": "OK",
+      "createdDate": "2025-11-04T07:55:19.000Z",
+      "modifiedDate": "2026-01-19T13:27:40.000Z",
+      "description": "Developer sandbox",
+      "labels": {},
+      "customProperties": []
+    }
+  ]
+}

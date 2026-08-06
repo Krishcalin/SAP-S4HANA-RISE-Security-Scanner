@@ -1,0 +1,70 @@
+{
+  "/api/v1/configuration/connector/version": {"version": "2.15.2"},
+
+  "/api/v1/configuration/subaccounts": [
+    {
+      "regionHost": "cf.eu10.hana.ondemand.com",
+      "subaccount": "a1b2c3d4-1111-4aaa-8bbb-000000000001",
+      "locationID": "",
+      "displayName": "Production",
+      "description": "S/4HANA RISE production extensions",
+      "tunnel": {
+        "state": "Connected",
+        "connectedSince": "2026-07-01T08:00:00.000Z",
+        "connections": 3,
+        "user": "SCC_ADMIN",
+        "subaccountCertificate": {
+          "subjectDN": "CN=a1b2c3d4-1111-4aaa-8bbb-000000000001, OU=SAP Cloud Platform Clients",
+          "issuer": "CN=SAP Cloud Platform Clients CA",
+          "notBeforeTimeStamp": 1706832000000,
+          "notAfterTimeStamp": 1738368000000
+        }
+      }
+    }
+  ],
+
+  "/api/v1/configuration/subaccounts/cf.eu10.hana.ondemand.com/a1b2c3d4-1111-4aaa-8bbb-000000000001/systemMappings": [
+    {
+      "virtualHost": "s4h-prod.internal",
+      "virtualPort": "443",
+      "localHost": "10.0.1.50",
+      "localPort": "44300",
+      "creationDate": "2024-03-04T12:00:00.000Z",
+      "protocol": "HTTPS",
+      "backendType": "abapSys",
+      "authenticationMode": "NONE",
+      "hostInHeader": "internal",
+      "sid": "PRD",
+      "totalResourcesCount": 3,
+      "enabledResourcesCount": 3,
+      "description": "S/4HANA production",
+      "resources": [
+        {"id": "/", "enabled": true, "exactMatchOnly": false,
+         "websocketUpgradeAllowed": false, "description": "root"},
+        {"id": "/sap/bc/gui/sap/its/webgui", "enabled": true, "exactMatchOnly": false,
+         "websocketUpgradeAllowed": false, "description": "WebGUI"},
+        {"id": "/sap/opu/odata/sap", "enabled": true, "exactMatchOnly": false,
+         "websocketUpgradeAllowed": false, "description": "OData"}
+      ]
+    },
+    {
+      "virtualHost": "bw-report.internal",
+      "virtualPort": "443",
+      "localHost": "10.0.1.60",
+      "localPort": "44301",
+      "creationDate": "2025-01-22T09:30:00.000Z",
+      "protocol": "HTTPS",
+      "backendType": "abapSys",
+      "authenticationMode": "X509_GENERAL",
+      "hostInHeader": "internal",
+      "sid": "BWP",
+      "totalResourcesCount": 1,
+      "enabledResourcesCount": 1,
+      "description": "BW reporting",
+      "resources": [
+        {"id": "/sap/bw/ina", "enabled": true, "exactMatchOnly": true,
+         "websocketUpgradeAllowed": false, "description": "InA"}
+      ]
+    }
+  ]
+}

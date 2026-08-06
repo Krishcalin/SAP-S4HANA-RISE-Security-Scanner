@@ -1,0 +1,45 @@
+{
+  "handle": "eyJvZmZzZXQiOjIwMH0",
+  "records": [
+    {
+      "uuid": "4d2c1a90-0001-4f00-9a11-aaaaaaaaaaaa",
+      "user": "basis.admin@acme.example",
+      "time": "2026-07-30T11:04:17.412Z",
+      "tenant": "a1b2c3d4-1111-4aaa-8bbb-000000000001",
+      "org_id": "cf-org-0001",
+      "space_id": "cf-space-0001",
+      "category": "audit.security-events",
+      "format_version": "2.0",
+      "message": {"uuid": "4d2c1a90-0001-4f00-9a11-aaaaaaaaaaaa",
+                  "user": "basis.admin@acme.example",
+                  "data": "role collection assigned"},
+      "attributes": [{"name": "role_collection", "old": "", "new": "Subaccount_Administrator"}]
+    },
+    {
+      "uuid": "4d2c1a90-0002-4f00-9a11-aaaaaaaaaaaa",
+      "user": "integration.svc@acme.example",
+      "time": "2026-07-31T04:22:56.108Z",
+      "tenant": "a1b2c3d4-1111-4aaa-8bbb-000000000001",
+      "org_id": "cf-org-0001",
+      "space_id": "cf-space-0001",
+      "category": "audit.configuration",
+      "format_version": "2.0",
+      "message": {"uuid": "4d2c1a90-0002-4f00-9a11-aaaaaaaaaaaa",
+                  "data": "destination updated"},
+      "attributes": [{"name": "destination", "old": "S4H_Backend", "new": "S4H_Backend"}]
+    },
+    {
+      "uuid": "4d2c1a90-0003-4f00-9a11-aaaaaaaaaaaa",
+      "user": "basis.admin@acme.example",
+      "time": "2026-08-01T19:47:03.900Z",
+      "tenant": "a1b2c3d4-1111-4aaa-8bbb-000000000001",
+      "org_id": "cf-org-0001",
+      "space_id": "cf-space-0001",
+      "category": "audit.security-events",
+      "format_version": "2.0",
+      "message": {"uuid": "4d2c1a90-0003-4f00-9a11-aaaaaaaaaaaa",
+                  "data": "failed logon"},
+      "attributes": []
+    }
+  ]
+}

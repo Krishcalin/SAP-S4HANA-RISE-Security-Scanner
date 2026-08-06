@@ -62,6 +62,9 @@ RISE_MODULE_SCOPE: Dict[str, str] = {
     "data_protection": "in_scope",
     "code_transport": "split",            # SE06/SCC4 are ticket-to-SAP
     "log_monitoring": "in_scope",
+    # A retrospective review reads an export the customer produces themselves from
+    # the ABAP application layer, which they keep in RISE.
+    "log_review": "in_scope",
     "fiori_ui": "in_scope",
     "crypto_posture": "partial",
     "hana_db_security": "mostly_out",

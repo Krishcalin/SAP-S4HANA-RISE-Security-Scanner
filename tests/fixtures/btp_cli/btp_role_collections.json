@@ -1,0 +1,42 @@
+[
+  {
+    "name": "Z_Analytics_Viewer",
+    "description": "Read-only analytics access",
+    "isReadOnly": false,
+    "roleReferences": [
+      {"roleTemplateAppId": "analytics!t1234", "roleTemplateName": "Viewer", "name": "Viewer"}
+    ],
+    "userReferences": [],
+    "groupReferences": [],
+    "attributeReferences": [
+      {"attributeName": "Groups", "attributeValue": "Default", "origin": "corp-azuread"}
+    ]
+  },
+  {
+    "name": "Subaccount_Administrator",
+    "description": "Subaccount administration",
+    "isReadOnly": true,
+    "roleReferences": [
+      {"roleTemplateAppId": "xsuaa!t1", "roleTemplateName": "Subaccount Administrator",
+       "name": "Subaccount Administrator"}
+    ],
+    "userReferences": [
+      {"id": "basis.admin@acme.example", "origin": "corp-azuread"}
+    ],
+    "groupReferences": [
+      {"groupName": "SAP_BTP_ADMINS", "origin": "corp-azuread"}
+    ],
+    "attributeReferences": []
+  },
+  {
+    "name": "Z_Procurement_Approver",
+    "description": "Purchase requisition approval",
+    "isReadOnly": false,
+    "roleReferences": [
+      {"roleTemplateAppId": "proc!t9", "roleTemplateName": "Approver", "name": "Approver"}
+    ],
+    "userReferences": [],
+    "groupReferences": [],
+    "attributeReferences": []
+  }
+]

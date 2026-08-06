@@ -437,7 +437,69 @@ catalogue refreshes from SAP in CI rather than by hand.
 
 ---
 
-## Phase 6 — Reach
+## Phase 6 — Reach ✅ **COMPLETE (file-based half)**
+
+| Component | File | Status |
+|---|---|---|
+| Cloud ALM CSA export importer | `modules/cloudalm_import.py` | ✅ |
+| BTP CLI / Cloud Connector / audit-log importers | `modules/btp_import.py` | ✅ |
+| Retrospective Security Audit Log review | `modules/log_review.py` (`logreview`) | ✅ |
+| Export guidance for all three | `docs/EXPORT_GUIDE.md` | ✅ |
+
+**465 tests green** (401 unit, 64 against real PostgreSQL 16).
+
+### Deliberately NOT built: live API clients
+
+No Cloud ALM OData client, no BTP `auditlog-management` client, no live Cloud Connector
+polling. They cannot be verified in this environment, and shipping unverifiable network code
+would be a capability claim we cannot stand behind. Every importer reads **files the customer
+exported** using documented SAP tooling, and `docs/EXPORT_GUIDE.md` gives the exact commands.
+The live-connector half of Phase 6 remains open and needs a real tenant.
+
+Also stated honestly in the module docstring: the research could **not** confirm whether Cloud
+ALM's API returns raw store values or only SAP's own policy verdicts. The importer covers the
+raw-export path; if the API returns only verdicts, that path is narrower than it looks.
+
+### A CRITICAL false negative found and fixed
+
+The Cloud ALM agent reported — but did not fix — a latent defect it had tripped over. Verified
+and fixed here, because it is the entry-point hop of attack path 4:
+
+`INTG-GW-001` (CRITICAL, "secinfo overly permissive permit rules") detected permit-all only via
+the literal word `PERMIT` or a structured `ACTION` column. Real gateway ACL lines use a leading
+`P`, and our own `sample_data/gw_secinfo.csv` contains
+
+```
+P TP=* HOST=* USER=*
+```
+
+— any program, from any host, as any user: **exactly the 10KBLAZE condition CISA AA19-122A
+describes.** The check did not fire. Nor did `INTG-GW-004`, its reginfo twin.
+
+Behind it sat the opposite bug: the operands were read from columns a rule-only export does not
+have, leaving them empty, and the wildcard test treated empty as wildcard. Had the action test
+ever matched, **every** permit rule would have been flagged, including the specific ones. Both
+are fixed by a real ACL parser; the specific rules correctly stay quiet and only the
+all-wildcard rule is flagged.
+
+### Two smaller things
+
+**A cross-platform loader bug**, found and fixed by the Cloud ALM agent. Three CSA store names
+collide with our own filenames (`STANDARD_USERS`, `GW_SECINFO`, `GW_REGINFO`). On Windows the
+filesystem is case-insensitive, so `STANDARD_USERS.csv` satisfied a lookup for
+`standard_users.csv` and the store export was read **raw and untranslated** — `UFLAG=64` then
+reads as *unlocked*, silently passing a CRITICAL check. One export produced two different
+products depending on the host OS.
+
+**The ID collision had a second victim.** Renumbering `BASELINE-011`→`BASELINE-012` made
+SAPPATH-02's required cut stop resolving — revealing that the path had been instantiating on
+the *password-hash* finding all along, because the template cited the colliding id.
+`rfc/callback_security_method` is now in the sample data (and its CSA twin, kept in step) so
+the cut is genuinely evidenced.
+
+---
+
+## Phase 6 — original scope (for reference)
 
 - [ ] **SAP Cloud ALM CSA** ingestion — already switched on in most RISE tenants; no transport,
       no RFC user, no agent. *Verify first:* whether its API returns raw store values or only

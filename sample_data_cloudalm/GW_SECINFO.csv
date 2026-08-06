@@ -1,0 +1,6 @@
+ACCESS,TP,HOST,USER
+PERMIT,sapxpg,*,*
+PERMIT,*,10.0.1.50,*
+PERMIT,*,*,*
+PERMIT,SAPXPG,internal.corp,ADMIN
+DENY,*,external.*,*

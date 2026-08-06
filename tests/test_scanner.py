@@ -30,6 +30,7 @@ from modules.integration_layer import IntegrationLayerAuditor
 from modules.data_protection import DataProtectionAuditor
 from modules.code_transport import CodeTransportAuditor
 from modules.log_monitoring import LogMonitoringAuditor
+from modules.log_review import LogReviewAuditor
 from modules.fiori_ui import FioriUiAuditor
 from modules.crypto_posture import CryptoPostureAuditor
 from modules.hana_db_security import HanaDbSecurityAuditor
@@ -51,6 +52,7 @@ MODULES = [
     ("iam", AdvancedIamAuditor), ("btpcloud", BtpCloudSurfaceAuditor),
     ("intglayer", IntegrationLayerAuditor), ("dataprot", DataProtectionAuditor),
     ("codetrans", CodeTransportAuditor), ("logmon", LogMonitoringAuditor),
+    ("logreview", LogReviewAuditor),
     ("fiori", FioriUiAuditor), ("crypto", CryptoPostureAuditor),
     ("hanadb", HanaDbSecurityAuditor), ("hotnews", SapHotNewsAuditor),
     ("authz", AbapAuthorizationAuditor), ("systrust", SystemTrustAuditor),
@@ -77,6 +79,10 @@ EXPECTED_CHECKS = {
     "systrust": {"STDUSR-001", "STDUSR-002", "STDUSR-003", "TRUST-001",
                  "TRUST-004", "TRUST-005", "TRUST-008", "TRUST-010"},
     "logmon": {"LOG-AUD-010", "LOG-AUD-011", "LOG-TBL-010"},
+    # sample_data carries the SM19 filter CONFIGURATION and no event extract, so the
+    # log-source-health half fires and the retrospective half correctly reports that
+    # it was given no window to review.
+    "logreview": {"LREV-SRC-001", "LREV-FLT-001", "LREV-FLT-002", "LREV-FLT-003"},
     "codetrans": {"CODE-SYSCHG-001"},
     "baseline": {"BASELINE-001", "BASELINE-002", "BASELINE-003", "BASELINE-004",
                  "BASELINE-005", "BASELINE-006", "BASELINE-007", "BASELINE-008",

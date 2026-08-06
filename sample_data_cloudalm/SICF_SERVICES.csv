@@ -1,0 +1,14 @@
+NAME,PATH,ACTIVE,AUTHENTICATION
+ping,/sap/public/icman/ping,ACTIVE,NONE
+info,/sap/public/info,ACTIVE,NONE
+rfc,/sap/bc/soap/rfc,ACTIVE,BASIC
+sap,/sap/bc/srt/rfc/sap,ACTIVE,BASIC
+webgui,/sap/bc/gui/sap/its/webgui,ACTIVE,BASIC
+webrfc,/sap/bc/webrfc,ACTIVE,NONE
+it00,/sap/bc/bsp/sap/it00,ACTIVE,BASIC
+API_BUSINESS_PARTNER,/sap/opu/odata/sap/API_BUSINESS_PARTNER,ACTIVE,BASIC
+API_SALES_ORDER,/sap/opu/odata/sap/API_SALES_ORDER,ACTIVE,BASIC
+wsdl,/sap/bc/soap/wsdl,ACTIVE,NONE
+webdynpro,/sap/bc/webdynpro,ACTIVE,BASIC
+icr_groups,/sap/public/icf_info/icr_groups,ACTIVE,NONE
+ping,/default_host/sap/bc/ping,ACTIVE,NONE

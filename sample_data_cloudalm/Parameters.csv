@@ -1,0 +1,3 @@
+NAME,VALUE
+ume.logon.security_policy.password_min_length,6
+ssl.session_timeout,3600

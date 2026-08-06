@@ -30,6 +30,7 @@ Data sources:
   - integration_topology.json → System-to-system integration map
 """
 
+import re
 from typing import Dict, List, Any, Set, Tuple
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -867,6 +868,67 @@ class IntegrationLayerAuditor(BaseAuditor):
     #  INTG-GW-*: Gateway Security (secinfo/reginfo Deep Analysis)
     # ════════════════════════════════════════════════════════════════
 
+    # ------------------------------------------------------------------ #
+    #  Gateway ACL parsing                                                #
+    # ------------------------------------------------------------------ #
+
+    _ACL_FIELD = re.compile(r"\b(TP|HOST|USER|ACCESS|CANCEL)\s*=\s*(\S+)", re.IGNORECASE)
+
+    @classmethod
+    def _parse_acl_rule(cls, row):
+        """Parse one gateway secinfo/reginfo line into (action, fields).
+
+        WHY THIS EXISTS
+        A real secinfo line is ``P TP=* HOST=* USER=*`` — the action is a single
+        leading ``P``/``D``, and the operands are ``KEY=VALUE`` inside the same
+        string. The checks previously looked for the literal word "PERMIT" or a
+        separate ``ACTION`` column, so on a genuine export they matched NEITHER:
+        `INTG-GW-001` (CRITICAL) sat silently over ``P TP=* HOST=* USER=*`` in our
+        own sample data — an unrestricted external-program-start rule, and exactly
+        the 10KBLAZE condition CISA AA19-122A describes.
+
+        There was a second, opposite bug behind it: the operands were read from
+        columns that a rule-only export does not have, leaving them empty, and the
+        wildcard test treated empty as "wildcard". Had the action ever matched,
+        every permit rule would have been flagged — including the specific ones.
+
+        Structured columns win when a row has them; otherwise the rule text is
+        parsed. Returns ``(action, {"TP": ..., "HOST": ..., "USER": ...})`` with the
+        action normalised to ``P`` or ``D``.
+        """
+        rule = row.get("RULE", row.get("ENTRY", row.get("LINE", ""))) or ""
+        text = str(rule).strip()
+
+        fields = {k.upper(): v for k, v in cls._ACL_FIELD.findall(text)}
+        for key, col in (("TP", "PROGRAM"), ("HOST", "FROM_HOST"), ("USER", "USER")):
+            explicit = row.get(key) or row.get(col)
+            if explicit:
+                fields[key] = str(explicit).strip()
+
+        action = str(row.get("ACTION") or "").strip().upper()
+        if action in ("PERMIT", "ALLOW"):
+            action = "P"
+        elif action in ("DENY", "DENIED"):
+            action = "D"
+        if action not in ("P", "D") and text:
+            first = text.split(None, 1)[0].upper().rstrip(",;")
+            if first in ("P", "PERMIT", "ALLOW"):
+                action = "P"
+            elif first in ("D", "DENY"):
+                action = "D"
+        return action, fields
+
+    @staticmethod
+    def _all_wildcard(fields, keys):
+        """True when every operand we can SEE is an explicit ``*``.
+
+        Requires at least one visible operand. "We could not read any field" is not
+        evidence of a wildcard, and treating it as one is what would have turned
+        this check into a false-positive generator.
+        """
+        seen = [fields.get(k) for k in keys if fields.get(k)]
+        return bool(seen) and all(v == "*" for v in seen)
+
     def check_gateway_secinfo(self):
         """
         Deep analysis of gateway secinfo rules:
@@ -885,22 +947,23 @@ class IntegrationLayerAuditor(BaseAuditor):
         has_deny_default = False
 
         for row in secinfo:
-            rule = row.get("RULE", row.get("ENTRY", row.get("LINE", "")))
-            action = row.get("ACTION", "")
-            program = row.get("PROGRAM", row.get("TP", ""))
-            host = row.get("HOST", row.get("FROM_HOST", ""))
-            user = row.get("USER", "")
+            action, fields = self._parse_acl_rule(row)
+            program = fields.get("TP", "")
+            host = fields.get("HOST", "")
+            user = fields.get("USER", "")
 
-            rule_text = rule or f"{action} {program} {host} {user}".strip()
+            rule_text = (row.get("RULE") or row.get("ENTRY") or row.get("LINE")
+                         or " ".join(x for x in (action, program, host, user) if x)).strip()
             rule_upper = rule_text.upper()
 
-            # Check for deny-all default
-            if "DENY" in rule_upper and ("*" in rule_upper or "ALL" in rule_upper):
+            # A deny-ALL default denies every operand, not merely some host range:
+            # `D TP=* HOST=external.* USER=*` is a targeted deny, not the default.
+            if action == "D" and self._all_wildcard(fields, ("TP", "HOST", "USER")):
                 has_deny_default = True
 
-            # Permit all rules
-            if "PERMIT" in rule_upper or action.upper() == "P":
-                if ("*" in program or not program) and ("*" in host or not host):
+            # Permit-all: the action is permit AND every operand is an explicit *.
+            if action == "P":
+                if self._all_wildcard(fields, ("TP", "HOST", "USER")):
                     permit_all.append(f"Rule: {rule_text}")
                     if rule_text:
                         permit_all_objs.append({
@@ -909,7 +972,7 @@ class IntegrationLayerAuditor(BaseAuditor):
                         })
 
             # External program execution
-            if "PERMIT" in rule_upper or action.upper() == "P":
+            if action == "P":
                 ext_indicators = ["SAPXPG", "TP_*", "/USR/", "/BIN/", "CMD", "PROGRAM"]
                 if any(ind in rule_upper for ind in ext_indicators):
                     external_exec.append(f"Rule: {rule_text}")
@@ -1002,19 +1065,19 @@ class IntegrationLayerAuditor(BaseAuditor):
         has_deny_default = False
 
         for row in reginfo:
-            rule = row.get("RULE", row.get("ENTRY", row.get("LINE", "")))
-            action = row.get("ACTION", "")
-            tp = row.get("TP", row.get("PROGRAM", ""))
-            host = row.get("HOST", row.get("FROM_HOST", ""))
+            action, fields = self._parse_acl_rule(row)
+            tp = fields.get("TP", "")
+            host = fields.get("HOST", "")
 
-            rule_text = rule or f"{action} {tp} {host}".strip()
+            rule_text = (row.get("RULE") or row.get("ENTRY") or row.get("LINE")
+                         or " ".join(x for x in (action, tp, host) if x)).strip()
             rule_upper = rule_text.upper()
 
-            if "DENY" in rule_upper and "*" in rule_upper:
+            if action == "D" and self._all_wildcard(fields, ("TP", "HOST")):
                 has_deny_default = True
 
-            if "PERMIT" in rule_upper or action.upper() == "P":
-                if ("*" in tp or not tp) and ("*" in host or not host):
+            if action == "P":
+                if self._all_wildcard(fields, ("TP", "HOST")):
                     permit_all.append(f"Rule: {rule_text}")
                     if rule_text:
                         permit_all_objs.append({

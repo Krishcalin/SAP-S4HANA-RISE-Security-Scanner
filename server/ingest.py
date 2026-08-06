@@ -54,6 +54,7 @@ AUDITORS: List[Tuple[str, str]] = [
     ("data_protection", "DataProtectionAuditor"),
     ("code_transport", "CodeTransportAuditor"),
     ("log_monitoring", "LogMonitoringAuditor"),
+    ("log_review", "LogReviewAuditor"),
     ("fiori_ui", "FioriUiAuditor"),
     ("crypto_posture", "CryptoPostureAuditor"),
     ("hana_db_security", "HanaDbSecurityAuditor"),
@@ -76,9 +77,9 @@ AUDITORS: List[Tuple[str, str]] = [
 #: input data was loaded.
 MODULE_KEYS = frozenset({
     "users", "params", "network", "rise", "iam", "btpcloud", "intglayer",
-    "dataprot", "codetrans", "logmon", "fiori", "crypto", "hanadb", "hotnews",
-    "authz", "systrust", "baseline", "s4authz", "ara", "jobcmd", "grcac",
-    "rolegov", "fincontrols",
+    "dataprot", "codetrans", "logmon", "logreview", "fiori", "crypto", "hanadb",
+    "hotnews", "authz", "systrust", "baseline", "s4authz", "ara", "jobcmd",
+    "grcac", "rolegov", "fincontrols",
 })
 
 RUN_CONTEXT = {"modules": MODULE_KEYS}

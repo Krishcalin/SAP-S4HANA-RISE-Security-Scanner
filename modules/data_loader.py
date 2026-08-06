@@ -19,6 +19,28 @@ Expected file naming convention in the data directory:
 
 All files are optional — the scanner will only run checks
 for which data is available.
+
+SAP CLOUD ALM CSA EXPORTS
+-------------------------
+A directory may instead (or additionally) contain SAP Cloud ALM Configuration &
+Security Analysis store exports, named after the store: `ABAP_INSTANCE_PAHI.csv`,
+`STANDARD_USERS.csv`, `SICF_SERVICES.csv` and so on. Those are translated into the
+same logical sources by `modules/cloudalm_import.py` after the filename pass, and
+they fill only sources a named file did not already supply — a file named in
+FILE_MAP always wins, so nothing about the existing convention changes.
+
+See `docs/EXPORT_GUIDE.md` for how a customer obtains the export, including the
+caveat about whether Cloud ALM's API returns raw store values at all.
+
+BTP ADMINISTRATIVE EXPORTS
+--------------------------
+Several BTP logical sources accept EITHER a hand-made file in our own shape or the
+raw output of SAP's own BTP tooling — the `btp` CLI, the customer-hosted Cloud
+Connector configuration API, and auditlog-management records. Those raw shapes are
+translated after loading by `modules/btp_import.py`, which recognises each by its
+own field names and leaves anything it does not recognise untouched, so a
+hand-made export keeps behaving exactly as before. Again see `docs/EXPORT_GUIDE.md`
+for the exact commands.
 """
 
 import csv
@@ -26,6 +48,9 @@ import json
 import os
 from pathlib import Path
 from typing import Dict, List, Any, Optional
+
+from modules import btp_import
+from modules import cloudalm_import
 
 
 class DataLoader:
@@ -72,7 +97,14 @@ class DataLoader:
         "doc_change_rules":         ["doc_change_rules.csv", "tbaer.csv", "ob32.csv"],
         "fi_number_ranges":         ["fi_number_ranges.csv", "tnro.csv", "number_ranges.csv"],
         # BTP Cloud Attack Surface data sources
-        "cloud_connector":      ["cloud_connector.json", "scc_config.json"],
+        #
+        # The trailing filenames on cloud_connector / btp_subaccounts are the raw
+        # output of SAP's own BTP tooling rather than our shape; modules/btp_import.py
+        # translates them after loading. A file in our own shape is listed FIRST and
+        # therefore always wins.
+        "cloud_connector":      ["cloud_connector.json", "scc_config.json",
+                                 "cloud_connector_configuration.json",
+                                 "scc_api_configuration.json"],
         "btp_service_bindings": ["btp_service_bindings.json", "service_bindings.json"],
         "btp_destinations":     ["btp_destinations.json", "destinations.json"],
         "ias_config":           ["ias_config.json", "ias_applications.json"],
@@ -80,7 +112,16 @@ class DataLoader:
         "event_mesh":           ["event_mesh.json", "em_config.json"],
         "cpi_artifacts":        ["cpi_artifacts.json", "cpi_security.json"],
         "btp_network":          ["btp_network.json", "private_link.json"],
-        "btp_subaccounts":      ["btp_subaccounts.json", "subaccounts.json"],
+        "btp_subaccounts":      ["btp_subaccounts.json", "subaccounts.json",
+                                 "btp_accounts_subaccount.json",
+                                 "accounts_subaccount.json"],
+        # `btp --format json list security/settings` — subaccount security settings.
+        # Folded onto the subaccount they describe by modules/btp_import.py.
+        "btp_security_settings": ["btp_security_settings.json", "security_settings.json"],
+        # auditlog-management records from /auditlog/v2/auditlogrecords. Summarised
+        # into per-tenant evidence; the records themselves never reach a report.
+        "btp_audit_log_records": ["btp_audit_log_records.json", "auditlogrecords.json",
+                                  "audit_log_records.json"],
         # Network & Integration Layer data sources
         "apim_policies":        ["apim_policies.json", "api_proxies.json"],
         "idoc_ports":           ["idoc_ports.csv", "we21.csv"],
@@ -160,7 +201,12 @@ class DataLoader:
         "cds_views":                   ["cds_views.csv", "cds_access_control.csv"],
         "odata_v4_services":           ["odata_v4_services.csv", "iwfnd_v4.csv"],
         "cf_roles":                    ["cf_roles.csv", "cf_org_space_roles.csv"],
-        "btp_role_collection_mappings": ["btp_role_collection_mappings.csv", "role_collection_groups.csv"],
+        # The .json alias is `btp --format json list security/role-collection`,
+        # translated to these rows by modules/btp_import.py.
+        "btp_role_collection_mappings": ["btp_role_collection_mappings.csv",
+                                         "role_collection_groups.csv",
+                                         "btp_role_collections.json",
+                                         "security_role_collection.json"],
         # Access Risk Analysis (SoD) data sources
         # (reuses role_auth_values.csv [AGR_1251] + user_roles.csv [AGR_USERS])
         "mitigating_controls":         ["mitigating_controls.csv", "mitigations.csv", "grc_mitigations.csv"],
@@ -176,14 +222,28 @@ class DataLoader:
     def __init__(self, data_dir: Path):
         self.data_dir = data_dir
         self._data: Dict[str, Any] = {}
+        #: One entry per Cloud ALM CSA store file found — including the ones we
+        #: recognise and deliberately refuse to translate. Empty for a directory
+        #: that holds no store exports, which is every native export directory.
+        self.cloudalm_report: List[Dict[str, Any]] = []
+        #: What modules/btp_import.py translated, one note per source. Empty for a
+        #: directory holding no BTP administrative exports.
+        self.btp_import_notes: List[str] = []
+        #: Real filenames the FILE_MAP pass claimed. Only these are withheld from
+        #: the Cloud ALM pass, so a store file is neither double-counted nor
+        #: silently withheld.
+        self._consumed_files: set = set()
+        #: Lazily built `lowercased filename -> real filename` index.
+        self._dir_entries: Optional[Dict[str, str]] = None
 
     def load_all(self) -> Dict[str, Any]:
         """Load all available data files and return unified data dict."""
         for logical_name, filenames in self.FILE_MAP.items():
             for fname in filenames:
-                fpath = self.data_dir / fname
-                if fpath.exists():
-                    print(f"    Loading {fname}...")
+                fpath = self._resolve(fname)
+                if fpath is not None:
+                    print(f"    Loading {fpath.name}...")
+                    self._consumed_files.add(fpath.name)
                     if fname.endswith(".csv"):
                         self._data[logical_name] = self._load_csv(fpath)
                     elif fname.endswith(".json"):
@@ -192,6 +252,16 @@ class DataLoader:
             else:
                 self._data[logical_name] = None
 
+        self._load_cloudalm_stores()
+
+        # Translate any BTP administrative exports into our shapes. Runs
+        # unconditionally: every translator recognises its own payload by field
+        # name and returns "not mine" for anything else, so a directory holding
+        # only hand-made exports comes out of here unchanged.
+        self.btp_import_notes = btp_import.apply(self._data)
+        for note in self.btp_import_notes:
+            print(f"    {note}")
+
         loaded = [k for k, v in self._data.items() if v is not None]
         missing = [k for k, v in self._data.items() if v is None]
         print(f"    Loaded: {', '.join(loaded) if loaded else 'none'}")
@@ -199,6 +269,89 @@ class DataLoader:
             print(f"    Not found (skipping): {', '.join(missing)}")
 
         return self._data
+
+    # ------------------------------------------------------------------ #
+    #  SAP Cloud ALM CSA store exports                                    #
+    # ------------------------------------------------------------------ #
+    def _entries(self) -> Dict[str, str]:
+        """`lowercased filename -> real filename` for the data directory."""
+        if self._dir_entries is None:
+            entries: Dict[str, str] = {}
+            try:
+                for entry in sorted(self.data_dir.iterdir()):
+                    if entry.is_file():
+                        entries.setdefault(entry.name.lower(), entry.name)
+            except OSError:
+                pass
+            self._dir_entries = entries
+        return self._dir_entries
+
+    def _resolve(self, fname: str) -> Optional[Path]:
+        """Find `fname` on disk, or None. Case-insensitive, with one exception.
+
+        Three Cloud ALM store names collide with our own filenames —
+        `STANDARD_USERS`, `GW_SECINFO`, `GW_REGINFO`. On Windows the filesystem is
+        case-insensitive, so `STANDARD_USERS.csv` satisfied a bare
+        `(data_dir / "standard_users.csv").exists()` and the FILE_MAP pass ate the
+        store export raw, untranslated; on Linux the same directory went to the
+        importer. One directory, two products, decided by the host OS.
+
+        So an exact filename match always wins — a customer who literally named the
+        file `standard_users.csv` gets the native path — and a differently-cased
+        match is refused when the real name is a translatable store, leaving it to
+        the Cloud ALM pass.
+        """
+        real = self._entries().get(fname.lower())
+        if real is None:
+            return None
+        if real != fname and cloudalm_import.store_for_filename(real) in \
+                cloudalm_import.STORE_TARGETS:
+            return None
+        return self.data_dir / real
+
+    def _load_cloudalm_stores(self) -> None:
+        """Fill logical sources from Cloud ALM CSA store exports.
+
+        Runs AFTER the filename pass and fills only what is still missing: a file
+        named in FILE_MAP always wins. A CSA export is an additional way to supply
+        a source, never a redefinition of the existing one.
+        """
+        translated, report = cloudalm_import.load_cloudalm(
+            self.data_dir,
+            csv_reader=self._load_csv,
+            json_reader=self._load_json,
+            skip_files=self._consumed_files,
+        )
+        self.cloudalm_report = report
+        if not report:
+            return
+
+        print("    SAP Cloud ALM CSA store export detected:")
+        for line in cloudalm_import.summarise(report):
+            print(f"      {line}")
+
+        for logical_name, rows in sorted(translated.items()):
+            if not rows:
+                continue
+            if self._data.get(logical_name) is not None:
+                # The customer supplied both. The named file is the more specific
+                # statement of intent, and silently preferring the store export
+                # would change what a check sees without saying so.
+                print(f"      [note] {logical_name} already loaded from a named "
+                      f"file — Cloud ALM rows not used")
+                continue
+            self._data[logical_name] = rows
+            print(f"      {logical_name}: {len(rows)} row(s) from Cloud ALM")
+
+        for entry in report:
+            if entry.get("undecoded_client_codes"):
+                print("      [warn] CLIENTS change options arrived as raw codes we "
+                      "do not decode; client-change checks will not fire on them: "
+                      + "; ".join(entry["undecoded_client_codes"]))
+            if entry.get("unrecognised_values"):
+                print(f"      [warn] {entry.get('store')}: values passed through "
+                      f"untranslated: "
+                      + ", ".join(sorted(set(entry["unrecognised_values"]))[:8]))
 
     def _load_csv(self, path: Path) -> List[Dict[str, str]]:
         """Load a CSV file into a list of dicts with normalized headers."""

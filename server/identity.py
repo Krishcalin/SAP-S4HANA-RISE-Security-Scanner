@@ -150,6 +150,13 @@ _CASE_SENSITIVE_TYPES = frozenset({
     # were created with, exactly like the BTP entities above, not ABAP repository
     # objects that SAP upper-cases.
     "idp_trust", "comm_arrangement",
+    # A Security Audit Log filter (SM19 / RSAU_CONFIG), named by the log_review
+    # module. The name is entered by an administrator and keeps the case it was
+    # typed with ("Dialog_Logon_Filter", "Table_Access_Filter") — like the RAL and
+    # Fiori entries above it is an authored configuration entry, not an ABAP
+    # repository object that SAP upper-cases, so folding case would merge two
+    # distinct filters into one node.
+    "audit_filter",
 })
 
 #: A BTP subaccount user, kept DISTINCT from an ABAP `user`.
