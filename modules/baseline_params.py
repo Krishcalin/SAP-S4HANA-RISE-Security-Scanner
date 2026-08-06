@@ -61,10 +61,26 @@ class BaselineParamAuditor(BaseAuditor):
     def _truthy(v: Any) -> bool:
         return str(v).strip().lower() in ("1", "true", "yes", "on", "x")
 
-    def _flag(self, check_id, title, severity, description, affected, remediation, references):
+    def _flag(self, check_id, title, severity, description, affected, remediation, references,
+              affected_objects=None, scope=None):
         self.finding(check_id=check_id, title=title, severity=severity, category=self.CATEGORY,
                      description=description, affected_items=affected, remediation=remediation,
-                     references=references)
+                     references=references, affected_objects=affected_objects, scope=scope)
+
+    @staticmethod
+    def _param_object(name: str, qualifier: Any = None) -> Dict[str, Any]:
+        """A profile parameter as a structured object.
+
+        `qualifier` carries the ACTUAL value, and it participates in identity — so pass
+        it only where the check fires on exactly ONE value ("= 0"). Where the trigger is
+        a range or "anything but X", the value must stay out: a 0 -> 2 change that fixes
+        nothing would otherwise retire the finding and raise a fresh one with its age
+        reset, and would split one parameter into several graph nodes.
+        """
+        obj: Dict[str, Any] = {"type": "parameter_name", "name": name}
+        if qualifier:
+            obj["qualifier"] = qualifier
+        return obj
 
     # --------------------------------------------------------------------- checks
     def check_password_hash_algorithm(self):
@@ -120,7 +136,13 @@ class BaselineParamAuditor(BaseAuditor):
                 "to purge any residual weak BCODE/PASSCODE hashes. Validate against the SAP "
                 "Security Baseline recommended value and re-export security_params to confirm.",
                 ["SAP Security Baseline — Password hash algorithm",
-                 "SAP Help Portal — Profile parameter login/password_hash_algorithm"])
+                 "SAP Help Portal — Profile parameter login/password_hash_algorithm"],
+                # One parameter is the entire defect; the two issues above are two ways
+                # the SAME parameter is weak, not two objects. No qualifier: the trigger
+                # accepts any weak algorithm and any iteration count below 10000, so the
+                # value would churn identity (iterations 1024 -> 2048 fixes nothing).
+                affected_objects=[self._param_object("login/password_hash_algorithm")],
+                scope="object")
 
     def check_rfc_authority_check(self):
         v = self._p("auth/rfc_authority_check")
@@ -134,7 +156,11 @@ class BaselineParamAuditor(BaseAuditor):
                 [f"auth/rfc_authority_check = {v}"],
                 "Set auth/rfc_authority_check = 9 so the S_RFC authorization check is enforced "
                 "for all called function modules on RFC calls.",
-                ["SAP Security Baseline — auth/rfc_authority_check", "SAP Note 93254"])
+                ["SAP Security Baseline — auth/rfc_authority_check", "SAP Note 93254"],
+                # The check fires on exactly one value ("0"), so the value cannot drift
+                # while the finding is open and is safe in identity.
+                affected_objects=[self._param_object("auth/rfc_authority_check", "0")],
+                scope="object")
 
     def check_no_check_in_some_cases(self):
         v = self._p("auth/no_check_in_some_cases")
@@ -148,13 +174,22 @@ class BaselineParamAuditor(BaseAuditor):
                 [f"auth/no_check_in_some_cases = {v}"],
                 "Set auth/no_check_in_some_cases = Y so SU24 check indicators drive role "
                 "authorization defaults (and transaction SU25 is maintained).",
-                ["SAP Security Baseline — auth/no_check_in_some_cases"])
+                ["SAP Security Baseline — auth/no_check_in_some_cases"],
+                # Pinned to one value. The comparison is case-folded, so the qualifier is
+                # the folded form — otherwise an export spelling it "n" would be a second
+                # identity for the same defect.
+                affected_objects=[self._param_object("auth/no_check_in_some_cases", "N")],
+                scope="object")
 
     def check_snc_accept_insecure(self):
         params = ["snc/accept_insecure_rfc", "snc/accept_insecure_gui",
                   "snc/accept_insecure_cpic", "snc/accept_insecure_r3int_rfc"]
         offenders = [f"{p} = {self._p(p)}" for p in params
                      if self._p(p) is not None and self._p(p).strip() in ("1", "u")]
+        # No qualifier: the trigger accepts "1" OR "u", so the value is not pinned and
+        # would split one parameter into two graph nodes.
+        objects = [self._param_object(p) for p in params
+                   if self._p(p) is not None and self._p(p).strip() in ("1", "u")]
         if offenders:
             self._flag(
                 "BASELINE-003", "SNC accepts insecure (unencrypted) connections",
@@ -165,7 +200,13 @@ class BaselineParamAuditor(BaseAuditor):
                 offenders,
                 "Set the snc/accept_insecure_* parameters to 0 so only SNC-protected "
                 "connections are accepted (after all clients/servers support SNC).",
-                ["SAP Security Baseline — SNC insecure connections", "SAP Note 1690662"])
+                ["SAP Security Baseline — SNC insecure connections", "SAP Note 1690662"],
+                # Up to four independent parameters rolled into ONE finding. Hardening
+                # snc/accept_insecure_gui while the CPIC one stays open must not retire
+                # this finding and re-raise it with a reset age, so the members stay out
+                # of identity and ride along as graph nodes only.
+                affected_objects=objects,
+                scope="aggregate")
 
     def check_gui_scripting(self):
         v = self._p("sapgui/user_scripting")
@@ -182,7 +223,12 @@ class BaselineParamAuditor(BaseAuditor):
                 "disable notification suppression.",
                 ["SAP Security Baseline — SAP GUI Scripting",
                  "SAP Note 480149 (introduces sapgui/user_scripting)",
-                 "SAP Note 692245 (server-side scripting security options)"])
+                 "SAP Note 692245 (server-side scripting security options)"],
+                # No qualifier: any truthy spelling (1 / TRUE / yes / on / X) trips this,
+                # so pinning the exported spelling would create several identities and
+                # several graph nodes for one parameter.
+                affected_objects=[self._param_object("sapgui/user_scripting")],
+                scope="object")
 
     def check_password_downwards_compat(self):
         v = self._p("login/password_downwards_compatibility")
@@ -200,7 +246,12 @@ class BaselineParamAuditor(BaseAuditor):
                         "Once all connected systems support the current code version, set "
                         "login/password_downwards_compatibility = 0 and remove old BCODE/PASSCODE "
                         "hashes (report CLEANUP_PASSWORD_HASH_VALUES).",
-                        ["SAP Security Baseline — Password hashes", "SAP Note 1023437"])
+                        ["SAP Security Baseline — Password hashes", "SAP Note 1023437"],
+                        # No qualifier: the trigger is a range (> 0), so a 3 -> 1 change
+                        # that still keeps the weak hash would look like a new defect.
+                        affected_objects=[self._param_object(
+                            "login/password_downwards_compatibility")],
+                        scope="object")
             except ValueError:
                 pass
 
@@ -220,7 +271,11 @@ class BaselineParamAuditor(BaseAuditor):
                 [f"service/protectedwebmethods = {v}"],
                 "Set service/protectedwebmethods = SDEFAULT (optionally extended) so the "
                 "sensitive administrative web methods require authentication.",
-                ["SAP Security Baseline — service/protectedwebmethods", "SAP Note 1439348"])
+                ["SAP Security Baseline — service/protectedwebmethods", "SAP Note 1439348"],
+                # No qualifier: anything that is neither SDEFAULT nor ALL trips this —
+                # NONE, empty, or any reduced custom list — so the value is not pinned.
+                affected_objects=[self._param_object("service/protectedwebmethods")],
+                scope="object")
 
     def check_gateway_acl_mode(self):
         v = self._p("gw/acl_mode")
@@ -236,19 +291,28 @@ class BaselineParamAuditor(BaseAuditor):
                 "Set gw/acl_mode = 1 to enforce the restrictive default gateway behaviour, and "
                 "maintain explicit secinfo / reginfo ACL files.",
                 ["SAP Security Baseline — gw/acl_mode", "SAP Note 1408081",
-                 "CISA AA19-122A (10KBLAZE)"])
+                 "CISA AA19-122A (10KBLAZE)"],
+                # Pinned: the check fires on exactly one value ("0").
+                affected_objects=[self._param_object("gw/acl_mode", "0")],
+                scope="object")
 
     def check_sso_ticket_cookie(self):
         offenders = []
+        objects = []
         https = self._p("login/ticket_only_by_https")
         if https is not None and https.strip() == "0":
             offenders.append("login/ticket_only_by_https = 0 (SSO ticket sent over plain HTTP — sniffable)")
+            objects.append(self._param_object("login/ticket_only_by_https", "0"))
         httponly = self._p("icf/set_HTTPonly_flag_on_cookies")
         if httponly is not None and httponly.strip() not in ("0", ""):
             offenders.append(f"icf/set_HTTPonly_flag_on_cookies = {httponly} (HttpOnly not set on all ICF cookies)")
+            # No qualifier: ANY value other than 0/empty trips this, so the value is not
+            # pinned — a 1 -> 2 change would otherwise mint a second graph node.
+            objects.append(self._param_object("icf/set_HTTPonly_flag_on_cookies"))
         to_host = self._p("login/ticket_only_to_host")
         if to_host is not None and to_host.strip() == "0":
             offenders.append("login/ticket_only_to_host = 0 (ticket accepted by other hosts)")
+            objects.append(self._param_object("login/ticket_only_to_host", "0"))
         if offenders:
             self._flag(
                 "BASELINE-008", "SSO ticket / session-cookie transport not hardened",
@@ -259,19 +323,32 @@ class BaselineParamAuditor(BaseAuditor):
                 offenders,
                 "Set login/ticket_only_by_https = 1, icf/set_HTTPonly_flag_on_cookies = 0 "
                 "(HttpOnly on all cookies), and login/ticket_only_to_host = 1.",
-                ["SAP Security Baseline — SSO ticket / cookie hardening"])
+                ["SAP Security Baseline — SSO ticket / cookie hardening"],
+                # Three independent parameters rolled into ONE "transport not hardened"
+                # finding. Fixing the HTTPS flag while the host binding stays open is
+                # progress, not a different defect, so the member list must not enter
+                # identity or the age would reset on every partial fix.
+                affected_objects=objects,
+                scope="aggregate")
 
     def check_icm_security_log(self):
         offenders = []
+        objects = []
         seclog = self._p("icm/security_log")
         if seclog is not None:
             m = re.search(r"level\s*=\s*(\d+)", seclog, re.IGNORECASE)
             level = int(m.group(1)) if m else (None if seclog.strip() else 0)
             if seclog.strip() == "" or (level is not None and level < 3):
                 offenders.append(f"icm/security_log = '{seclog or '(empty)'}' (log level < 3 / not configured)")
+                # No qualifier: the trigger is a range (LEVEL < 3) over a free-form
+                # value that also carries the log file name and size — raising LEVEL
+                # from 0 to 1, or rotating the file name, would re-identify the node.
+                objects.append(self._param_object("icm/security_log"))
         errors = self._p("is/http/show_detailed_errors")
         if errors is not None and self._truthy(errors):
             offenders.append(f"is/HTTP/show_detailed_errors = {errors} (detailed errors leaked to clients)")
+            # No qualifier: any truthy spelling trips this.
+            objects.append(self._param_object("is/http/show_detailed_errors"))
         if offenders:
             self._flag(
                 "BASELINE-009", "Web-tier logging / error disclosure weak (ICM)",
@@ -282,7 +359,12 @@ class BaselineParamAuditor(BaseAuditor):
                 offenders,
                 "Configure icm/security_log with LEVEL=3 (per SAP Security Baseline) and log "
                 "rotation, and set is/HTTP/show_detailed_errors = FALSE in production.",
-                ["SAP Security Baseline — ICM security log / error disclosure"])
+                ["SAP Security Baseline — ICM security log / error disclosure"],
+                # Two independent web-tier settings summarised as one weakness: turning
+                # off detailed errors while the security log stays at LEVEL=1 must keep
+                # the same finding rather than restart its clock.
+                affected_objects=objects,
+                scope="aggregate")
 
     def check_password_compliance(self):
         v = self._p("login/password_compliance_to_current_policy")
@@ -296,4 +378,8 @@ class BaselineParamAuditor(BaseAuditor):
                 [f"login/password_compliance_to_current_policy = {v}"],
                 "Set login/password_compliance_to_current_policy = 1 so non-compliant passwords "
                 "must be changed at next logon.",
-                ["SAP Security Baseline — password policy enforcement"])
+                ["SAP Security Baseline — password policy enforcement"],
+                # Pinned: the check fires on exactly one value ("0").
+                affected_objects=[self._param_object(
+                    "login/password_compliance_to_current_policy", "0")],
+                scope="object")

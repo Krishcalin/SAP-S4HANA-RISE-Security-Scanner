@@ -163,6 +163,43 @@ class AdvancedIamAuditor(BaseAuditor):
         return self.findings
 
     # ════════════════════════════════════════════════════════════════
+    #  Affected-object construction
+    # ════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def _objects(pairs) -> List[Dict[str, Any]]:
+        """Build de-duplicated affected-object dicts from (type, name) pairs.
+
+        De-duplication keeps one graph node per real object: a role named in forty
+        offending assignments is one node with one edge set, not forty. A pair whose
+        name is empty is dropped rather than given an invented placeholder — an export
+        row with no UNAME names no user, and fabricating one would both put a fictional
+        node in the graph and let two nameless rows share an identity.
+        """
+        out: List[Dict[str, Any]] = []
+        seen = set()
+        for obj_type, name in pairs:
+            n = "" if name is None else str(name).strip()
+            if not n:
+                continue
+            key = (obj_type, n.upper())
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({"type": obj_type, "name": n})
+        return out
+
+    @classmethod
+    def _row_objects(cls, rows) -> List[Dict[str, Any]]:
+        """`_objects` over rows that each contribute several pairs.
+
+        Checks that cap their display list (``affected_items=x[:50]``) slice the SAME
+        rows here, so the structured objects describe exactly the evidence the report
+        shows rather than a silently different subset.
+        """
+        return cls._objects(pair for row in rows for pair in row)
+
+    # ════════════════════════════════════════════════════════════════
     #  SOD-*: Segregation of Duties Conflict Detection
     # ════════════════════════════════════════════════════════════════
 
@@ -219,6 +256,11 @@ class AdvancedIamAuditor(BaseAuditor):
                 "Cannot perform Segregation of Duties analysis. This is a critical "
                 "audit gap — SoD violations are among the most exploited internal control weaknesses."
             ),
+            # A missing-export finding names nothing: the defect is that no user, role
+            # or t-code data reached the scanner at all. There is no object to point at,
+            # so identity is (system, client, check) and no affected_objects are passed
+            # — inventing one would fabricate a node that is not in any export.
+            scope="aggregate",
             remediation=(
                 "Export one of: (1) sod_matrix.csv with USERNAME, TCODES columns "
                 "(from SUIM or GRC ARA), (2) user_roles.csv (AGR_USERS) + role_tcodes.csv "
@@ -234,6 +276,7 @@ class AdvancedIamAuditor(BaseAuditor):
             side_a_tcodes = set(t.upper() for t in rule["side_a"].get("tcodes", []))
             side_b_tcodes = set(t.upper() for t in rule["side_b"].get("tcodes", []))
             conflicts = []
+            conflict_objs = []
 
             for row in matrix:
                 user = row.get("USERNAME", row.get("BNAME", row.get("UNAME", "")))
@@ -254,6 +297,13 @@ class AdvancedIamAuditor(BaseAuditor):
                         f"[{rule['side_b']['description']}]: "
                         f"{', '.join(sorted(has_b))}"
                     )
+                    # The conflicted USER is the offender; the t-codes are the two
+                    # sides they actually hold, taken from the intersection with the
+                    # export rather than from the rule definition.
+                    conflict_objs.append(
+                        [("user", user)]
+                        + [("tcode", t) for t in sorted(has_a | has_b)]
+                    )
 
             if conflicts:
                 self.finding(
@@ -268,6 +318,13 @@ class AdvancedIamAuditor(BaseAuditor):
                         "of duties and creates fraud/error risk."
                     ),
                     affected_items=conflicts,
+                    # One finding per SoD RULE, rolling up every user that trips it, so
+                    # identity must exclude the membership: remediating the first of
+                    # eleven conflicted users would otherwise retire this finding and
+                    # raise a new one with its age reset while ten conflicts remain.
+                    # The users and the t-codes they hold still ride along as nodes.
+                    affected_objects=self._row_objects(conflict_objs),
+                    scope="aggregate",
                     remediation=(
                         f"Remove one side of the conflict for each affected user. "
                         f"If business requires both, implement mitigating controls: "
@@ -348,6 +405,7 @@ class AdvancedIamAuditor(BaseAuditor):
 
         for rule in heuristic_rules:
             conflicts = []
+            conflict_objs = []
             for user, roles in user_role_map.items():
                 role_str = " ".join(roles)
                 has_a = any(p in role_str for p in rule["side_a_patterns"])
@@ -359,6 +417,13 @@ class AdvancedIamAuditor(BaseAuditor):
                     conflicts.append(
                         f"{user} — Side A roles: {', '.join(matching_a[:3])} ↔ "
                         f"Side B roles: {', '.join(matching_b[:3])}"
+                    )
+                    # Full role lists, not the display list's first three: the display
+                    # truncation is cosmetic, whereas every matched role is a real
+                    # graph node the remediation has to touch.
+                    conflict_objs.append(
+                        [("user", user)]
+                        + [("role", r) for r in matching_a + matching_b]
                     )
 
             if conflicts:
@@ -374,6 +439,11 @@ class AdvancedIamAuditor(BaseAuditor):
                         f"for precise t-code level analysis."
                     ),
                     affected_items=conflicts,
+                    # Same shape as the matrix path: one finding per heuristic rule
+                    # summarising every user that matches it, so the member list stays
+                    # out of identity.
+                    affected_objects=self._row_objects(conflict_objs),
+                    scope="aggregate",
                     remediation=(
                         "Validate these conflicts using SUIM or SAP GRC Access Risk Analysis. "
                         "If confirmed, remove one side or implement mitigating controls."
@@ -413,6 +483,11 @@ class AdvancedIamAuditor(BaseAuditor):
                         "Cannot verify proper use, session review, or justification compliance."
                     ),
                     affected_items=ff_users,
+                    # One finding over the whole set of firefighter accounts found
+                    # without a log. Deleting one such account does not supply the
+                    # missing log, so it must not retire and re-raise this finding.
+                    affected_objects=self._objects(("user", u) for u in ff_users),
+                    scope="aggregate",
                     remediation=(
                         "Export firefighter usage logs from SAP GRC Superuser Privilege "
                         "Management (SPM) or equivalent. File: firefighter_log.csv with "
@@ -427,9 +502,13 @@ class AdvancedIamAuditor(BaseAuditor):
         max_sessions = self.get_config("ff_max_sessions_per_month", self.FF_MAX_SESSIONS_PER_MONTH)
 
         long_sessions = []
+        long_session_objs = []
         no_reason = []
+        no_reason_objs = []
         unreviewed = []
+        unreviewed_objs = []
         self_approved = []
+        self_approved_objs = []
         user_session_counts: Dict[str, List] = defaultdict(list)
 
         for row in ff_log:
@@ -442,6 +521,10 @@ class AdvancedIamAuditor(BaseAuditor):
             reviewer = row.get("REVIEWER", row.get("REVIEWED_BY", row.get("CONTROLLER", "")))
 
             session_label = f"{actual_user} as {ff_user} (login: {login_time})"
+            # A session is not an SAP object; the two principals it names are. The login
+            # timestamp is deliberately not a qualifier — it differs per session, so it
+            # would split one firefighter ID into a new graph node on every use.
+            session_objs = [("user", actual_user), ("user", ff_user)]
 
             # Check duration
             if login_time and logout_time:
@@ -450,18 +533,22 @@ class AdvancedIamAuditor(BaseAuditor):
                     long_sessions.append(
                         f"{session_label} — duration: {duration_hours:.1f}h (max: {max_duration}h)"
                     )
+                    long_session_objs.extend(session_objs)
 
             # Check justification
             if not reason or not reason.strip():
                 no_reason.append(session_label)
+                no_reason_objs.extend(session_objs)
 
             # Check review status
             if str(reviewed).upper() not in ("YES", "Y", "X", "1", "TRUE", "REVIEWED", "COMPLETE"):
                 unreviewed.append(session_label)
+                unreviewed_objs.extend(session_objs)
 
             # Check self-approval
             if reviewer and actual_user and reviewer.upper() == actual_user.upper():
                 self_approved.append(f"{session_label} — reviewed by: {reviewer}")
+                self_approved_objs.extend(session_objs)
 
             # Track frequency
             user_session_counts[actual_user.upper()].append(login_time)
@@ -479,6 +566,11 @@ class AdvancedIamAuditor(BaseAuditor):
                     "firefighter sessions increase exposure to privileged access misuse."
                 ),
                 affected_items=long_sessions,
+                # Every over-long session rolled into ONE finding. Sessions are historic
+                # events that can never be "fixed" individually, so identity must stay
+                # on the check or each new export would raise a brand-new finding.
+                affected_objects=self._objects(long_session_objs),
+                scope="aggregate",
                 remediation=(
                     "Enforce automatic session timeout in GRC SPM configuration. "
                     "Investigate each extended session for unauthorized activity. "
@@ -499,6 +591,10 @@ class AdvancedIamAuditor(BaseAuditor):
                     "traceable business reason for audit compliance."
                 ),
                 affected_items=no_reason,
+                # Aggregate for the same reason as IAM-FF-001: the members are past
+                # sessions, and the defect is the missing reason-code control.
+                affected_objects=self._objects(no_reason_objs),
+                scope="aggregate",
                 remediation=(
                     "Enable mandatory reason code in GRC SPM. "
                     "Retroactively document justification for existing sessions. "
@@ -519,6 +615,10 @@ class AdvancedIamAuditor(BaseAuditor):
                     "breakdown of the compensating control framework."
                 ),
                 affected_items=unreviewed,
+                # Aggregate: reviewing one outstanding session shortens the list but
+                # does not close the control gap, so the finding keeps its identity.
+                affected_objects=self._objects(unreviewed_objs),
+                scope="aggregate",
                 remediation=(
                     "Assign controllers to review all outstanding sessions immediately. "
                     "Configure automated email escalation for unreviewed sessions. "
@@ -542,6 +642,11 @@ class AdvancedIamAuditor(BaseAuditor):
                     "segregation of duties violation in the control process itself."
                 ),
                 affected_items=self_approved,
+                # Aggregate over every self-approved session. The reviewer is the same
+                # principal as the requestor by construction here, so naming it twice
+                # would add no node.
+                affected_objects=self._objects(self_approved_objs),
+                scope="aggregate",
                 remediation=(
                     "Enforce controller ≠ requestor rule in GRC SPM configuration. "
                     "Reassign controller responsibility to an independent reviewer. "
@@ -552,11 +657,13 @@ class AdvancedIamAuditor(BaseAuditor):
 
         # Frequency analysis
         frequent_users = []
+        frequent_user_objs = []
         for user, sessions in user_session_counts.items():
             if len(sessions) > max_sessions:
                 frequent_users.append(
                     f"{user} — {len(sessions)} sessions (max: {max_sessions}/month)"
                 )
+                frequent_user_objs.append(("user", user))
 
         if frequent_users:
             self.finding(
@@ -570,6 +677,11 @@ class AdvancedIamAuditor(BaseAuditor):
                     "may need permanent role adjustments instead of emergency access."
                 ),
                 affected_items=frequent_users,
+                # One finding listing every over-frequent user. The session COUNT is
+                # not a qualifier: it climbs with each export, and would re-key the
+                # node on every run.
+                affected_objects=self._objects(frequent_user_objs),
+                scope="aggregate",
                 remediation=(
                     "Review each user's firefighter usage patterns. "
                     "If recurring access is needed, provision appropriate permanent roles "
@@ -602,8 +714,11 @@ class AdvancedIamAuditor(BaseAuditor):
                 return  # No date data available
 
         no_expiry = []
+        no_expiry_objs = []
         expired_active = []
+        expired_active_objs = []
         long_validity = []
+        long_validity_objs = []
         max_validity_days = self.get_config("max_role_validity_days", 365)
 
         for row in role_expiry:
@@ -613,10 +728,14 @@ class AdvancedIamAuditor(BaseAuditor):
             to_date = row.get("TO_DAT", row.get("VALID_TO", row.get("END_DATE", "")))
 
             label = f"{user} → {role}"
+            # A role ASSIGNMENT has no name of its own; the two ends of it do. Dates
+            # stay out of the object names — they are exactly what remediation changes.
+            row_objs = (("user", user), ("role", role))
 
             # No expiry date set
             if not to_date or to_date.strip() in ("", "99991231", "9999-12-31", "31.12.9999"):
                 no_expiry.append(f"{label} (valid to: indefinite)")
+                no_expiry_objs.append(row_objs)
                 continue
 
             # Parse end date
@@ -630,6 +749,7 @@ class AdvancedIamAuditor(BaseAuditor):
             if parsed_to < now:
                 days_expired = (now - parsed_to).days
                 expired_active.append(f"{label} (expired: {to_date}, {days_expired}d ago)")
+                expired_active_objs.append(row_objs)
                 continue
 
             # Excessively long validity
@@ -640,6 +760,7 @@ class AdvancedIamAuditor(BaseAuditor):
                     long_validity.append(
                         f"{label} (validity: {validity_days}d, max: {max_validity_days}d)"
                     )
+                    long_validity_objs.append(row_objs)
 
         if no_expiry:
             self.finding(
@@ -653,6 +774,12 @@ class AdvancedIamAuditor(BaseAuditor):
                     "and create access accumulation risk."
                 ),
                 affected_items=no_expiry[:100],
+                # One finding covering every open-ended assignment. Dating one of them
+                # must not retire this finding and raise a fresh one — that would reset
+                # its age every run and make MTTR permanently wrong. Same [:100] slice
+                # as the display list so the nodes match the evidence shown.
+                affected_objects=self._row_objects(no_expiry_objs[:100]),
+                scope="aggregate",
                 remediation=(
                     "Set validity end dates on all role assignments. "
                     "Implement a maximum validity period policy (e.g., 12 months). "
@@ -675,6 +802,10 @@ class AdvancedIamAuditor(BaseAuditor):
                     "an accurate access baseline."
                 ),
                 affected_items=expired_active[:50],
+                # Aggregate over the stale-assignment backlog; same [:50] slice as the
+                # display list.
+                affected_objects=self._row_objects(expired_active_objs[:50]),
+                scope="aggregate",
                 remediation=(
                     "Run report PRGN_COMPRESS_TIMES to clean up expired role assignments. "
                     "Schedule periodic cleanup via SAP Identity Management."
@@ -695,6 +826,10 @@ class AdvancedIamAuditor(BaseAuditor):
                     "access reviews and increase the window for privilege misuse."
                 ),
                 affected_items=long_validity[:50],
+                # Aggregate over every over-long assignment; same [:50] slice as the
+                # display list.
+                affected_objects=self._row_objects(long_validity_objs[:50]),
+                scope="aggregate",
                 remediation=(
                     f"Reduce validity periods to {max_validity_days} days maximum. "
                     "Implement re-certification workflows for role renewals. "
@@ -752,6 +887,7 @@ class AdvancedIamAuditor(BaseAuditor):
 
         # BTP users without S/4 counterpart
         btp_only = []
+        btp_only_objs = []
         for user in btp_user_list:
             if not isinstance(user, dict):
                 continue
@@ -762,9 +898,15 @@ class AdvancedIamAuditor(BaseAuditor):
             if uid not in s4_identities and email not in s4_identities:
                 role_str = ", ".join(roles[:3]) if isinstance(roles, list) else str(roles)
                 btp_only.append(f"{uid} (roles: {role_str})")
+                # Typed `user`, not a separate BTP type: this check exists precisely to
+                # treat the S/4 and BTP user masters as ONE identity namespace, and it
+                # already folds case (`uid` is upper-cased above) to compare them. A
+                # second type here would split the very identity the check is matching.
+                btp_only_objs.append(("user", uid))
 
         # S/4 locked users still active in BTP
         locked_but_active_btp = []
+        locked_but_active_objs = []
         for row in s4_users:
             uname = row.get("BNAME", row.get("USERNAME", "")).upper()
             email = row.get("SMTP_ADDR", row.get("EMAIL", "")).upper()
@@ -776,6 +918,7 @@ class AdvancedIamAuditor(BaseAuditor):
                     locked_but_active_btp.append(
                         f"{uname} — locked in S/4 but present in BTP"
                     )
+                    locked_but_active_objs.append(("user", uname))
 
         # BTP admin role collections on unexpected users
         admin_patterns = ["SUBACCOUNT_ADMIN", "GLOBAL_ACCOUNT_ADMIN",
@@ -783,6 +926,7 @@ class AdvancedIamAuditor(BaseAuditor):
                           "DESTINATION_ADMIN", "SUBACCOUNT_SERVICE_ADMIN"]
 
         btp_admins = []
+        btp_admin_objs = []
         for user in btp_user_list:
             if not isinstance(user, dict):
                 continue
@@ -794,6 +938,14 @@ class AdvancedIamAuditor(BaseAuditor):
                 )]
                 if admin_roles:
                     btp_admins.append(f"{uid} — {', '.join(str(r) for r in admin_roles[:4])}")
+                    # Full admin_roles, not the display list's first four. Role
+                    # collections use the case-sensitive `role_collection` type, which
+                    # is what keeps a BTP "Subaccount_Admin" from being upper-cased and
+                    # conflated with a PFCG role of the same spelling.
+                    btp_admin_objs.append(
+                        [("user", uid)]
+                        + [("role_collection", str(r)) for r in admin_roles]
+                    )
 
         if btp_only:
             self.finding(
@@ -807,6 +959,11 @@ class AdvancedIamAuditor(BaseAuditor):
                     "external consultants, or shadow access entries."
                 ),
                 affected_items=btp_only[:50],
+                # One finding over the whole orphan set: deleting one BTP-only account
+                # must shrink the list, not restart the clock on the rest. Same [:50]
+                # slice as the display list.
+                affected_objects=self._objects(btp_only_objs[:50]),
+                scope="aggregate",
                 remediation=(
                     "Review each BTP-only account for business justification. "
                     "Implement centralized identity governance spanning both S/4 and BTP "
@@ -830,6 +987,10 @@ class AdvancedIamAuditor(BaseAuditor):
                     "potentially reach backend S/4 via API proxies."
                 ),
                 affected_items=locked_but_active_btp,
+                # Aggregate: one finding for the incomplete-offboarding backlog, so
+                # deprovisioning the first leaver does not re-raise it for the others.
+                affected_objects=self._objects(locked_but_active_objs),
+                scope="aggregate",
                 remediation=(
                     "Implement synchronized deprovisioning across S/4 and BTP. "
                     "Use SAP Cloud Identity Services for centralized lifecycle management. "
@@ -851,6 +1012,10 @@ class AdvancedIamAuditor(BaseAuditor):
                     "the entire RISE landscape."
                 ),
                 affected_items=btp_admins,
+                # Aggregate over every BTP admin holder; revoking one collection from
+                # one user leaves the over-privileged population, and the finding.
+                affected_objects=self._row_objects(btp_admin_objs),
+                scope="aggregate",
                 remediation=(
                     "Review all BTP admin assignments using principle of least privilege. "
                     "Separate Subaccount Admin from Security Admin roles. "
@@ -923,6 +1088,12 @@ class AdvancedIamAuditor(BaseAuditor):
                     "periodic access recertification process."
                 ),
                 affected_items=overdue,
+                # Aggregate, and deliberately with no affected_objects: the members are
+                # GRC review CAMPAIGNS, which are not SAP objects of any registered type
+                # and have no presence in the attack-path graph. Naming the campaign
+                # owner instead would put the reviewer in the graph as if they were the
+                # defect, which they are not.
+                scope="aggregate",
                 remediation=(
                     "Escalate overdue reviews to management immediately. "
                     "Complete all outstanding reviews within 2 weeks. "
@@ -946,6 +1117,9 @@ class AdvancedIamAuditor(BaseAuditor):
                     "unvalidated access in place."
                 ),
                 affected_items=incomplete,
+                # Aggregate over review campaigns — no registered object type, see
+                # IAM-REV-001 above.
+                scope="aggregate",
                 remediation=(
                     "Reopen campaigns and ensure 100% review coverage. "
                     "Investigate why certain items were skipped. "
@@ -965,6 +1139,9 @@ class AdvancedIamAuditor(BaseAuditor):
                     "Unowned reviews will never be completed."
                 ),
                 affected_items=no_reviewer,
+                # Aggregate over review campaigns — no registered object type, and by
+                # definition no reviewer to name either. See IAM-REV-001 above.
+                scope="aggregate",
                 remediation=(
                     "Assign reviewers to all campaigns based on business process ownership. "
                     "Implement automatic reviewer assignment based on organizational structure."
@@ -1040,6 +1217,11 @@ class AdvancedIamAuditor(BaseAuditor):
                     "Undocumented roles cannot be effectively reviewed or maintained."
                 ),
                 affected_items=no_description[:50],
+                # Aggregate: documenting one role does not document the rest, so the
+                # member list stays out of identity. The display list here IS the role
+                # names, so the same [:50] slice gives exactly matching nodes.
+                affected_objects=self._objects(("role", r) for r in no_description[:50]),
+                scope="aggregate",
                 remediation=(
                     "Add meaningful descriptions to all custom roles via PFCG. "
                     "Include: business process, target user group, and approval reference."
@@ -1060,6 +1242,9 @@ class AdvancedIamAuditor(BaseAuditor):
                     "and tend to accumulate unauthorized permissions over time."
                 ),
                 affected_items=no_owner[:50],
+                # Aggregate over the ownerless-role population; same [:50] slice.
+                affected_objects=self._objects(("role", r) for r in no_owner[:50]),
+                scope="aggregate",
                 remediation=(
                     "Assign business owners to all custom roles. "
                     "Use SAP GRC role ownership features or maintain a RACI matrix. "
@@ -1080,6 +1265,9 @@ class AdvancedIamAuditor(BaseAuditor):
                     "Empty roles may be leftover artifacts from role redesign projects."
                 ),
                 affected_items=empty_roles[:30],
+                # Aggregate over the leftover empty roles; same [:30] slice.
+                affected_objects=self._objects(("role", r) for r in empty_roles[:30]),
+                scope="aggregate",
                 remediation="Review and delete empty roles. Verify no users are assigned.",
                 references=["SAP Note 1763498"],
                 details={"total_count": len(empty_roles)},
@@ -1108,11 +1296,15 @@ class AdvancedIamAuditor(BaseAuditor):
                 valid_roles.add(role)
 
         orphaned = []
+        orphaned_objs = []
         for row in user_roles:
             user = row.get("UNAME", row.get("BNAME", row.get("USERNAME", "")))
             role = row.get("AGR_NAME", row.get("ROLE", row.get("ROLE_NAME", ""))).upper()
             if role and role not in valid_roles:
                 orphaned.append(f"{user} → {role}")
+                # The dangling role name is still a real node: it is what the AGR_USERS
+                # row points at, and it is the thing the cleanup removes.
+                orphaned_objs.append((("user", user), ("role", role)))
 
         if orphaned:
             self.finding(
@@ -1126,6 +1318,10 @@ class AdvancedIamAuditor(BaseAuditor):
                     "from deleted roles that were not properly cleaned up."
                 ),
                 affected_items=orphaned[:50],
+                # Aggregate over the orphaned-assignment backlog; same [:50] slice as
+                # the display list.
+                affected_objects=self._row_objects(orphaned_objs[:50]),
+                scope="aggregate",
                 remediation=(
                     "Remove orphaned role assignments via SU01 or mass cleanup. "
                     "Implement role deletion procedures that include assignment cleanup. "
@@ -1156,6 +1352,7 @@ class AdvancedIamAuditor(BaseAuditor):
                 return
 
         default_group_users = []
+        default_group_objs = []
         group_distribution: Dict[str, int] = defaultdict(int)
 
         for row in user_groups:
@@ -1170,6 +1367,10 @@ class AdvancedIamAuditor(BaseAuditor):
                 lock_status = row.get("UFLAG", row.get("LOCK_STATUS", "0"))
                 if str(lock_status) in ("0", ""):
                     default_group_users.append(f"{user} (group: {group or 'none'})")
+                    # Only the user is named: the offending rows are exactly those with
+                    # no group, or a placeholder group ("000"/"DEFAULT"/"SUPER"), so
+                    # there is no real group object to point at.
+                    default_group_objs.append(("user", user))
 
         if default_group_users:
             self.finding(
@@ -1183,6 +1384,10 @@ class AdvancedIamAuditor(BaseAuditor):
                     "group-level access control via S_USER_GRP authorization object."
                 ),
                 affected_items=default_group_users[:30],
+                # Aggregate: assigning one user a proper group does not segment the
+                # rest. Same [:30] slice as the display list.
+                affected_objects=self._objects(default_group_objs[:30]),
+                scope="aggregate",
                 remediation=(
                     "Assign all users to meaningful user groups reflecting their "
                     "organizational or functional role. Use user groups as an "
@@ -1221,12 +1426,14 @@ class AdvancedIamAuditor(BaseAuditor):
 
         # Flag dialog users being used as reference users
         misused = []
+        misused_objs = []
         for ref_user in ref_users_assigned:
             user_type = user_type_map.get(ref_user, "")
             if str(user_type).upper() in ("A", "DIALOG"):
                 misused.append(
                     f"{ref_user} (type: Dialog) — used as reference user for other accounts"
                 )
+                misused_objs.append(("user", ref_user))
 
         if misused:
             self.finding(
@@ -1241,6 +1448,12 @@ class AdvancedIamAuditor(BaseAuditor):
                     "authorizations silently affect all dependent accounts."
                 ),
                 affected_items=misused,
+                # Aggregate over every dialog account misused this way. Only the
+                # reference users themselves are named — the check builds a set of
+                # reference-user names and never keeps the dependent accounts, so
+                # naming those would mean inventing data the check does not hold.
+                affected_objects=self._objects(misused_objs),
+                scope="aggregate",
                 remediation=(
                     "Create dedicated type L (Reference) users for authorization inheritance. "
                     "Do not use active dialog accounts as reference users. "
@@ -1275,28 +1488,39 @@ class AdvancedIamAuditor(BaseAuditor):
             user_auths[user][obj].add(value)
 
         escalation_paths = []
+        escalation_objs = []
 
         for user, auth_map in user_auths.items():
             reasons = []
+            triggered = []
 
             # Can modify roles (PFCG access) AND is assigned roles
             has_role_admin = "S_USER_AGR" in auth_map
             if has_role_admin and "*" in auth_map.get("S_USER_AGR", set()):
                 reasons.append("can modify any role via PFCG (S_USER_AGR=*)")
+                triggered.append("S_USER_AGR")
 
             # Can create/modify users (SU01 access) in any group
             has_user_admin = "S_USER_GRP" in auth_map
             if has_user_admin and "*" in auth_map.get("S_USER_GRP", set()):
                 reasons.append("can manage any user via SU01 (S_USER_GRP=*)")
+                triggered.append("S_USER_GRP")
 
             # Can assign profiles directly
             has_profile_admin = "S_USER_PRO" in auth_map
             if has_profile_admin and "*" in auth_map.get("S_USER_PRO", set()):
                 reasons.append("can assign any profile (S_USER_PRO=*)")
+                triggered.append("S_USER_PRO")
 
             if len(reasons) >= 2:
                 escalation_paths.append(
                     f"{user} — {'; '.join(reasons)}"
+                )
+                # The user is the offender; the auth objects that combined to make the
+                # path are the edges. Every one of these three names comes from the
+                # export's OBJECT column, not from a list invented here.
+                escalation_objs.append(
+                    [("user", user)] + [("auth_object", o) for o in triggered]
                 )
 
         if escalation_paths:
@@ -1311,6 +1535,11 @@ class AdvancedIamAuditor(BaseAuditor):
                     "their own access or create accounts with elevated privileges."
                 ),
                 affected_items=escalation_paths,
+                # One finding rolling up every self-escalating user, so identity stays
+                # on the check: splitting one user's administrative combination does
+                # not remove the segregation gap for the others.
+                affected_objects=self._row_objects(escalation_objs),
+                scope="aggregate",
                 remediation=(
                     "Separate user administration, role administration, and profile "
                     "administration across different individuals. No single user should "

@@ -61,6 +61,9 @@ class CryptoPostureAuditor(BaseAuditor):
         weak_protocols = []
         weak_ciphers_found = []
         no_hsts = []
+        weak_protocol_objs = []
+        weak_cipher_objs = []
+        no_hsts_objs = []
 
         for row in tls:
             port = row.get("PORT", row.get("SERVICE_PORT", row.get("LISTENER", "")))
@@ -73,6 +76,14 @@ class CryptoPostureAuditor(BaseAuditor):
 
             label = f"{name} (port: {port})"
 
+            # The listener's own exported name is the object. The port is deliberately
+            # NOT a qualifier: the same listener must be ONE graph node across all
+            # three TLS checks, and a port change is a reconfiguration of the same
+            # endpoint, not a different one. Omitted entirely when the row carries no
+            # name — `label` falls back to "Port <n>" for display, but that is a
+            # formatted string, not an identity.
+            ep = str(row.get("NAME") or row.get("SERVICE") or "").strip()
+
             # Weak TLS versions
             if protocol:
                 proto_upper = protocol.upper()
@@ -80,6 +91,8 @@ class CryptoPostureAuditor(BaseAuditor):
                     weak_protocols.append(
                         f"{label} — protocol: {protocol}"
                     )
+                    if ep:
+                        weak_protocol_objs.append({"type": "endpoint", "name": ep})
 
             # Weak cipher suites
             if ciphers:
@@ -89,11 +102,15 @@ class CryptoPostureAuditor(BaseAuditor):
                         weak_ciphers_found.append(
                             f"{label} — weak cipher: {wc} in suite"
                         )
+                        if ep:
+                            weak_cipher_objs.append({"type": "endpoint", "name": ep})
                         break
 
             # Missing HSTS
             if not hsts or str(hsts).lower() in ("false", "0", "no", "disabled", ""):
                 no_hsts.append(f"{label} — HSTS: not enabled")
+                if ep:
+                    no_hsts_objs.append({"type": "endpoint", "name": ep})
 
         if weak_protocols:
             self.finding(
@@ -106,6 +123,12 @@ class CryptoPostureAuditor(BaseAuditor):
                     "These have known vulnerabilities (BEAST, POODLE, etc.)."
                 ),
                 affected_items=weak_protocols,
+                # One finding rolling up every offending listener: raising the minimum
+                # TLS version on one port must shrink the member list, not retire this
+                # finding and raise a new one with a reset age. The endpoints still
+                # ride along as graph nodes.
+                affected_objects=weak_protocol_objs,
+                scope="aggregate",
                 remediation=(
                     "Set minimum TLS version to 1.2 across all ICM ports. "
                     "Configure via icm/HTTPS/client_sni_* and ssl/ciphersuites. "
@@ -129,6 +152,12 @@ class CryptoPostureAuditor(BaseAuditor):
                     "These can be exploited for decryption or downgrade attacks."
                 ),
                 affected_items=weak_ciphers_found,
+                # Aggregate for the same reason as CRYPTO-TLS-001. No cipher in the
+                # qualifier: the check stops at the FIRST weak algorithm it matches,
+                # so the reported cipher can change while the endpoint stays equally
+                # broken, and that must not re-identify the finding or the node.
+                affected_objects=weak_cipher_objs,
+                scope="aggregate",
                 remediation=(
                     "Configure ssl/ciphersuites to allow only strong ciphers: "
                     "AES-256-GCM, AES-128-GCM with ECDHE/DHE key exchange. "
@@ -149,6 +178,9 @@ class CryptoPostureAuditor(BaseAuditor):
                     "via SSL stripping attacks."
                 ),
                 affected_items=no_hsts,
+                # Aggregate over the listeners missing HSTS, same rationale.
+                affected_objects=no_hsts_objs,
+                scope="aggregate",
                 remediation=(
                     "Enable HSTS via ICM parameter icm/HTTP/hsts_header. "
                     "Set max-age to at least 31536000 (1 year). "
@@ -167,6 +199,10 @@ class CryptoPostureAuditor(BaseAuditor):
         expiring_soon = []
         weak_keys = []
         self_signed_prod = []
+        expired_objs = []
+        expiring_soon_objs = []
+        weak_key_objs = []
+        self_signed_objs = []
         now = datetime.now()
         warning_days = self.get_config("cert_expiry_warning_days", 90)
 
@@ -180,26 +216,44 @@ class CryptoPostureAuditor(BaseAuditor):
 
             label = f"{name} (purpose: {purpose})" if purpose else name
 
+            # Certificate names are CASE-BEARING (subject/alias strings such as
+            # "SSL_Server_Cert" or a full DN), which is why `certificate` lives in
+            # _CASE_SENSITIVE_TYPES — upper-casing would merge distinct certificates.
+            # The purpose is not a qualifier: the same certificate must stay ONE node
+            # across the expiry, weak-key and self-signed checks. Omitted when the row
+            # names no certificate — `label` falls back to the literal "unknown",
+            # which is a display placeholder, not an object.
+            cert = str(row.get("CERT_NAME") or row.get("ALIAS")
+                       or row.get("SUBJECT") or "").strip()
+
             if expiry:
                 parsed = self._parse_date(expiry)
                 if parsed:
                     days_left = (parsed - now).days
                     if days_left <= 0:
                         expired.append(f"{label} — EXPIRED {abs(days_left)}d ago ({expiry})")
+                        if cert:
+                            expired_objs.append({"type": "certificate", "name": cert})
                     elif days_left <= warning_days:
                         expiring_soon.append(
                             f"{label} — expires in {days_left}d ({expiry})"
                         )
+                        if cert:
+                            expiring_soon_objs.append({"type": "certificate", "name": cert})
 
             if key_size:
                 try:
                     if int(str(key_size)) < 2048:
                         weak_keys.append(f"{label} — key: {key_size} bits")
+                        if cert:
+                            weak_key_objs.append({"type": "certificate", "name": cert})
                 except ValueError:
                     pass
 
             if algo and any(w in str(algo).upper() for w in ["SHA1", "MD5", "SHA-1"]):
                 weak_keys.append(f"{label} — algorithm: {algo}")
+                if cert:
+                    weak_key_objs.append({"type": "certificate", "name": cert})
 
             # Self-signed in production
             if issuer and name:
@@ -209,6 +263,8 @@ class CryptoPostureAuditor(BaseAuditor):
                     purpose_upper = str(purpose).upper()
                     if any(p in purpose_upper for p in ["PROD", "SSL", "HTTPS", "SNC", "SERVER"]):
                         self_signed_prod.append(f"{label} — issuer: self-signed")
+                        if cert:
+                            self_signed_objs.append({"type": "certificate", "name": cert})
 
         if expired:
             self.finding(
@@ -221,6 +277,12 @@ class CryptoPostureAuditor(BaseAuditor):
                     "cause TLS handshake failures, breaking HTTPS, SNC, and SSO."
                 ),
                 affected_items=expired,
+                # One finding rolling up the whole expired set: renewing one
+                # certificate must shrink the member list, not retire this finding and
+                # raise a fresh one whose age starts at zero. The certificates are
+                # real objects and stay in the graph.
+                affected_objects=expired_objs,
+                scope="aggregate",
                 remediation=(
                     "Renew expired certificates immediately via STRUST. "
                     "Import updated CA certificates. Restart ICM after changes."
@@ -239,6 +301,12 @@ class CryptoPostureAuditor(BaseAuditor):
                     f"{warning_days} days. Proactive renewal avoids service disruptions."
                 ),
                 affected_items=expiring_soon,
+                # Aggregate: this is a rolling renewal queue. Its membership changes
+                # every run as certificates cross the warning threshold or are renewed,
+                # so members must stay out of identity or the finding would churn
+                # continuously and never accumulate an age.
+                affected_objects=expiring_soon_objs,
+                scope="aggregate",
                 remediation=(
                     "Renew certificates at least 30 days before expiry. "
                     "Implement automated certificate monitoring and alerting."
@@ -257,6 +325,12 @@ class CryptoPostureAuditor(BaseAuditor):
                     "or deprecated signature algorithms (SHA-1, MD5)."
                 ),
                 affected_items=weak_keys,
+                # Aggregate over every weak certificate. A certificate that is weak on
+                # BOTH counts (short key and SHA-1) appears twice in the member list,
+                # matching affected_items; identity ignores members and the graph
+                # de-duplicates by object key, so neither is distorted.
+                affected_objects=weak_key_objs,
+                scope="aggregate",
                 remediation=(
                     "Replace with RSA 2048+ or ECDSA P-256+ keys, "
                     "signed with SHA-256 or stronger."
@@ -276,6 +350,10 @@ class CryptoPostureAuditor(BaseAuditor):
                     "are not validated by standard trust chains, weakening TLS."
                 ),
                 affected_items=self_signed_prod,
+                # Aggregate: replacing one self-signed certificate with a CA-issued one
+                # must not reset the age of the remaining exposure.
+                affected_objects=self_signed_objs,
+                scope="aggregate",
                 remediation=(
                     "Replace self-signed certificates with CA-issued certificates "
                     "from an internal PKI or public CA. "
@@ -314,6 +392,14 @@ class CryptoPostureAuditor(BaseAuditor):
                         "credentials and business data on the network."
                     ),
                     affected_items=[f"snc/enable = {snc_enabled}"],
+                    # One profile parameter, one defect: the parameter IS the subject,
+                    # exactly as in the ABAP/HANA parameter checks. No qualifier — the
+                    # check fires on ANY value other than 1/TRUE/YES (including the
+                    # parameter being absent, which defaults to "0" here), so carrying
+                    # the value into identity would re-raise the finding on a 0 -> 2
+                    # change that fixes nothing.
+                    affected_objects=[{"type": "parameter_name", "name": "snc/enable"}],
+                    scope="object",
                     remediation=(
                         "Enable SNC by setting snc/enable = 1. "
                         "Configure snc/identity/as, snc/data_protection/min, "
@@ -339,6 +425,13 @@ class CryptoPostureAuditor(BaseAuditor):
                         "the data stream."
                     ),
                     affected_items=[f"snc/data_protection/min = {qop}"],
+                    # One parameter, one defect. No qualifier: the check accepts two
+                    # spellings of the same setting ("1" and "AUTHENTICATION_ONLY"),
+                    # so pinning the exported spelling would split one parameter into
+                    # two identities and two graph nodes.
+                    affected_objects=[{"type": "parameter_name",
+                                       "name": "snc/data_protection/min"}],
+                    scope="object",
                     remediation=(
                         "Set snc/data_protection/min = 3 (privacy protection) "
                         "for full encryption. Level 2 (integrity) provides "
@@ -360,6 +453,15 @@ class CryptoPostureAuditor(BaseAuditor):
                     category="Cryptographic Posture",
                     description="SNC is not enabled. RFC/GUI traffic is unencrypted.",
                     affected_items=[f"{name} = {value}"],
+                    # Per-row check: this fires once per non-enabled SNC parameter in
+                    # the dedicated export, so CRYPTO-SNC-001 can legitimately appear
+                    # more than once in a run. The parameter name — read from the
+                    # export, not invented — is what keeps those rows from collapsing
+                    # into a single identity and silently losing all but one. No
+                    # qualifier: any value other than 1/TRUE fires.
+                    affected_objects=([{"type": "parameter_name", "name": name}]
+                                      if name else None),
+                    scope="object",
                     remediation="Enable SNC: set snc/enable = 1.",
                     references=["SAP Security Baseline — Secure Network Communications (SNC)"],
                 )
@@ -387,6 +489,14 @@ class CryptoPostureAuditor(BaseAuditor):
                     "vulnerable to physical media theft or unauthorized disk access."
                 ),
                 affected_items=["Data volume encryption: disabled"],
+                # A single system-wide encryption switch. The hana_encryption export
+                # is a flat JSON document of booleans — it names no HANA ini parameter
+                # and no database, so there is no object to point at and coining one
+                # would fabricate a graph node. Aggregate keeps identity on
+                # (system, client, check_id), which is the honest, stable answer here:
+                # this finding can never split into several, and its wording is then
+                # free to change without orphaning its history.
+                scope="aggregate",
                 remediation=(
                     "Enable HANA data volume encryption via "
                     "ALTER SYSTEM PERSISTENCE ENCRYPTION ON. "
@@ -410,6 +520,9 @@ class CryptoPostureAuditor(BaseAuditor):
                     "contain complete change data and may expose sensitive records."
                 ),
                 affected_items=["Log volume encryption: disabled"],
+                # Same shape as CRYPTO-HANA-001: one switch, nothing named by the
+                # export. See the note there.
+                scope="aggregate",
                 remediation="Enable log volume encryption alongside data volume encryption.",
                 references=["SAP HANA Security Guide — Log Encryption"],
             )
@@ -429,6 +542,10 @@ class CryptoPostureAuditor(BaseAuditor):
                     "key separation and compliance."
                 ),
                 affected_items=[f"Root key management: {root_key}"],
+                # One key-management setting; the export names no key and no keystore.
+                # Aggregate also keeps the exported value ("INTERNAL" / "DEFAULT" /
+                # "LOCAL" — three spellings of the same defect) out of identity.
+                scope="aggregate",
                 remediation=(
                     "Consider external key management via SAP Data Custodian or "
                     "cloud provider KMS (Azure Key Vault, AWS KMS). "
@@ -462,6 +579,9 @@ class CryptoPostureAuditor(BaseAuditor):
                     "highest-impact and most frequently overlooked HANA data-at-rest gaps."
                 ),
                 affected_items=["Backup encryption: disabled"],
+                # Same shape as CRYPTO-HANA-001: one switch, nothing named by the
+                # export. See the note there.
+                scope="aggregate",
                 remediation=(
                     "Enable backup encryption: ALTER SYSTEM BACKUP ENCRYPTION ON; (or via "
                     "the cockpit Data Encryption page). This requires that a backup "
@@ -534,6 +654,16 @@ class CryptoPostureAuditor(BaseAuditor):
                     "to either database."
                 ),
                 affected_items=[f"[system_replication_communication] enable_ssl = {val}"],
+                # Unlike CRYPTO-HANA-001..004, this one reads a REAL HANA ini
+                # parameter out of the M_INIFILE_CONTENTS export, so it has a genuine
+                # object. The key in that export is literally "enable_ssl", which is
+                # not an identity on its own — many sections have one — so the section
+                # narrows it, exactly as the tenant-isolation check does. The section
+                # is constant for this check, so identity stays stable. No value in
+                # the qualifier: every falsy spelling fires.
+                affected_objects=[{"type": "parameter_name", "name": "enable_ssl",
+                                   "qualifier": "section=system_replication_communication"}],
+                scope="object",
                 remediation=(
                     "Enable TLS for system replication: set [system_replication_communication] "
                     "enable_ssl = true on both primary and secondary, provision the "
@@ -580,6 +710,20 @@ class CryptoPostureAuditor(BaseAuditor):
                                 "and contain known vulnerabilities."
                             ),
                             affected_items=[f"{label} at {path}"],
+                            # Per-row check: it fires once per outdated library, so
+                            # CRYPTO-LIB-001 can appear several times in one run and
+                            # the library name is what stops those rows collapsing
+                            # into one identity — the exact failure mode the identity
+                            # module exists to prevent. No version qualifier: an
+                            # upgrade that is still below the threshold (5.5 -> 6.0)
+                            # fixes nothing, and must not retire the finding and
+                            # re-raise it with its age reset. The install path is
+                            # deliberately not an object either: it is a directory
+                            # shared by many binaries, so two outdated libraries in
+                            # one directory would collide.
+                            affected_objects=([{"type": "crypto_library",
+                                                "name": lib_name}] if lib_name else None),
+                            scope="object",
                             remediation=(
                                 "Update CommonCryptoLib to the latest version. "
                                 "Download from SAP Software Center. "
@@ -597,6 +741,7 @@ class CryptoPostureAuditor(BaseAuditor):
             return
 
         issues = []
+        issue_objs = []
         now = datetime.now()
 
         for row in pse:
@@ -608,13 +753,26 @@ class CryptoPostureAuditor(BaseAuditor):
 
             label = f"{pse_name} ({pse_type})" if pse_type else pse_name
 
+            # A PSE is a file in the STRUST store ("SAPSSLS.pse"), so it is typed as a
+            # case-bearing `file`, not as a `certificate` — the certificates it
+            # contains are separate objects reported by CRYPTO-CERT-*. The PSE type
+            # ("SSL Server", "SNC") is not a qualifier: it describes the same file.
+            # Omitted when the row names no PSE — the "unknown" fallback above is a
+            # display placeholder, not an object.
+            pse_obj = str(row.get("PSE_NAME") or row.get("NAME")
+                          or row.get("PSE_FILE") or "").strip()
+
             if status and str(status).upper() in ("ERROR", "INVALID", "CORRUPTED", "EXPIRED"):
                 issues.append(f"{label} — status: {status}")
+                if pse_obj:
+                    issue_objs.append({"type": "file", "name": pse_obj})
 
             if cert_expiry:
                 parsed = self._parse_date(cert_expiry)
                 if parsed and (parsed - now).days <= 0:
                     issues.append(f"{label} — PSE certificate expired: {cert_expiry}")
+                    if pse_obj:
+                        issue_objs.append({"type": "file", "name": pse_obj})
 
         if issues:
             self.finding(
@@ -628,6 +786,12 @@ class CryptoPostureAuditor(BaseAuditor):
                     "failures break encrypted communications."
                 ),
                 affected_items=issues,
+                # One finding rolling up every unhealthy PSE: repairing one must
+                # shrink the member list, not retire this finding and raise a new one.
+                # A PSE that is both in ERROR state and holding an expired certificate
+                # appears twice, matching affected_items; the graph de-duplicates it.
+                affected_objects=issue_objs,
+                scope="aggregate",
                 remediation=(
                     "Repair or recreate affected PSE files via STRUST. "
                     "Renew expired certificates within PSEs. "
@@ -675,6 +839,12 @@ class CryptoPostureAuditor(BaseAuditor):
                     "and enabling key recovery in disaster scenarios."
                 ),
                 affected_items=issues,
+                # Aggregate over the policy gaps: configuring key backup while
+                # rotation is still manual must shrink the list, not reset the age.
+                # No affected_objects — the key_management export describes the policy
+                # (rotation mode, interval, backup flag) and names no key, keystore or
+                # KMS instance, so there is nothing to anchor a graph node to.
+                scope="aggregate",
                 remediation=(
                     "Implement automated key rotation with defined intervals. "
                     "Configure key backup/escrow for disaster recovery. "

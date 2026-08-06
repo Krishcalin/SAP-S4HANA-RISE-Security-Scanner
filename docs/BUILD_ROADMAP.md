@@ -356,16 +356,41 @@ Being crisp buys credibility for what we do claim.
 
 ---
 
+## Module conversion ✅ **COMPLETE — all 23**
+
+Every auditor now emits structured `affected_objects`. Measured on `sample_data`:
+
+```
+296 findings  ->  296 distinct fingerprints   (0 collisions, 0 unconverted)
+basis:  objects 56 · check_only 240 · display 0
+620 graph nodes   64 object types, all registered, registries disjoint
+```
+
+**`display` basis is now zero.** Every finding is either structurally identified by the SAP
+objects it names, or honestly labelled an aggregate. The weaker display-string fallback is no
+longer relied on anywhere — it remains only as a safety net for a module nobody has converted.
+
+The high `check_only` count is correct, not a shortfall: most checks roll every offender into
+one finding, and an aggregate is honestly identified by check and system. Forcing a `subject`
+onto those would change the label the console shows without changing the guarantee behind it.
+
+Re-verified end to end after conversion: scanning the same bundle twice still gives
+`new 0 · persisting 296 · resolved 0`.
+
+---
+
 ## Immediate next actions
 
-1. Convert the remaining 15 modules to structured `affected_objects` (8 done). They track
-   correctly today on the display fallback, and `_rebase` means converting them later will not
-   destroy their history
-2. Fix or document the dead path at `modules/iam_advanced.py:185` — it returns early and emits
-   nothing whenever `role_auth_values.csv` is present
-3. Add CI: unit suite on every push, integration suite against a PostgreSQL service container
-   (the 43 DB-backed tests currently only run locally, which is exactly how the console-wide
-   render bug survived)
-4. Begin Phase 3 — FAIR on the front page
+1. Fix or document the dead path at `modules/iam_advanced.py:185` — it returns early and emits
+   nothing whenever `role_auth_values.csv` is present, so its SoD rules never fire on a complete
+   export (the deeper `ara` module takes over, which is why nothing looks wrong)
+2. Review two judgement calls the conversion surfaced, both defensible and both worth a second
+   opinion: BTP users typed as `user` rather than a separate `btp_user` (deliberate — the check
+   exists to treat the S/4 and BTP user masters as one identity namespace), and the GRC access-
+   review findings carrying no objects at all (review campaigns are not SAP objects; naming the
+   reviewer would put a person in the graph as though they were the defect)
+3. Begin Phase 4 — the attack-path graph. The node substrate is now in place: 620 typed nodes
+   from real exports, where before the pivot every node would have been a string.
 
-**Done:** README `PARAM-* (25+)` overstatement corrected to 23.
+**Done:** README `PARAM-* (25+)` overstatement corrected to 23. CI now has three jobs including
+a stdlib-purity gate and a skip guard.

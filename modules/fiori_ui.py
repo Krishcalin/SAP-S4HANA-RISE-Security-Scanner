@@ -50,6 +50,29 @@ class FioriUiAuditor(BaseAuditor):
         "MANAGE_WORKFORCE", "FINANCIALS",
     ]
 
+    # ------------------------------------------------------------------ helpers
+    @staticmethod
+    def _add(objects: List[Dict[str, Any]], seen: set, obj_type: str,
+             name: Any, qualifier: str = None) -> None:
+        """Append one structured affected object, de-duplicated.
+
+        A blank name is DROPPED rather than turned into a placeholder node: these
+        exports routinely omit a column (a catalog row with no CATALOG_ID, a space
+        with neither `name` nor `spaceId`), and inventing "unknown" would put a
+        fictional object into the attack-path graph.
+        """
+        n = str(name or "").strip()
+        if not n:
+            return
+        key = (obj_type, n, qualifier)
+        if key in seen:
+            return
+        seen.add(key)
+        obj: Dict[str, Any] = {"type": obj_type, "name": n}
+        if qualifier:
+            obj["qualifier"] = qualifier
+        objects.append(obj)
+
     def run_all_checks(self) -> List[Dict[str, Any]]:
         self.check_catalog_access()
         self.check_sensitive_app_exposure()
@@ -69,6 +92,10 @@ class FioriUiAuditor(BaseAuditor):
         excessive_roles = []
         no_role = []
         max_roles = self.get_config("max_roles_per_catalog", 10)
+        public_objects: List[Dict[str, Any]] = []
+        public_seen: set = set()
+        excessive_objects: List[Dict[str, Any]] = []
+        excessive_seen: set = set()
 
         catalog_roles = defaultdict(list)
         for row in catalogs:
@@ -84,12 +111,22 @@ class FioriUiAuditor(BaseAuditor):
 
             if str(scope).upper() in ("PUBLIC", "ALL", "EVERYONE", "*"):
                 public_catalogs.append(f"{catalog} — scope: {scope}")
+                # No qualifier on the scope value: the check fires on four different
+                # spellings (PUBLIC/ALL/EVERYONE/*), so pinning the exported one would
+                # split a single catalog into several graph nodes and would make a
+                # cosmetic export change look like a different object.
+                self._add(public_objects, public_seen, "fiori_catalog", catalog)
 
         for catalog, roles in catalog_roles.items():
             if len(roles) > max_roles:
                 excessive_roles.append(
                     f"{catalog}: {len(roles)} roles assigned (max: {max_roles})"
                 )
+                # The catalog is the offender; the roles ride along so the graph keeps
+                # the catalog -> role edges the over-sharing actually consists of.
+                self._add(excessive_objects, excessive_seen, "fiori_catalog", catalog)
+                for role_name in roles:
+                    self._add(excessive_objects, excessive_seen, "role", role_name)
 
         # Catalogs without any role assignment
         all_catalogs = set()
@@ -119,6 +156,11 @@ class FioriUiAuditor(BaseAuditor):
                     "Remove public scope from all non-default catalogs."
                 ),
                 references=["SAP Fiori — Catalog-Based Authorization"],
+                affected_objects=public_objects,
+                # One finding rolls up every publicly scoped catalog. Re-scoping one
+                # catalog must shrink this finding, not retire it and raise a fresh one
+                # with a reset age — so the catalogs stay out of identity.
+                scope="aggregate",
             )
 
         if excessive_roles:
@@ -138,6 +180,10 @@ class FioriUiAuditor(BaseAuditor):
                     "Create separate catalogs for different user populations."
                 ),
                 references=["SAP Fiori — Role-Based Catalog Design"],
+                affected_objects=excessive_objects,
+                # Summary of the over-shared catalog population; un-assigning one role
+                # from one catalog must leave the finding's identity and age alone.
+                scope="aggregate",
             )
 
     def check_sensitive_app_exposure(self):
@@ -149,6 +195,8 @@ class FioriUiAuditor(BaseAuditor):
             return
 
         exposed = []
+        objects: List[Dict[str, Any]] = []
+        seen: set = set()
         for row in data_source:
             app_id = row.get("APP_ID", row.get("TILE_ID",
                     row.get("SEMANTIC_OBJECT", "")))
@@ -163,6 +211,14 @@ class FioriUiAuditor(BaseAuditor):
                         exposed.append(
                             f"{app_id}: {title or sensitive_desc} — catalog: {catalog}, scope: {scope}"
                         )
+                        # The exposure is the app REACHED THROUGH a broadly scoped
+                        # catalog by a role, so all three are real nodes and the edges
+                        # between them are the path. None carries a qualifier: each is
+                        # the same launchpad entity the other Fiori checks name, and a
+                        # qualifier would fork it into a second graph node.
+                        self._add(objects, seen, "fiori_app", app_id)
+                        self._add(objects, seen, "fiori_catalog", catalog)
+                        self._add(objects, seen, "role", role)
                     break
 
         if exposed:
@@ -183,6 +239,10 @@ class FioriUiAuditor(BaseAuditor):
                     "Do not rely solely on Fiori tile visibility for security."
                 ),
                 references=["SAP Fiori — Admin App Authorization Best Practices"],
+                affected_objects=objects,
+                # One finding over every over-exposed sensitive app. Restricting one app
+                # must shrink the member list, not re-raise the finding with a zero age.
+                scope="aggregate",
             )
 
     def check_odata_service_auth(self):
@@ -193,6 +253,10 @@ class FioriUiAuditor(BaseAuditor):
 
         no_auth = []
         sensitive_weak = []
+        no_auth_objects: List[Dict[str, Any]] = []
+        no_auth_seen: set = set()
+        weak_objects: List[Dict[str, Any]] = []
+        weak_seen: set = set()
 
         for row in odata:
             service = row.get("SERVICE_NAME", row.get("SERVICE",
@@ -208,6 +272,11 @@ class FioriUiAuditor(BaseAuditor):
             # No authorization check
             if str(auth_check).upper() in ("NONE", "NO", "FALSE", "0", "DISABLED", ""):
                 no_auth.append(f"{label} — auth check: {auth_check or 'disabled'}")
+                # The service technical name is the object. The ALIAS is only a display
+                # label here, and the auth-check VALUE is deliberately not a qualifier:
+                # the check fires on six different spellings of "off", so pinning one
+                # would fork the service into several nodes for no gain.
+                self._add(no_auth_objects, no_auth_seen, "odata_service", service)
 
             # Sensitive services with weak auth
             svc_upper = f"{service} {alias}".upper()
@@ -218,6 +287,7 @@ class FioriUiAuditor(BaseAuditor):
                         sensitive_weak.append(
                             f"{label} — auth: {auth_check or 'not configured'}"
                         )
+                        self._add(weak_objects, weak_seen, "odata_service", service)
                     break
 
         if no_auth:
@@ -242,6 +312,11 @@ class FioriUiAuditor(BaseAuditor):
                     "SAP Note 2926224 — OData Service Authorization",
                     "OWASP — API Authorization",
                 ],
+                affected_objects=no_auth_objects,
+                # Every unauthenticated service rolled into one finding: enabling the
+                # authorization check on one service must reduce this finding rather
+                # than retire it and restart its clock.
+                scope="aggregate",
             )
 
         if sensitive_weak:
@@ -262,6 +337,9 @@ class FioriUiAuditor(BaseAuditor):
                     "in the DPC implementation, and field-level authorization where needed."
                 ),
                 references=["SAP Fiori — OData Backend Authorization Design"],
+                affected_objects=weak_objects,
+                # Summary of the weakly-protected sensitive-service population.
+                scope="aggregate",
             )
 
     def check_spaces_pages_config(self):
@@ -275,6 +353,8 @@ class FioriUiAuditor(BaseAuditor):
 
         no_role = []
         everyone_spaces = []
+        everyone_objects: List[Dict[str, Any]] = []
+        everyone_seen: set = set()
 
         for space in space_list:
             if not isinstance(space, dict):
@@ -285,6 +365,11 @@ class FioriUiAuditor(BaseAuditor):
 
             if str(visibility).upper() in ("PUBLIC", "EVERYONE", "ALL"):
                 everyone_spaces.append(f"{name} — visibility: {visibility}")
+                # Read the space id back from the export rather than reusing `name`:
+                # `name` falls back to the literal "unknown" for the display string, and
+                # a node called "unknown" would be a fabricated object in the graph.
+                self._add(everyone_objects, everyone_seen, "fiori_space",
+                          space.get("name") or space.get("spaceId") or "")
 
             if not roles or (isinstance(roles, list) and len(roles) == 0):
                 no_role.append(f"{name} — no roles assigned")
@@ -307,6 +392,10 @@ class FioriUiAuditor(BaseAuditor):
                     "with proper role assignments."
                 ),
                 references=["SAP Fiori — Spaces and Pages Configuration"],
+                affected_objects=everyone_objects,
+                # One finding over every publicly visible space; making one space
+                # role-based must not reset the finding's age.
+                scope="aggregate",
             )
 
     def check_tile_odata_mismatch(self):
@@ -326,6 +415,8 @@ class FioriUiAuditor(BaseAuditor):
 
         # Check tiles for OData service references
         mismatch = []
+        objects: List[Dict[str, Any]] = []
+        seen: set = set()
         for row in tiles:
             tile_id = row.get("TILE_ID", row.get("APP_ID", ""))
             odata_svc = row.get("ODATA_SERVICE", row.get("TARGET_SERVICE",
@@ -340,6 +431,14 @@ class FioriUiAuditor(BaseAuditor):
                         f"Tile {tile_id} → {odata_svc}: requires {required}, "
                         f"role {role} provides {auth_provided}"
                     )
+                    # All four are exported objects and the mismatch IS the edge
+                    # between them: tile -> service -> required auth object, versus
+                    # what the role actually carries. `required` comes straight from
+                    # the odata_auth export (REQUIRED_AUTH_OBJECT) — nothing invented.
+                    self._add(objects, seen, "fiori_tile", tile_id)
+                    self._add(objects, seen, "odata_service", odata_svc)
+                    self._add(objects, seen, "role", role)
+                    self._add(objects, seen, "auth_object", required)
 
         if mismatch:
             self.finding(
@@ -359,6 +458,13 @@ class FioriUiAuditor(BaseAuditor):
                     "objects for all tiles in their assigned catalogs."
                 ),
                 references=["SAP Fiori — Tile-Service Authorization Alignment"],
+                # The display list is capped at 20 but the object list is not: members
+                # are graph nodes, not report rows, and they are excluded from identity
+                # anyway, so truncating them would only blind the graph.
+                affected_objects=objects,
+                # Summary of every misaligned tile; fixing one role's authorizations
+                # must shrink the finding rather than replace it.
+                scope="aggregate",
             )
 
     def check_unused_fiori_apps(self):
@@ -368,6 +474,8 @@ class FioriUiAuditor(BaseAuditor):
             return
 
         unused = []
+        objects: List[Dict[str, Any]] = []
+        seen: set = set()
         stale_days = self.get_config("fiori_app_stale_days", 90)
 
         for row in usage:
@@ -381,6 +489,10 @@ class FioriUiAuditor(BaseAuditor):
             try:
                 if int(str(launches)) == 0:
                     unused.append(f"{app_id}: {title} (catalog: {catalog}) — never launched")
+                    # The app is the offender; the catalog it sits in is where the
+                    # remediation happens ("remove from catalogs"), so both are nodes.
+                    self._add(objects, seen, "fiori_app", app_id)
+                    self._add(objects, seen, "fiori_catalog", catalog)
             except ValueError:
                 pass
 
@@ -404,4 +516,10 @@ class FioriUiAuditor(BaseAuditor):
                 ),
                 references=["SAP Fiori — App Usage Analytics"],
                 details={"total_unused": len(unused)},
+                # Object list is not capped at 30 like the display list: see FIORI-TILE-001.
+                affected_objects=objects,
+                # A rolling inventory of never-launched apps. Removing one app from a
+                # catalog must shrink this finding, not raise a new zero-age one — the
+                # backlog is the defect, not any single app.
+                scope="aggregate",
             )

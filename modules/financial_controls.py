@@ -122,6 +122,7 @@ class FinancialControlsAuditor(BaseAuditor):
         if not rows:
             return
         offenders = []
+        objects = []
         for r in rows:
             variant = self._get(r, "VARIANT", "BUKRS", "PERIOD_VARIANT", "BKGRP") or "?"
             acct = self._get(r, "ACCOUNT_TYPE", "KOART", "ACCT_TYPE").upper()
@@ -136,6 +137,15 @@ class FinancialControlsAuditor(BaseAuditor):
             if wide and acct in self._ALL_ACCT_TYPES and not ag:
                 yr = f"{fy or '?'}-{ty or '?'}"
                 offenders.append(f"variant {variant}: all account types, periods {fp}-{tp}/{yr}, no auth group")
+                # The offending config entry is the posting-period VARIANT (the T001B key
+                # OB52 maintains), not table T001B — remediation closes periods on that
+                # variant. "?" is the display fallback for a row that never named one, so
+                # it stays a member string rather than becoming a fabricated node.
+                # No qualifier: the period range, fiscal years and auth group are exactly
+                # what change when the variant is remediated, so pinning them would spawn a
+                # new graph node on every period close.
+                if variant != "?":
+                    objects.append({"type": "posting_period_variant", "name": variant})
         if offenders:
             self.finding(
                 check_id="FIN-PP-001",
@@ -152,6 +162,11 @@ class FinancialControlsAuditor(BaseAuditor):
                     "financial-reporting concern (PCAOB AS 2201)."
                 ),
                 affected_items=offenders[:50],
+                affected_objects=objects,
+                # One finding rolling up every wide-open variant: closing periods on one
+                # variant must shrink this finding, not retire it and raise a zero-age
+                # clone, so the variants stay out of identity and ride along as members.
+                scope="aggregate",
                 remediation=(
                     "In OB52 (posting period variant, T001B) keep only the current open period(s) open, "
                     "close prior periods, and set an authorization group on the second/special period "
@@ -183,12 +198,17 @@ class FinancialControlsAuditor(BaseAuditor):
                     "single user can post arbitrarily large amounts."
                 ),
                 affected_items=["T043T export is empty"],
+                # An ABSENCE, not an object: the defect is that T043T defines no tolerance
+                # group at all, so there is nothing in the export to name. Identified by
+                # (system, client, check_id) alone — correctly coarse.
+                scope="aggregate",
                 remediation="Define FI tolerance groups (OBA4) with appropriate per-document and per-open-item limits and assign users (OB57).",
                 references=["SOX preventive financial controls / authorization limits (PCAOB AS 2201)",
                             "DSAG Prüfleitfaden — Toleranzgruppen (OBA4)"],
             )
             return
         unlimited = []
+        objects = []
         for r in rows:
             grp = self._get(r, "GROUP", "TOLERANZ", "TGROUP", "TOLERANCE_GROUP") or "(blank/default)"
             per_doc = self._amount(self._get(r, "AMOUNT_PER_DOC", "AMOUNT_DOC", "BETRG", "MAX_AMOUNT"))
@@ -197,6 +217,13 @@ class FinancialControlsAuditor(BaseAuditor):
             if per_doc == 0 or per_doc >= self._UNLIMITED or per_item >= self._UNLIMITED:
                 cap = "unset" if per_doc == 0 else f"{per_doc:,.0f}"
                 unlimited.append(f"group {grp}: per-document limit {cap}")
+                # The T043T tolerance GROUP is the config entry at fault. The default
+                # group's key is genuinely blank in T043T and "(blank/default)" is a
+                # display label, not an identifier — it stays a member string rather than
+                # becoming an invented node. No qualifier: the limit is the value being
+                # remediated, so pinning it would re-node the group on every change.
+                if grp != "(blank/default)":
+                    objects.append({"type": "tolerance_group", "name": grp})
         if unlimited:
             self.finding(
                 check_id="FIN-TOL-001",
@@ -211,6 +238,10 @@ class FinancialControlsAuditor(BaseAuditor):
                     "(a SOX preventive-control gap)."
                 ),
                 affected_items=unlimited[:50],
+                affected_objects=objects,
+                # One finding over the whole set of uncapped groups: setting a limit on
+                # one group must shrink the member list, not reset the finding's age.
+                scope="aggregate",
                 remediation=(
                     "In OBA4 set realistic per-document and per-open-item amount limits on each FI "
                     "tolerance group appropriate to the roles assigned, and confirm the default (blank) "
@@ -248,6 +279,14 @@ class FinancialControlsAuditor(BaseAuditor):
                     "control over payment master data is a key SOX anti-fraud control."
                 ),
                 affected_items=(sorted(fields)[:50] or ["T055F export contains no sensitive fields"]),
+                # Aggregate, and deliberately WITHOUT affected_objects. The defect is an
+                # ABSENCE — no payment-relevant field appears in T055F — so the offending
+                # object is not in the export at all. The fields listed above are the ones
+                # that ARE under dual control; promoting them to graph nodes would hang a
+                # "not under dual control" finding off compliant objects. Naming T055F (or
+                # FK08) instead would be naming a constant to dress the basis up as
+                # "objects" without making the identity any more structural.
+                scope="aggregate",
                 remediation=(
                     "In FK08 (vendor) / FD08 (customer) mark the bank-detail and payment-method fields "
                     "(LFBK-BANKN/BANKL/BANKS, IBAN, ZWELS, house bank) as 'sensitive' so a change locks "
@@ -265,6 +304,7 @@ class FinancialControlsAuditor(BaseAuditor):
         if not rows:
             return
         offenders = []
+        objects = []
         for r in rows:
             field = self._get(r, "FIELD", "FELDNAME", "FIELD_NAME").upper()
             acct = self._get(r, "ACCOUNT_TYPE", "KOART")
@@ -278,6 +318,15 @@ class FinancialControlsAuditor(BaseAuditor):
                     and (self._truthy(after_post) or self._truthy(after_clear)):
                 when = "after posting" if self._truthy(after_post) else "after clearing"
                 offenders.append(f"{field}" + (f" ({acct})" if acct else "") + f" changeable {when}")
+                # The config entry is the TBAER change rule, whose key is the document
+                # FIELD plus the account type it applies to — not table TBAER itself. The
+                # account type is a genuine key component, so it qualifies the object; the
+                # "after posting / after clearing" trigger does not, because it is the
+                # setting being remediated.
+                obj = {"type": "document_field", "name": field}
+                if acct:
+                    obj["qualifier"] = f"account_type={acct}"
+                objects.append(obj)
         if offenders:
             self.finding(
                 check_id="FIN-DOC-001",
@@ -293,6 +342,10 @@ class FinancialControlsAuditor(BaseAuditor):
                     "gap and a payment-fraud vector."
                 ),
                 affected_items=offenders[:50],
+                affected_objects=objects,
+                # One finding rolling up every over-permissive change rule: locking one
+                # field down must shrink this finding rather than replace it.
+                scope="aggregate",
                 remediation=(
                     "In OB32 (document change rules, TBAER) disallow changes to payment-relevant fields "
                     "once a line item is posted/cleared (uncheck 'field can be changed'), or gate them "
@@ -310,6 +363,7 @@ class FinancialControlsAuditor(BaseAuditor):
         if not rows:
             return
         buffered = []
+        objects = []
         for r in rows:
             obj = self._get(r, "OBJECT", "NROBJ", "NR_OBJECT", "NUMBER_RANGE_OBJECT").upper()
             buffering = self._get(r, "BUFFERING", "BUFFER", "PUFFER", "BUFFER_TYPE")
@@ -321,6 +375,11 @@ class FinancialControlsAuditor(BaseAuditor):
                            and not self._truthy(no_buffer))
             if obj in self._FI_NR_OBJECTS and is_buffered:
                 buffered.append(f"{obj}: buffering = {buffering}")
+                # The SNRO/TNRO number-range OBJECT is the config entry at fault. No
+                # qualifier: every non-"none" buffer code (X/L/P/S) trips this check, so
+                # putting the code in the node key would turn an X -> S change, which
+                # fixes nothing, into a different object.
+                objects.append({"type": "number_range_object", "name": obj})
         if buffered:
             self.finding(
                 check_id="FIN-NR-001",
@@ -335,6 +394,10 @@ class FinancialControlsAuditor(BaseAuditor):
                     "confirm no financial document was deleted or is missing (SOX completeness)."
                 ),
                 affected_items=buffered[:50],
+                affected_objects=objects,
+                # One finding over every buffered FI document range: unbuffering one
+                # object must not retire the finding and restart its clock.
+                scope="aggregate",
                 remediation=(
                     "For financial document number-range objects (SNRO / TNRO, e.g. RF_BELEG), disable "
                     "buffering (set 'no buffering') so document numbers are assigned gap-free. Weigh the "

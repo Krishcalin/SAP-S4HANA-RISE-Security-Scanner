@@ -67,6 +67,36 @@ _UPPERCASE_TYPES = frozenset({
     # SE06 system-change-option scopes: SAP namespaces ("/CUST/") and software
     # components ("SAP", "HOME", "LOCAL"). Both are upper-case SAP identifiers.
     "namespace",
+    # OData / Gateway service technical name (/IWFND/MAINT_SERVICE SERVICE_NAME, e.g.
+    # "API_BUSINESS_PARTNER_SRV"). This is an ABAP repository object name and is
+    # therefore upper-cased — deliberately distinct from `endpoint` below, which names
+    # case-bearing API-proxy / webhook / web-service-binding entities.
+    "odata_service",
+    # FI Customizing config-entry keys (financial_controls). The offending object is the
+    # ENTRY, not the Customizing table it lives in: a posting-period variant (T001B key,
+    # "1000"), an FI tolerance group (T043T, "SUPER"), a document field governed by a
+    # change rule (TBAER, "BVTYP") and a number-range object (SNRO/TNRO, "RF_BELEG").
+    # All four are upper-case SAP Customizing identifiers.
+    "posting_period_variant", "tolerance_group", "document_field", "number_range_object",
+    # S/4HANA repository + platform identifiers: a CDS view is a DDL name
+    # ("ZC_CUSTOMER_MASTER"), an OData V4 service group a gateway identifier
+    # ("ZSG_SALES_ORDER_V4"), and a Cloud Foundry platform role a fixed enumerated
+    # name that exports spell "Space Developer", "SPACE_DEVELOPER" or "space developer"
+    # for the one role — folding case keeps those one node rather than three.
+    "cds_view", "service_group", "cf_role",
+    # SAP Security Note numbers (sap_hotnews) and GRC Access Control ruleset objects
+    # (grc_access_control). A note number is a numeric SAP identifier ("2934135" — NUMC
+    # exports zero-pad it to "0002934135" and the module normalizes it back); a
+    # GRACSODRISK risk id ("P2P_01") and a GRACMITCNT mitigating-control id ("MIT_007")
+    # are upper-case identifiers maintained in the ABAP GRC system. None of the three
+    # is case-bearing.
+    "sap_note", "sod_risk", "mitigating_control",
+    # Cryptographic library / software component as named by the crypto-library export
+    # ("CommonCryptoLib", "sapcryptolib"). This is the component name, not the file it
+    # ships as: the installation path is exported separately and is case-bearing, but
+    # the component identifier is not, so an export that lower-cases it must not mint a
+    # second node for the same library.
+    "crypto_library",
 })
 
 #: Object types whose names are case-SENSITIVE and must never be upper-cased.
@@ -82,6 +112,28 @@ _CASE_SENSITIVE_TYPES = frozenset({
     # and folding the two together would upper-case the latter.
     "btp_destination", "ias_application", "cc_backend", "event_queue",
     "cpi_credential", "btp_service",
+    # Fiori launchpad content IDs — catalogs, spaces, apps and tiles. These are
+    # authored in the launchpad designer / delivered as content and keep the case they
+    # were created with ("Finance_Home", "Z_ADMIN_CATALOG", "TILE_001"); they are not
+    # ABAP repository names that SAP upper-cases, so folding case here would merge
+    # genuinely different launchpad content into one identity and one graph node.
+    "fiori_catalog", "fiori_app", "fiori_tile", "fiori_space",
+    # Data-protection config entries (data_protection). RAL configurations and log
+    # channels (SRALMANAGER), ILM retention policies (IRMPOL), purpose-of-processing
+    # entries and cross-border transfer flows are all authored names that keep the case
+    # they were typed with ("HR_PersonalData", "HR_MasterData_Retention", "Employment
+    # Administration", "EU_to_US_Analytics") — they are not ABAP repository objects that
+    # SAP upper-cases, so folding case would merge distinct config entries into one node.
+    # `dsar_request` is a data-subject request/ticket id ("DSAR-2025-001"), issued by a
+    # ticketing system rather than by SAP, and is likewise case-bearing.
+    "ral_config", "ral_channel", "ilm_policy", "processing_purpose",
+    "data_transfer", "dsar_request",
+    # RISE / S/4HANA Cloud surface. A BTP trust configuration is keyed by its
+    # originKey ("sap.default", "corp-aad-tenant") and a communication arrangement by
+    # an admin-entered name — both are cloud-cockpit entities that keep the case they
+    # were created with, exactly like the BTP entities above, not ABAP repository
+    # objects that SAP upper-cases.
+    "idp_trust", "comm_arrangement",
 })
 
 _WS = re.compile(r"\s+")

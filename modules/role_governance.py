@@ -121,6 +121,15 @@ class RoleGovernanceAuditor(BaseAuditor):
                             "DSAG Prüfleitfaden — Qualität des Berechtigungskonzepts (SU24-Pflege)",
                             "ISO 27001 A.9.2 — access provisioning based on need"],
                 details={"count": len(unmaintained)},
+                # Every unmaintained custom transaction, not just the 50 displayed: the
+                # members are graph nodes and are excluded from identity anyway.
+                affected_objects=[{"type": "tcode", "name": t} for t in unmaintained],
+                # One finding rolls up the whole SU24 backlog. Maintaining one
+                # transaction's proposal must shrink this finding, not retire it and
+                # raise a fresh one whose age restarts at zero. No auth_object members:
+                # the OBJECT column on an unmaintained row is exactly the proposal that
+                # is missing or wrong, so naming it would assert a proposal exists.
+                scope="aggregate",
             )
 
     # =====================================================  UN-GENERATED PROFILES
@@ -130,6 +139,7 @@ class RoleGovernanceAuditor(BaseAuditor):
             return
         assigned = self._assigned_roles()
         offenders = []
+        objects: List[Dict[str, Any]] = []
         for r in role_profiles:
             agr = self._get(r, "AGR_NAME", "ROLE", "ROLE_NAME").upper()
             prof = self._get(r, "PROFILE", "PROFILE_NAME", "GENERATED_PROFILE", "PROFN")
@@ -140,6 +150,14 @@ class RoleGovernanceAuditor(BaseAuditor):
             if ungenerated and (not assigned or agr in assigned):
                 who = "" if not assigned else " (assigned to users)"
                 offenders.append(f"{agr}{who}")
+                # The role is the offender, and it stays bare so it is the same graph
+                # node the other role checks name.
+                objects.append({"type": "role", "name": agr})
+                # A profile name is only present when AGR_1016 carries one and the
+                # status is nonetheless red — i.e. a stale generated profile. When the
+                # column is blank there is no profile to name, so none is invented.
+                if prof:
+                    objects.append({"type": "profile", "name": prof})
         if offenders:
             verified = bool(assigned)   # was user_roles actually available to confirm assignment?
             assign_clause = ("yet are assigned to users" if verified
@@ -169,6 +187,12 @@ class RoleGovernanceAuditor(BaseAuditor):
                             "DSAG Prüfleitfaden — Rollengenerierung / PFCG-Status",
                             "SOX ITGC — access changes are complete and effective"],
                 details={"count": len(offenders)},
+                affected_objects=objects,
+                # One finding rolls up every ungenerated role. Generating one role's
+                # profile must shrink the finding, not re-raise it with a reset age —
+                # and note the title itself changes with `verified`, which identity
+                # ignores, so the history survives that too.
+                scope="aggregate",
             )
 
     # =====================================================  DERIVED-ROLE DRIFT
@@ -205,6 +229,8 @@ class RoleGovernanceAuditor(BaseAuditor):
             high = self._get(r, "HIGH", "BIS", "TO")
             struct.setdefault(agr, set()).add((obj, field, low, high))
         drifted = []
+        objects: List[Dict[str, Any]] = []
+        seen: Set = set()
         for child, parent in parent_of.items():
             if child not in struct or parent not in struct:
                 continue
@@ -218,6 +244,22 @@ class RoleGovernanceAuditor(BaseAuditor):
                 if missing:
                     bits.append(f"-{len(missing)} missing")
                 drifted.append(f"{child} (parent {parent}): " + "; ".join(bits))
+                # Both ends of the broken derivation are real roles and both are nodes:
+                # the graph needs the parent->child edge to show the master-role owner
+                # which children have escaped their master.
+                for role_name in (child, parent):
+                    if ("role", role_name) not in seen:
+                        seen.add(("role", role_name))
+                        objects.append({"type": "role", "name": role_name})
+                # Only the ADDED objects become nodes. An object in `missing` is one the
+                # derived role does NOT have, so attaching it here would put access that
+                # is absent into the graph; the extras are the access actually granted.
+                # No qualifier: the same authorization object must stay one node across
+                # the authorization checks that also name it.
+                for obj_name in sorted({t[0] for t in extra}):
+                    if ("auth_object", obj_name) not in seen:
+                        seen.add(("auth_object", obj_name))
+                        objects.append({"type": "auth_object", "name": obj_name})
         if drifted:
             self.finding(
                 check_id="RG-DRV-001",
@@ -246,6 +288,11 @@ class RoleGovernanceAuditor(BaseAuditor):
                             "DSAG Prüfleitfaden — Ableitungskonzept (derived roles)",
                             "SOX ITGC — authorization changes follow change management"],
                 details={"count": len(drifted)},
+                affected_objects=objects,
+                # One finding covers the whole derivation-hierarchy breakdown. Re-deriving
+                # one child role must shrink this finding rather than retire it and raise a
+                # new one, which would reset the age of a defect nobody finished fixing.
+                scope="aggregate",
             )
 
     # ------------------------------------------------------------------ shared

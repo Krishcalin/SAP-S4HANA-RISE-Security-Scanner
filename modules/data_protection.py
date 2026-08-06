@@ -151,6 +151,13 @@ class DataProtectionAuditor(BaseAuditor):
                                 "personal data — a fundamental GDPR/DPDP compliance requirement."
                             ),
                             affected_items=[f"Parameter: {name} = {value}"],
+                            # One profile parameter is the whole defect, so the parameter
+                            # IS the subject. No qualifier: the check fires on any of
+                            # 0/false/no/off/empty, so pinning the exported spelling would
+                            # retire and re-raise this finding on a cosmetic value change
+                            # that fixes nothing.
+                            affected_objects=[{"type": "parameter_name", "name": name}],
+                            scope="object",
                             remediation=(
                                 "Enable RAL via transaction SRALMANAGER. "
                                 "Configure logging for all personal data access channels: "
@@ -180,12 +187,17 @@ class DataProtectionAuditor(BaseAuditor):
                         "ral_config.csv with RAL channel and purpose definitions."
                     ),
                     references=["SAP Note 2089022 — Read Access Logging"],
+                    # An ABSENCE of evidence: neither a RAL export nor a RAL-related
+                    # profile parameter exists, so there is nothing in the data to name.
+                    # Identified by (system, client, check_id) alone — correctly coarse.
+                    scope="aggregate",
                 )
             return
 
         # Analyze RAL config entries
         enabled_configs = []
         disabled_configs = []
+        disabled_objects = []
 
         for row in ral:
             config_name = row.get("CONFIG_NAME", row.get("NAME",
@@ -199,6 +211,13 @@ class DataProtectionAuditor(BaseAuditor):
                 enabled_configs.append(f"{config_name} (channel: {channel})")
             else:
                 disabled_configs.append(f"{config_name} (channel: {channel})")
+                # The RAL configuration (log domain) is the config entry that has to be
+                # activated in SRALMANAGER. A row that names no configuration contributes
+                # its display string only — no placeholder node is invented for it. The
+                # channel is left off the node so one RAL configuration stays one node
+                # across its per-channel rows.
+                if config_name and str(config_name).strip():
+                    disabled_objects.append({"type": "ral_config", "name": config_name})
 
         if not enabled_configs:
             self.finding(
@@ -211,6 +230,11 @@ class DataProtectionAuditor(BaseAuditor):
                     "Personal data read access is not being recorded."
                 ),
                 affected_items=disabled_configs[:10] if disabled_configs else ["No RAL configs found"],
+                affected_objects=disabled_objects,
+                # One finding summarising the whole inactive RAL configuration set:
+                # activating one configuration must shrink this finding, not retire it
+                # and raise a fresh one with a reset age.
+                scope="aggregate",
                 remediation=(
                     "Activate RAL configurations for all personal data domains. "
                     "Configure via SRALMANAGER with appropriate log purposes."
@@ -259,6 +283,12 @@ class DataProtectionAuditor(BaseAuditor):
                     "Personal data accessed through these channels goes unlogged."
                 ),
                 affected_items=missing,
+                # Aggregate, and deliberately WITHOUT affected_objects. The members are the
+                # required channel KINDS from this module's own constant list, and the
+                # defect is precisely that no RAL rule exists for them — the missing rules
+                # are absent from the export by definition, so there is no object in the
+                # data to name. Covering one channel must also not reset the finding's age.
+                scope="aggregate",
                 remediation=(
                     "Configure RAL rules for all listed channels in SRALMANAGER. "
                     "OData is especially critical as Fiori apps use it exclusively. "
@@ -274,6 +304,7 @@ class DataProtectionAuditor(BaseAuditor):
             return
 
         short_retention = []
+        short_retention_objects = []
         no_archiving = []
         min_retention_days = self.get_config("ral_min_retention_days", 365)
 
@@ -291,6 +322,13 @@ class DataProtectionAuditor(BaseAuditor):
                         short_retention.append(
                             f"{name} — retention: {ret_days}d (min: {min_retention_days}d)"
                         )
+                        # The RAL log channel is the config entry whose retention is
+                        # remediated. No qualifier: the retention figure is exactly what
+                        # changes when this is fixed, so pinning it would spawn a new node
+                        # every time the value is tuned. Unnamed rows are skipped.
+                        if name and str(name).strip():
+                            short_retention_objects.append(
+                                {"type": "ral_channel", "name": name})
                 except ValueError:
                     pass
 
@@ -309,6 +347,10 @@ class DataProtectionAuditor(BaseAuditor):
                     "may mandate longer retention for data access audit trails."
                 ),
                 affected_items=short_retention,
+                affected_objects=short_retention_objects,
+                # One finding over every under-retained channel: lengthening retention on
+                # one channel must shrink the member list, not reset the finding's age.
+                scope="aggregate",
                 remediation=(
                     f"Increase RAL log retention to at least {min_retention_days} days. "
                     "Configure archiving for long-term storage compliance. "
@@ -338,6 +380,9 @@ class DataProtectionAuditor(BaseAuditor):
         long_retention = []
         no_auto_destroy = []
         no_end_purpose = []
+        long_retention_objects = []
+        no_auto_destroy_objects = []
+        no_end_purpose_objects = []
         max_retention_years = self.get_config("max_retention_years", 10)
 
         for pol in policies:
@@ -357,6 +402,19 @@ class DataProtectionAuditor(BaseAuditor):
 
             label = f"{name} (object: {data_object})"
 
+            # Objects for this policy row. The ILM POLICY is the config entry at fault;
+            # the retained TABLE is a real object too, and the policy->table edge is what
+            # makes the ILM coverage question answerable in the graph. `name` above falls
+            # back to the display placeholder "unknown", so identity is taken from the raw
+            # export instead: a row that named no policy contributes no node rather than a
+            # fabricated one.
+            raw_name = pol.get("name") or pol.get("policyName") or pol.get("rule") or ""
+            pol_objects = []
+            if str(raw_name).strip():
+                pol_objects.append({"type": "ilm_policy", "name": raw_name})
+            if data_object and str(data_object).strip():
+                pol_objects.append({"type": "table", "name": data_object})
+
             # Excessive retention
             if retention:
                 try:
@@ -365,10 +423,12 @@ class DataProtectionAuditor(BaseAuditor):
                         long_retention.append(
                             f"{label} — retention: {ret_val} years (max: {max_retention_years})"
                         )
+                        long_retention_objects.extend(pol_objects)
                     elif unit.upper() in ("DAYS", "D") and ret_val > max_retention_years * 365:
                         long_retention.append(
                             f"{label} — retention: {ret_val} days (max: {max_retention_years * 365})"
                         )
+                        long_retention_objects.extend(pol_objects)
                 except ValueError:
                     pass
 
@@ -379,10 +439,12 @@ class DataProtectionAuditor(BaseAuditor):
                 no_auto_destroy.append(
                     f"{label} — destruction: {destruction or 'not configured'}"
                 )
+                no_auto_destroy_objects.extend(pol_objects)
 
             # No end-of-purpose definition
             if not end_purpose or str(end_purpose).strip() == "":
                 no_end_purpose.append(label)
+                no_end_purpose_objects.extend(pol_objects)
 
         if long_retention:
             self.finding(
@@ -396,6 +458,11 @@ class DataProtectionAuditor(BaseAuditor):
                     "only as long as necessary for the processing purpose."
                 ),
                 affected_items=long_retention,
+                affected_objects=long_retention_objects,
+                # One finding rolling up every over-retaining policy: shortening one
+                # policy's retention must shrink this finding, not retire it and raise a
+                # fresh one whose age starts at zero.
+                scope="aggregate",
                 remediation=(
                     "Review retention periods against business and legal requirements. "
                     "Reduce to minimum necessary. Document legal basis for any "
@@ -419,6 +486,9 @@ class DataProtectionAuditor(BaseAuditor):
                     "unreliable and frequently result in data hoarding."
                 ),
                 affected_items=no_auto_destroy,
+                affected_objects=no_auto_destroy_objects,
+                # Aggregate over the manual-destruction policy set — same reasoning.
+                scope="aggregate",
                 remediation=(
                     "Configure automatic destruction workflows in ILM. "
                     "Use SAP ILM destruction cockpit for scheduled execution. "
@@ -439,6 +509,10 @@ class DataProtectionAuditor(BaseAuditor):
                     "when data should transition to blocking or deletion."
                 ),
                 affected_items=no_end_purpose,
+                affected_objects=no_end_purpose_objects,
+                # Aggregate over the policies missing an end-of-purpose trigger —
+                # defining one policy's trigger must not restart the finding's clock.
+                scope="aggregate",
                 remediation=(
                     "Define end-of-purpose conditions for every ILM policy: "
                     "business transaction completion, contract termination, "
@@ -485,6 +559,12 @@ class DataProtectionAuditor(BaseAuditor):
                     "indefinitely, violating data minimization principles."
                 ),
                 affected_items=uncovered,
+                # The uncovered TABLES are real SAP objects (this module's personal-data
+                # table list), so they become graph nodes and connect this gap to the ILM
+                # policies that do exist. Aggregate: creating a policy for one table must
+                # shrink the finding rather than replace it with a zero-age clone.
+                affected_objects=[{"type": "table", "name": t} for t in uncovered],
+                scope="aggregate",
                 remediation=(
                     "Create ILM retention policies for all listed tables. "
                     "Use SAP's standard ILM objects where available. "
@@ -512,6 +592,7 @@ class DataProtectionAuditor(BaseAuditor):
                 masking.get("configurations", masking.get("rules", []))
 
             no_pii_masking = []
+            no_pii_masking_objects = []
             disabled = []
 
             for cfg in configs:
@@ -534,6 +615,16 @@ class DataProtectionAuditor(BaseAuditor):
                         no_pii_masking.append(
                             f"{name} (type: {system_type}) — PII masking: not enabled"
                         )
+                        # The unmasked SYSTEM is the object. `name` above falls back to
+                        # the display placeholder "unknown", so the node is taken from the
+                        # raw export and a config that names no system contributes none.
+                        # The name is NOT also stamped as the object's `system` field:
+                        # fingerprint_finding reads objs[0].system even for an aggregate,
+                        # which would let the member list leak into this finding's identity.
+                        raw_name = cfg.get("name") or cfg.get("system") or ""
+                        if str(raw_name).strip():
+                            no_pii_masking_objects.append(
+                                {"type": "system", "name": raw_name})
 
                     if status and str(status).upper() in ("DISABLED", "INACTIVE"):
                         disabled.append(f"{name} — masking status: {status}")
@@ -551,6 +642,10 @@ class DataProtectionAuditor(BaseAuditor):
                         "weaker access controls."
                     ),
                     affected_items=no_pii_masking,
+                    affected_objects=no_pii_masking_objects,
+                    # One finding over the whole unmasked non-production population:
+                    # masking one system must shrink it, not reset its age.
+                    scope="aggregate",
                     remediation=(
                         "Implement data masking for all non-production system copies. "
                         "Use SAP Data Privacy Integration (DPI), SAP Test Data Migration "
@@ -567,6 +662,7 @@ class DataProtectionAuditor(BaseAuditor):
         # Also check system landscape for systems without masking config
         if landscape:
             nonprod_systems = []
+            nonprod_objects = []
             for row in landscape:
                 sid = row.get("SID", row.get("SYSTEM", row.get("SYSTEM_ID", "")))
                 env_type = row.get("ENVIRONMENT", row.get("TYPE",
@@ -585,6 +681,12 @@ class DataProtectionAuditor(BaseAuditor):
                             nonprod_systems.append(
                                 f"{sid} (env: {env_type}) — production copy without masking"
                             )
+                            # The SID from the landscape export is the object. Rows with
+                            # no SID are display-only. As above, the SID is not stamped as
+                            # the object's `system` field: for an aggregate that would put
+                            # objs[0] — a member — into the finding's identity.
+                            if sid and str(sid).strip():
+                                nonprod_objects.append({"type": "system", "name": sid})
 
             if nonprod_systems:
                 self.finding(
@@ -598,6 +700,10 @@ class DataProtectionAuditor(BaseAuditor):
                         "full production personal data accessible to development teams."
                     ),
                     affected_items=nonprod_systems,
+                    affected_objects=nonprod_objects,
+                    # Aggregate over the unmasked production-copy population — masking
+                    # one copy must not retire the finding and restart its clock.
+                    scope="aggregate",
                     remediation=(
                         "Immediately schedule data masking runs for all production copies. "
                         "Implement a policy requiring masking within 48 hours of system copy. "
@@ -654,6 +760,12 @@ class DataProtectionAuditor(BaseAuditor):
                     "data subject rights and regulatory obligations."
                 ),
                 affected_items=unconfigured,
+                # Aggregate, and deliberately WITHOUT affected_objects. The members are
+                # toolkit CAPABILITY FLAGS from this module's own constant list, not named
+                # SAP objects, and the defect is that they are switched off. Typing them
+                # as `parameter_name` would be a lie (they are not profile parameters) and
+                # would upper-case case-bearing keys such as "informationReport".
+                scope="aggregate",
                 remediation=(
                     "Configure all DPP toolkit features in the S/4HANA system. "
                     "Use Fiori apps: 'Information Report', 'Deletion Report', "
@@ -684,6 +796,8 @@ class DataProtectionAuditor(BaseAuditor):
 
         no_legal_basis = []
         expired = []
+        no_legal_basis_objects = []
+        expired_objects = []
         now = datetime.now()
 
         for row in pop:
@@ -699,8 +813,16 @@ class DataProtectionAuditor(BaseAuditor):
 
             label = f"Purpose: {purpose}"
 
+            # The purpose-of-processing entry is the config object at fault. Neither the
+            # legal basis nor the expiry date qualifies it: both are the values being
+            # remediated, so pinning them would re-node the purpose on every correction.
+            purpose_obj = ({"type": "processing_purpose", "name": purpose}
+                           if purpose and str(purpose).strip() else None)
+
             if not legal_basis or legal_basis.strip() == "":
                 no_legal_basis.append(f"{label} — legal basis: not documented")
+                if purpose_obj:
+                    no_legal_basis_objects.append(purpose_obj)
 
             if expiry:
                 parsed = self._parse_date_flexible(expiry)
@@ -709,6 +831,8 @@ class DataProtectionAuditor(BaseAuditor):
                         expired.append(
                             f"{label} — expired: {expiry}, status: {status or 'active'}"
                         )
+                        if purpose_obj:
+                            expired_objects.append(purpose_obj)
 
         if no_legal_basis:
             self.finding(
@@ -723,6 +847,10 @@ class DataProtectionAuditor(BaseAuditor):
                     "vital interest, public task, or legitimate interest."
                 ),
                 affected_items=no_legal_basis,
+                affected_objects=no_legal_basis_objects,
+                # One finding over every purpose lacking a legal basis: documenting one
+                # purpose must shrink the finding, not raise a zero-age replacement.
+                scope="aggregate",
                 remediation=(
                     "Document the legal basis for every purpose of processing. "
                     "Map to GDPR Art.6(1)(a-f) or DPDP Act Section 4. "
@@ -746,6 +874,9 @@ class DataProtectionAuditor(BaseAuditor):
                     "basis and should be blocked or deleted."
                 ),
                 affected_items=expired,
+                affected_objects=expired_objects,
+                # Aggregate over the expired-but-active purpose set — same reasoning.
+                scope="aggregate",
                 remediation=(
                     "Deactivate expired purposes and trigger end-of-purpose data blocking. "
                     "Review affected data for deletion eligibility. "
@@ -773,6 +904,8 @@ class DataProtectionAuditor(BaseAuditor):
             # Check classified fields
             no_protection = []
             no_ral = []
+            no_ral_objects = []
+            no_protection_objects = []
 
             for row in inv_list:
                 field = row.get("FIELD_NAME", row.get("FIELD",
@@ -787,6 +920,16 @@ class DataProtectionAuditor(BaseAuditor):
 
                 label = f"{table}.{field}" if table else field
 
+                # The object is the TABLE, narrowed by the column: a bare field name is
+                # not locatable (NAME1 exists in many tables), so a row with no table
+                # contributes its display string only. The classification is left off the
+                # qualifier — re-classifying a field must not create a second node for it.
+                field_obj = None
+                if table and str(table).strip():
+                    field_obj = {"type": "table", "name": table}
+                    if field and str(field).strip():
+                        field_obj["qualifier"] = f"field={str(field).strip()}"
+
                 if classification and classification.upper() in (
                     "PII", "SENSITIVE", "PERSONAL", "SPECIAL_CATEGORY",
                     "HIGH", "CONFIDENTIAL"
@@ -795,6 +938,8 @@ class DataProtectionAuditor(BaseAuditor):
                         "false", "0", "no", ""
                     ):
                         no_ral.append(f"{label} (class: {classification})")
+                        if field_obj:
+                            no_ral_objects.append(field_obj)
 
                     if not masked or str(masked).lower() in (
                         "false", "0", "no", ""
@@ -802,6 +947,8 @@ class DataProtectionAuditor(BaseAuditor):
                         no_protection.append(
                             f"{label} (class: {classification}) — not masked in non-prod"
                         )
+                        if field_obj:
+                            no_protection_objects.append(field_obj)
 
             if no_ral:
                 self.finding(
@@ -814,6 +961,12 @@ class DataProtectionAuditor(BaseAuditor):
                         "Read Access Logging enabled. Access to these fields is unaudited."
                     ),
                     affected_items=no_ral[:50],
+                    affected_objects=no_ral_objects,
+                    # One finding over the unlogged-field population: enabling RAL on one
+                    # field must shrink it rather than reset its age. The object list is
+                    # not truncated with the display list — identity is unaffected either
+                    # way and the graph should see every field.
+                    scope="aggregate",
                     remediation=(
                         "Enable RAL for all PII-classified fields via SRALMANAGER. "
                         "Create RAL log purposes matching the field's processing purpose."
@@ -833,6 +986,9 @@ class DataProtectionAuditor(BaseAuditor):
                         "but are not included in non-production masking rules."
                     ),
                     affected_items=no_protection[:50],
+                    affected_objects=no_protection_objects,
+                    # Aggregate over the unmasked-field population — same reasoning.
+                    scope="aggregate",
                     remediation=(
                         "Add all PII-classified fields to the data masking rule set. "
                         "Apply masking during system copy refresh cycles."
@@ -867,6 +1023,12 @@ class DataProtectionAuditor(BaseAuditor):
                         "Unclassified sensitive fields may lack proper protection."
                     ),
                     affected_items=missing_from_inventory[:30],
+                    # Aggregate, and deliberately WITHOUT affected_objects. The members are
+                    # bare DDIC field names from this module's constant checklist with no
+                    # owning table in the data — NAME1 alone is not a locatable object, and
+                    # naming a table for it would be invention. (Contrast DPP-ILM-004,
+                    # where each uncovered member IS one concrete table.)
+                    scope="aggregate",
                     remediation=(
                         "Add all listed fields to the personal data classification inventory. "
                         "Assign appropriate data classification levels. "
@@ -900,6 +1062,8 @@ class DataProtectionAuditor(BaseAuditor):
         no_adequacy = []
         no_safeguard = []
         sensitive_transfers = []
+        no_safeguard_objects = []
+        sensitive_transfer_objects = []
 
         for transfer in transfers:
             if not isinstance(transfer, dict):
@@ -917,12 +1081,24 @@ class DataProtectionAuditor(BaseAuditor):
 
             label = f"{name}: {source_region} → {dest_region}"
 
+            # The named transfer flow is the config entry at fault. `name` above falls
+            # back to the display placeholder "unknown", so the node is taken from the raw
+            # export and an unnamed flow contributes no node. The flow name already
+            # carries its route, and the safeguard is the setting being remediated, so
+            # neither is used as a qualifier — that keeps one flow one node across
+            # DPP-RES-001 and DPP-RES-002.
+            raw_name = transfer.get("name") or transfer.get("flow") or ""
+            transfer_obj = ({"type": "data_transfer", "name": raw_name}
+                            if str(raw_name).strip() else None)
+
             # Check for transfers without adequacy decision or safeguards
             if not adequacy or str(adequacy).lower() in ("false", "0", "no", "none", ""):
                 if not safeguard or str(safeguard).lower() in ("none", "", "unknown"):
                     no_safeguard.append(
                         f"{label} — no adequacy decision or transfer safeguard"
                     )
+                    if transfer_obj:
+                        no_safeguard_objects.append(transfer_obj)
                 elif str(safeguard).upper() not in (
                     "SCC", "STANDARD_CONTRACTUAL_CLAUSES", "BCR",
                     "BINDING_CORPORATE_RULES", "CONSENT",
@@ -943,6 +1119,8 @@ class DataProtectionAuditor(BaseAuditor):
                     sensitive_transfers.append(
                         f"{label} — special categories: {', '.join(sensitive_cats)}"
                     )
+                    if transfer_obj:
+                        sensitive_transfer_objects.append(transfer_obj)
 
         if no_safeguard:
             self.finding(
@@ -957,6 +1135,10 @@ class DataProtectionAuditor(BaseAuditor):
                     "specific legal basis."
                 ),
                 affected_items=no_safeguard,
+                affected_objects=no_safeguard_objects,
+                # One finding over every unsafeguarded flow: putting SCCs in place for one
+                # flow must shrink this finding, not raise a zero-age replacement.
+                scope="aggregate",
                 remediation=(
                     "Implement appropriate transfer mechanisms for each cross-border flow: "
                     "Standard Contractual Clauses (SCCs), Binding Corporate Rules (BCRs), "
@@ -981,6 +1163,9 @@ class DataProtectionAuditor(BaseAuditor):
                     "These require additional safeguards under GDPR Art.9."
                 ),
                 affected_items=sensitive_transfers,
+                affected_objects=sensitive_transfer_objects,
+                # Aggregate over the special-category transfer set — same reasoning.
+                scope="aggregate",
                 remediation=(
                     "Conduct a Data Protection Impact Assessment (DPIA) for each "
                     "transfer involving special category data. Ensure explicit consent "
@@ -1011,6 +1196,9 @@ class DataProtectionAuditor(BaseAuditor):
         overdue = []
         incomplete = []
         undocumented = []
+        overdue_objects = []
+        incomplete_objects = []
+        undocumented_objects = []
         now = datetime.now()
         sla_days = self.get_config("deletion_sla_days", 30)
 
@@ -1030,6 +1218,15 @@ class DataProtectionAuditor(BaseAuditor):
 
             label = f"Request {req_id} ({req_type}, subject: {subject})"
 
+            # The request itself is the object; a row with no request id is display-only.
+            # The DATA SUBJECT is deliberately NOT named: these are pseudonymised natural
+            # persons, not SAP principals, and turning a privacy finding's data subjects
+            # into permanent graph nodes would put personal data into the very inventory
+            # the check exists to protect. Status/age are not qualifiers either — they are
+            # what changes as the request is worked.
+            req_obj = ({"type": "dsar_request", "name": req_id}
+                       if req_id and str(req_id).strip() else None)
+
             # Overdue
             if received and str(status).upper() not in (
                 "COMPLETED", "CLOSED", "DONE"
@@ -1042,6 +1239,8 @@ class DataProtectionAuditor(BaseAuditor):
                             f"{label} — open {days_open}d (SLA: {sla_days}d), "
                             f"status: {status or 'open'}"
                         )
+                        if req_obj:
+                            overdue_objects.append(req_obj)
 
             # Completed but incomplete
             if str(status).upper() in ("COMPLETED", "CLOSED", "DONE"):
@@ -1052,6 +1251,8 @@ class DataProtectionAuditor(BaseAuditor):
                         incomplete.append(
                             f"{label} — status: {status}, completion: {completion_pct}%"
                         )
+                        if req_obj:
+                            incomplete_objects.append(req_obj)
                 except ValueError:
                     pass
 
@@ -1060,6 +1261,8 @@ class DataProtectionAuditor(BaseAuditor):
                 undocumented.append(
                     f"{label} — no documentation/justification recorded"
                 )
+                if req_obj:
+                    undocumented_objects.append(req_obj)
 
         if overdue:
             self.finding(
@@ -1074,6 +1277,11 @@ class DataProtectionAuditor(BaseAuditor):
                     "regulatory enforcement."
                 ),
                 affected_items=overdue,
+                affected_objects=overdue_objects,
+                # One finding over the overdue backlog: closing one request must shrink
+                # this finding, not retire it and raise a fresh one whose age is zero —
+                # which is exactly the SLA metric this check feeds.
+                scope="aggregate",
                 remediation=(
                     "Process all overdue requests immediately. "
                     "Communicate delays to data subjects with justification. "
@@ -1097,6 +1305,9 @@ class DataProtectionAuditor(BaseAuditor):
                     "personal data in the system."
                 ),
                 affected_items=incomplete,
+                affected_objects=incomplete_objects,
+                # Aggregate over the partially-completed request set — same reasoning.
+                scope="aggregate",
                 remediation=(
                     "Reopen and complete all partially processed requests. "
                     "Verify deletion across all systems (S/4, BTP, archives, backups). "
@@ -1117,6 +1328,10 @@ class DataProtectionAuditor(BaseAuditor):
                     "documented for accountability purposes."
                 ),
                 affected_items=undocumented[:30],
+                affected_objects=undocumented_objects,
+                # Aggregate over the undocumented request set — documenting one request
+                # must not restart the finding's clock.
+                scope="aggregate",
                 remediation=(
                     "Document all data subject requests with: identity verification, "
                     "scope of request, actions taken, any exemptions applied, "
@@ -1140,6 +1355,7 @@ class DataProtectionAuditor(BaseAuditor):
             return
 
         no_classification = []
+        no_classification_objects = []
         prod_with_open_access = []
 
         for row in landscape:
@@ -1155,6 +1371,11 @@ class DataProtectionAuditor(BaseAuditor):
 
             if not data_class or data_class.strip() == "":
                 no_classification.append(label)
+                # The unclassified SYSTEM is the object. As in DPP-MASK-002 the SID is not
+                # stamped as the object's `system` field, because for an aggregate that
+                # would pull a member (objs[0]) into the finding's identity.
+                if sid and str(sid).strip():
+                    no_classification_objects.append({"type": "system", "name": sid})
 
             if str(env_type).upper() in ("PROD", "PRODUCTION"):
                 if access_policy and access_policy.upper() in (
@@ -1176,6 +1397,10 @@ class DataProtectionAuditor(BaseAuditor):
                     "protection measures cannot be determined."
                 ),
                 affected_items=no_classification,
+                affected_objects=no_classification_objects,
+                # One finding over every unclassified system: classifying one system must
+                # shrink this finding rather than replace it with a zero-age clone.
+                scope="aggregate",
                 remediation=(
                     "Assign data classification levels to all systems: "
                     "Public, Internal, Confidential, or Restricted. "

@@ -104,6 +104,12 @@ class LogMonitoringAuditor(BaseAuditor):
                     "incident response and no evidence for SOX/ISO logging controls."
                 ),
                 affected_items=[f"rsau/enable = {enable or '(empty)'}"],
+                # One profile parameter, one defect: the parameter IS the subject. No
+                # qualifier — the check fires on both "0" and the empty spelling, so
+                # pinning the exported value would split one parameter into two
+                # identities (and two graph nodes) that mean exactly the same thing.
+                affected_objects=[{"type": "parameter_name", "name": "rsau/enable"}],
+                scope="object",
                 remediation=(
                     "Set rsau/enable = 1 (activate on the next restart) or activate dynamically via "
                     "RSAU_CONFIG 'Kernel Parameters', and confirm the audit filters are active. "
@@ -127,6 +133,9 @@ class LogMonitoringAuditor(BaseAuditor):
                     "forensic evidence."
                 ),
                 affected_items=[f"rsau/integrity = {integ or '(empty)'}"],
+                # One parameter, one defect. No qualifier: "0" and "" both fire.
+                affected_objects=[{"type": "parameter_name", "name": "rsau/integrity"}],
+                scope="object",
                 remediation="Set rsau/integrity = 1 to enable the integrity-protected audit log format.",
                 references=["SAP Note 2033317 — Security Audit Log integrity protection",
                             "SOX ITGC — log integrity / chain of custody"],
@@ -156,6 +165,12 @@ class LogMonitoringAuditor(BaseAuditor):
                     "blind spot the per-table logging check (LOG-TBL-001) cannot detect on its own."
                 ),
                 affected_items=[f"rec/client = {rc or '(empty)'}"],
+                # The master switch parameter IS the defect. No qualifier: the check
+                # fires on both the empty value and "OFF", and on a value that is
+                # compared case-insensitively, so the exported spelling must not enter
+                # identity.
+                affected_objects=[{"type": "parameter_name", "name": "rec/client"}],
+                scope="object",
                 remediation=(
                     "Set rec/client to ALL (or the explicit list of productive/relevant clients, e.g. "
                     "'100,200') in the instance profile and restart, so DD09L-flagged tables are logged "
@@ -181,6 +196,12 @@ class LogMonitoringAuditor(BaseAuditor):
                         "No security audit log configuration was found. Cannot verify "
                         "SM19/SM20 filter coverage or audit log health."
                     ),
+                    # A missing-export finding. It names nothing because there is
+                    # nothing to name: the whole point is that no audit configuration
+                    # was delivered. Aggregate keeps identity on (system, client,
+                    # check_id) so the coverage gap holds its age until an export
+                    # actually arrives.
+                    scope="aggregate",
                     remediation=(
                         "Export SM19 filter configuration. Provide security_audit_log.csv "
                         "or audit_config.csv with filter definitions."
@@ -208,6 +229,13 @@ class LogMonitoringAuditor(BaseAuditor):
                     "being recorded. This is a fundamental audit and forensic gap."
                 ),
                 affected_items=[f"Total filters: {len(audit)}, active: 0"],
+                # System-level state, not a per-filter defect: the SAL as a whole is
+                # recording nothing. Aggregate so that activating one of several
+                # filter slots does not retire this finding and raise a fresh one.
+                # No affected_objects — an SM19 filter slot has no object type in the
+                # identity registry, and the defect is the ABSENCE of an active
+                # filter, which is not a thing the export names.
+                scope="aggregate",
                 remediation=(
                     "Configure SM19 with both static and dynamic audit profiles. "
                     "Enable filters for: dialog logon, RFC logon, user master changes, "
@@ -228,6 +256,10 @@ class LogMonitoringAuditor(BaseAuditor):
                     "until manually re-enabled."
                 ),
                 affected_items=["Static profile: not configured"],
+                # The defect is the absence of a static profile, so there is no object
+                # to name — inventing a placeholder profile name would fabricate a
+                # graph node the export does not contain.
+                scope="aggregate",
                 remediation=(
                     "Create a static audit profile in SM19 covering core security events. "
                     "Static profiles survive system restarts automatically."
@@ -275,6 +307,13 @@ class LogMonitoringAuditor(BaseAuditor):
                     "for incident detection and forensic investigation."
                 ),
                 affected_items=missing,
+                # Aggregate over the uncovered event classes: adding a filter for one
+                # of them narrows the gap but does not close it, so the finding must
+                # keep its identity and its age. No affected_objects — the members are
+                # audit event CLASSES that are missing from the configuration, i.e.
+                # exactly the things the export does NOT contain; naming them would
+                # create graph nodes for objects that do not exist.
+                scope="aggregate",
                 remediation=(
                     "Add SM19 filters for all listed event types. "
                     "Use 'All audit classes' filter for comprehensive coverage, "
@@ -297,6 +336,9 @@ class LogMonitoringAuditor(BaseAuditor):
                     "SAP security events cannot be correlated with other infrastructure "
                     "events for incident detection."
                 ),
+                # No SIEM export at all: nothing is named because nothing was
+                # delivered. Aggregate keeps identity on the check itself.
+                scope="aggregate",
                 remediation=(
                     "Configure SAP Enterprise Threat Detection (ETD) or third-party "
                     "SIEM connector (Splunk, Sentinel, QRadar). "
@@ -323,6 +365,12 @@ class LogMonitoringAuditor(BaseAuditor):
                     "disabled. Security events are not being forwarded."
                 ),
                 affected_items=[f"Connector: {connector}, status: disabled"],
+                # One system-level switch. The connector name ("Splunk_HEC") is a
+                # free-text label in the SIEM export, not an SAP object with a type in
+                # the identity registry, so nothing is named; aggregate keeps identity
+                # on (system, client, check_id) instead of on the display string, so
+                # renaming the connector does not orphan the finding's history.
+                scope="aggregate",
                 remediation="Enable the SIEM connector and verify log forwarding.",
                 references=["SAP ETD — Configuration Guide"],
             )
@@ -363,6 +411,12 @@ class LogMonitoringAuditor(BaseAuditor):
                     "to the SIEM. Incomplete log coverage creates detection blind spots."
                 ),
                 affected_items=missing,
+                # Aggregate over the un-forwarded log sources: wiring up one source
+                # shrinks the list without fixing the coverage gap, so identity must
+                # exclude the members. No affected_objects — the members are the log
+                # sources that are MISSING from the forwarding configuration, so there
+                # is nothing in the export to point a graph node at.
+                scope="aggregate",
                 remediation=(
                     "Configure forwarding for all listed log sources. "
                     "For BTP, use Alert Notification Service with webhook to SIEM. "
@@ -415,6 +469,12 @@ class LogMonitoringAuditor(BaseAuditor):
                     "forensic investigation capability."
                 ),
                 affected_items=short_retention,
+                # Aggregate over the under-retained log types: extending one policy
+                # must not retire the finding and reset its age. No affected_objects —
+                # a retention policy's "logType" is a descriptive label in the
+                # retention export ("Security Audit Log (SM20)"), not an SAP object
+                # with a registered type, and coining one would fabricate a node.
+                scope="aggregate",
                 remediation=(
                     f"Increase retention to at least {min_days} days for all security logs. "
                     "Configure archiving for long-term compliance requirements."
@@ -433,6 +493,10 @@ class LogMonitoringAuditor(BaseAuditor):
                     "Without archiving, logs are permanently lost after retention expiry."
                 ),
                 affected_items=no_archiving,
+                # Aggregate for the same reason as LOG-RET-001, and likewise with no
+                # affected_objects: the members are retention-policy labels, not
+                # named SAP objects.
+                scope="aggregate",
                 remediation="Configure log archiving for long-term retention compliance.",
                 references=["SAP — Log Archiving Configuration"],
             )
@@ -466,6 +530,12 @@ class LogMonitoringAuditor(BaseAuditor):
                     "will not be recorded in the change document log."
                 ),
                 affected_items=missing,
+                # The tables are real, named ABAP dictionary objects and belong in the
+                # graph. Aggregate, though: this check rolls every unlogged critical
+                # table into ONE finding, so enabling logging on USR02 must shrink the
+                # member list, not retire the finding and re-raise it with a reset age.
+                affected_objects=[{"type": "table", "name": t} for t in missing],
+                scope="aggregate",
                 remediation=(
                     "Enable table logging for all listed tables via SE11 (technical settings). "
                     "Ensure rec/client parameter is set to log the production client. "
@@ -485,6 +555,8 @@ class LogMonitoringAuditor(BaseAuditor):
 
         high_failure = []
         brute_force = []
+        high_failure_objs = []
+        brute_force_objs = []
         failure_threshold = self.get_config("logon_failure_threshold", 20)
 
         user_failures = defaultdict(int)
@@ -510,10 +582,17 @@ class LogMonitoringAuditor(BaseAuditor):
                 successes = user_successes.get(user, 0)
                 ratio = failures / max(successes, 1)
                 entry = f"{user}: {failures} failures, {successes} successes (ratio: {ratio:.1f})"
+                # No qualifier on the user node: the failure counts are the finding's
+                # evidence, not the account's identity, and baking a count into the
+                # node key would mint a new graph node on every export.
                 if ratio > 5:
                     brute_force.append(entry)
+                    if user:
+                        brute_force_objs.append({"type": "user", "name": user})
                 else:
                     high_failure.append(entry)
+                    if user:
+                        high_failure_objs.append({"type": "user", "name": user})
 
         if brute_force:
             self.finding(
@@ -527,6 +606,12 @@ class LogMonitoringAuditor(BaseAuditor):
                     "Investigate immediately."
                 ),
                 affected_items=brute_force,
+                # The targeted accounts are real users and belong in the graph, but
+                # this check rolls every suspicious account into ONE finding: locking
+                # one attacked account must shrink the member list, not retire the
+                # finding and raise a new one whose age starts at zero mid-incident.
+                affected_objects=brute_force_objs,
+                scope="aggregate",
                 remediation=(
                     "Investigate affected accounts for unauthorized access attempts. "
                     "Lock accounts if attack is confirmed. "
@@ -548,6 +633,10 @@ class LogMonitoringAuditor(BaseAuditor):
                     "service accounts, or attack attempts."
                 ),
                 affected_items=high_failure,
+                # Aggregate for the same reason as LOG-LOGON-001; the accounts ride
+                # along as members and as graph nodes.
+                affected_objects=high_failure_objs,
+                scope="aggregate",
                 remediation=(
                     "Review failure reasons (expired password, wrong password, locked). "
                     "Contact users or check service account configurations. "
@@ -590,6 +679,12 @@ class LogMonitoringAuditor(BaseAuditor):
                     "will be delayed and uncoordinated."
                 ),
                 affected_items=missing,
+                # Aggregate over the missing readiness components: documenting the
+                # runbook while the escalation matrix is still absent must not reset
+                # this finding's age. No affected_objects — the members are process
+                # artefacts (runbook, contact list, drill schedule), not SAP objects,
+                # and the export names none of them.
+                scope="aggregate",
                 remediation=(
                     "Complete all IR readiness components: document runbooks, "
                     "maintain contact lists, define escalation paths, ensure "

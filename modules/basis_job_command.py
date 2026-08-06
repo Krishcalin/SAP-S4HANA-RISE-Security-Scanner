@@ -170,6 +170,7 @@ class BasisJobCommandAuditor(BaseAuditor):
     # --------------------------------------------------------------- CMD checks
     def check_command_shell_wrap(self):
         offenders = []
+        objects = []
         for c in self._ext_commands():
             name = self._get(c, "NAME", "SXPGLOGCMD", "COMMAND_NAME")
             opcmd = self._get(c, "OPCOMMAND", "BTCXPGPGM", "COMMAND", "PROGRAM")
@@ -179,6 +180,13 @@ class BasisJobCommandAuditor(BaseAuditor):
             if base in self.SHELLS or meta:
                 why = "wraps a shell/interpreter" if base in self.SHELLS else "contains shell metacharacters"
                 offenders.append(f"{name or '?'} -> {opcmd} {params}".strip() + f"  ({why})")
+                # The SM69 logical command IS the object. No qualifier and no separate
+                # node for the target executable: this same os_command node is what
+                # JOBCMD-JOB-002 emits for the job step that invokes it, and that shared
+                # node is the ABAP->OS bridge edge. Qualifying it with `why` would split
+                # one command into a different node per check and cut the edge.
+                if name:
+                    objects.append({"type": "os_command", "name": name})
         if offenders:
             self.finding(
                 check_id="JOBCMD-CMD-001",
@@ -194,6 +202,11 @@ class BasisJobCommandAuditor(BaseAuditor):
                     "user (<sid>adm)."
                 ),
                 affected_items=offenders,
+                # Aggregate: one finding rolls up every offending command definition, so
+                # redefining one command must shrink the member list, not retire the
+                # finding and raise a fresh one with a reset age.
+                affected_objects=objects,
+                scope="aggregate",
                 remediation=(
                     "Redefine each command to call the specific target executable directly with a "
                     "fixed argument list; never call sh/bash/cmd/powershell/python etc. or use "
@@ -205,12 +218,18 @@ class BasisJobCommandAuditor(BaseAuditor):
 
     def check_command_addpar(self):
         offenders = []
+        objects = []
         for c in self._ext_commands():
             name = self._get(c, "NAME", "SXPGLOGCMD")
             opcmd = self._get(c, "OPCOMMAND", "BTCXPGPGM", "COMMAND")
             addpar = self._get(c, "ADDPAR", "SXPGADDPAR", "ADD_PARAMETERS", "ALLOW_ADDPAR")
             if self._truthy(addpar):
                 offenders.append(f"{name or '?'} -> {opcmd}  (additional parameters allowed)")
+                # Same node as JOBCMD-CMD-001/003 and as the job step that calls it: a
+                # command that both wraps a shell and allows ADDPAR must be ONE node
+                # carrying both check_ids, not two.
+                if name:
+                    objects.append({"type": "os_command", "name": name})
         if offenders:
             self.finding(
                 check_id="JOBCMD-CMD-002",
@@ -225,6 +244,11 @@ class BasisJobCommandAuditor(BaseAuditor):
                     "primitive even though the base program looks harmless."
                 ),
                 affected_items=offenders,
+                # Aggregate: clearing ADDPAR on one command narrows the set; the defect
+                # (and its age) belongs to the catalog, not to whichever command is
+                # remediated first.
+                affected_objects=objects,
+                scope="aggregate",
                 remediation=(
                     "In SM69, edit each command and clear 'Additional Parameters Allowed' unless a "
                     "specific, reviewed use case requires it; where run-time input is unavoidable, "
@@ -235,6 +259,7 @@ class BasisJobCommandAuditor(BaseAuditor):
 
     def check_command_path(self):
         offenders = []
+        objects = []
         for c in self._ext_commands():
             name = self._get(c, "NAME", "SXPGLOGCMD")
             opcmd = self._get(c, "OPCOMMAND", "BTCXPGPGM", "COMMAND")
@@ -249,6 +274,12 @@ class BasisJobCommandAuditor(BaseAuditor):
                 why = ("unqualified name (PATH-search hijack)" if bare else
                        "relative path" if relative else "user-writable/temp location")
                 offenders.append(f"{name or '?'} -> {prog}  ({why})")
+                # Only the command definition is named. The referenced program is a bare
+                # token, a relative path or a temp path — precisely the cases where the
+                # export does not identify a stable filesystem object — so promoting it
+                # to a node would invent one. `prog` stays in the display string.
+                if name:
+                    objects.append({"type": "os_command", "name": name})
         if offenders:
             self.finding(
                 check_id="JOBCMD-CMD-003",
@@ -263,6 +294,9 @@ class BasisJobCommandAuditor(BaseAuditor):
                     "the command runs."
                 ),
                 affected_items=offenders,
+                # Aggregate over the command catalog's path hygiene.
+                affected_objects=objects,
+                scope="aggregate",
                 remediation=(
                     "Specify every external command with a fully-qualified, absolute path to a "
                     "root-owned, non-writable directory; never rely on PATH resolution or place "
@@ -275,12 +309,17 @@ class BasisJobCommandAuditor(BaseAuditor):
 
     def check_command_danger_verbs(self):
         offenders = []
+        objects = []
         for c in self._ext_commands():
             name = self._get(c, "NAME", "SXPGLOGCMD")
             opcmd = self._get(c, "OPCOMMAND", "BTCXPGPGM", "COMMAND")
             base = self._basename(opcmd)
             if base in self.DANGER_VERBS:
                 offenders.append(f"{name or '?'} -> {opcmd}  ({base})")
+                # No qualifier for the verb: the same command must stay one node across
+                # every JOBCMD-CMD-* check and across the job step that invokes it.
+                if name:
+                    objects.append({"type": "os_command", "name": name})
         if offenders:
             self.finding(
                 check_id="JOBCMD-CMD-004",
@@ -294,6 +333,9 @@ class BasisJobCommandAuditor(BaseAuditor):
                     "destruction, lateral movement and exfiltration from the SAP host."
                 ),
                 affected_items=offenders,
+                # Aggregate: deleting one destructive command does not clear the catalog.
+                affected_objects=objects,
+                scope="aggregate",
                 remediation=(
                     "Remove destructive/network utilities from the external-command catalog unless "
                     "there is a documented operational need; where genuinely required, scope tightly "
@@ -305,11 +347,16 @@ class BasisJobCommandAuditor(BaseAuditor):
 
     def check_command_any_os(self):
         offenders = []
+        objects = []
         for c in self._ext_commands():
             name = self._get(c, "NAME", "SXPGLOGCMD")
             osys = self._get(c, "OPSYSTEM", "SYOPSYS", "TARGET_OS", "OS")
             if osys == "" or osys.upper() in ("ANYOS", "*", "ALL"):
                 offenders.append(f"{name or '?'}  (OS: {osys or 'unspecified'})")
+                # No qualifier: the check fires on ANYOS / * / ALL / unspecified alike, so
+                # pinning the exported spelling would split one command into four nodes.
+                if name:
+                    objects.append({"type": "os_command", "name": name})
         if offenders:
             self.finding(
                 check_id="JOBCMD-CMD-005",
@@ -323,6 +370,9 @@ class BasisJobCommandAuditor(BaseAuditor):
                     "portable for an attacker across heterogeneous application servers."
                 ),
                 affected_items=offenders,
+                # Aggregate: binding one command to a concrete OS shortens the list.
+                affected_objects=objects,
+                scope="aggregate",
                 remediation=(
                     "In SM69, define each logical command for the specific target operating system "
                     "rather than 'Any Operating System'."
@@ -333,13 +383,27 @@ class BasisJobCommandAuditor(BaseAuditor):
     # --------------------------------------------------------------- JOB checks
     def check_job_privileged_step_user(self):
         crit, high = [], []
+        crit_objs, high_objs = [], []
         for label, step, _h in self._armed_steps():
             user = self._get(step, "AUTHCKNAM", "STEP_USER", "BTCUSER", "AUTH_USER")
             cls = self._step_user_class(user)
+            # The job and its step user are modelled as two nodes, not one composite:
+            # the job->user edge is what makes "this armed job runs as DDIC" derivable,
+            # and the same user node is the one the user/authorization modules emit.
+            # The job is keyed on JOBNAME alone, exactly as the display label is — a
+            # JOBCOUNT qualifier would make every re-scheduling a brand-new node.
             if cls == "critical":
                 crit.append(f"{label} — step user {user}")
+                if label:
+                    crit_objs.append({"type": "job", "name": label})
+                if user:
+                    crit_objs.append({"type": "user", "name": user})
             elif cls == "standard":
                 high.append(f"{label} — step user {user}")
+                if label:
+                    high_objs.append({"type": "job", "name": label})
+                if user:
+                    high_objs.append({"type": "user", "name": user})
         if crit:
             self.finding(
                 check_id="JOBCMD-JOB-001",
@@ -355,6 +419,10 @@ class BasisJobCommandAuditor(BaseAuditor):
                     "that background users must not hold SAP_ALL."
                 ),
                 affected_items=crit,
+                # Aggregate: re-planning one job onto a technical user must not retire
+                # this finding and re-raise it with a zeroed age while others remain.
+                affected_objects=crit_objs,
+                scope="aggregate",
                 remediation=(
                     "Reassign these jobs to a dedicated, least-privilege background (type B / "
                     "system) user carrying only the authorizations the job needs; never run "
@@ -377,6 +445,9 @@ class BasisJobCommandAuditor(BaseAuditor):
                     "privileges and obscures accountability."
                 ),
                 affected_items=high,
+                # Aggregate, for the same reason as JOBCMD-JOB-001.
+                affected_objects=high_objs,
+                scope="aggregate",
                 remediation=(
                     "Move these jobs to a purpose-built least-privilege background user; lock the "
                     "standard accounts for interactive/batch use where they are not required."
@@ -386,6 +457,7 @@ class BasisJobCommandAuditor(BaseAuditor):
 
     def check_job_external_step(self):
         offenders = []
+        objects = []
         for label, step, _h in self._armed_steps():
             # PROGNAME (the ABAP report) is read separately; do NOT alias it here or every
             # ABAP step would look external. XPGFLAG is CHAR1 ('X' = external command/program).
@@ -398,6 +470,23 @@ class BasisJobCommandAuditor(BaseAuditor):
                 tag = extcmd or xpgprog or "external step"
                 priv = "  [privileged step user]" if self._step_user_class(user) else ""
                 offenders.append(f"{label} -> {tag} (user {user or '?'}){priv}")
+                # THE ABAP->OS bridge. The job, the command it invokes and the identity it
+                # runs as are three separate nodes, deliberately: EXTCMD carries the same
+                # SM69 logical name the JOBCMD-CMD-* checks emit, so job -> os_command is
+                # a derivable edge joining "this command is a shell wrapper" to "this armed
+                # job calls it as DDIC". Collapsing them into one composite node — or
+                # qualifying the command with the job — would destroy exactly that join.
+                if label:
+                    objects.append({"type": "job", "name": label})
+                if extcmd:
+                    objects.append({"type": "os_command", "name": extcmd})
+                # XPGPROG is the external *program* form of the same step type; a step may
+                # carry either, so both are emitted when both are present rather than only
+                # whichever the display string happened to pick.
+                if xpgprog:
+                    objects.append({"type": "program", "name": xpgprog})
+                if user:
+                    objects.append({"type": "user", "name": user})
         if offenders:
             self.finding(
                 check_id="JOBCMD-JOB-002",
@@ -412,6 +501,11 @@ class BasisJobCommandAuditor(BaseAuditor):
                     "it is a direct route to host command execution."
                 ),
                 affected_items=offenders,
+                # Aggregate: this is the inventory of armed external steps. Converting one
+                # job to ABAP-native processing shrinks the set; the finding — and the age
+                # that proves how long the OS-execution surface has been open — persists.
+                affected_objects=objects,
+                scope="aggregate",
                 remediation=(
                     "Review every job step that calls an external command/program: confirm the "
                     "business need, that the referenced SM69 command is safe (no shell wrap / "
@@ -424,14 +518,29 @@ class BasisJobCommandAuditor(BaseAuditor):
 
     def check_job_os_report(self):
         offenders = []
+        objects = []
         for label, step, _h in self._armed_steps():
             prog = self._get(step, "PROGNAME", "REPORT", "ABAP_PROGRAM").upper()
             user = self._get(step, "AUTHCKNAM", "STEP_USER", "BTCUSER")
             priv = self._step_user_class(user)
+            hit = False
             if prog == "RSBDCOS0":
                 offenders.append(f"{label} -> RSBDCOS0 (direct OS command, bypasses SM69) — user {user or '?'}")
+                hit = True
             elif prog.startswith(("Z", "Y")) and priv:
                 offenders.append(f"{label} -> custom report {prog} under privileged user {user}")
+                hit = True
+            if hit:
+                # The second OS bridge, the one that bypasses the SM69 allowlist entirely:
+                # job -> program(RSBDCOS0) -> user. RSBDCOS0 is named as a program node so
+                # it joins the custom-code / authorization findings that name the same
+                # report, rather than living only inside a display string.
+                if label:
+                    objects.append({"type": "job", "name": label})
+                if prog:
+                    objects.append({"type": "program", "name": prog})
+                if user:
+                    objects.append({"type": "user", "name": user})
         if offenders:
             self.finding(
                 check_id="JOBCMD-JOB-003",
@@ -446,6 +555,10 @@ class BasisJobCommandAuditor(BaseAuditor):
                     "executing on a schedule with little oversight."
                 ),
                 affected_items=offenders,
+                # Aggregate: unscheduling one RSBDCOS0 job while another remains must not
+                # reset this finding's clock.
+                affected_objects=objects,
+                scope="aggregate",
                 remediation=(
                     "Remove RSBDCOS0 from scheduled jobs and restrict authorization to run it; "
                     "review custom Z/Y batch programs for OS access and reassign them to a "
@@ -458,6 +571,7 @@ class BasisJobCommandAuditor(BaseAuditor):
 
     def check_job_stale_step_user(self):
         offenders = []
+        objects = []
         for label, step, _h in self._armed_steps():
             user = self._get(step, "AUTHCKNAM", "STEP_USER", "BTCUSER").upper()
             if not user:
@@ -475,6 +589,16 @@ class BasisJobCommandAuditor(BaseAuditor):
                     reason = f"expired (valid to {info['valid_to']})"
             if reason:
                 offenders.append(f"{label} — step user {user} ({reason})")
+                # No qualifier for `reason`: the same step user is named by JOBCMD-JOB-001
+                # and -005 too, and tagging it "locked" here would fork it into a second
+                # graph node instead of one user carrying all three check_ids. The deleted
+                # step user is still a real exported name (TBTCP-AUTHCKNAM), so it is named
+                # rather than dropped — a name that can be re-created to hijack the job is
+                # precisely the object of interest.
+                if label:
+                    objects.append({"type": "job", "name": label})
+                if user:
+                    objects.append({"type": "user", "name": user})
         if offenders:
             self.finding(
                 check_id="JOBCMD-JOB-004",
@@ -489,6 +613,9 @@ class BasisJobCommandAuditor(BaseAuditor):
                     "potential-hijack issue."
                 ),
                 affected_items=offenders,
+                # Aggregate: a job-hygiene backlog. Fixing one job step user shortens it.
+                affected_objects=objects,
+                scope="aggregate",
                 remediation=(
                     "Re-plan affected jobs onto a valid, unlocked, least-privilege system (type B) "
                     "background user; never leave a job pointing at a deleted or dialog account. "
@@ -499,12 +626,20 @@ class BasisJobCommandAuditor(BaseAuditor):
 
     def check_job_identity_borrow(self):
         offenders = []
+        objects = []
         for label, step, header in self._armed_steps():
             user = self._get(step, "AUTHCKNAM", "STEP_USER", "BTCUSER").upper()
             sched = self._get(step, "SDLUNAME", "SCHEDULER", "CREATOR").upper() or \
                 self._get(header, "SDLUNAME", "SCHEDULER", "CREATOR").upper()
             if user and sched and user != sched and self._step_user_class(user):
                 offenders.append(f"{label} — scheduled by {sched}, runs as {user}")
+                # Both identities are real exported names (SDLUNAME and AUTHCKNAM) and both
+                # become nodes: the borrowing edge only exists if the low-privileged
+                # scheduler and the powerful step user are separate nodes on the same job.
+                if label:
+                    objects.append({"type": "job", "name": label})
+                objects.append({"type": "user", "name": user})
+                objects.append({"type": "user", "name": sched})
         if offenders:
             self.finding(
                 check_id="JOBCMD-JOB-005",
@@ -518,6 +653,10 @@ class BasisJobCommandAuditor(BaseAuditor):
                     "privilege-escalation and accountability gap."
                 ),
                 affected_items=offenders,
+                # Aggregate: the set of borrowing relationships. Correcting one job's step
+                # user must not orphan the finding's history for the rest.
+                affected_objects=objects,
+                scope="aggregate",
                 remediation=(
                     "Ensure the step user reflects the least privilege actually required and that "
                     "the scheduler is authorized (S_BTCH_NAM) to use it; investigate cases where a "

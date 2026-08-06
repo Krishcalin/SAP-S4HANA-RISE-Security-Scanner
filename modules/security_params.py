@@ -236,6 +236,17 @@ class SecurityParamAuditor(BaseAuditor):
         },
     }
 
+    #: Operators whose FAILING condition admits exactly one value, so the actual value
+    #: may safely be carried as the object's qualifier (it participates in identity).
+    #:
+    #:   "!="  fails only when the value EQUALS `expected` — one string, pinned.
+    #:
+    #: Every other operator here fails over a range or over "anything but one string":
+    #: `>= 8` fails at 0..7, `== 1` fails at 0, 2 and "". Putting the value in identity
+    #: for those would retire the finding and raise a fresh one — resetting its age —
+    #: the moment somebody changed min_password_lng from 4 to 6, which fixes nothing.
+    _VALUE_PINNING_OPS = frozenset({"!="})
+
     def run_all_checks(self) -> List[Dict[str, Any]]:
         self.check_params_against_baseline()
         self.check_missing_critical_params()
@@ -258,6 +269,12 @@ class SecurityParamAuditor(BaseAuditor):
                     "Export parameters using RZ11 (single) or RZ10 (profiles). "
                     "Alternatively, run report RSPARAM and export to CSV."
                 ),
+                # A coverage gap, not a defect in any named object: the whole point is
+                # that no parameter export exists, so there is no parameter to name and
+                # inventing one would fabricate a graph node the data never contained.
+                # Identity is (system, client, PARAM-000) and `check_only` is the honest
+                # basis for it.
+                scope="aggregate",
             )
             return
 
@@ -282,6 +299,12 @@ class SecurityParamAuditor(BaseAuditor):
                 continue  # Will be caught by missing params check
 
             if not self._evaluate_rule(actual_value, rule["expected"], rule["op"]):
+                # One finding per non-compliant parameter, and the parameter IS the
+                # defect — identity must include it, or all 19 PARAM-* findings would
+                # differ only by check_id.
+                param_object = {"type": "parameter_name", "name": param_name}
+                if rule["op"] in self._VALUE_PINNING_OPS:
+                    param_object["qualifier"] = str(actual_value).strip()
                 self.finding(
                     check_id=f"PARAM-{param_name}",
                     title=f"Parameter {param_name} non-compliant",
@@ -293,6 +316,8 @@ class SecurityParamAuditor(BaseAuditor):
                         f"Expected: {rule['op']} '{rule['expected']}'"
                     ),
                     affected_items=[f"{param_name} = {actual_value}"],
+                    affected_objects=[param_object],
+                    scope="object",
                     remediation=rule["fix"],
                     references=rule.get("refs", []),
                     details={
@@ -316,10 +341,15 @@ class SecurityParamAuditor(BaseAuditor):
                 param_lookup.add(name)
 
         critical_missing = []
+        missing_objects = []
         for param_name, rule in self.BASELINE.items():
             if rule["severity"] in ("CRITICAL", "HIGH"):
                 if param_name.lower() not in param_lookup:
                     critical_missing.append(f"{param_name} ({rule['category']})")
+                    # No qualifier: the parameter is absent, so there is no value to
+                    # pin — and the node must be the same `parameter_name` node the
+                    # PARAM-<name> checks produce once the parameter does appear.
+                    missing_objects.append({"type": "parameter_name", "name": param_name})
 
         if critical_missing:
             self.finding(
@@ -333,6 +363,13 @@ class SecurityParamAuditor(BaseAuditor):
                     "values (often insecure) or not exported."
                 ),
                 affected_items=critical_missing,
+                # One roll-up of every parameter absent from the export. Exporting one
+                # more parameter shrinks the list but does not close the gap, so the
+                # member list must stay OUT of identity — otherwise each incremental
+                # export improvement would retire this finding and raise a new one with
+                # its age reset to zero. The members still ride along as graph nodes.
+                affected_objects=missing_objects,
+                scope="aggregate",
                 remediation=(
                     "Export all profile parameters using RSPARAM or RZ10. "
                     "Ensure the listed parameters are explicitly set to secure values."

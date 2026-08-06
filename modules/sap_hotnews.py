@@ -182,6 +182,33 @@ class SapHotNewsAuditor(BaseAuditor):
         return addressed, partial
 
     @staticmethod
+    def _note_objects(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Structured affected objects for a set of catalog entries: the SAP Notes.
+
+        The note number is the only identifier these findings actually carry, and it is
+        never invented — it comes from the built-in catalog or from the SNOTE /
+        applied-notes export, already normalized by `_norm_note`.
+
+        The catalog's `component` field is deliberately NOT emitted as a `package`
+        object: values like "NetWeaver ABAP/Java, Web Dispatcher, Content Server (ICM)"
+        are prose product descriptions, not ABAP package or software-component names,
+        so typing them as packages would fabricate an SAP identifier that does not
+        exist. The component stays in the display string, where it already was.
+
+        Likewise no `system` object: applied_notes.csv carries no SID, so the system a
+        finding belongs to comes from the run-level default rather than an invented name.
+        """
+        out: List[Dict[str, Any]] = []
+        seen = set()
+        for e in entries:
+            note = str(e.get("note") or "").strip()
+            if not note or note in seen:
+                continue
+            seen.add(note)
+            out.append({"type": "sap_note", "name": note})
+        return out
+
+    @staticmethod
     def _label(e: Dict[str, Any]) -> str:
         bits = [f"Note {e['note']}"]
         if e.get("cve"):
@@ -217,6 +244,12 @@ class SapHotNewsAuditor(BaseAuditor):
                     "are unauthenticated remote-compromise flaws."
                 ),
                 affected_items=[self._label(e) for e in missing],
+                # One finding rolls up every missing HotNews note, so it is an
+                # aggregate: implementing one of the six must shrink the list without
+                # retiring the finding and re-raising a fresh one with a reset age.
+                # The notes still ride along as graph nodes.
+                affected_objects=self._note_objects(missing),
+                scope="aggregate",
                 remediation=(
                     "Implement the listed SAP Security Notes via SNOTE (or the "
                     "correcting Support Package) after change control and testing. "
@@ -241,6 +274,9 @@ class SapHotNewsAuditor(BaseAuditor):
                     "7.0-8.9) from the catalog are not recorded as implemented."
                 ),
                 affected_items=[self._label(e) for e in missing],
+                # Aggregate for the same reason as HOTNEWS-001 above.
+                affected_objects=self._note_objects(missing),
+                scope="aggregate",
                 remediation=(
                     "Schedule these High-priority notes into the next patch cycle; "
                     "implement via SNOTE / Support Package with testing."
@@ -266,6 +302,11 @@ class SapHotNewsAuditor(BaseAuditor):
                 "highest-urgency items — attackers actively scan for and weaponise them."
             ),
             affected_items=[self._label(e) for e in exploited],
+            # Aggregate: this is the "you are exposed to in-the-wild exploitation"
+            # finding, and it stays the same defect while any listed note is unpatched.
+            # Patching the RECON note must not reset the clock on the ICMAD one.
+            affected_objects=self._note_objects(exploited),
+            scope="aggregate",
             remediation=(
                 "Treat as an emergency patch: implement the correcting SAP Notes now, "
                 "and check for indicators of compromise (RECON: unexpected admin users / "
@@ -295,6 +336,9 @@ class SapHotNewsAuditor(BaseAuditor):
                 "not close the vulnerability and can leave the system inconsistent."
             ),
             affected_items=[self._label(e) + " — status: incomplete" for e in hits],
+            # Aggregate over every partially-implemented note in the export.
+            affected_objects=self._note_objects(hits),
+            scope="aggregate",
             remediation=(
                 "Re-process these notes in SNOTE to 'Completely Implemented', completing "
                 "all manual and automatic activities, then confirm."
@@ -319,6 +363,11 @@ class SapHotNewsAuditor(BaseAuditor):
             ),
             affected_items=[self._label(e) + (" [EXPLOITED]" if e.get("exploited") else "")
                             for e in crit],
+            # Aggregate: the defect is the MISSING SNOTE EXPORT, not any one note. The
+            # catalog notes listed for manual verification are members — growing the
+            # catalog must not re-raise this finding as new.
+            affected_objects=self._note_objects(crit),
+            scope="aggregate",
             remediation=(
                 "Export note implementation status (transaction SNOTE, or the SAP "
                 "EarlyWatch Alert / System Recommendations in Solution Manager / Cloud "

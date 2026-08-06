@@ -78,6 +78,29 @@ class GrcAccessControlAuditor(BaseAuditor):
         return ""
 
     @staticmethod
+    def _add_obj(bucket: List[Dict[str, Any]], obj_type: str, name: Any) -> None:
+        """Append one structured affected object, de-duplicated.
+
+        A row whose identifying column is empty contributes NO object: an export row
+        with no FFID names no firefighter ID, and inventing a placeholder would put a
+        fictional node in the graph. The row still appears in `affected_items`, so
+        nothing is lost from the report.
+
+        De-duplication keeps one node per real object — the firefighter ID used in five
+        logged sessions is one node, not five.
+
+        A GRC firefighter ID is typed `user` deliberately: in the ID-based EAM scenario
+        FF_BASIS_01 *is* an SU01 account in the target system, so it must be the same
+        graph node the user-level checks produce for it, not a parallel one.
+        """
+        n = "" if name is None else str(name).strip()
+        if not n:
+            return
+        obj = {"type": obj_type, "name": n}
+        if obj not in bucket:
+            bucket.append(obj)
+
+    @staticmethod
     def _truthy(v: Any) -> bool:
         return str(v).strip().lower() in ("1", "x", "yes", "true", "on", "y", "enabled", "active")
 
@@ -120,6 +143,8 @@ class GrcAccessControlAuditor(BaseAuditor):
         if not rows:
             return
         no_reason, unreviewed = [], []
+        no_reason_objs: List[Dict[str, Any]] = []
+        unreviewed_objs: List[Dict[str, Any]] = []
         for r in rows:
             ffid = self._get(r, "FFID", "FIREFIGHTER_ID", "FIREFIGHTER", "FF_ID")
             user = self._get(r, "FF_USER", "USER", "BNAME", "FIREFIGHTER_USER", "OWNER")
@@ -131,10 +156,18 @@ class GrcAccessControlAuditor(BaseAuditor):
             label = f"{ffid or '?'} used by {user or '?'}" + (f" @ {when}" if when else "")
             if not reason:
                 no_reason.append(label)
+                # Both halves of the session are real accounts: the firefighter ID that
+                # was used and the person who used it.
+                self._add_obj(no_reason_objs, "user", ffid)
+                self._add_obj(no_reason_objs, "user", user)
             if status and status not in self._REVIEWED:
                 unreviewed.append(f"{label} (status={status})")
+                self._add_obj(unreviewed_objs, "user", ffid)
+                self._add_obj(unreviewed_objs, "user", user)
             elif not status:
                 unreviewed.append(f"{label} (status=none)")
+                self._add_obj(unreviewed_objs, "user", ffid)
+                self._add_obj(unreviewed_objs, "user", user)
         if no_reason:
             self.finding(
                 check_id="GRC-FF-001",
@@ -149,6 +182,11 @@ class GrcAccessControlAuditor(BaseAuditor):
                     "sessions are the classic gap auditors cite for emergency access."
                 ),
                 affected_items=no_reason[:50],
+                # Aggregate: one finding rolls up every unjustified session. Sessions are
+                # append-only history, so putting them in identity would re-raise this
+                # finding on every upload and its age would never accumulate.
+                affected_objects=no_reason_objs,
+                scope="aggregate",
                 remediation=(
                     "Maintain EAM Reason Codes and make reason-code entry mandatory in the "
                     "Superuser/EAM logon workflow so sessions cannot start without a justification. "
@@ -173,6 +211,10 @@ class GrcAccessControlAuditor(BaseAuditor):
                     "unreviewed log means the privileged activity was never checked for abuse."
                 ),
                 affected_items=unreviewed[:50],
+                # Aggregate for the same reason as GRC-FF-001: reviewing one session log
+                # must shrink the list, not retire and re-raise the control gap.
+                affected_objects=unreviewed_objs,
+                scope="aggregate",
                 remediation=(
                     "Ensure the firefighter controller reviews each session log (GRAC EAM log report "
                     "/ workflow) within the defined SLA and records an approval decision. Configure "
@@ -191,6 +233,9 @@ class GrcAccessControlAuditor(BaseAuditor):
         if not rows:
             return
         no_governance, self_monitor, no_logreview = [], [], []
+        no_gov_objs: List[Dict[str, Any]] = []
+        self_mon_objs: List[Dict[str, Any]] = []
+        no_logrev_objs: List[Dict[str, Any]] = []
         for r in rows:
             ffid = self._get(r, "FFID", "FIREFIGHTER_ID", "FIREFIGHTER", "FF_ID")
             owner = self._get(r, "OWNER", "FF_OWNER", "OWNER_USER").upper()
@@ -200,10 +245,18 @@ class GrcAccessControlAuditor(BaseAuditor):
                 continue
             if not owner or not controller:
                 no_governance.append(f"{ffid} (owner={owner or 'NONE'}, controller={controller or 'NONE'})")
+                # Only the firefighter ID: the defect is the ABSENCE of the counterpart,
+                # and the party that happens to be filled in is not what is wrong here.
+                self._add_obj(no_gov_objs, "user", ffid)
             elif owner == controller:
                 self_monitor.append(f"{ffid} (owner==controller={owner})")
+                # Here the person IS part of the defect — one account on both sides of
+                # the segregation — so both the ID and that person are named.
+                self._add_obj(self_mon_objs, "user", ffid)
+                self._add_obj(self_mon_objs, "user", owner)
             if logrev and self._falsy(logrev):
                 no_logreview.append(f"{ffid} (log review/delivery disabled)")
+                self._add_obj(no_logrev_objs, "user", ffid)
         if no_governance:
             self.finding(
                 check_id="GRC-FF-002",
@@ -217,6 +270,10 @@ class GrcAccessControlAuditor(BaseAuditor):
                     "access is unaccountable and its logs are never independently reviewed."
                 ),
                 affected_items=no_governance[:50],
+                # Aggregate: assigning an owner to one firefighter ID must not retire the
+                # finding and raise a new one for the IDs still ungoverned.
+                affected_objects=no_gov_objs,
+                scope="aggregate",
                 remediation=(
                     "Assign a distinct owner and controller to every firefighter ID (GRAC EAM "
                     "Owners / Controllers). Decommission firefighter IDs that are no longer needed."
@@ -239,6 +296,9 @@ class GrcAccessControlAuditor(BaseAuditor):
                     "self-approved. Owner and controller must be different individuals."
                 ),
                 affected_items=self_monitor[:50],
+                # Aggregate over every self-monitored firefighter ID.
+                affected_objects=self_mon_objs,
+                scope="aggregate",
                 remediation=(
                     "Reassign the controller of each listed firefighter ID to an independent person "
                     "(not the owner), per the EAM segregation model."
@@ -259,6 +319,9 @@ class GrcAccessControlAuditor(BaseAuditor):
                     "compensating control is effectively disabled."
                 ),
                 affected_items=no_logreview[:50],
+                # Aggregate over every firefighter ID with log delivery switched off.
+                affected_objects=no_logrev_objs,
+                scope="aggregate",
                 remediation="Enable log delivery / review workflow for every firefighter ID (GRAC EAM).",
                 references=["SAP GRC Access Control — EAM log review", "SOX ITGC — emergency-access monitoring"],
                 details={"count": len(no_logreview)},
@@ -272,6 +335,9 @@ class GrcAccessControlAuditor(BaseAuditor):
         if not rows:
             return
         no_approval, self_approved, no_risk = [], [], []
+        no_approval_objs: List[Dict[str, Any]] = []
+        self_approved_objs: List[Dict[str, Any]] = []
+        no_risk_objs: List[Dict[str, Any]] = []
         risk_col_present = False  # only judge "no risk analysis" if the export carries the indicator
         for r in rows:
             req = self._get(r, "REQ_ID", "REQUEST", "REQNO", "REQUEST_ID")
@@ -288,13 +354,22 @@ class GrcAccessControlAuditor(BaseAuditor):
             label = f"req {req or '?'}: {requestor or '?'} -> {prov_user or '?'}"
             if is_prov and not approver:
                 no_approval.append(label + " (no approver)")
+                # The request number is a workflow ticket, not an SAP object; the
+                # accounts on either end of the unapproved grant are.
+                self._add_obj(no_approval_objs, "user", requestor)
+                self._add_obj(no_approval_objs, "user", prov_user)
             elif is_prov and approver and (approver == requestor or approver == prov_user):
                 self_approved.append(label + f" (self-approved by {approver})")
+                self._add_obj(self_approved_objs, "user", requestor)
+                self._add_obj(self_approved_objs, "user", prov_user)
+                self._add_obj(self_approved_objs, "user", approver)
             # Flag both an explicit "not done" AND a blank indicator on a provisioned
             # request; emission is gated on the column actually being present so a
             # GRACREQ export without a risk-analysis column doesn't flag every request.
             if is_prov and self._falsy(risk):
                 no_risk.append(label + (" (risk analysis not done)" if risk else " (no risk-analysis record)"))
+                self._add_obj(no_risk_objs, "user", requestor)
+                self._add_obj(no_risk_objs, "user", prov_user)
         if no_approval:
             self.finding(
                 check_id="GRC-ARM-001",
@@ -308,6 +383,11 @@ class GrcAccessControlAuditor(BaseAuditor):
                     "authorization-control failure and a common audit finding."
                 ),
                 affected_items=no_approval[:50],
+                # Aggregate: the defect is the workflow bypass, and access requests are
+                # an append-only log. Retro-approving one grant must not restart the age
+                # of the control gap the remaining ones still evidence.
+                affected_objects=no_approval_objs,
+                scope="aggregate",
                 remediation=(
                     "Route all access provisioning through the GRAC ARM MSMP approval workflow; "
                     "disable direct/auto provisioning paths. Re-review the listed grants and obtain "
@@ -330,6 +410,9 @@ class GrcAccessControlAuditor(BaseAuditor):
                     "granting — a user can grant themselves privileged access unchecked."
                 ),
                 affected_items=self_approved[:50],
+                # Aggregate over every self-approved request.
+                affected_objects=self_approved_objs,
+                scope="aggregate",
                 remediation=(
                     "Configure MSMP so the requestor/beneficiary can never be the approver; enforce "
                     "manager or role-owner approval. Investigate the listed self-approvals."
@@ -350,6 +433,10 @@ class GrcAccessControlAuditor(BaseAuditor):
                     "are detected (and mitigated) BEFORE access is granted, not discovered later."
                 ),
                 affected_items=no_risk[:50],
+                # Aggregate: the defect is that the ARM workflow does not enforce risk
+                # analysis, evidenced by the listed requests.
+                affected_objects=no_risk_objs,
+                scope="aggregate",
                 remediation="Enable mandatory risk analysis in the ARM workflow (ARA-ARM integration).",
                 references=["SAP GRC Access Control — ARA/ARM integration (risk analysis at provisioning)",
                             "SOX ITGC — preventive SoD"],
@@ -364,6 +451,7 @@ class GrcAccessControlAuditor(BaseAuditor):
         if not rows:
             return
         offenders = []
+        offender_objs: List[Dict[str, Any]] = []
         for r in rows:
             user = self._get(r, "USERID", "USER", "BNAME", "USER_ID").upper()
             risk = self._get(r, "RISK_ID", "RISKID", "RISK", "SOD_RISK")
@@ -385,6 +473,12 @@ class GrcAccessControlAuditor(BaseAuditor):
             if not active:
                 why = "no mitigation" if not mitigated else "mitigation expired/undated"
                 offenders.append(f"{user} / {risk} ({why})")
+                # Both sides of the violation are real GRC objects: the user who carries
+                # it and the rule-set risk it violates. The reason is not a qualifier —
+                # a violation that moves from "no mitigation" to "mitigation expired" is
+                # the same exposure and must stay the same node.
+                self._add_obj(offender_objs, "user", user)
+                self._add_obj(offender_objs, "sod_risk", risk)
         if offenders:
             self.finding(
                 check_id="GRC-ARA-001",
@@ -399,6 +493,12 @@ class GrcAccessControlAuditor(BaseAuditor):
                     "fraud/error exposure (e.g. create vendor + pay vendor)."
                 ),
                 affected_items=offenders[:50],
+                # Aggregate: one finding rolls up every open user–risk combination.
+                # Mitigating one user's conflict must shrink the population, not retire
+                # the residual-risk finding and re-raise it with the clock reset — that
+                # number is exactly what an auditor tracks over time.
+                affected_objects=offender_objs,
+                scope="aggregate",
                 remediation=(
                     "For each: remove one side of the conflicting access (preferred), or assign a "
                     "valid, owner-monitored mitigating control with a current validity date in GRAC. "
@@ -416,6 +516,7 @@ class GrcAccessControlAuditor(BaseAuditor):
         if not rows:
             return
         offenders = []
+        offender_objs: List[Dict[str, Any]] = []
         for r in rows:
             cid = self._get(r, "CONTROL_ID", "MITIGATION_ID", "MIT_ID", "MITIGATING_CONTROL", "CONTROL")
             owner = self._get(r, "OWNER", "CONTROL_OWNER", "OWNER_USER")
@@ -438,6 +539,12 @@ class GrcAccessControlAuditor(BaseAuditor):
                 issues.append("inactive")
             if issues:
                 offenders.append(f"{cid}: " + ", ".join(issues))
+                # The control itself is the object. The owner/monitor are NOT named:
+                # the ones this check flags are precisely those that are missing, and
+                # the ones that are filled in are not what is defective. No qualifier
+                # either — a control that gains an owner but is still unmonitored is
+                # the same control, and the issue list is display, not identity.
+                self._add_obj(offender_objs, "mitigating_control", cid)
         if offenders:
             self.finding(
                 check_id="GRC-MIT-001",
@@ -452,6 +559,10 @@ class GrcAccessControlAuditor(BaseAuditor):
                     "suppresses those violations from the risk report — masking live exposure."
                 ),
                 affected_items=offenders[:50],
+                # Aggregate: fixing one control must not retire the finding covering the
+                # rest of the control population.
+                affected_objects=offender_objs,
+                scope="aggregate",
                 remediation=(
                     "For each control (GRAC Mitigating Controls): assign an owner and an independent "
                     "monitor, set a monitoring frequency, renew or retire expired controls, and "
@@ -472,6 +583,8 @@ class GrcAccessControlAuditor(BaseAuditor):
             return
         total = 0
         disabled_crit, no_owner = [], []
+        disabled_crit_objs: List[Dict[str, Any]] = []
+        no_owner_objs: List[Dict[str, Any]] = []
         for r in rows:
             rid = self._get(r, "RISK_ID", "RISKID", "RISK", "SOD_RISK")
             if not rid:
@@ -484,8 +597,13 @@ class GrcAccessControlAuditor(BaseAuditor):
             is_disabled = status in ("disabled", "inactive", "0", "n", "off", "false")
             if is_disabled and (level in self._CRIT_LEVELS):
                 disabled_crit.append(f"{rid} (level={level or '?'}, status={status or 'disabled'})")
+                # No qualifier: level and status are what the check reads to decide, and
+                # a risk re-classified Critical -> High is still one rule-set risk, so
+                # pinning them would split one node in two.
+                self._add_obj(disabled_crit_objs, "sod_risk", rid)
             if not owner:
                 no_owner.append(rid)
+                self._add_obj(no_owner_objs, "sod_risk", rid)
         if disabled_crit:
             self.finding(
                 check_id="GRC-RS-001",
@@ -499,6 +617,10 @@ class GrcAccessControlAuditor(BaseAuditor):
                     "Disabling a critical risk should be a rare, governed exception."
                 ),
                 affected_items=disabled_crit[:50],
+                # Aggregate: re-enabling one disabled critical risk must not retire the
+                # finding covering the ones still switched off.
+                affected_objects=disabled_crit_objs,
+                scope="aggregate",
                 remediation=(
                     "Re-enable the listed critical risks (GRAC Access Rule Maintenance) unless there is "
                     "a documented, risk-owner-approved reason; record any exception with justification."
@@ -519,6 +641,9 @@ class GrcAccessControlAuditor(BaseAuditor):
                     "deciding remediation vs mitigation, violations of that risk are never dispositioned."
                 ),
                 affected_items=no_owner[:50],
+                # Aggregate over every owner-less risk in the rule set.
+                affected_objects=no_owner_objs,
+                scope="aggregate",
                 remediation="Assign a business risk owner to every SoD risk in the rule set (GRAC).",
                 references=["SAP GRC Access Control — risk ownership", "SOX ITGC — risk accountability"],
                 details={"count": len(no_owner)},
@@ -536,6 +661,14 @@ class GrcAccessControlAuditor(BaseAuditor):
                     "conflicts across P2P/O2C/R2R/H2R/Basis are simply not being detected."
                 ),
                 affected_items=[f"{total} risks defined (expected 200+ from delivered content)"],
+                # Aggregate, and deliberately with NO affected_objects: the defect is the
+                # rule set's incompleteness, which is a property of the whole rule base
+                # and not of any risk in it — the risks that WOULD name it are precisely
+                # the ones missing. Naming the few that exist would be backwards.
+                # Aggregate also keeps the count out of identity: with the display-string
+                # fallback, "5 risks defined" -> "6 risks defined" would re-identify this
+                # finding every time somebody added a rule without fixing the gap.
+                scope="aggregate",
                 remediation=(
                     "Import and tailor the SAP-delivered rule set (or a maintained ruleset), covering "
                     "all in-scope process areas; validate with the business risk owners."
