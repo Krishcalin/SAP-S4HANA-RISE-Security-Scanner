@@ -86,10 +86,23 @@ docker compose exec app python -m server.cli add-landscape "Acme Prod" --mode ri
 # scan without a browser (air-gapped path)
 python -m server.cli scan "Acme Prod" ./sample_data --sid PRD --client 100
 python -m server.cli runs
+
+# the way back in when nobody can sign in
+docker compose exec app python -m server.cli set-password admin --generate
 ```
 
 `DB_DSN` and `SESSION_SECRET` have **no defaults** — a deployment that forgets them must fail
 at startup rather than silently run on a value published in this repo.
+
+**Passwords never come from argv** — an argument is visible in `ps` and in shell history, so
+`--password` does not exist and must not be added. `_read_password` takes a TTY prompt, a pipe,
+or `--generate`. `--generate` also sets `must_change_password`: it printed the secret to a
+terminal, so it now lives in scrollback and in `docker compose logs`, which makes it a handover
+credential rather than a chosen one. `current_user` then routes that account to `/account` and
+refuses every other page; `/api/*` returns 403 rather than a redirect, so the gate cannot be
+scripted around. Changing a password drops every session for that user **except the caller's
+own** (`set_password(..., keep_token=)`); an admin reset drops all of them, including the
+target's current one. The audit log records the event and never the value.
 
 ## Architecture
 
@@ -190,7 +203,7 @@ at startup rather than silently run on a value published in this repo.
 | `identity.py` | **The load-bearing module.** `AffectedObject`, normalization, `compute_fingerprint`, `extract_nodes`. Read its docstring before changing anything about finding identity. |
 | `schema.sql` | 20 tables. Single-tenant (no `tenant_id`); `landscape` preserves the option. Idempotent — re-running it upgrades an existing deployment. |
 | `db.py` | psycopg pool, `scope_clause` (**the one place** row scoping is expressed), `audit`. |
-| `auth.py` | PBKDF2 passwords, sessions, ranked roles, per-system scope. |
+| `auth.py` | PBKDF2 passwords, sessions, ranked roles, per-system scope, password change/reset and the forced-change flag. |
 | `queries.py` | Every read of findings/runs/systems, plus assignment, bulk actions and saved views. HTML pages and the JSON API call the same functions — that is what keeps "everything the console shows is in the API" structural. |
 | `enrich.py` | Priority tier, owning team, **remediation owner** and SLA window. The team map is a prefix table; the ownership map is deployment-mode dependent. |
 | `analytics.py` | The mitigation journey: MTTR, burndown, aging, backlog trajectory, team and domain scorecards. |

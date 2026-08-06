@@ -508,6 +508,18 @@ CREATE INDEX IF NOT EXISTS notification_undelivered_idx
 --  Added as ALTERs rather than edited into the CREATEs above, so an existing
 --  deployment upgrades simply by re-running this file.
 
+-- Account self-service.
+--
+-- `must_change_password` exists because of how the first admin is created: the
+-- container has no TTY, so `create-user --generate` mints a password and prints it
+-- to a terminal, where it survives in scrollback, in `docker compose logs` and in
+-- whatever recorded the session. A machine-generated password is a BOOTSTRAP
+-- credential, not a chosen one, so the account is forced to replace it at first
+-- login rather than trusted to remember.
+ALTER TABLE app_user ADD COLUMN IF NOT EXISTS must_change_password boolean
+    NOT NULL DEFAULT false;
+ALTER TABLE app_user ADD COLUMN IF NOT EXISTS password_changed_at timestamptz;
+
 ALTER TABLE finding ADD COLUMN IF NOT EXISTS priority_rationale text;
 -- When the SLA clock started. Deliberately distinct from first_seen_at:
 -- re-prioritising a finding restarts its window, and an "overdue" count computed

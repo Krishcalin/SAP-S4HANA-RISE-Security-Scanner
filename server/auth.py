@@ -56,14 +56,15 @@ def verify_password(password: str, stored: str) -> bool:
 
 
 def create_user(username: str, password: str, role: str = "viewer",
-                display_name: str = "") -> int:
+                display_name: str = "", must_change: bool = False) -> int:
     if role not in ROLE_RANK:
         raise AuthError(f"unknown role {role!r}")
     with db.connection() as conn:
         row = conn.execute(
-            "INSERT INTO app_user (username, display_name, password_hash, role) "
-            "VALUES (%s,%s,%s,%s) RETURNING id",
-            (username, display_name or username, hash_password(password), role)
+            "INSERT INTO app_user (username, display_name, password_hash, role, "
+            "must_change_password) VALUES (%s,%s,%s,%s,%s) RETURNING id",
+            (username, display_name or username, hash_password(password), role,
+             must_change)
         ).fetchone()
         db.audit(conn, "system", "user.create", "app_user", str(row["id"]),
                  {"username": username, "role": role})
@@ -112,6 +113,58 @@ def resolve_session(token: Optional[str]) -> Optional[Dict[str, Any]]:
 
 def destroy_session(token: str) -> None:
     db.execute("DELETE FROM session WHERE token = %s", (token,))
+
+
+# --------------------------------------------------------------------------- #
+#  Password change                                                            #
+# --------------------------------------------------------------------------- #
+
+def set_password(user_id: int, new_password: str, actor: str,
+                 keep_token: Optional[str] = None) -> None:
+    """Replace a user's password and invalidate their OTHER sessions.
+
+    THE OTHER SESSIONS MATTER AS MUCH AS THE PASSWORD.
+    Changing a password is what someone does when they believe a credential has
+    leaked. If existing sessions kept working, the change would accomplish nothing
+    against the case it exists for: whoever holds the stolen cookie keeps their
+    access until it expires. So every session but the caller's own is dropped.
+
+    `keep_token` is the caller's own session — "log me out everywhere else, not
+    here". Omitting it logs the user out everywhere, which is the correct
+    behaviour when an ADMIN resets somebody else's password.
+    """
+    hashed = hash_password(new_password)
+    with db.connection() as conn:
+        conn.execute(
+            "UPDATE app_user SET password_hash = %s, must_change_password = false, "
+            "password_changed_at = now() WHERE id = %s", (hashed, user_id))
+        if keep_token:
+            conn.execute("DELETE FROM session WHERE user_id = %s AND token <> %s",
+                         (user_id, keep_token))
+        else:
+            conn.execute("DELETE FROM session WHERE user_id = %s", (user_id,))
+        # The EVENT is audited. The value never is, here or anywhere.
+        db.audit(conn, actor, "user.password_change", "app_user", str(user_id),
+                 {"other_sessions_revoked": True})
+        conn.commit()
+
+
+def reset_password(user_id: int, actor: str) -> str:
+    """Admin path: mint a new password and force the holder to replace it.
+
+    Returns the generated password so it can be handed over ONCE. It is never
+    stored in the clear and never written to the audit log — the log records that
+    a reset happened, which is what an auditor needs; the secret is not.
+    """
+    new = secrets.token_urlsafe(18)
+    set_password(user_id, new, actor)              # drops ALL that user's sessions
+    db.execute("UPDATE app_user SET must_change_password = true WHERE id = %s",
+               (user_id,))
+    return new
+
+
+def must_change_password(user: Dict[str, Any]) -> bool:
+    return bool(user.get("must_change_password"))
 
 
 def has_role(user: Dict[str, Any], required: str) -> bool:

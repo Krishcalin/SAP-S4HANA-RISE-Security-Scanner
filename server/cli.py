@@ -74,11 +74,42 @@ def cmd_create_user(args: argparse.Namespace) -> int:
     if pw is None:
         return 1
     try:
-        uid = auth.create_user(args.username, pw, args.role)
+        # A generated password is a handover credential, not a chosen
+        # one: it was printed to a terminal and lives in scrollback.
+        uid = auth.create_user(args.username, pw, args.role,
+                               must_change=args.generate)
     except auth.AuthError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(f"created user {args.username} (id={uid}, role={args.role})")
+    return 0
+
+
+def cmd_set_password(args: argparse.Namespace) -> int:
+    """Reset a password from the host — the way back in when nobody can sign in.
+
+    Not a backdoor: whoever can run this already has the container and the
+    database, so it grants nothing they did not have. It exists so a locked-out
+    deployment has a documented recovery path instead of an undocumented one.
+    """
+    user = db.one("SELECT id, username FROM app_user WHERE username = %s",
+                  (args.username,))
+    if user is None:
+        print(f"no such user: {args.username}", file=sys.stderr)
+        return 1
+    pw = _read_password(args.generate)
+    if pw is None:
+        return 1
+    try:
+        auth.set_password(user["id"], pw, "cli")
+    except auth.AuthError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if args.generate:
+        db.execute("UPDATE app_user SET must_change_password = true WHERE id = %s",
+                   (user["id"],))
+        print("the user must replace it at next sign-in")
+    print(f"password set for {args.username}; all their sessions were signed out")
     return 0
 
 
@@ -217,6 +248,12 @@ def main(argv=None) -> int:
                          "prompting. Use this for the first admin in a container, "
                          "where there is no TTY.")
     cu.set_defaults(fn=cmd_create_user)
+
+    sp = sub.add_parser("set-password")
+    sp.add_argument("username")
+    sp.add_argument("--generate", action="store_true",
+                    help="mint one and print it; the user must then replace it")
+    sp.set_defaults(fn=cmd_set_password)
 
     al = sub.add_parser("add-landscape")
     al.add_argument("name")

@@ -59,8 +59,26 @@ docker compose exec app python -m server.cli create-user admin admin --generate
 docker compose exec app python -m server.cli add-landscape "Acme Production" --mode rise_pce
 ```
 
-Open <http://127.0.0.1:8000> and upload an export bundle. The scan runs automatically and the
-findings land in the console.
+Open <http://127.0.0.1:8000> and sign in. `--generate` prints a password to the terminal, so it
+now lives in scrollback and in `docker compose logs` — the console therefore holds that account
+at **Your account** until it is replaced. Every page and every JSON endpoint stays closed until
+then, so the requirement cannot be scripted around.
+
+After that, passwords are managed from inside the console: **Your account** (the role chip, top
+right) changes your own — the current password is required even though you are already signed
+in, because a stolen session should not be enough to take an account over permanently. Admins
+also get a user list there, where a reset *mints* a new password rather than setting a chosen
+one. Either way, every other session for that account is signed out; that is the point of
+changing a password that may have leaked.
+
+Locked out of every admin account, the way back in is from the host — where whoever runs the
+container already has the database anyway:
+
+```bash
+docker compose exec app python -m server.cli set-password admin --generate
+```
+
+Then upload an export bundle. The scan runs automatically and the findings land in the console.
 
 Scanning without a browser — the air-gapped path:
 

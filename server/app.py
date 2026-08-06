@@ -25,7 +25,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import parse_qs, quote, urlencode, urlparse
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -88,10 +88,21 @@ app.router.lifespan_context = _lifespan
 #  Auth plumbing                                                              #
 # --------------------------------------------------------------------------- #
 
+#: Reachable while an account is still on a generated password. Everything else
+#: redirects to /account until it is replaced — including the API, so a forced
+#: account cannot simply be scripted around.
+_ALLOWED_WHILE_FORCED = ("/account", "/logout", "/login", "/health")
+
+
 def current_user(request: Request) -> Dict[str, Any]:
     user = auth.resolve_session(request.cookies.get(SESSION_COOKIE))
     if user is None:
         raise HTTPException(status_code=401, detail="not authenticated")
+    if auth.must_change_password(user) and not request.url.path.startswith(
+            _ALLOWED_WHILE_FORCED):
+        # 303 rather than 403: the caller is authenticated and the fix is one
+        # page away, so send them to it instead of refusing with no route out.
+        raise HTTPException(status_code=303, detail="password change required")
     return user
 
 
@@ -109,6 +120,15 @@ async def _unauth(request: Request, exc: HTTPException):
     if request.url.path.startswith("/api/"):
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
     return RedirectResponse(f"/login?next={request.url.path}", status_code=303)
+
+
+@app.exception_handler(303)
+async def _must_change(request: Request, exc: HTTPException):
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(
+            {"detail": "password change required", "change_at": "/account"},
+            status_code=403)
+    return RedirectResponse("/account", status_code=303)
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -284,6 +304,74 @@ def coverage_page(request: Request, user: Dict[str, Any] = Depends(current_user)
 def api_coverage(user: Dict[str, Any] = Depends(current_user)):
     check_ids = [r["check_id"] for r in db.query("SELECT check_id FROM check_definition")]
     return sapcontent.coverage(check_ids)
+
+
+@app.get("/account", response_class=HTMLResponse)
+def account_page(request: Request, user: Dict[str, Any] = Depends(current_user),
+                 changed: bool = False, error: str = None):
+    return TEMPLATES.TemplateResponse(request, "account.html", {
+        "user": user,
+        "forced": auth.must_change_password(user),
+        "changed": changed, "error": error,
+        "sessions": db.one("SELECT count(*) n FROM session WHERE user_id = %s",
+                           (user["id"],))["n"],
+        "users": (db.query("SELECT * FROM app_user ORDER BY username")
+                  if user["role"] == "admin" else []),
+        # A generated password is rendered ONCE, on the response to the reset
+        # that created it. It is never carried in a redirect or a query
+        # string, where it would land in browser history, in a proxy log and
+        # in the referer header.
+        "generated": None,
+    })
+
+
+@app.post("/account/password")
+def change_password(request: Request, current: str = Form(...),
+                    new1: str = Form(...), new2: str = Form(...),
+                    user: Dict[str, Any] = Depends(current_user)):
+    """Change your own password.
+
+    The CURRENT password is required even though the caller is already signed in:
+    a stolen session should not be enough to take an account over permanently.
+    """
+    def back(msg):
+        return RedirectResponse(f"/account?error={quote(msg)}", status_code=303)
+
+    if not auth.verify_password(current, user["password_hash"]):
+        return back("Current password is incorrect.")
+    if new1 != new2:
+        return back("The new passwords do not match.")
+    if new1 == current:
+        return back("The new password must differ from the current one.")
+    try:
+        auth.set_password(user["id"], new1, user["username"],
+                          keep_token=request.cookies.get(SESSION_COOKIE))
+    except auth.AuthError as exc:
+        return back(str(exc))
+    return RedirectResponse("/account?changed=true", status_code=303)
+
+
+@app.post("/account/reset/{user_id}")
+def reset_user_password(user_id: int, request: Request,
+                        admin: Dict[str, Any] = Depends(require("admin"))):
+    """Admin resets someone else's password by GENERATING one.
+
+    Never by choosing it: an admin who can set a known password can impersonate a
+    user and leave nothing that user could distinguish from their own activity.
+    """
+    target = db.one("SELECT username FROM app_user WHERE id = %s", (user_id,))
+    if target is None:
+        raise HTTPException(404, "no such user")
+    if user_id == admin["id"]:
+        raise HTTPException(400, "use the change-password form for your own account")
+    new = auth.reset_password(user_id, admin["username"])
+    return TEMPLATES.TemplateResponse(request, "account.html", {
+        "user": admin, "forced": False, "changed": False, "error": None,
+        "sessions": db.one("SELECT count(*) n FROM session WHERE user_id = %s",
+                           (admin["id"],))["n"],
+        "users": db.query("SELECT * FROM app_user ORDER BY username"),
+        "generated": {"username": target["username"], "password": new},
+    })
 
 
 @app.get("/v/{slug}")

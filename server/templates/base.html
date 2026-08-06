@@ -139,7 +139,8 @@ dl.kv dd{margin:0}
   </nav>
   <div class="who">
     <span>{{ user.display_name or user.username }}</span>
-    <span class="role">{{ user.role }}</span>
+    <a href="/account" class="role" style="text-decoration:none"
+       title="Account and password">{{ user.role }}</a>
     <form method="post" action="/logout" style="margin:0">
       <button class="ghost" type="submit">Sign out</button>
     </form>
