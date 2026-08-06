@@ -69,6 +69,20 @@ AUDITORS: List[Tuple[str, str]] = [
     ("financial_controls", "FinancialControlsAuditor"),
 ]
 
+#: Module KEYS (the CLI's `--modules` vocabulary), for `BaseAuditor.run_context`.
+#: The server always runs every auditor, so this is the full set — but it must be
+#: passed rather than assumed, because a module deciding to defer needs to know
+#: that its deeper sibling is genuinely running, not merely that the sibling's
+#: input data was loaded.
+MODULE_KEYS = frozenset({
+    "users", "params", "network", "rise", "iam", "btpcloud", "intglayer",
+    "dataprot", "codetrans", "logmon", "fiori", "crypto", "hanadb", "hotnews",
+    "authz", "systrust", "baseline", "s4authz", "ara", "jobcmd", "grcac",
+    "rolegov", "fincontrols",
+})
+
+RUN_CONTEXT = {"modules": MODULE_KEYS}
+
 
 class ScanCancelled(Exception):
     """Raised when a user cancels a running scan. Not an error."""
@@ -129,7 +143,12 @@ def run_auditors(data: Dict[str, Any], conn: psycopg.Connection, run_id: int,
         try:
             module = importlib.import_module(f"modules.{mod_name}")
             cls = getattr(module, cls_name)
-            produced = cls(data).run_all_checks() or []
+            # Every auditor is told what else is in the run, so a module can
+            # defer to a deeper sibling on the basis that the sibling is
+            # ACTUALLY RUNNING rather than that its input data happens to be
+            # loaded. Deferring on data presence alone silently drops a
+            # capability when the sibling is filtered out.
+            produced = cls(data, None, RUN_CONTEXT).run_all_checks() or []
             findings.extend(produced)
             ran.append(mod_name)
             status[mod_name] = {"status": "ok", "findings": len(produced)}

@@ -306,6 +306,15 @@ at startup rather than silently run on a value published in this repo.
   negations.
 - **Fire only on present-and-risky.** Parameter checks should key on a parameter being
   *present with a risky value*, not merely absent from the export (absence ≠ secure/insecure).
+- **A module may defer to a deeper sibling, but never on data presence alone, and never
+  silently.** `iam` defers its transaction-level SoD to `ara`'s permission-level analysis — but
+  the condition must be *"is `ara` actually running"* (`self.module_is_running("ara")`), not
+  *"is `ara`'s input loaded"*. Those differ: `--modules iam` loads `role_auth_values.csv` without
+  running `ara`, and the original condition made SoD analysis produce **nothing** while looking
+  like a clean result. When a check does stand down it must emit an INFO finding saying so —
+  same discipline as the coverage manifest: **absence is stated, never implied**. Callers pass
+  `run_context={"modules": …}`; a module given no context keeps its historical behaviour rather
+  than guessing.
 - **CSV header normalization:** the loader upper-cases headers and replaces spaces with `_`,
   so match `row.get("USER_NAME")` etc. Values are stripped but keep their case.
 - **Tests + CI exist** (`tests/`, `.github/workflows/tests.yml`, `requirements-dev.txt`). Run

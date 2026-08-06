@@ -189,7 +189,12 @@ def main():
     # --- Advanced Identity & Access Management ---
     if "iam" in run_modules:
         print("[*] Running Advanced IAM Checks (SoD, Firefighter, Role Expiry, Cross-ID)...")
-        auditor = AdvancedIamAuditor(data, baseline_overrides)
+        # run_context lets the module see whether the deeper permission-level SoD
+        # module ('ara') is actually in this run. Without it, iam deferred whenever
+        # role_auth_values was merely PRESENT — so `--modules iam` stood down in
+        # favour of a module that was not running, and produced no SoD findings.
+        auditor = AdvancedIamAuditor(data, baseline_overrides,
+                                     run_context={"modules": set(run_modules)})
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")

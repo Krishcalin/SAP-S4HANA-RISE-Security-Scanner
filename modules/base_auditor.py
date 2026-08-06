@@ -18,10 +18,30 @@ class BaseAuditor:
     SEVERITY_LOW = "LOW"
     SEVERITY_INFO = "INFO"
 
-    def __init__(self, data: Dict[str, Any], baseline_overrides: Dict = None):
+    def __init__(self, data: Dict[str, Any], baseline_overrides: Dict = None,
+                 run_context: Dict[str, Any] = None):
         self.data = data
         self.overrides = baseline_overrides or {}
+        #: What else is happening in this run. Currently carries
+        #: ``{"modules": {<module keys>}}`` so a module can tell whether a DEEPER
+        #: module is also running and defer to it.
+        #:
+        #: A module must never infer that a sibling ran just because that
+        #: sibling's input data is present: `--modules iam` supplies the data
+        #: without running `ara`, and deferring on data presence alone silently
+        #: drops the capability with nothing anywhere saying so.
+        #:
+        #: When this is empty the caller did not tell us, and a module should
+        #: fall back to its historical behaviour rather than guess.
+        self.run_context = run_context or {}
         self.findings: List[Dict[str, Any]] = []
+
+    def module_is_running(self, module_key: str) -> Optional[bool]:
+        """Is `module_key` part of this run? ``None`` when the caller did not say."""
+        modules = self.run_context.get("modules")
+        if modules is None:
+            return None
+        return module_key in modules
 
     def finding(
         self,

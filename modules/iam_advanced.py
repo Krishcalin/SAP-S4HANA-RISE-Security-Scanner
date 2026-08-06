@@ -203,6 +203,64 @@ class AdvancedIamAuditor(BaseAuditor):
     #  SOD-*: Segregation of Duties Conflict Detection
     # ════════════════════════════════════════════════════════════════
 
+    def _defer_to_ara(self) -> bool:
+        """Should this coarse SoD check stand down in favour of the 'ara' module?
+
+        The Access Risk Analysis module performs PERMISSION-level SoD from the
+        AGR_1251 export (`role_auth_values.csv`) — object/field/activity precision
+        that suppresses the display-only false positives this transaction-level
+        check cannot avoid. Where both could speak, the deeper one should.
+
+        TWO THINGS THIS GETS RIGHT THAT THE ORIGINAL DID NOT
+        -----------------------------------------------------
+        1. **Deferring on data presence alone was wrong.** `role_auth_values.csv`
+           being loaded does not mean `ara` is RUNNING. `--modules iam` supplies
+           exactly that data and never runs `ara`, so this check stood down in
+           favour of a module that was not there and the run produced no SoD
+           findings whatsoever. Now it only defers when `ara` is genuinely in the
+           run; when the caller does not say, it keeps the historical behaviour
+           rather than guessing.
+
+        2. **A silent stand-down is indistinguishable from a clean bill of
+           health.** Whenever this check does defer it now says so, as an INFO
+           finding, so "no SoD findings here" can never be mistaken for "no SoD
+           conflicts". That is the same discipline as the coverage manifest:
+           absence must be stated, not implied.
+        """
+        if not self.data.get("role_auth_values"):
+            return False                    # nothing deeper is possible; run.
+
+        ara_running = self.module_is_running("ara")
+        if ara_running is False:
+            return False                    # ara was excluded; we are the only SoD.
+
+        self.finding(
+            check_id="IAM-SOD-DEFERRED",
+            title="Transaction-level SoD deferred to permission-level analysis",
+            severity=self.SEVERITY_INFO,
+            category="Advanced IAM",
+            description=(
+                "Transaction-level Segregation of Duties analysis did not run here "
+                "because the AGR_1251 authorization export (role_auth_values) is "
+                "available and the Access Risk Analysis module performs the same "
+                "analysis at permission level — matching on authorization object, "
+                "field and activity rather than transaction code alone. That is "
+                "strictly more precise and does not raise the display-only false "
+                "positives this coarser check produces. "
+                "SoD results for this run are the ARA-* findings."
+            ),
+            affected_items=["Advanced IAM SoD rules (IAM-SOD-*)"],
+            remediation=(
+                "No action. This records why one module is quiet so that an empty "
+                "IAM-SOD-* result is not read as an absence of SoD conflicts. To "
+                "run the coarser transaction-level check anyway, exclude the 'ara' "
+                "module or omit the role_auth_values export."
+            ),
+            references=["SAP Security Baseline — Segregation of Duties"],
+            scope="aggregate",
+        )
+        return True
+
     def check_sod_conflicts(self):
         """
         Detect SoD conflicts by checking if any user has t-codes or
@@ -214,12 +272,7 @@ class AdvancedIamAuditor(BaseAuditor):
           - OR sod_matrix.csv (pre-computed: USERNAME, TCODE list)
           - OR sod_ruleset.json (custom rules overriding defaults)
         """
-        # The Access Risk Analysis module ('ara') performs permission-level SoD from
-        # the AGR_1251 export (role_auth_values.csv) — object/field/activity precision
-        # that suppresses the display-only false positives this transaction-level check
-        # cannot. When that export is present, defer to it to avoid duplicate, coarser
-        # findings; this coarse check remains as a fallback for matrix/role-name-only data.
-        if self.data.get("role_auth_values"):
+        if self._defer_to_ara():
             return
 
         # Load custom SoD rules if provided

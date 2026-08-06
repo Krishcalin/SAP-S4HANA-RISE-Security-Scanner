@@ -381,9 +381,15 @@ Re-verified end to end after conversion: scanning the same bundle twice still gi
 
 ## Immediate next actions
 
-1. Fix or document the dead path at `modules/iam_advanced.py:185` — it returns early and emits
-   nothing whenever `role_auth_values.csv` is present, so its SoD rules never fire on a complete
-   export (the deeper `ara` module takes over, which is why nothing looks wrong)
+1. ~~Fix the dead SoD path~~ ✅ **DONE.** The deferral was correct in intent — `ara` does SoD at
+   permission level, which is strictly better — but keyed on the wrong condition and said
+   nothing. It stood down whenever `role_auth_values.csv` was *loaded*, which is not the same as
+   `ara` *running*: `--modules iam` supplies that export and never runs `ara`, so SoD analysis
+   silently produced **nothing** and an empty result read as "no SoD conflicts".
+   `BaseAuditor` now carries a `run_context`, so the module defers only when the deeper module is
+   genuinely in the run, and **says so** with an INFO finding when it does. A caller that
+   supplies no context keeps the historical behaviour rather than having it changed underneath
+   it. Measured: `--modules iam` went from **0 SoD findings to 7**.
 2. Review two judgement calls the conversion surfaced, both defensible and both worth a second
    opinion: BTP users typed as `user` rather than a separate `btp_user` (deliberate — the check
    exists to treat the S/4 and BTP user masters as one identity namespace), and the GRC access-
