@@ -32,7 +32,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from server import analytics, auth, crq, db, graph, ingest, queries, sapcontent
+from server import analytics, auth, crq, db, graph, ingest, prose, queries, sapcontent
 from server.config import settings
 
 log = logging.getLogger(__name__)
@@ -62,6 +62,11 @@ def _money(value: Any) -> str:
 
 
 TEMPLATES.env.globals["money"] = _money
+#: Authored text carries its own structure in newlines; HTML throws them away.
+#: See server/prose.py for why remediation becomes a real <ol> rather than
+#: `white-space: pre-line`.
+TEMPLATES.env.filters["steps"] = prose.steps
+TEMPLATES.env.filters["paragraphs"] = prose.paragraphs
 
 app = FastAPI(title="MonitorRisk — SAP Threat, Vulnerabilities & GRC",
               docs_url="/api/docs")

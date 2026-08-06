@@ -29,7 +29,13 @@
   <strong>{{ d.confidence_note }}</strong>
 </div>
 
-<div class="card"><p style="margin:0">{{ d.narrative }}</p></div>
+{# Same treatment as the finding narrative. No template in data/attack_paths.json
+   contains a newline today, so this changes nothing on screen — it is here so the
+   first multi-paragraph narrative someone writes does not silently collapse into a
+   wall, which is exactly how the remediation panel broke. #}
+<div class="card prose">
+  {% for para in d.narrative | paragraphs %}<p>{{ para }}</p>{% endfor %}
+</div>
 
 <h2>The route</h2>
 {# The graph renders only HERE — inside one selected path, at six to ten nodes.

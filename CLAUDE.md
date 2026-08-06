@@ -243,6 +243,7 @@ target's current one. The audit log records the event and never the value.
 | `schema.sql` | 20 tables. Single-tenant (no `tenant_id`); `landscape` preserves the option. Idempotent — re-running it upgrades an existing deployment. |
 | `db.py` | psycopg pool, `scope_clause` (**the one place** row scoping is expressed), `audit`. |
 | `auth.py` | PBKDF2 passwords, sessions, ranked roles, per-system scope, password change/reset and the forced-change flag. |
+| `prose.py` | Jinja filters `steps` and `paragraphs`. The findings KB authors remediation as a numbered list and risk as prose, both separated by a single `\n`; HTML collapses those to spaces, so a `<p>` turns a ten-step procedure into a wall. `steps` returns None unless the text is a clean 1..N run — an `<ol>` renumbers, so an excerpt starting at 3 must NOT become one — and the caller falls back to paragraphs. |
 | `static/` | Brand assets, mounted at `/static` and deliberately UNAUTHENTICATED — the sign-in page carries the logo, so a gated mount shows a broken image to everyone not yet signed in. Derived, not hand-made: see below. |
 | `queries.py` | Every read of findings/runs/systems, plus assignment, bulk actions and saved views. HTML pages and the JSON API call the same functions — that is what keeps "everything the console shows is in the API" structural. |
 | `enrich.py` | Priority tier, owning team, **remediation owner** and SLA window. The team map is a prefix table; the ownership map is deployment-mode dependent. |

@@ -103,13 +103,30 @@
 </div>
 
 <h2>Risk</h2>
-<div class="card"><p style="margin:0">{{ finding.risk_narrative }}</p></div>
+{# Authored one paragraph per line. Inside a single <p> the browser collapses every
+   newline to a space and the reader gets a wall of text. #}
+<div class="card prose">
+  {% for para in finding.risk_narrative | paragraphs %}<p>{{ para }}</p>{% endfor %}
+</div>
 
 <h2>Remediation</h2>
-<div class="card">
-  <p style="margin:0 0 10px">{{ finding.remediation }}</p>
+<div class="card prose">
+  {# A numbered procedure is a list, so it is marked up as one: the steps get hanging
+     indentation, and a screen reader announces "list, N items" instead of reading a
+     paragraph. `steps` returns nothing when the text is not a clean 1..N run — an
+     <ol> would silently renumber it — and the text then renders exactly as written. #}
+  {% set remediation_steps = finding.remediation | steps %}
+  {% if remediation_steps %}
+  <ol class="steps">
+    {% for step in remediation_steps %}<li>{{ step }}</li>{% endfor %}
+  </ol>
+  {% else %}
+    {% for para in finding.remediation | paragraphs %}<p>{{ para }}</p>{% endfor %}
+  {% endif %}
   {% if finding.remediation_owner == 'ticket_to_sap' %}
-  <h3>Service request text</h3>
+  {# .card h3 has no top margin, so without this the heading butts against the
+     last step of the list above it. #}
+  <h3 style="margin-top:18px">Service request text</h3>
   <pre class="mono small" style="white-space:pre-wrap;background:var(--panel-2);
        padding:12px;border-radius:6px;margin:0">System: {{ finding.sid }}/{{ finding.system_client }}
 Check:  {{ finding.check_id }} — {{ finding.title }}

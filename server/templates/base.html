@@ -142,6 +142,16 @@ button.ghost,.btn.ghost{background:var(--panel-2);color:var(--ink);border:1px so
 .tier-P3{background:var(--panel-2);color:var(--ink-dim);border:1px solid var(--line)}
 .tier-P4{background:transparent;color:var(--ink-faint);border:1px dashed var(--line)}
 
+/* Authored prose: risk narratives and remediation procedures. Paragraphs are
+   spaced rather than run together, and a numbered procedure is a real <ol> so a
+   step that wraps hangs under its own text instead of under its number. */
+.prose > p{margin:0 0 10px}
+.prose > p:last-child{margin-bottom:0}
+ol.steps{margin:0;padding-left:1.6em}
+ol.steps li{margin:0 0 9px;padding-left:2px}
+ol.steps li:last-child{margin-bottom:0}
+ol.steps li::marker{color:var(--ink-faint);font-variant-numeric:tabular-nums}
+
 .muted{color:var(--ink-dim)}
 .faint{color:var(--ink-faint)}
 .small{font-size:12px}
