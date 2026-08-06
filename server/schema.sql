@@ -1,5 +1,5 @@
 -- =====================================================================
---  SAP Security Platform — schema
+--  MonitorRisk — schema
 --  PostgreSQL 16
 --
 --  SINGLE-TENANT PER DEPLOYMENT (decided 2026-08-05).

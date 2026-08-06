@@ -94,6 +94,45 @@ docker compose exec app python -m server.cli set-password admin --generate
 `DB_DSN` and `SESSION_SECRET` have **no defaults** — a deployment that forgets them must fail
 at startup rather than silently run on a value published in this repo.
 
+### Branding
+
+The web console is **MonitorRisk**. `tests/test_branding.py` asserts the retired names
+(`SAPSec`, `SAP Security Platform`) appear in no template and that every page template
+carries the brand in its `{% block title %}` — checked against the template tree, so a
+NEW page that ships with an old name fails too.
+
+Brand assets are **derived, not drawn**. `docs/brand/monitorrisk-master.png` is the
+supplied artwork; `server/static/*` is generated from it:
+
+```bash
+python tools/build_brand_assets.py            # rebuild
+python tools/build_brand_assets.py --check    # fail if the committed assets drift
+```
+
+That tool needs Pillow. It is a build-time dependency and is deliberately NOT in
+`requirements.txt` — the container never runs it, and the derived PNGs are committed so
+a deployment needs nothing but the repo. The runtime dependency count stays at five;
+`StaticFiles` ships inside Starlette, which FastAPI already pulls in.
+
+Why the master is not served directly: it sits on a textured cream field, so on the dark
+console it is a bright slab whose cream never quite matches a CSS colour — there is
+always a visible rectangle at the seam. The build keys the cream out to transparency by
+un-mixing each pixel against the two brand colours rather than thresholding luminance
+(the brand blue sits midway between the cream and the navy in luma, so a luma key makes
+half the wordmark semi-transparent).
+
+Two places consume it differently, and the difference is forced by contrast:
+- **Sign-in** uses the full lockup on a cream panel. The wordmark is navy `#0b246a`;
+  navy on `#0f1419` is unreadable, so the panel keeps the tone the artwork was drawn for.
+- **The header** uses the shield mark alone, which does survive a dark background, in
+  two variants swapped by `<picture>`. That `<picture>` is written "backwards" on
+  purpose — see the comment in `base.html`; it mirrors the stylesheet, where `:root` is
+  dark and only `prefers-color-scheme: light` overrides.
+
+**Not rebranded:** the CLI's HTML/PDF/PPTX reports carry a different brand,
+`PhalanxCyber`, with its own logo art in `assets/` embedded as data URIs. That is a
+separate decision from the console name and was left alone.
+
 **Passwords never come from argv** — an argument is visible in `ps` and in shell history, so
 `--password` does not exist and must not be added. `_read_password` takes a TTY prompt, a pipe,
 or `--generate`. `--generate` also sets `must_change_password`: it printed the secret to a
@@ -204,6 +243,7 @@ target's current one. The audit log records the event and never the value.
 | `schema.sql` | 20 tables. Single-tenant (no `tenant_id`); `landscape` preserves the option. Idempotent — re-running it upgrades an existing deployment. |
 | `db.py` | psycopg pool, `scope_clause` (**the one place** row scoping is expressed), `audit`. |
 | `auth.py` | PBKDF2 passwords, sessions, ranked roles, per-system scope, password change/reset and the forced-change flag. |
+| `static/` | Brand assets, mounted at `/static` and deliberately UNAUTHENTICATED — the sign-in page carries the logo, so a gated mount shows a broken image to everyone not yet signed in. Derived, not hand-made: see below. |
 | `queries.py` | Every read of findings/runs/systems, plus assignment, bulk actions and saved views. HTML pages and the JSON API call the same functions — that is what keeps "everything the console shows is in the API" structural. |
 | `enrich.py` | Priority tier, owning team, **remediation owner** and SLA window. The team map is a prefix table; the ownership map is deployment-mode dependent. |
 | `analytics.py` | The mitigation journey: MTTR, burndown, aging, backlog trajectory, team and domain scorecards. |

@@ -1,19 +1,46 @@
 {% extends "base.html" %}
-{% block title %}Sign in — SAPSec{% endblock %}
+{% block title %}Sign in — MonitorRisk{% endblock %}
+{% block mainclass %}bleed{% endblock %}
 {% block body %}
-<div style="max-width:360px;margin:9vh auto">
-  <div class="brand" style="font-size:22px;margin-bottom:6px">SAP<span>Sec</span></div>
-  <p class="sub small">Offline SAP security assessment and remediation tracking.</p>
-  {% if error %}<div class="banner bad">{{ error }}</div>{% endif %}
-  <form method="post" action="/login" class="card">
-    <input type="hidden" name="next" value="{{ next }}">
-    <label class="small faint">Username</label>
-    <input type="text" name="username" autofocus required autocomplete="username"
-           style="width:100%;margin:4px 0 12px">
-    <label class="small faint">Password</label>
-    <input type="password" name="password" required autocomplete="current-password"
-           style="width:100%;margin:4px 0 16px">
-    <button type="submit" style="width:100%">Sign in</button>
-  </form>
+
+{# Form first in the DOM, brand second. That is the left/right order visually AND
+   the order a keyboard or screen reader walks: the thing you came to do comes
+   before the thing that tells you where you are. #}
+<div class="auth">
+
+  <div class="auth-form">
+    <div>
+      <h1 style="font-size:20px;margin:0 0 4px">Sign in</h1>
+      <p class="sub small">SAP threat, vulnerability and GRC posture — assessed
+        offline, tracked to closure.</p>
+
+      {% if error %}<div class="banner bad">{{ error }}</div>{% endif %}
+
+      <form method="post" action="/login" class="card">
+        <input type="hidden" name="next" value="{{ next }}">
+        <label class="small faint" for="username">Username</label>
+        <input type="text" id="username" name="username" autofocus required
+               autocomplete="username" style="width:100%;margin:4px 0 12px">
+        <label class="small faint" for="password">Password</label>
+        <input type="password" id="password" name="password" required
+               autocomplete="current-password" style="width:100%;margin:4px 0 16px">
+        <button type="submit" style="width:100%">Sign in</button>
+      </form>
+
+      <p class="small faint" style="margin:14px 0 0">
+        Forgotten it? There is no self-service reset — an unauthenticated reset is a
+        way in. Ask an administrator, who can issue you a new one from their
+        <strong>Your account</strong> page.
+      </p>
+    </div>
+  </div>
+
+  <div class="auth-brand">
+    {# Intrinsic width/height are the asset's real pixels, so the panel reserves its
+       space before the image loads and the form does not jump. #}
+    <img src="/static/monitorrisk-logo.png" width="1100" height="389"
+         alt="MonitorRisk — SAP Threat, Vulnerabilities &amp; GRC">
+  </div>
+
 </div>
 {% endblock %}

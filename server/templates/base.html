@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}SAP Security Platform{% endblock %}</title>
+<title>{% block title %}MonitorRisk{% endblock %}</title>
+<link rel="icon" href="/static/favicon.ico" sizes="any">
 <style>
 :root{
   --bg:#0f1419; --panel:#161c24; --panel-2:#1c242e; --line:#26313d;
@@ -27,8 +28,14 @@ code,.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size
 
 header.top{display:flex;align-items:center;gap:22px;padding:0 22px;height:54px;
   background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
-.brand{font-weight:650;letter-spacing:-.01em;white-space:nowrap}
-.brand span{color:var(--accent)}
+.brand{display:flex;align-items:center;gap:9px;
+  font-weight:650;letter-spacing:-.01em;white-space:nowrap}
+.brand img{width:22px;height:22px;display:block;flex:none}
+/* The wordmark is ONE flex item on purpose. A bare text node inside a flex
+   container becomes an anonymous item of its own, so `Monitor<span>Risk</span>`
+   would take the 9px gap between the two halves and render "Monitor Risk". */
+.brand .wordmark{display:block}
+.brand .wordmark span{color:var(--accent)}
 nav.main{display:flex;gap:4px;flex:1}
 nav.main a{padding:6px 12px;border-radius:6px;color:var(--ink-dim);font-weight:500}
 nav.main a:hover{background:var(--panel-2);text-decoration:none;color:var(--ink)}
@@ -38,6 +45,32 @@ nav.main a.on{background:var(--accent-dim);color:var(--accent)}
   padding:2px 7px;border-radius:99px;background:var(--panel-2);border:1px solid var(--line)}
 
 main{max-width:1440px;margin:0 auto;padding:24px 22px 64px}
+main.bleed{max-width:none;margin:0;padding:0}
+
+/* Sign-in: form on the left, brand on the right.
+   The brand panel keeps the logo's own cream field instead of the page
+   background. That is not decoration — the wordmark is navy (#0b246a), and navy
+   on the dark console background is illegible. The shield mark survives a dark
+   background on its own, which is why the header uses the mark and this panel
+   uses the full lockup on cream. */
+.auth{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);min-height:100vh}
+.auth-form{display:flex;align-items:center;justify-content:center;padding:32px}
+.auth-form > div{width:100%;max-width:340px}
+/* #f3f2ee is the artwork's own field colour, kept so the lockup sits in the tone it
+   was drawn for. The border is not ornament: in the LIGHT theme the page background
+   (#f6f8fa) and this cream are a couple of percent apart, and without an edge the
+   split reads as a rendering fault rather than a panel. */
+.auth-brand{background:#f3f2ee;border-left:1px solid var(--line);
+  display:flex;align-items:center;justify-content:center;padding:clamp(28px,5vw,64px)}
+.auth-brand img{width:100%;max-width:500px;height:auto}
+/* Narrow: one column. The brand moves ABOVE the form rather than below it —
+   below the fold it may as well not be there. */
+@media (max-width:860px){
+  .auth{grid-template-columns:1fr;min-height:0}
+  .auth-brand{order:-1;padding:26px 22px;border-left:0;border-bottom:1px solid var(--line)}
+  .auth-brand img{max-width:300px}
+  .auth-form{padding:26px 22px 48px}
+}
 h1{font-size:21px;margin:0 0 4px;letter-spacing:-.01em}
 h2{font-size:15px;margin:26px 0 10px;color:var(--ink)}
 .sub{color:var(--ink-dim);margin:0 0 20px}
@@ -125,7 +158,19 @@ dl.kv dd{margin:0}
 <body>
 {% if user %}
 <header class="top">
-  <div class="brand">SAP<span>Sec</span></div>
+  {# The <source> selects the LIGHT mark and the <img> falls back to the dark one,
+     which is the inverse of how it reads at first glance. It mirrors the
+     stylesheet exactly: :root is the dark theme and only `prefers-color-scheme:
+     light` overrides it. Written the other way round, a browser reporting
+     "no-preference" would get the dark page CSS and the navy mark, which is
+     invisible on it. #}
+  <div class="brand">
+    <picture>
+      <source srcset="/static/monitorrisk-mark.png" media="(prefers-color-scheme: light)">
+      <img src="/static/monitorrisk-mark-dark.png" alt="" width="22" height="22">
+    </picture>
+    <span class="wordmark">Monitor<span>Risk</span></span>
+  </div>
   <nav class="main">
     <a href="/" class="{{ 'on' if nav=='dash' }}">Dashboard</a>
     <a href="/findings" class="{{ 'on' if nav=='findings' }}">Findings</a>
@@ -147,6 +192,6 @@ dl.kv dd{margin:0}
   </div>
 </header>
 {% endif %}
-<main>{% block body %}{% endblock %}</main>
+<main class="{% block mainclass %}{% endblock %}">{% block body %}{% endblock %}</main>
 </body>
 </html>

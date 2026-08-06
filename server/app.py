@@ -29,6 +29,7 @@ from urllib.parse import parse_qs, quote, urlencode, urlparse
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from server import analytics, auth, crq, db, graph, ingest, queries, sapcontent
@@ -62,7 +63,17 @@ def _money(value: Any) -> str:
 
 TEMPLATES.env.globals["money"] = _money
 
-app = FastAPI(title="SAP Security Platform", docs_url="/api/docs")
+app = FastAPI(title="MonitorRisk — SAP Threat, Vulnerabilities & GRC",
+              docs_url="/api/docs")
+
+#: Brand assets. Deliberately UNAUTHENTICATED: the sign-in page carries the logo,
+#: so gating this mount would render a broken image to everyone not yet signed in.
+#: Nothing else is served from here, and nothing here is derived from scan data.
+#: StaticFiles ships inside Starlette, which FastAPI already depends on — the
+#: runtime dependency count stays at five.
+app.mount("/static",
+          StaticFiles(directory=str(Path(__file__).with_name("static"))),
+          name="static")
 
 #: Scans are CPU-bound Python; they must not run on the event loop or a single
 #: upload would freeze every other user's console.

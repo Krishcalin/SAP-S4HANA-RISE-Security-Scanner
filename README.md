@@ -59,7 +59,8 @@ docker compose exec app python -m server.cli create-user admin admin --generate
 docker compose exec app python -m server.cli add-landscape "Acme Production" --mode rise_pce
 ```
 
-Open <http://127.0.0.1:8000> and sign in. `--generate` prints a password to the terminal, so it
+Open <http://127.0.0.1:8000> and sign in — the console is branded **MonitorRisk**.
+`--generate` prints a password to the terminal, so it
 now lives in scrollback and in `docker compose logs` — the console therefore holds that account
 at **Your account** until it is replaced. Every page and every JSON endpoint stays closed until
 then, so the requirement cannot be scripted around.

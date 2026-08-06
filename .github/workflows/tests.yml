@@ -169,6 +169,29 @@ jobs:
           PY
 
   # ------------------------------------------------------------------ #
+  #  Brand asset drift — the served PNGs must match the master         #
+  # ------------------------------------------------------------------ #
+  # server/static/* is DERIVED from docs/brand/monitorrisk-master.png. The
+  # derived files are committed so a deployment — and every other CI job —
+  # needs nothing but the repo. But a committed binary with no provenance is
+  # exactly the thing nobody notices going stale, so the same rule as the SAP
+  # catalogue above applies: if it is derived, CI re-derives it.
+  #
+  # Pillow is installed HERE and nowhere else. It is a build-time tool, not a
+  # runtime dependency, and requirements.txt stays at five packages.
+  brand-assets:
+    name: brand assets match the master
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet Pillow
+      - name: Re-derive the brand assets and compare
+        run: python tools/build_brand_assets.py --check
+
+  # ------------------------------------------------------------------ #
   #  Server — needs a real PostgreSQL                                  #
   # ------------------------------------------------------------------ #
   server:
