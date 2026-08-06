@@ -102,6 +102,73 @@ jobs:
           PY
 
   # ------------------------------------------------------------------ #
+  #  SAP content drift — the catalogue must stay current               #
+  # ------------------------------------------------------------------ #
+  # data/sap_baseline_requirements.json is DERIVED from SAP's Apache-2.0
+  # policy repository. Vendoring it keeps the tool working offline and
+  # air-gapped, which is the whole product premise — but a vendored copy
+  # of someone else's content goes stale silently, and a coverage page
+  # measured against a stale denominator is worse than none.
+  #
+  # So CI re-derives it from source and fails on any difference. That is
+  # also free version currency: SAP updates these policies on its own
+  # schedule and the build tells us the day it happens.
+  #
+  # `continue-on-error` is deliberately NOT set. If the fetch breaks, the
+  # check must fail loudly rather than quietly stop verifying.
+  sap-content:
+    name: SAP baseline catalogue is current
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fetch SAP's published policy repository
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --filter=blob:none --sparse \
+            https://github.com/SAP-samples/frun-csa-policies-best-practices.git /tmp/sappol
+          cd /tmp/sappol
+          git sparse-checkout set BaselinePolicies Schema
+          echo "policy files: $(find . -name '*.xml' | wc -l)"
+
+      - name: Re-derive the catalogue and compare
+        run: |
+          python - <<'PY'
+          import json, sys
+          from pathlib import Path
+          sys.path.insert(0, ".")
+          from server.sapcontent import build_catalogue, load_catalogue
+
+          fresh = build_catalogue(Path("/tmp/sappol"))
+          stored = load_catalogue()
+
+          def norm(cat):
+              # Compare the CONTENT, not the run-to-run metadata.
+              return {"requirements": cat.get("requirements", []),
+                      "policies": cat.get("policies", []),
+                      "counts": cat.get("_meta", {}).get("counts", {})}
+
+          if norm(fresh) != norm(stored):
+              fr = {r["requirement"] for r in fresh["requirements"]}
+              st = {r["requirement"] for r in stored["requirements"]}
+              print("::error::data/sap_baseline_requirements.json is out of date with "
+                    "SAP's published policies. The coverage page is measured against "
+                    "this catalogue, so a stale copy misreports coverage.")
+              if fr - st:
+                  print(f"  SAP added:   {sorted(fr - st)}")
+              if st - fr:
+                  print(f"  SAP removed: {sorted(st - fr)}")
+              print(f"  counts stored={stored.get('_meta',{}).get('counts')} "
+                    f"fresh={fresh['_meta']['counts']}")
+              print("  Regenerate with: python -m server.cli rebuild-sap-catalogue /tmp/sappol")
+              raise SystemExit(1)
+          print(f"catalogue current: {fresh['_meta']['counts']}")
+          PY
+
+  # ------------------------------------------------------------------ #
   #  Server — needs a real PostgreSQL                                  #
   # ------------------------------------------------------------------ #
   server:

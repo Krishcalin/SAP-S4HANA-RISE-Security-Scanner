@@ -355,7 +355,64 @@ attack-path page.
 
 ---
 
-## Phase 5 — Content: adopt SAP's own catalogue
+## Phase 5 — Content: adopt SAP's own catalogue ✅ **COMPLETE**
+
+| Component | File | Status |
+|---|---|---|
+| Parser for SAP's Apache-2.0 CSA policies | `server/sapcontent.py` | ✅ |
+| Derived requirement catalogue (vendored) | `data/sap_baseline_requirements.json` | ✅ |
+| Check → SAP requirement mapping | `sapcontent.CHECK_TO_REQUIREMENT` | ✅ |
+| `/coverage` — the published catalogue **and its gaps** | `templates/coverage.html` | ✅ |
+| CI job re-derives from SAP and fails on drift | `.github/workflows/tests.yml` | ✅ |
+| `rebuild-sap-catalogue` CLI command | `server/cli.py` | ✅ |
+| Static check-id collision guard | `tests/test_check_id_uniqueness.py` | ✅ |
+
+### Measured against SAP's real files
+
+Parsed from **58 policy files** actually fetched from
+`SAP-samples/frun-csa-policies-best-practices`:
+
+```
+38 requirement families · 351 check items · CRITICAL 97 / STANDARD 175 / EXTENDED 79
+we cover 17 of 38 · 162 of our checks go beyond the Baseline entirely
+uncovered by stack: Java 10 · ABAP 4 · HANA 3 · BTP 2 · Other 2
+```
+
+**Ten of the 21 gaps are NetWeaver Java**, which this tool deliberately does not cover. The
+`/coverage` page publishes that rather than hiding it — a coverage page that lists only what
+you cover is marketing; one that lists what you do not is evidence.
+
+### A number we deliberately do not publish
+
+The research reported the SAP Security Baseline as **214 in-scope control points**
+(69/92/53) — the yardstick the incumbent chose. Parsing SAP's published policies gives
+**351 check items across 38 families** (97/175/79). **These are different units** and do not
+reconcile: a "control point" in the Baseline document is not a `checkitem` in the CSA
+policies. The catalogue carries that warning inline, and no percentage is published against
+214. The earlier instruction — *no coverage claim against SAP Note 3250501 until someone with
+an S-user reads it* — also still stands.
+
+### Three defects found while building it
+
+**A check-id collision I introduced.** `BASELINE-011` was already taken by the password-hash
+check when I used it for the new RFC-callback check. My `grep | tail -5` had not shown it.
+Renumbered to `BASELINE-012`, and there is now a static guard — the runtime suite could never
+have caught it, because the two fire on different conditions and `sample_data` triggers only
+one.
+
+**A parser bug that would have flattered us.** SAP uses *both* separators after the
+technology letter — `CRITAU-A_a.1` and `NETENC-O.a.1` — so accepting only the underscore
+silently dropped `NETENC-O`, `OBSCNT-A` and `SECUPD-H`. That shrinks the published
+denominator and makes coverage look **better** than it is, which is the one direction an
+error here must never go.
+
+**An untiered requirement.** `SECUPD-A` carries no priority tag at all in SAP's own files.
+It is recorded as `None` and rendered "untiered" rather than assigned a tier — inventing one
+for SAP's content would be exactly the fabrication this project forbids.
+
+---
+
+## Phase 5 — original scope (for reference)
 
 **Depends on:** Phase 1. The structural fix for the invented-identifier failure mode.
 

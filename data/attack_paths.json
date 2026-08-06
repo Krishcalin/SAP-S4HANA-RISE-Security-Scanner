@@ -50,7 +50,7 @@
         {"name": "Outbound route to a less-protected system", "required": true, "cut": false,
          "checks": ["NET-001", "NET-002"], "node_types": ["destination"]},
         {"name": "Callback protection not enforced", "required": true, "cut": true,
-         "checks": ["BASELINE-011"], "node_types": ["parameter_name"],
+         "checks": ["BASELINE-012"], "node_types": ["parameter_name"],
          "why_cut": "rfc/callback_security_method = 3 plus a per-destination allowlist rejects the callback outright. Until this check existed the path's only cut was unasserted — the graph could show the path but never show it closed."},
         {"name": "Remote callable surface is unrestricted", "required": false, "cut": true,
          "checks": ["TRUST-007"], "node_types": ["parameter_name"],

@@ -31,7 +31,7 @@ from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile, 
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from server import analytics, auth, crq, db, graph, ingest, queries
+from server import analytics, auth, crq, db, graph, ingest, queries, sapcontent
 from server.config import settings
 
 log = logging.getLogger(__name__)
@@ -261,6 +261,29 @@ def api_paths(user: Dict[str, Any] = Depends(current_user),
     return {"summary": graph.path_summary(scope),
             "paths": graph.list_paths(scope, include_closed=include_closed),
             "chokepoints": graph.chokepoints(scope)}
+
+
+@app.get("/coverage", response_class=HTMLResponse)
+def coverage_page(request: Request, user: Dict[str, Any] = Depends(current_user)):
+    """The published check catalogue and its coverage of SAP's own Baseline.
+
+    Coverage is computed from the check ids actually in the catalogue, so the page
+    cannot drift from what the scanner really does.
+    """
+    check_ids = [r["check_id"] for r in db.query("SELECT check_id FROM check_definition")]
+    cat = sapcontent.load_catalogue()
+    return TEMPLATES.TemplateResponse(request, "coverage.html", {
+        "user": user,
+        "cov": sapcontent.coverage(check_ids, cat),
+        "meta": cat.get("_meta", {}),
+        "our_checks": len(check_ids),
+    })
+
+
+@app.get("/api/coverage")
+def api_coverage(user: Dict[str, Any] = Depends(current_user)):
+    check_ids = [r["check_id"] for r in db.query("SELECT check_id FROM check_definition")]
+    return sapcontent.coverage(check_ids)
 
 
 @app.get("/v/{slug}")

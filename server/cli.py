@@ -125,6 +125,31 @@ def cmd_scan(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_rebuild_sap_catalogue(args: argparse.Namespace) -> int:
+    """Re-derive data/sap_baseline_requirements.json from a checkout of SAP's
+    Apache-2.0 policy repository.
+
+    Vendored so the tool works offline and air-gapped — the product premise — but a
+    vendored copy of someone else's content goes stale silently, so CI re-derives it
+    and fails on drift. This is the command CI tells you to run.
+
+        git clone --depth 1 https://github.com/SAP-samples/frun-csa-policies-best-practices.git
+        python -m server.cli rebuild-sap-catalogue ./frun-csa-policies-best-practices
+    """
+    from server.sapcontent import build_catalogue, write_catalogue
+    try:
+        cat = build_catalogue(Path(args.repo_dir), args.version)
+    except FileNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    write_catalogue(cat)
+    counts = cat["_meta"]["counts"]
+    print(f"catalogue written: {counts['requirements']} requirements from "
+          f"{counts['policies']} policies ({counts['check_items']} check items, "
+          f"{counts['by_tier']})")
+    return 0
+
+
 def cmd_runs(args: argparse.Namespace) -> int:
     rows = db.query(
         "SELECT r.id, r.status, r.started_at, r.content_sha, s.sid, s.client "
@@ -175,6 +200,11 @@ def main(argv=None) -> int:
     sc.add_argument("--sid", default=None)
     sc.add_argument("--client", default=None)
     sc.set_defaults(fn=cmd_scan)
+
+    rb = sub.add_parser("rebuild-sap-catalogue")
+    rb.add_argument("repo_dir", help="checkout of SAP-samples/frun-csa-policies-best-practices")
+    rb.add_argument("--version", default="v2.4", help="baseline policy version folder")
+    rb.set_defaults(fn=cmd_rebuild_sap_catalogue)
 
     sub.add_parser("runs").set_defaults(fn=cmd_runs)
 

@@ -186,7 +186,7 @@ class BaselineParamAuditor(BaseAuditor):
                          "1": "simulation only — violations are logged, not blocked",
                          "2": "simulation with logging — still not blocked"}[val]
             self._flag(
-                "BASELINE-011",
+                "BASELINE-012",
                 "RFC callback protection not enforced (rfc/callback_security_method)",
                 self.SEVERITY_HIGH,
                 f"rfc/callback_security_method = {val} means {enforcing}. When this "
