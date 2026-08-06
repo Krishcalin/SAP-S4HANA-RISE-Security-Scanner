@@ -194,6 +194,7 @@ at startup rather than silently run on a value published in this repo.
 | `queries.py` | Every read of findings/runs/systems, plus assignment, bulk actions and saved views. HTML pages and the JSON API call the same functions — that is what keeps "everything the console shows is in the API" structural. |
 | `enrich.py` | Priority tier, owning team, **remediation owner** and SLA window. The team map is a prefix table; the ownership map is deployment-mode dependent. |
 | `analytics.py` | The mitigation journey: MTTR, burndown, aging, backlog trajectory, team and domain scorecards. |
+| `graph.py` | Attack paths: template instantiation, cuts, choke points, closure over time. |
 | `crq.py` | FAIR quantification per run — portfolio ALE, the 5 scoped scenarios, the unrouted count, and system criticality as a calibration input. |
 | `coverage.py` | The per-upload manifest. Module→source mapping is **derived from source at import**, never hand-maintained, so it cannot drift. |
 | `ingest.py` | upload → parse → scan → enrich → store → diff → notify. Holds `store_run` (the journey), `_rebase` and `queue_notifications`. |
@@ -232,6 +233,19 @@ at startup rather than silently run on a value published in this repo.
   LOW findings arrived reports progress where none happened. Likewise MTTR counts only findings
   actually **resolved**: including still-open ones as "time so far" makes it fall whenever new
   findings arrive, which is exactly backwards.
+- *A path is a STORED ROW with a lifecycle*, never a query re-run on each page load. That is
+  what makes "severed on 6 August" expressible and what lets a returning path re-open as the
+  SAME path. Its identity is (template, systems) — never the findings, whose churn would retire
+  and re-raise it continuously.
+- *An accepted risk does not close an attack path.* Acceptance is a decision to tolerate a
+  defect, not evidence it is gone; an attacker is unmoved by paperwork. A `mitigated` finding
+  does close it — a compensating control genuinely interrupts the step.
+- *Attack paths are templates in `data/attack_paths.json`, i.e. CONTENT.* Adding a path is a
+  data change, never a code change, and every hop must cite checks that already exist. A
+  required hop citing a check no module emits produces a path that silently never
+  instantiates — `tests/test_graph_paths.py` fails on it.
+- *Never claim a path was traversed.* We hold no connection and never will. Paths carry
+  `derived_from_config` and the UI repeats it.
 - *A saved view stores FILTERS, never rows*, and the filter keys are an allowlist. Opening a
   shared link re-runs the query under the caller's own row scope, so it can never widen access.
 

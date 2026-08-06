@@ -1,0 +1,193 @@
+{
+  "_meta": {
+    "version": "1.0.0",
+    "description": "SAP attack-path templates. CONTENT, not code: a new path is a new entry here, never a code change. Each template names the checks that evidence each hop, so every hop is grounded in a check that already exists and a path can never claim more than the scanner actually detected.",
+    "how_a_path_instantiates": "Every REQUIRED hop must have at least one OPEN finding in the landscape. Optional hops enrich a path but do not gate it. A path is therefore a statement that these conditions CO-EXIST, derived from exported configuration — never a claim that anything was traversed or validated. The console must say so.",
+    "cut_semantics": "A hop marked cut=true appears on every variant of the path, so closing it disconnects the path. Non-cut hops reduce exploitability without severing it. This is the mitigate-vs-additional split: it needs no clever algorithm, only that each hop knows whether removing it disconnects.",
+    "targets_are_fair_scenarios": "Each path ends at a scenario id from data/fair_scenarios.json, so a path terminates in a currency figure rather than a severity word.",
+    "sources": [
+      "CISA AA19-122A (10KBLAZE) — SAP Gateway, SAProuter and Message Server ACL exposure",
+      "CVE-2025-31324 — SAP NetWeaver Visual Composer unauthenticated RCE (CISA KEV, 15 May 2025)",
+      "SAP Help — Trusted system RFC and authorization object S_RFCACL",
+      "SAP Help — Protecting standard users (SAP*, DDIC, EARLYWATCH)",
+      "SAP BTP connectivity documentation — principal propagation via Cloud Connector"
+    ]
+  },
+
+  "paths": [
+    {
+      "id": "SAPPATH-01",
+      "name": "Lower-tier trust pivot into production",
+      "summary": "A non-production system holds a stored-credential or trusted RFC route into production, and the landing authorization is broad enough to act on arrival.",
+      "narrative": "Development and QA systems are routinely less controlled than production, yet a trusted-RFC relationship or a destination carrying stored credentials gives them a route in. Where the target's S_RFCACL is wildcarded, the caller can arrive as any user. This is the demo path: today these appear as unrelated rows across four modules and four severity bands.",
+      "fair_scenario": "SAP-PRIV-03",
+      "severity": "CRITICAL",
+      "crosses_tier": true,
+      "hops": [
+        {"name": "Route from a lower tier exists", "required": true, "cut": false,
+         "checks": ["TRUST-001", "TRUST-003", "NET-001", "TRUST-004"],
+         "node_types": ["trusted_system", "destination"]},
+        {"name": "Caller can arrive as any user", "required": true, "cut": true,
+         "checks": ["AUTH-002"], "node_types": ["role", "auth_object"],
+         "why_cut": "One wildcarded S_RFCACL grant is what lets the inbound call choose its identity. Remove it and every trust route into this system dies at once, however many destinations exist."},
+        {"name": "Arrival identity is privileged", "required": false, "cut": false,
+         "checks": ["USR-002", "USR-001", "STDUSR-002", "STDUSR-003"],
+         "node_types": ["user", "profile"]},
+        {"name": "Transport is unauthenticated or unencrypted", "required": false, "cut": false,
+         "checks": ["NET-003", "TRUST-002"], "node_types": ["destination", "parameter_name"]}
+      ]
+    },
+
+    {
+      "id": "SAPPATH-02",
+      "name": "RFC callback inversion",
+      "summary": "Production's own outbound RFC call becomes the inbound route: the callee calls back on destination BACK, in the context of the production user who made the call.",
+      "narrative": "Directionality is a real property, not decoration. An OUTBOUND destination from production to a weaker system is an INBOUND risk, and neither row is alarming alone — which is exactly the class of risk a flat finding list structurally cannot show.",
+      "fair_scenario": "SAP-INTF-05",
+      "severity": "HIGH",
+      "crosses_tier": true,
+      "hops": [
+        {"name": "Outbound route to a less-protected system", "required": true, "cut": false,
+         "checks": ["NET-001", "NET-002"], "node_types": ["destination"]},
+        {"name": "Callback protection not enforced", "required": true, "cut": true,
+         "checks": ["BASELINE-011"], "node_types": ["parameter_name"],
+         "why_cut": "rfc/callback_security_method = 3 plus a per-destination allowlist rejects the callback outright. Until this check existed the path's only cut was unasserted — the graph could show the path but never show it closed."},
+        {"name": "Remote callable surface is unrestricted", "required": false, "cut": true,
+         "checks": ["TRUST-007"], "node_types": ["parameter_name"],
+         "why_cut": "Activating UCON constrains which function modules are remotely callable at all, which severs the path higher up and more broadly than the callback allowlist."},
+        {"name": "Caller's S_RFC is broad", "required": false, "cut": false,
+         "checks": ["AUTH-006"], "node_types": ["role", "auth_object"]},
+        {"name": "RFC authorization check weakened", "required": false, "cut": false,
+         "checks": ["BASELINE-001"], "node_types": ["parameter_name"]}
+      ]
+    },
+
+    {
+      "id": "SAPPATH-03",
+      "name": "Transport-borne code into production",
+      "summary": "Developer privilege in a lower system becomes arbitrary ABAP running in production, carried by the change process itself.",
+      "narrative": "Every hop is also a change-management control failure, so one path object serves the security buyer and the audit buyer at once. Note that a four-eyes violation is a GOVERNANCE rule, not a technical vulnerability, and it is still a genuine cut — a path model that cannot express process controls as edges would miss it.",
+      "fair_scenario": "SAP-PRIV-03",
+      "severity": "HIGH",
+      "crosses_tier": true,
+      "hops": [
+        {"name": "Route delivers straight to production", "required": true, "cut": true,
+         "checks": ["CODE-TMS-001", "CODE-TMS-005"], "node_types": ["system", "transport_request"],
+         "why_cut": "Removing the direct delivery route forces every change through the intermediate system, which is the cheapest and most auditable single change available."},
+        {"name": "Release and import are not segregated", "required": false, "cut": true,
+         "checks": ["CODE-TMS-003", "CODE-TMS-002"], "node_types": ["user", "transport_request"],
+         "why_cut": "Four-eyes separation on release and import severs the path even where the route remains — a process control acting as a cut edge."},
+        {"name": "Production accepts changes", "required": false, "cut": false,
+         "checks": ["CODE-CLIENT-001", "CODE-SYSCHG-001", "CODE-SYSCHG-002"],
+         "node_types": ["client", "system", "namespace"]},
+        {"name": "Runtime authorization can be bypassed", "required": false, "cut": false,
+         "checks": ["AUTH-001", "AUTH-014", "CODE-DEV-001"], "node_types": ["role", "auth_object"]},
+        {"name": "Change is not attributable", "required": false, "cut": false,
+         "checks": ["CODE-CHG-001", "CODE-CHG-002"], "node_types": ["table"]}
+      ]
+    },
+
+    {
+      "id": "SAPPATH-04",
+      "name": "Exposed surface to OS command execution",
+      "summary": "An unauthenticated gateway, router, message server or ICF service reaches OS-level command execution, and from there the database.",
+      "narrative": "The closest analogue to the cloud archetype — internet, workload, privilege, data — and therefore the one to lead with for a CISO who already thinks in those terms. The entry conditions are CISA-cited rather than asserted.",
+      "fair_scenario": "SAP-RCE-01",
+      "severity": "CRITICAL",
+      "crosses_tier": false,
+      "hops": [
+        {"name": "Unauthenticated entry point exposed", "required": true, "cut": true,
+         "checks": ["INTG-GW-002", "INTG-GW-005", "TRUST-005", "TRUST-010", "TRUST-006",
+                    "TRUST-008", "NET-004", "NET-005", "BASELINE-007"],
+         "node_types": ["gateway", "message_server", "icf_path", "parameter_name"],
+         "why_cut": "A deny-all default in reginfo/secinfo severs the entire gateway branch in one change; deactivating one ICF node severs the web branch."},
+        {"name": "OS command execution reachable", "required": true, "cut": true,
+         "checks": ["AUTH-003", "AUTH-010", "AUTH-011", "JOBCMD-CMD-001", "JOBCMD-CMD-002",
+                    "JOBCMD-CMD-003"],
+         "node_types": ["auth_object", "os_command", "role"],
+         "why_cut": "Withdrawing S_LOG_COM / the external command definition removes the bridge from the application layer to the operating system."},
+        {"name": "Database is reachable and privileged", "required": false, "cut": false,
+         "checks": ["HANADB-USER-001", "HANADB-PRIV-001", "HANADB-PRIV-002", "HANADB-PRIV-004"],
+         "node_types": ["hana_user", "hana_privilege"]},
+        {"name": "Activity would not be recorded", "required": false, "cut": false,
+         "checks": ["HANADB-AUDIT-001", "LOG-AUD-001", "LOG-AUD-002"],
+         "node_types": ["parameter_name"]}
+      ]
+    },
+
+    {
+      "id": "SAPPATH-05",
+      "name": "Cloud identity into the on-premise backend",
+      "summary": "A weak BTP identity control reaches an ABAP backend through the Cloud Connector.",
+      "narrative": "The RISE-specific path, and the one where the incumbent framing of SAP security as ABAP-only is weakest. Modelled as a path, 'no MFA in IAS' stops being a medium-severity checkbox and becomes the first hop of a chain that ends in an on-premise user context.",
+      "fair_scenario": "SAP-INTF-05",
+      "severity": "HIGH",
+      "crosses_tier": true,
+      "hops": [
+        {"name": "Cloud identity is weakly controlled", "required": true, "cut": false,
+         "checks": ["BTP-IAS-003", "BTP-IAS-005", "BTP-IAS-001", "BTP-IAS-002"],
+         "node_types": ["btp_user", "subaccount"]},
+        {"name": "Credential or binding is exposed", "required": false, "cut": false,
+         "checks": ["BTP-DST-001", "BTP-DST-002", "BTP-SB-001", "BTP-SB-002",
+                    "BTP-CPI-003", "BTP-CPI-004"],
+         "node_types": ["btp_destination", "service_binding", "iflow"]},
+        {"name": "Cloud Connector reaches the backend broadly", "required": true, "cut": true,
+         "checks": ["BTP-CC-001", "BTP-CC-002", "BTP-CC-004"],
+         "node_types": ["cc_backend", "subaccount"],
+         "why_cut": "Narrowing one wildcard resource mapping cuts every path through that backend at once, whatever else is misconfigured upstream."},
+        {"name": "Connector itself is vulnerable", "required": false, "cut": false,
+         "checks": ["BTP-CC-008"], "node_types": ["cc_backend"]}
+      ]
+    },
+
+    {
+      "id": "SAPPATH-06",
+      "name": "Business-impact path — no exploit required",
+      "summary": "One person can both create a vendor and pay one. No vulnerability is involved at any step.",
+      "narrative": "The path a cloud CNAPP cannot express at all, because in SAP the crown jewel is not a bucket of PII — it is a business transaction. This is computed at permission level, matching authorization object, field and activity rather than transaction code alone, which is what suppresses the display-only false positives.",
+      "fair_scenario": "SAP-FRAUD-02",
+      "severity": "HIGH",
+      "crosses_tier": false,
+      "hops": [
+        {"name": "A user holds conflicting duties", "required": true, "cut": true,
+         "checks": ["ARA-P2P-01", "ARA-O2C-01", "ARA-R2R-01", "ARA-H2R-01",
+                    "ARA-BASIS-01", "ARA-BASIS-02"],
+         "node_types": ["user", "role"],
+         "why_cut": "Withdrawing one side of the conflict from one role removes the combination. The conflict IS the path."},
+        {"name": "No compensating control is in force", "required": false, "cut": true,
+         "checks": ["GRC-MIT-001", "GRC-MIT-002", "ARA-SCORE-001"],
+         "node_types": ["mitigating_control", "user"],
+         "why_cut": "A valid, unexpired mitigating control severs the business path without changing a single authorization."},
+        {"name": "Financial controls are permissive", "required": false, "cut": false,
+         "checks": ["FIN-PP-001", "FIN-TOL-001", "FIN-DUAL-001", "FIN-CHG-001", "FIN-NR-001"],
+         "node_types": ["posting_period_variant", "tolerance_group", "document_field"]},
+        {"name": "Activity would not be reviewed", "required": false, "cut": false,
+         "checks": ["IAM-REV-001", "IAM-REV-003", "LOG-TBL-001"],
+         "node_types": ["review_campaign", "table"]}
+      ]
+    },
+
+    {
+      "id": "SAPPATH-07",
+      "name": "ABAP to operating system bridge",
+      "summary": "An external OS command definition plus a job that invokes it, in a system where the customer contractually has no OS access.",
+      "narrative": "RISE-specific and underrated. SAP's contract states plainly that customers never get OS access to managed servers — yet a customer-visible ABAP object that executes operating-system commands crosses exactly that boundary. The command and the job are modelled as separate objects so the edge between them is derivable.",
+      "fair_scenario": "SAP-PRIV-03",
+      "severity": "HIGH",
+      "crosses_tier": false,
+      "hops": [
+        {"name": "An external OS command is defined", "required": true, "cut": true,
+         "checks": ["JOBCMD-CMD-001", "JOBCMD-CMD-002", "JOBCMD-CMD-003", "JOBCMD-CMD-004",
+                    "JOBCMD-CMD-005"],
+         "node_types": ["os_command"],
+         "why_cut": "Removing or parameter-locking the command definition closes the bridge regardless of who could have invoked it."},
+        {"name": "Something can invoke it", "required": true, "cut": false,
+         "checks": ["JOBCMD-JOB-001", "JOBCMD-JOB-001B", "JOBCMD-JOB-002", "JOBCMD-JOB-003",
+                    "JOBCMD-JOB-004", "JOBCMD-JOB-005", "AUTH-003"],
+         "node_types": ["job", "user", "auth_object"]},
+        {"name": "It runs as a privileged identity", "required": false, "cut": false,
+         "checks": ["USR-002", "STDUSR-002"], "node_types": ["user", "profile"]}
+      ]
+    }
+  ]
+}

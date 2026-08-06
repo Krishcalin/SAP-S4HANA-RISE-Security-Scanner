@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% set nav = 'paths' %}
+{% set d = path.detail %}
+{% block title %}{{ path.template_id }} — SAPSec{% endblock %}
+{% block body %}
+
+<p class="small"><a href="/paths">&larr; Attack paths</a></p>
+<h1>
+  <span class="pill sev-{{ path.severity }}">{{ path.severity }}</span>
+  {{ d.name }}
+</h1>
+<p class="sub">
+  <span class="mono">{{ path.template_id }}</span>
+  · ends at <span class="mono">{{ path.fair_scenario }}</span>
+  {% if path.scenario_ale %} · exposure {{ money(path.scenario_ale) }}{% endif %}
+  · first seen {{ path.first_seen.strftime('%d %b %Y') }}
+</p>
+
+{% if path.closed_at %}
+<div class="banner" style="border-color:rgba(34,197,94,.45);background:rgba(34,197,94,.08)">
+  <strong>Severed on {{ path.closed_at.strftime('%d %B %Y') }}.</strong>
+  The conditions that formed this route no longer all hold. The row is kept rather
+  than deleted, so the path can be shown to have closed — and would re-open with its
+  history intact if the conditions returned.
+</div>
+{% endif %}
+
+<div class="banner info">
+  <strong>{{ d.confidence_note }}</strong>
+</div>
+
+<div class="card"><p style="margin:0">{{ d.narrative }}</p></div>
+
+<h2>The route</h2>
+{# The graph renders only HERE — inside one selected path, at six to ten nodes.
+   A whole-landscape canvas is the hairball both documented incumbents avoid. #}
+<div class="card" style="overflow-x:auto">
+  <svg viewBox="0 0 {{ 60 + d.hops|length * 190 }} 132" width="100%"
+       style="max-width:{{ 60 + d.hops|length * 190 }}px;min-width:520px" role="img"
+       aria-label="Attack path diagram">
+    <defs>
+      <marker id="ar" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto">
+        <polygon points="0 0, 9 3.5, 0 7" fill="var(--ink-faint)"/>
+      </marker>
+    </defs>
+    {% for h in d.hops %}
+      {% set x = 30 + loop.index0 * 190 %}
+      {% if not loop.first %}
+        <line x1="{{ x - 34 }}" y1="52" x2="{{ x - 8 }}" y2="52"
+              stroke="var(--ink-faint)" stroke-width="1.5" marker-end="url(#ar)"
+              {% if not h.present %}stroke-dasharray="4 3"{% endif %}/>
+      {% endif %}
+      <rect x="{{ x }}" y="24" width="156" height="56" rx="7"
+            fill="{{ 'rgba(244,63,94,.13)' if h.is_cut and h.present
+                     else 'var(--panel-2)' if h.present else 'transparent' }}"
+            stroke="{{ 'var(--crit)' if h.is_cut and h.present
+                       else 'var(--line)' }}"
+            stroke-width="{{ 2 if h.is_cut and h.present else 1 }}"
+            {% if not h.present %}stroke-dasharray="4 3"{% endif %}/>
+      <text x="{{ x + 10 }}" y="44" font-size="10.5" fill="var(--ink)">
+        {{ h.name[:24] }}
+      </text>
+      <text x="{{ x + 10 }}" y="59" font-size="9.5" fill="var(--ink-dim)">
+        {{ h.name[24:46] }}
+      </text>
+      <text x="{{ x + 10 }}" y="73" font-size="9" fill="var(--ink-faint)">
+        {% if h.present %}{{ h.evidence_total }} finding(s){% else %}not present{% endif %}
+      </text>
+      {% if h.is_cut and h.present %}
+      <text x="{{ x + 10 }}" y="17" font-size="9" font-weight="700" fill="var(--crit)">
+        CUT — closing this severs the path
+      </text>
+      {% endif %}
+    {% endfor %}
+    <text x="30" y="112" font-size="9.5" fill="var(--ink-faint)">
+      Solid = condition holds. Dashed = not present. Red = a cut.
+    </text>
+  </svg>
+</div>
+
+<h2>Steps</h2>
+{# The tabular view alongside the diagram: a table of step / object / why this step
+   works is what a Basis reviewer actually pastes into a change ticket, and it
+   renders from stored data with no graph library. #}
+<div class="card wrap" style="padding:0">
+  <table>
+    <thead><tr>
+      <th style="width:34px">#</th><th>Step</th>
+      <th style="width:84px">Required</th><th style="width:70px">Cut</th>
+      <th style="width:90px" class="right">Evidence</th>
+    </tr></thead>
+    <tbody>
+    {% for h in d.hops %}
+    <tr>
+      <td class="mono small faint">{{ loop.index }}</td>
+      <td>
+        <strong>{{ h.name }}</strong>
+        {% if h.why_cut %}<div class="small muted">{{ h.why_cut }}</div>{% endif %}
+        <div class="small faint mono">{{ h.checks|join(' · ') }}</div>
+      </td>
+      <td class="small">{{ 'required' if h.required else 'contributing' }}</td>
+      <td>{% if h.is_cut %}<span class="pill sev-CRITICAL">cut</span>{% else %}
+        <span class="faint small">—</span>{% endif %}</td>
+      <td class="right mono small">
+        {% if h.present %}{{ h.evidence_total }}{% else %}
+        <span class="faint">none</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<h2>Remediation</h2>
+{# The mitigate-vs-additional split, which is what makes a path actionable. It needs
+   no clever algorithm — only that each hop knows whether removing it disconnects. #}
+<div class="grid g2">
+  <div class="card">
+    <h3 style="color:var(--crit)">Severs this path</h3>
+    <p class="small muted" style="margin:-4px 0 10px">
+      Close any one of these and the route is gone.
+    </p>
+    <table>
+      {% for f in findings if f.id in cut_ids %}
+      <tr>
+        <td style="width:118px" class="mono small">
+          <a href="/findings/{{ f.id }}">{{ f.check_id }}</a></td>
+        <td>{{ f.title }}
+          <span class="own own-{{ f.remediation_owner }}">
+            {{ {'customer_fixable':'yours','ticket_to_sap':'SAP',
+                'provider_owned':"SAP's",'not_assessable':'out of reach'}[f.remediation_owner] }}
+          </span></td>
+      </tr>
+      {% else %}
+      <tr><td class="empty small">No cut is currently open for this path.</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  <div class="card">
+    <h3>Reduces risk, but does not sever</h3>
+    <p class="small muted" style="margin:-4px 0 10px">
+      Worth doing. Will not close the route on its own.
+    </p>
+    <table>
+      {% for f in findings if f.id not in cut_ids %}
+      <tr>
+        <td style="width:118px" class="mono small">
+          <a href="/findings/{{ f.id }}">{{ f.check_id }}</a></td>
+        <td>{{ f.title }}</td>
+      </tr>
+      {% else %}
+      <tr><td class="empty small">—</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+
+<h2>All evidence</h2>
+<div class="card wrap" style="padding:0">
+  <table>
+    <thead><tr>
+      <th style="width:88px">Severity</th><th style="width:118px">Check</th>
+      <th>Title</th><th style="width:100px">System</th><th style="width:90px">State</th>
+    </tr></thead>
+    <tbody>
+    {% for f in findings %}
+    <tr>
+      <td><span class="pill sev-{{ f.severity or 'INFO' }}">{{ f.severity }}</span></td>
+      <td class="mono small"><a href="/findings/{{ f.id }}">{{ f.check_id }}</a></td>
+      <td>{{ f.title }}</td>
+      <td class="mono small">{{ f.sid or '—' }}{% if f.client %}/{{ f.client }}{% endif %}</td>
+      <td><span class="pill st st-{{ f.state }}">{{ f.state.replace('_',' ') }}</span></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

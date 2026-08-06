@@ -520,6 +520,20 @@ CREATE INDEX IF NOT EXISTS finding_tier_idx ON finding (landscape_id, priority_t
     WHERE state IN ('open', 'submitted_to_provider');
 
 -- ---------------------------------------------------------------------
+--  Phase 4 columns
+-- ---------------------------------------------------------------------
+
+-- The renderable shape of an instantiated path: its hops, which of them are cuts,
+-- and the evidence behind each. Stored rather than recomputed on read so the path
+-- page can never disagree with the row that carries the path's history.
+ALTER TABLE attack_path ADD COLUMN IF NOT EXISTS detail jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+CREATE INDEX IF NOT EXISTS attack_path_open_idx
+    ON attack_path (landscape_id, severity) WHERE closed_at IS NULL;
+CREATE INDEX IF NOT EXISTS attack_path_closed_idx
+    ON attack_path (closed_at DESC) WHERE closed_at IS NOT NULL;
+
+-- ---------------------------------------------------------------------
 --  Schema version
 -- ---------------------------------------------------------------------
 

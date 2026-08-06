@@ -130,6 +130,7 @@ dl.kv dd{margin:0}
     <a href="/" class="{{ 'on' if nav=='dash' }}">Dashboard</a>
     <a href="/findings" class="{{ 'on' if nav=='findings' }}">Findings</a>
     <a href="/trend" class="{{ 'on' if nav=='trend' }}">Trend</a>
+    <a href="/paths" class="{{ 'on' if nav=='paths' }}">Paths</a>
     <a href="/risk" class="{{ 'on' if nav=='risk' }}">Risk ($)</a>
     {% if user.role in ('analyst','admin') %}
     <a href="/upload" class="{{ 'on' if nav=='upload' }}">Upload</a>

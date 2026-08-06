@@ -40,6 +40,7 @@ class BaselineParamAuditor(BaseAuditor):
         self.check_icm_security_log()
         self.check_password_compliance()
         self.check_password_hash_algorithm()
+        self.check_rfc_callback_security()
         return self.findings
 
     # ------------------------------------------------------------------ helpers
@@ -160,6 +161,53 @@ class BaselineParamAuditor(BaseAuditor):
                 # The check fires on exactly one value ("0"), so the value cannot drift
                 # while the finding is open and is safe in identity.
                 affected_objects=[self._param_object("auth/rfc_authority_check", "0")],
+                scope="object")
+
+    def check_rfc_callback_security(self):
+        """rfc/callback_security_method — the RFC callback allowlist.
+
+        An outbound RFC call from production to a weaker system can be turned back
+        on production: the callee invokes the predefined destination BACK, and the
+        callback executes in the context of the production user who made the
+        original call. No credentials are needed. This parameter is the control
+        that constrains it, and the finding exists because it is the primary
+        chokepoint of the callback-inversion attack path — a path whose other hops
+        were all detected while its cut was unasserted, so the graph could show the
+        path but never show it closed.
+        """
+        v = self._p("rfc/callback_security_method")
+        if v is None:
+            return                              # absent != insecure; self-skip
+        val = v.strip()
+        # 3 = reject callbacks not on the destination's allowlist. 0 disables the
+        # mechanism; 1 and 2 only simulate/log it, so an attacker is still served.
+        if val in ("0", "1", "2"):
+            enforcing = {"0": "no callback protection at all",
+                         "1": "simulation only — violations are logged, not blocked",
+                         "2": "simulation with logging — still not blocked"}[val]
+            self._flag(
+                "BASELINE-011",
+                "RFC callback protection not enforced (rfc/callback_security_method)",
+                self.SEVERITY_HIGH,
+                f"rfc/callback_security_method = {val} means {enforcing}. When this "
+                "system makes an outbound RFC call to a less-protected system, an "
+                "attacker controlling that system can call back into this one using "
+                "the predefined destination BACK. The callback runs in the user "
+                "context of whoever initiated the outbound call, so no credentials "
+                "are required — the trust flows in the opposite direction to the "
+                "data.",
+                [f"rfc/callback_security_method = {val}"],
+                "Set rfc/callback_security_method = 3 to reject callbacks that are "
+                "not on the calling destination's allowlist, and maintain the "
+                "per-destination callback allowlist in SM59 (called function module "
+                "/ callback function module pairs). Activating UCON to restrict "
+                "which function modules are remotely callable at all is the broader "
+                "control.",
+                ["SAP Security Baseline — RFC callback protection"],
+                # Fires on exactly the value shown, so the value cannot drift while
+                # the finding is open and is safe to carry in identity.
+                affected_objects=[
+                    self._param_object("rfc/callback_security_method", val)],
                 scope="object")
 
     def check_no_check_in_some_cases(self):

@@ -250,7 +250,80 @@ console* reached main. Exactly one skip is expected and accounted for; more fail
 
 ---
 
-## Phase 4 — The attack-path graph
+## Phase 4 — The attack-path graph ✅ **COMPLETE**
+
+| Component | File | Status |
+|---|---|---|
+| Path templates as **content, not code** | `data/attack_paths.json` (7 paths) | ✅ |
+| Instantiation, cuts, chokepoints, closure | `server/graph.py` | ✅ |
+| `/paths` ranked list + choke-point table | `templates/paths.html` | ✅ |
+| Per-path detail, SVG, mitigate-vs-additional | `templates/path_detail.html` | ✅ |
+| Ruleset fingerprint + staleness banner | `graph.ruleset_fingerprint` | ✅ |
+| RFC destination ownership classification | `enrich.classify_destination_owner` | ✅ |
+| `rfc/callback_security_method` (path 2's cut) | `BASELINE-011` | ✅ |
+| `/api/paths` | `server/app.py` | ✅ |
+
+### Exit criterion — **PASSED**
+
+All 7 templates instantiate on `sample_data`, and closure works end to end. Removing the
+external OS command definitions resolved 5 findings and **severed SAPPATH-07**, with the path
+row and its `first_seen` kept intact:
+
+```
+SEVERED:  SAPPATH-07  ABAP to operating system bridge — severed 06 Aug 2026, first seen 06 Aug
+```
+
+SAPPATH-04 correctly stayed open: its "OS command execution reachable" hop also cites
+`AUTH-003`, which still holds. One cut of a multi-check hop does not sever it while other
+checks still evidence that hop.
+
+Choke-point ranking already earns its place — `JOBCMD-CMD-001/2/3` each cut **two** paths,
+because they are cuts of both SAPPATH-04 and SAPPATH-07.
+
+### Design decisions
+
+- **Templates, not free traversal.** Free traversal over a graph this dense yields hundreds of
+  "paths", nearly all noise. Microsoft's own documentation says an empty attack-path page is
+  correct, because paths should focus on real exploitable threats. **A short list is the
+  feature.** Adding a path is a data change, never a code change.
+- **Every hop cites checks that already exist**, so a path can never claim more than the scanner
+  actually detected. A test fails if a *required* hop cites no check any module emits — such a
+  path would silently never instantiate, and a missing path is invisible in a way a wrong one
+  is not.
+- **Cuts need no algorithm.** A hop marked `cut` appears on every variant of its path, so
+  closing it disconnects the path; everything else only reduces exploitability. That is the
+  whole mitigate-vs-additional split.
+- **A path is a stored row with a lifecycle**, not a query re-run on each page load. That is
+  what makes *"severed on 6 August"* expressible at all, and what lets a returning path re-open
+  as the **same** path rather than a new one.
+- **Identity is (template, systems)** — never the findings. Evidence churns as individual
+  defects are fixed and re-found; folding that into identity would retire and re-raise the path
+  continuously, the same mistake aggregate findings avoid.
+- **An accepted risk does NOT close a path.** A risk acceptance is a decision to tolerate a
+  defect, not evidence it is gone, and an attacker is unmoved by paperwork. A *mitigated*
+  finding does close it, because a compensating control genuinely interrupts the step.
+- **Every path says it was not validated.** We hold no connection and never will, so
+  `derived_from_config` is stored on the path and repeated in the UI. A buyer who has seen Wiz
+  will ask "did you actually reach it?" — the answer has to be prepared, not improvised.
+- **A path ends at a FAIR scenario**, so it terminates in a currency figure rather than a
+  severity word. A test fails on a dangling scenario id.
+- **Process controls can be cuts.** Four-eyes separation on transport release is a governance
+  rule, not a technical vulnerability, and it is still a genuine cut — a path model that could
+  not express that would miss it.
+
+### RFC destination ownership
+
+`SAPOSS`, `SM_*`, `SAPNET*` and SAP's support domains are classified as SAP-operated in RISE, so
+their findings do not arrive as customer misconfigurations. Deliberately conservative: it only
+downgrades when **every** destination named is SAP's (a finding spanning both is still real work),
+customer integrations on SAP-branded SaaS — Ariba, SuccessFactors — stay the customer's, and the
+classification is labelled a **naming heuristic to confirm once per landscape**, not a fact SAP
+publishes. A wrong "SAP's problem" hides a real finding, which is worse than an extra one to
+dismiss.
+
+---
+
+## Phase 4 — original scope (for reference)
 
 **Depends on:** Phase 1 (nodes already materialise). Build to the **readable** specs — Microsoft
 and AWS — not to Wiz's gated docs.

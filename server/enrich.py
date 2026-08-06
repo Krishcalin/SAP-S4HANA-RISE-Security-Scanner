@@ -95,6 +95,61 @@ SLA_DAYS: Dict[str, Optional[int]] = {"P1": 3, "P2": 7, "P3": 30, "P4": None}
 SLA_DAYS_PROVIDER: Dict[str, Optional[int]] = {"P1": 14, "P2": 30, "P3": 90, "P4": None}
 
 
+#: RFC destinations that SAP itself operates in a RISE tenant.
+#:
+#: SAP's contract distinguishes "technical RFC connections to central systems
+#: managed by SAP used for system operations" (SAP's) from "any application-related
+#: RFC connection" (the customer's). Flagging one of SAP's own monitoring
+#: destinations as a customer misconfiguration wastes their time and costs us
+#: credibility on the very first report.
+#:
+#: THESE ARE HEURISTICS, NOT FACTS. The names below are long-standing SAP support
+#: and monitoring destinations, but SAP does not publish an exhaustive list and a
+#: customer is free to name their own destination `SAPOSS`. So this classification
+#: is a DEFAULT that the customer confirms once per landscape and which then
+#: persists — never a silent, unchallengeable verdict. Where it is unsure it says
+#: unknown rather than guessing, because a wrong "SAP's problem" hides a real
+#: finding, which is worse than an extra one to dismiss.
+SAP_MANAGED_DESTINATION_NAMES = frozenset({
+    "SAPOSS",           # SAP support / OSS connection
+    "SAP-SUPPORT_PORTAL",
+    "SAPNET_RFC",
+    "SAPNET_R3_READ",
+})
+
+#: Prefixes for SAP-operated monitoring and support routes.
+SAP_MANAGED_DESTINATION_PREFIXES = (
+    "SM_",              # Solution Manager managed-system destinations
+    "SAPOSS",
+    "SAPNET",
+    "SDCC",             # Service Data Control Centre
+    "SDCCN",
+)
+
+
+def classify_destination_owner(name: str, host: str = "",
+                               deployment_mode: str = "on_prem") -> str:
+    """Who operates this RFC destination: ``customer``, ``sap`` or ``unknown``.
+
+    On premise everything is the customer's, so the question does not arise.
+    """
+    if not deployment_mode.startswith("rise"):
+        return "customer"
+    n = (name or "").strip().upper()
+    if not n:
+        return "unknown"
+    if n in SAP_MANAGED_DESTINATION_NAMES or n.startswith(SAP_MANAGED_DESTINATION_PREFIXES):
+        return "sap"
+    # A destination pointing at SAP's own service network is operated by SAP even
+    # when the customer created it — but ONLY the support domains, not every
+    # *.sap.com host: an Ariba or SuccessFactors tenant is a customer integration
+    # the customer very much owns.
+    h = (host or "").strip().lower()
+    if h.endswith(("sap-ag.de", "sapserv.com")) or ".sapservices." in h:
+        return "sap"
+    return "customer"
+
+
 def team_for(check_id: str) -> str:
     cid = (check_id or "").upper()
     best = ""
@@ -135,8 +190,23 @@ def sla_due_date(tier: Optional[str], owner: str,
     return (from_date or date.today()) + timedelta(days=days)
 
 
+def destination_hosts(data: Optional[Dict[str, Any]]) -> Dict[str, str]:
+    """Destination name -> target host, from the SM59 export.
+
+    Kept out of `classify_destination_owner` so that function stays pure and
+    testable; the loader shape belongs here.
+    """
+    out: Dict[str, str] = {}
+    for row in ((data or {}).get("rfc_destinations") or []):
+        name = (row.get("RFCDEST") or row.get("DESTINATION") or "").strip().upper()
+        if name:
+            out[name] = (row.get("RFCHOST") or row.get("HOST") or "").strip()
+    return out
+
+
 def enrich(findings: List[Dict[str, Any]], deployment_mode: str = "on_prem",
-           supplied_sources: Optional[set] = None) -> Dict[str, Dict[str, Any]]:
+           supplied_sources: Optional[set] = None,
+           dest_hosts: Optional[Dict[str, str]] = None) -> Dict[str, Dict[str, Any]]:
     """Compute priority, team, owner and SLA for a run's findings.
 
     Returns a mapping keyed by `id(finding)` so the caller can look each one up
@@ -182,7 +252,29 @@ def enrich(findings: List[Dict[str, Any]], deployment_mode: str = "on_prem",
                             or cid in RISE_UNREACHABLE_CHECKS) or bool(
                 supplied_sources & {"gw_secinfo", "gw_reginfo", "saprouttab", "ms_acl"})
 
-        entry["remediation_owner"] = remediation_owner_for(cid, deployment_mode, supplied)
+        owner = remediation_owner_for(cid, deployment_mode, supplied)
+
+        # A finding about a destination SAP itself operates is not the customer's
+        # to fix, whatever its check family says. Only downgrade when EVERY
+        # destination named is SAP's: a finding spanning both is still actionable
+        # on the customer's own destinations, and marking it provider-owned would
+        # hide real work.
+        if owner == "customer_fixable" and dest_hosts is not None:
+            dests = [o.get("name", "") for o in (f.get("affected_objects") or ())
+                     if o.get("type") == "destination"]
+            if dests:
+                owners = {classify_destination_owner(
+                    d, dest_hosts.get((d or "").upper(), ""), deployment_mode)
+                    for d in dests}
+                if owners == {"sap"}:
+                    owner = "provider_owned"
+                    entry["ownership_note"] = (
+                        "Every RFC destination named here is one SAP operates in a "
+                        "RISE tenant. Confirm this classification once for your "
+                        "landscape — it is a naming heuristic, not a fact SAP "
+                        "publishes.")
+
+        entry["remediation_owner"] = owner
         entry["due_date"] = sla_due_date(entry["priority_tier"], entry["remediation_owner"])
         out[id(f)] = entry
 

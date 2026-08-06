@@ -1225,6 +1225,7 @@ SAP-S4HANA-RISE-Security-Scanner/
 │   ├── queries.py                  # The query layer — console and JSON API share it
 │   ├── enrich.py                   # Priority tier, owning team, RISE remediation owner, SLA
 │   ├── analytics.py                # MTTR, burndown, aging, trajectory, scorecards
+│   ├── graph.py                    # Attack paths: instantiation, cuts, choke points, closure
 │   ├── crq.py                      # FAIR quantification per run (portfolio + 5 scenarios)
 │   ├── coverage.py                 # Per-upload coverage manifest (module→source map is derived)
 │   ├── ingest.py                   # upload → parse → scan → store → run-over-run diff
@@ -1236,7 +1237,8 @@ SAP-S4HANA-RISE-Security-Scanner/
 ├── sample_data/                    # 90 crafted demo exports (trigger every check)
 ├── data/
 │   ├── finding_details.json        # Knowledge base: detailed risk + step-by-step remediation per check
-│   └── fair_scenarios.json         # FAIR catalog: 5 SAP loss scenarios + factor/loss ranges (--crq)
+│   ├── fair_scenarios.json         # FAIR catalog: 5 SAP loss scenarios + factor/loss ranges (--crq)
+│   └── attack_paths.json           # 7 SAP attack-path templates (content, not code)
 ├── tests/
 │   ├── conftest.py                 # pytest fixtures (DataLoader over sample_data)
 │   ├── test_scanner.py             # per-module + full-pipeline + CLI tests

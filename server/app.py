@@ -31,7 +31,7 @@ from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile, 
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from server import analytics, auth, crq, db, ingest, queries
+from server import analytics, auth, crq, db, graph, ingest, queries
 from server.config import settings
 
 log = logging.getLogger(__name__)
@@ -221,6 +221,46 @@ def api_risk(user: Dict[str, Any] = Depends(current_user)):
     return {"portfolio": latest,
             "scenarios": crq.scenarios_for_run(latest["run_id"]) if latest else [],
             "trend": crq.trend(scope)}
+
+
+@app.get("/paths", response_class=HTMLResponse)
+def paths_page(request: Request, user: Dict[str, Any] = Depends(current_user)):
+    """Ranked path list plus choke points. The graph is NOT here — it renders inside
+    one selected path, which is what keeps this legible at landscape scale."""
+    scope = auth.scope_for(user)
+    return TEMPLATES.TemplateResponse(request, "paths.html", {
+        "user": user,
+        "paths": graph.list_paths(scope),
+        "chokes": graph.chokepoints(scope),
+        "summary": graph.path_summary(scope),
+        "closed": graph.recently_closed(scope),
+        "template_count": len(graph.load_templates().get("paths", [])),
+    })
+
+
+@app.get("/paths/{path_id}", response_class=HTMLResponse)
+def path_detail(path_id: int, request: Request,
+                user: Dict[str, Any] = Depends(current_user)):
+    scope = auth.scope_for(user)
+    path = graph.get_path(path_id, scope)
+    if path is None:
+        raise HTTPException(404, "not found")
+    findings = graph.path_findings(path_id)
+    # Cut findings drive the mitigate-vs-additional split on the page.
+    cut_ids = {fid for hop in (path["detail"].get("hops") or []) if hop.get("is_cut")
+               for fid in hop.get("finding_ids", [])}
+    return TEMPLATES.TemplateResponse(request, "path_detail.html", {
+        "user": user, "path": path, "findings": findings, "cut_ids": cut_ids,
+    })
+
+
+@app.get("/api/paths")
+def api_paths(user: Dict[str, Any] = Depends(current_user),
+              include_closed: bool = False):
+    scope = auth.scope_for(user)
+    return {"summary": graph.path_summary(scope),
+            "paths": graph.list_paths(scope, include_closed=include_closed),
+            "chokepoints": graph.chokepoints(scope)}
 
 
 @app.get("/v/{slug}")

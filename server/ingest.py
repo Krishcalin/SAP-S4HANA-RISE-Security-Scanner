@@ -536,9 +536,10 @@ def scan_directory(data_dir: Path, landscape_id: int, system_id: Optional[int],
 
             conn.execute("UPDATE scan_run SET status = 'deriving' WHERE id = %s", (run_id,))
 
-            from server.enrich import enrich
+            from server.enrich import destination_hosts, enrich
             supplied = {k for k, v in data.items() if v}
-            enrichment = enrich(findings, deployment_mode, supplied)
+            enrichment = enrich(findings, deployment_mode, supplied,
+                                destination_hosts(data))
 
             diff = store_run(conn, run_id, landscape_id, system_id, findings,
                              default_sid, default_client, enrichment)
@@ -552,6 +553,12 @@ def scan_directory(data_dir: Path, landscape_id: int, system_id: Optional[int],
             from server.crq import compute_and_store
             crq = compute_and_store(conn, run_id, landscape_id, findings, enrichment)
 
+            # Paths are recomputed for the WHOLE landscape, not just this run's
+            # system: the cross-tier paths that matter most span systems, and a
+            # per-run view could never see them.
+            from server.graph import store_paths
+            paths = store_paths(conn, landscape_id, run_id)
+
             conn.execute(
                 "UPDATE scan_run SET status = 'complete', finished_at = now(), "
                 "coverage = %s, module_status = %s WHERE id = %s",
@@ -562,7 +569,7 @@ def scan_directory(data_dir: Path, landscape_id: int, system_id: Optional[int],
 
             return {"run_id": run_id, "findings": len(findings), "nodes": node_count,
                     "diff": diff.as_counts(), "coverage": manifest,
-                    "module_status": module_status, "crq": crq}
+                    "module_status": module_status, "crq": crq, "paths": paths}
 
         except ScanCancelled as exc:
             conn.rollback()
