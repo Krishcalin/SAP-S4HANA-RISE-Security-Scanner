@@ -4,15 +4,37 @@ Guidance for Claude Code (and humans) working in this repository.
 
 ## What this is
 
-An **offline SAP S/4HANA RISE + BTP security config-review tool**. It reads exported
-SAP configuration (CSV / JSON) from a `--data-dir`, runs a set of auditor modules, and
-produces an interactive **HTML report** — plus a multi-page **PDF** hand-over report and a
-per-finding **PowerPoint (PPTX)** deck — with findings, severity ratings, P1–P4 risk
-prioritization, compliance mapping and remediation. No live system / RFC connection is
-needed — ideal for RISE environments with restricted access.
+An **offline SAP S/4HANA RISE + BTP security config-review tool**, in two modes over one
+scanner core:
 
-- **Zero external dependencies** — Python 3.8+ standard library only. Do **not** add
-  third-party packages (no `requirements.txt` / `pyproject.toml` by design).
+1. **CLI** (`sap_scanner.py`) — reads exports from a `--data-dir`, runs the auditor modules,
+   writes **HTML / PDF / PPTX**. Single-shot and stateless.
+2. **Server** (`server/`) — the same modules behind a browser console backed by
+   **PostgreSQL 16**. Uploads are scanned automatically, findings persist, and re-uploads over
+   time track the **mitigation journey**.
+
+No live system / RFC connection is needed in either mode — ideal for RISE, where the customer
+contractually has no OS access and a third-party ABAP add-on is an Excluded Task.
+
+### ⚠️ The charter changed (2026-08-05) — read this before adding a dependency
+
+The founding rule was *zero external dependencies, stdlib only*. That rule **ended when the
+product became client-server**, deliberately and one-way. It has NOT been relaxed everywhere:
+
+- **`modules/` and `sap_scanner.py` remain standard library only.** The HTML, PDF and PPTX
+  engines are hand-built. Do **not** add `reportlab` / `python-pptx` / `pandas`.
+- **`server/` may use the five pinned runtime dependencies** in `requirements.txt` (FastAPI,
+  uvicorn, Jinja2, psycopg, python-multipart) and nothing else without a decision.
+- The discipline replacing "zero deps" is a **single-digit runtime dependency count**. Also
+  deliberately absent, and to stay absent: an **ORM** (SQL is hand-written and reviewed), a
+  **graph database** (recursive CTEs are ample at SAP landscape scale), and a **client-side
+  framework** (pages are server-rendered).
+- The deployment is **one app container + one PostgreSQL**. A third service is a design
+  failure, not a feature — it forfeits the product's clearest structural advantage over
+  competitors that need a console VM plus sensors.
+
+Background and the full plan: [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md),
+[`docs/BUILD_ROADMAP.md`](docs/BUILD_ROADMAP.md).
 - **~300+ checks across 23 audit modules** (keep the README badge/count and
   `docs/CHECKS_REFERENCE.md` in sync when you add checks).
 - CIS SAP / DSAG-aligned; findings cite real SAP Notes / SAP Security Baseline / CIS.
@@ -52,6 +74,23 @@ python sap_scanner.py --data-dir ./sample_data --output report.html --format bot
 on the default cp1252 console. Always run with `PYTHONIOENCODING=utf-8` on Windows
 (`PYTHONIOENCODING=utf-8 python sap_scanner.py …`). (Pre-existing; fine on UTF-8 terminals.)
 
+### Server mode
+
+```bash
+cp .env.example .env          # then set SESSION_SECRET (>=32 chars) and POSTGRES_PASSWORD
+docker compose up -d --build
+docker compose exec app python -m server.cli init-db
+docker compose exec app python -m server.cli create-user admin admin
+docker compose exec app python -m server.cli add-landscape "Acme Prod" --mode rise_pce
+
+# scan without a browser (air-gapped path)
+python -m server.cli scan "Acme Prod" ./sample_data --sid PRD --client 100
+python -m server.cli runs
+```
+
+`DB_DSN` and `SESSION_SECRET` have **no defaults** — a deployment that forgets them must fail
+at startup rather than silently run on a value published in this repo.
+
 ## Architecture
 
 - **`sap_scanner.py`** — CLI entry / orchestrator. Parses args, loads data via `DataLoader`,
@@ -60,9 +99,27 @@ on the default cp1252 console. Always run with `PYTHONIOENCODING=utf-8` on Windo
 - **`modules/base_auditor.py`** — `BaseAuditor`. Subclass it; implement
   `run_all_checks() -> list[findings]`. Create findings with:
   `self.finding(check_id, title, severity, category, description, affected_items=[],
-  remediation="", references=[], details={})`. Severity constants:
-  `SEVERITY_CRITICAL/HIGH/MEDIUM/LOW/INFO`. `self.get_config(key, default)` reads
-  baseline overrides (from `--config baseline.json`).
+  remediation="", references=[], details={}, affected_objects=[], subject=[], scope=None,
+  system=None, client=None)`. Severity constants: `SEVERITY_CRITICAL/HIGH/MEDIUM/LOW/INFO`.
+  `self.get_config(key, default)` reads baseline overrides (from `--config baseline.json`).
+
+  **The identity kwargs are not optional extras — get them wrong and the mitigation journey
+  breaks.** Read the `finding()` docstring and `server/identity.py` before touching a module.
+  - `affected_objects=[{"type","name","system"?,"client"?,"qualifier"?}]` — the concrete SAP
+    objects. Display strings alone cannot be graph nodes and cannot identify a finding.
+  - `scope="object"` — the finding is ABOUT the named object(s); identity includes them. Four
+    unlocked default users must be four findings, not one.
+  - `scope="aggregate"` — the finding SUMMARISES a set ("23 dormant accounts"). Identity
+    excludes the members; otherwise dismissing one member retires the finding and raises a new
+    one, resetting its age **every run**. Still pass the objects — they become graph nodes.
+  - `subject=[…]` — for a finding that is about ONE thing but names several ("role Z_ADMIN
+    grants SAP_ALL to 41 users"): the role is identity, the users are members.
+  - Types must be registered in `_UPPERCASE_TYPES` or `_CASE_SENSITIVE_TYPES` in
+    `server/identity.py`, never both. Case-bearing things (ICF paths, URLs, BTP entities,
+    schemas) are case-**sensitive**; SAP identifiers are not.
+  - **Do not reach for `subject` just to make `fingerprint_basis` read `objects`.** A genuine
+    aggregate is honestly `check_only`; the console presents `objects` as "structural, survives
+    rewording", so mislabelling it is a claim the data does not support.
 - **`modules/data_loader.py`** — `DataLoader.FILE_MAP` maps a logical data-source name to a
   list of candidate filenames. CSV → list of dicts with **headers normalized to
   UPPERCASE, spaces→underscores** and values stripped; JSON → the parsed object. Missing
@@ -101,6 +158,43 @@ on the default cp1252 console. Always run with `PYTHONIOENCODING=utf-8` on Windo
   - **Loss ranges are modelled estimates from public benchmarks, not measurements** — cite real
     sources in the catalog's `sources[]`, and keep the report's "modelled estimate" disclaimer.
 
+### The server tier (`server/`)
+
+| file | role |
+|---|---|
+| `identity.py` | **The load-bearing module.** `AffectedObject`, normalization, `compute_fingerprint`, `extract_nodes`. Read its docstring before changing anything about finding identity. |
+| `schema.sql` | 18 tables. Single-tenant (no `tenant_id`); `landscape` preserves the option. Idempotent — every statement is `IF NOT EXISTS`. |
+| `db.py` | psycopg pool, `scope_clause` (**the one place** row scoping is expressed), `audit`. |
+| `auth.py` | PBKDF2 passwords, sessions, ranked roles, per-system scope. |
+| `queries.py` | Every read of findings/runs/systems. HTML pages and the JSON API call the same functions — that is what keeps "everything the console shows is in the API" structural. |
+| `coverage.py` | The per-upload manifest. Module→source mapping is **derived from source at import**, never hand-maintained, so it cannot drift. |
+| `ingest.py` | upload → parse → scan → store → diff. Holds `store_run` (the journey) and `_rebase`. |
+| `app.py` | FastAPI. Uploads, cancellable background scans, `/health`. |
+| `cli.py` | Admin + the air-gapped `scan` path. |
+| `templates/` | Jinja2, server-rendered, one stylesheet, no client framework. |
+
+**Invariants to preserve in the server tier:**
+- *A finding row is never deleted.* "Resolved" is the **absence of an observation in the latest
+  run**. That is what lets a regression re-open the same row with its age and assignee intact.
+- *Degrade, never drop.* A module that raises is recorded with its traceback and the run
+  continues. Losing 22 modules because the 23rd hit a bad row is far worse than an incomplete
+  run that says it is incomplete.
+- *An empty explicit row scope means NOTHING, not everything.* `scope_clause([])` returns
+  `FALSE`. Returning `TRUE` would hand a deliberately-restricted user the whole estate.
+- *Coverage is recorded, not implied.* A missing export loads as `None` and its checks
+  self-skip; without the manifest a partial upload produces a clean-looking report. This is a
+  correctness defect, not a missing feature.
+- *`_rebase` must refuse to guess.* Converting a module changes its findings' fingerprints;
+  `_rebase` carries history across that only when exactly one candidate matches. Attaching one
+  defect's history to another is worse than losing it.
+- *`remediation_owner` is four-state* (`customer_fixable` / `ticket_to_sap` / `provider_owned`
+  / `not_assessable`). In RISE the customer can see a bad parameter and cannot fix it, so a
+  report that says "change this" is unactionable noise.
+- *Never add an R&R line-item ID column.* Tagging checks to the SAP contract task they
+  discharge is a good idea, but the published PDFs' ID-to-task pairings drift under text
+  extraction and are **unverified**. Tag to the task description. See
+  `docs/RISE_SECURITY_MODEL.md` §0.
+
 ### The 23 modules (module key → class → focus)
 
 | key | module | focus |
@@ -137,6 +231,10 @@ on the default cp1252 console. Always run with `PYTHONIOENCODING=utf-8` on Windo
    (`row.get("A", row.get("B", ""))`); collect offenders; `self.finding(...)`. Check IDs are
    `MODULE-SUBAREA-NNN` (e.g. `HANADB-PRIV-001`, `AUTH-002`, `TRUST-005`). Always cite **real**
    references (SAP Note / CIS SAP / DSAG / SAP Security Baseline).
+   **Pass `affected_objects` and `scope` on every finding** — names taken from the data, never
+   invented; omit the object rather than fabricating a placeholder when a row lacks the field.
+   `server/coverage.py` derives your module's data sources by scanning for
+   `self.data.get("…")`, so the coverage manifest picks the module up automatically.
 2. **`sap_scanner.py`** — add the import, add the module key to the `--modules` `choices`
    list, add it to the `"all"` expansion list, and add an `if "<key>" in run_modules:` run block.
 3. **`modules/data_loader.py`** — add the new data source(s) to `FILE_MAP`.
@@ -170,13 +268,54 @@ on the default cp1252 console. Always run with `PYTHONIOENCODING=utf-8` on Windo
 - **CSV header normalization:** the loader upper-cases headers and replaces spaces with `_`,
   so match `row.get("USER_NAME")` etc. Values are stripped but keep their case.
 - **Tests + CI exist** (`tests/`, `.github/workflows/tests.yml`, `requirements-dev.txt`). Run
-  `python -m pytest -q` (stdlib + pytest only; no SAP system needed). The suite runs every
-  module over `sample_data` and validates the finding contract, cross-module id collisions, the
-  report render, and a CLI end-to-end run. **When you add a module:** it is picked up
-  automatically by the parametrized tests via the `MODULES` list in `tests/test_scanner.py` —
-  add your class there, and add a set of key check ids to `EXPECTED_CHECKS` so a regression that
-  stops your checks firing is caught. Keep tests stdlib + `pytest`-only. CI matrix is Python
-  3.8–3.12; keep type hints `typing`-based (`List`/`Dict`/`Optional`, not `list[...]`/`X | Y`).
+  `python -m pytest -q` (no SAP system needed). The suite runs every module over `sample_data`
+  and validates the finding contract, cross-module id collisions, the report render, and a CLI
+  end-to-end run. **When you add a module:** it is picked up automatically by the parametrized
+  tests via the `MODULES` list in `tests/test_scanner.py` — add your class there, and add a set
+  of key check ids to `EXPECTED_CHECKS` so a regression that stops your checks firing is caught.
+  Module tests stay stdlib + `pytest`-only; type hints stay `typing`-based (`List`/`Dict`/
+  `Optional`, not `list[...]`/`X | Y`) for the 3.8–3.12 matrix.
+- **`tests/test_integration_ingest.py` needs a real PostgreSQL and SKIPS without `DB_DSN`.**
+  The mitigation journey is implemented in SQL; a mocked database proves the Python is
+  self-consistent and proves nothing about whether the journey works. Run it:
+  ```bash
+  docker run -d --name sapsec-test-db -e POSTGRES_USER=sapsec -e POSTGRES_PASSWORD=sapsec \
+      -e POSTGRES_DB=sapsec -p 55433:5432 postgres:16
+  DB_DSN=postgresql://sapsec:sapsec@localhost:55433/sapsec \
+  SESSION_SECRET=$(python -c "import secrets;print(secrets.token_urlsafe(48))") \
+      python -m pytest tests/test_integration_ingest.py -q
+  ```
+- **The Phase-1 exit criterion is a test, and it must stay green:** scan the same bundle twice
+  and get `new 0 · persisting N · resolved 0`. If it ever fails, finding identity has broken
+  and every re-upload will report the whole estate as newly broken.
+- **`tests/test_identity.py` runs against the REAL `sample_data`, not fixtures**, and asserts
+  the `check_id` collisions still exist before asserting they resolve. If the sample data ever
+  stops colliding, the test fails loudly rather than silently proving less.
+
+## Product direction
+
+The tool is being taken from an offline assessment CLI to a commercial-grade platform. The
+competitive and contractual research behind that is in `docs/`, and it is evidence-based —
+claims are labelled `verified` / `asserted` / `inferred`, and two adversarial verification
+passes corrected sixteen of them.
+
+| doc | what it settles |
+|---|---|
+| [`PIVOT_PLAN.md`](docs/PIVOT_PLAN.md) | Architecture and the six phases, with rationale |
+| [`BUILD_ROADMAP.md`](docs/BUILD_ROADMAP.md) | Execution view: status, dependencies, exit criteria, non-goals |
+| [`COMPETITIVE_ANALYSIS.md`](docs/COMPETITIVE_ANALYSIS.md) | Onapsis, the market, and the attack-path design spec |
+| [`COMPETITOR_SECURITYBRIDGE.md`](docs/COMPETITOR_SECURITYBRIDGE.md) | SecurityBridge dossier |
+| [`RISE_SECURITY_MODEL.md`](docs/RISE_SECURITY_MODEL.md) | Where SAP's contractual line sits; what a RISE customer can actually export |
+
+**Things that would be a mistake to build** (each is argued in the docs): real-time threat
+detection, transport gating, ABAP source SAST (SAP gives RISE customers CVA free), peer
+benchmarking (fiction without a customer base), BusinessObjects/SuccessFactors, an ABAP agent
+of any kind, and check-count comparisons.
+
+**Do not repeat these overclaims:** the mitigation journey is *table stakes*, not a
+differentiator — both incumbents ship it. The genuinely open lane is monetary risk
+quantification. And absence of a capability in a competitor's public material is stated as
+"no public evidence across N named sources", never as proof of absence.
 
 ## Git / commits
 

@@ -1,0 +1,47 @@
+# One app container, one PostgreSQL. That is the whole deployment.
+#
+# It is also the product's clearest structural advantage and must stay this way:
+# the connected alternatives require a console VM and one or more sensor VMs at
+# 8 cores / 16 GB / 200 GB each, and even their SaaS mode needs a connector
+# inside the customer network with a route to production SAP. If this file ever
+# needs a third service to stand up, that advantage is gone.
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: sapsec
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: sapsec
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Deliberately NOT published to the host. The database holds a customer's
+    # entire SAP security posture; only the app needs to reach it.
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sapsec -d sapsec"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_DSN: postgresql://sapsec:${POSTGRES_PASSWORD}@db:5432/sapsec
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      UPLOAD_DIR: /var/lib/sapsec/uploads
+      MAX_CONCURRENT_SCANS: ${MAX_CONCURRENT_SCANS:-2}
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - uploads:/var/lib/sapsec/uploads
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  uploads:

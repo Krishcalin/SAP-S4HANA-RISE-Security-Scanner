@@ -153,23 +153,65 @@ class AbapAuthorizationAuditor(BaseAuditor):
         sample = f" [{', '.join(users[:4])}{'…' if len(users) > 4 else ''}]" if users else ""
         return f"Role {role} — {who}{sample}" + (f" — {detail}" if detail else "")
 
+    def _role_objects(self, role: str, auth_object: str = "",
+                      qualifier: str = "") -> List[Dict[str, Any]]:
+        """Structured objects behind one offending role label.
+
+        Emits the role, the authorization object that makes it dangerous, and every
+        user who holds the role — the holders are what turn a role defect into an
+        account risk, and they are the edge the attack-path graph needs.
+
+        The qualifier rides on the AUTHORIZATION OBJECT, not on the role. A role is one
+        entity in the landscape and must stay one graph node no matter how many checks
+        name it, whereas `S_TABU_DIS` with `DICBERCLS=*` is genuinely a different object
+        from the same object scoped to a narrow class.
+        """
+        objs: List[Dict[str, Any]] = [{"type": "role", "name": role}]
+        if auth_object:
+            ao: Dict[str, Any] = {"type": "auth_object", "name": auth_object}
+            if qualifier:
+                ao["qualifier"] = qualifier
+            objs.append(ao)
+        objs.extend({"type": "user", "name": u} for u in self._holders(role))
+        return objs
+
+    @staticmethod
+    def _dedupe(objects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Collapse repeats (a role holding two authorizations of the same object names
+        its holders twice) while preserving first-seen order."""
+        seen, uniq = set(), []
+        for o in objects:
+            key = (o.get("type"), o.get("name"), o.get("qualifier"))
+            if key not in seen:
+                seen.add(key)
+                uniq.append(o)
+        return uniq
+
     def _emit(self, check_id, title, severity, description, offenders, remediation,
-              references, details=None):
+              references, details=None, objects=None):
         if not offenders:
             return
         # sort assigned roles first (higher impact)
         offenders.sort(key=lambda lbl: (0 if "0 users" not in lbl else 1, lbl))
+        # Every _emit check rolls ALL offending roles into ONE finding whose description
+        # counts them ("N role(s) grant ..."). That makes it an aggregate: its identity
+        # must exclude the role list, otherwise remediating one of five roles would
+        # retire the finding and raise a fresh one, resetting its age every run. The
+        # roles/users/objects still travel as members and become graph nodes.
         self.finding(check_id=check_id, title=title, severity=severity, category=self.CATEGORY,
                      description=description, affected_items=offenders, remediation=remediation,
-                     references=references, details=details or {})
+                     references=references, details=details or {},
+                     affected_objects=self._dedupe(objects or []), scope="aggregate")
 
     # ==================================================================  CRITICAL
     def check_debug_replace(self):
         """S_DEVELOP OBJTYPE=DEBUG + ACTVT=02 → Debug & Replace (runtime auth bypass)."""
-        bad = [self._role_label(i["role"], "S_DEVELOP OBJTYPE=DEBUG, ACTVT=02")
-               for i in self._objects("S_DEVELOP")
-               if self._covers(self._field(i, "OBJTYPE"), "DEBUG")
-               and self._covers(self._field(i, "ACTVT"), "02")]
+        bad, objs = [], []
+        for i in self._objects("S_DEVELOP"):
+            if (self._covers(self._field(i, "OBJTYPE"), "DEBUG")
+                    and self._covers(self._field(i, "ACTVT"), "02")):
+                bad.append(self._role_label(i["role"], "S_DEVELOP OBJTYPE=DEBUG, ACTVT=02"))
+                objs.extend(self._role_objects(i["role"], i["object"], "OBJTYPE=DEBUG,ACTVT=02"))
         self._emit(
             "AUTH-001", "Debug & Replace authorization (runtime authorization bypass)",
             self.SEVERITY_CRITICAL,
@@ -183,11 +225,12 @@ class AbapAuthorizationAuditor(BaseAuditor):
             "ACTVT 03, is normally enough for support). Restrict change-debugging to a "
             "firefighter role in non-production only.",
             ["SAP Note 65968 — Debugging authorizations", "SAP Security Baseline — S_DEVELOP",
-             "DSAG Audit Guideline — Debug & Replace"])
+             "DSAG Audit Guideline — Debug & Replace"],
+            objects=objs)
 
     def check_trusted_rfc_acl(self):
         """S_RFCACL with wildcard trust fields → trusted-RFC logon as any user/system."""
-        bad = []
+        bad, objs = [], []
         for i in self._objects("S_RFCACL"):
             eq = self._field(i, "RFC_EQUSER")
             eq_forced = self._covers(eq, "Y") and not self._has_star(eq)
@@ -197,6 +240,11 @@ class AbapAuthorizationAuditor(BaseAuditor):
                     or self._has_star(self._field(i, "RFC_SYSID"))
                     or self._has_star(self._field(i, "RFC_CLIENT"))):
                 bad.append(self._role_label(i["role"], "S_RFCACL RFC_USER/RFC_SYSID = *"))
+                # qualifier names the fields that are ACTUALLY wildcarded in this grant:
+                # trusting any system is not the same defect as trusting any user.
+                starred = ",".join(f"{f}=*" for f in ("RFC_USER", "RFC_SYSID", "RFC_CLIENT")
+                                   if self._has_star(self._field(i, f)))
+                objs.extend(self._role_objects(i["role"], i["object"], starred))
         self._emit(
             "AUTH-002", "Trusted-RFC logon as any user (S_RFCACL wildcard)",
             self.SEVERITY_CRITICAL,
@@ -208,14 +256,17 @@ class AbapAuthorizationAuditor(BaseAuditor):
             "Never grant '*' in S_RFCACL. Bind trusted-RFC to specific calling systems/clients "
             "and set RFC_EQUSER='Y' (same-user logon). Migrate to the current trusted-RFC "
             "security model (SAP Note 3157268 / migration of trust relationships).",
-            ["SAP Note 1416085 — S_RFCACL wildcard risk", "SAP Note 3157268 — Trusted RFC migration"])
+            ["SAP Note 1416085 — S_RFCACL wildcard risk", "SAP Note 3157268 — Trusted RFC migration"],
+            objects=objs)
 
     def check_os_command(self):
         """S_LOG_COM all-wildcard → run any external OS command on any host (SM49/SM69)."""
-        bad = [self._role_label(i["role"], "S_LOG_COM COMMAND/HOST/OPSYSTEM = *")
-               for i in self._objects("S_LOG_COM")
-               if self._has_star(self._field(i, "COMMAND"))
-               and self._has_star(self._field(i, "HOST"))]
+        bad, objs = [], []
+        for i in self._objects("S_LOG_COM"):
+            if (self._has_star(self._field(i, "COMMAND"))
+                    and self._has_star(self._field(i, "HOST"))):
+                bad.append(self._role_label(i["role"], "S_LOG_COM COMMAND/HOST/OPSYSTEM = *"))
+                objs.extend(self._role_objects(i["role"], i["object"], "COMMAND=*,HOST=*"))
         self._emit(
             "AUTH-003", "Unrestricted external OS-command execution (S_LOG_COM)",
             self.SEVERITY_CRITICAL,
@@ -226,22 +277,28 @@ class AbapAuthorizationAuditor(BaseAuditor):
             bad,
             "Restrict S_LOG_COM to specific, pre-defined external commands and hosts; never '*'. "
             "Review who holds SM49/SM69 and the defined external OS commands (transaction SM69).",
-            ["SAP Security Baseline — S_LOG_COM", "SAP Help — SM49 External OS Commands"])
+            ["SAP Security Baseline — S_LOG_COM", "SAP Help — SM49 External OS Commands"],
+            objects=objs)
 
     def check_auth_forging(self):
         """S_USER_AUT / S_USER_TCD / S_USER_VAL with wildcards → self-escalation."""
-        bad = []
+        bad, objs = [], []
         for i in self._objects("S_USER_AUT"):
             if self._has_star(self._field(i, "AUTH")) and (
                     self._covers(self._field(i, "ACTVT"), "01")
                     or self._covers(self._field(i, "ACTVT"), "02")
                     or self._covers(self._field(i, "ACTVT"), "07")):
                 bad.append(self._role_label(i["role"], "S_USER_AUT AUTH=* (build any authorization)"))
+                objs.extend(self._role_objects(i["role"], i["object"], "AUTH=*"))
         for i in self._objects("S_USER_TCD"):
             if self._has_star(self._field(i, "TCD")):
                 bad.append(self._role_label(i["role"], "S_USER_TCD TCD=* (put any tcode in a role)"))
+                objs.extend(self._role_objects(i["role"], i["object"], "TCD=*"))
         for i in self._objects("S_USER_VAL"):
             bad.append(self._role_label(i["role"], "S_USER_VAL (maintain any field value in a role)"))
+            # no qualifier: holding S_USER_VAL at all is the defect, no field value
+            # narrows it, and inventing one would fabricate a distinction.
+            objs.extend(self._role_objects(i["role"], i["object"]))
         self._emit(
             "AUTH-004", "Authorization forging via role-content control objects",
             self.SEVERITY_CRITICAL,
@@ -252,13 +309,16 @@ class AbapAuthorizationAuditor(BaseAuditor):
             bad,
             "Remove S_USER_AUT/TCD/VAL from non-security-admin roles. Even security administrators "
             "should be scoped (no AUTH=*/TCD=*) and covered by four-eyes change control.",
-            ["SAP Security Baseline — role administration objects", "DSAG Audit — self-escalation"])
+            ["SAP Security Baseline — role administration objects", "DSAG Audit — self-escalation"],
+            objects=objs)
 
     def check_start_any_tcode(self):
         """S_TCODE TCD=* → start any transaction."""
-        bad = [self._role_label(i["role"], "S_TCODE TCD=*")
-               for i in self._objects("S_TCODE")
-               if self._has_star(self._field(i, "TCD"))]
+        bad, objs = [], []
+        for i in self._objects("S_TCODE"):
+            if self._has_star(self._field(i, "TCD")):
+                bad.append(self._role_label(i["role"], "S_TCODE TCD=*"))
+                objs.extend(self._role_objects(i["role"], i["object"], "TCD=*"))
         self._emit(
             "AUTH-005", "Role allows starting any transaction (S_TCODE = *)",
             self.SEVERITY_CRITICAL,
@@ -268,14 +328,17 @@ class AbapAuthorizationAuditor(BaseAuditor):
             bad,
             "Never grant S_TCODE TCD=*. Grant only the specific transactions each role needs "
             "(PFCG menu). Review why the role was built with a full transaction wildcard.",
-            ["SAP Security Baseline — S_TCODE", "DSAG Audit Guideline"])
+            ["SAP Security Baseline — S_TCODE", "DSAG Audit Guideline"],
+            objects=objs)
 
     # ==================================================================  HIGH
     def check_broad_s_rfc(self):
         """S_RFC RFC_TYPE=FUGR + RFC_NAME=* → call any RFC-enabled function module."""
-        bad = [self._role_label(i["role"], "S_RFC RFC_NAME=*")
-               for i in self._objects("S_RFC")
-               if self._has_star(self._field(i, "RFC_NAME"))]
+        bad, objs = [], []
+        for i in self._objects("S_RFC"):
+            if self._has_star(self._field(i, "RFC_NAME")):
+                bad.append(self._role_label(i["role"], "S_RFC RFC_NAME=*"))
+                objs.extend(self._role_objects(i["role"], i["object"], "RFC_NAME=*"))
         self._emit(
             "AUTH-006", "Broad RFC authorization (S_RFC RFC_NAME = *)",
             self.SEVERITY_HIGH,
@@ -286,11 +349,12 @@ class AbapAuthorizationAuditor(BaseAuditor):
             bad,
             "Scope S_RFC to the specific function groups (RFC_NAME) each interface needs; never "
             "'*'. Enable UCON RFC allowlisting to further restrict externally-callable modules.",
-            ["SAP Note 1416085", "SAP Help — S_RFC authorization", "Onapsis — RFC FM abuse"])
+            ["SAP Note 1416085", "SAP Help — S_RFC authorization", "Onapsis — RFC FM abuse"],
+            objects=objs)
 
     def check_icf_destination(self):
         """S_ICF ICF_FIELD=DEST + ICF_VALUE=* → use any RFC/HTTP destination (stored creds)."""
-        bad = []
+        bad, objs = [], []
         for i in self._objects("S_ICF"):
             field_vals = self._field(i, "ICF_FIELD")   # DEST (destinations) / SERVICE
             value_vals = self._field(i, "ICF_VALUE")
@@ -298,6 +362,8 @@ class AbapAuthorizationAuditor(BaseAuditor):
             # lets the role select ANY destination maintained in the system.
             if self._covers(field_vals, "DEST") and self._has_star(value_vals):
                 bad.append(self._role_label(i["role"], "S_ICF ICF_FIELD=DEST, ICF_VALUE=*"))
+                objs.extend(self._role_objects(i["role"], i["object"],
+                                               "ICF_FIELD=DEST,ICF_VALUE=*"))
         self._emit(
             "AUTH-016", "Unrestricted destination authorization (S_ICF ICF_FIELD=DEST, ICF_VALUE=*)",
             self.SEVERITY_HIGH,
@@ -327,14 +393,17 @@ class AbapAuthorizationAuditor(BaseAuditor):
             "propagation) so that destination use cannot escalate privilege, and reconcile "
             "S_ICF grants against the trusted-RFC findings (S_RFCACL, AUTH-002).",
             ["SAP Help — Authorization object S_ICF (ICF_FIELD DEST/SERVICE, ICF_VALUE)",
-             "SAP Note 1416085 — S_RFCACL trusted-RFC wildcard risk (cross-reference)"])
+             "SAP Note 1416085 — S_RFCACL trusted-RFC wildcard risk (cross-reference)"],
+            objects=objs)
 
     def check_table_name_write(self):
         """S_TABU_NAM TABLE=* + ACTVT=02 → write any table (bypasses table auth groups)."""
-        bad = [self._role_label(i["role"], "S_TABU_NAM TABLE=*, ACTVT=02")
-               for i in self._objects("S_TABU_NAM")
-               if self._has_star(self._field(i, "TABLE"))
-               and self._covers(self._field(i, "ACTVT"), "02")]
+        bad, objs = [], []
+        for i in self._objects("S_TABU_NAM"):
+            if (self._has_star(self._field(i, "TABLE"))
+                    and self._covers(self._field(i, "ACTVT"), "02")):
+                bad.append(self._role_label(i["role"], "S_TABU_NAM TABLE=*, ACTVT=02"))
+                objs.extend(self._role_objects(i["role"], i["object"], "TABLE=*,ACTVT=02"))
         self._emit(
             "AUTH-007", "Generic table write via S_TABU_NAM (TABLE = *)",
             self.SEVERITY_HIGH,
@@ -345,16 +414,19 @@ class AbapAuthorizationAuditor(BaseAuditor):
             bad,
             "Restrict S_TABU_NAM to the specific tables a role must maintain, and prefer display "
             "(ACTVT 03) over change. Review broad table-maintenance access.",
-            ["SAP Note 1481950 — S_TABU_NAM", "SAP Help — Table authorizations"])
+            ["SAP Note 1481950 — S_TABU_NAM", "SAP Help — Table authorizations"],
+            objects=objs)
 
     def check_table_dis_generic(self):
         """S_TABU_DIS DICBERCLS=&NC&/* + ACTVT=02 → maintain tables without an auth group."""
-        bad = []
+        bad, objs = [], []
         for i in self._objects("S_TABU_DIS"):
             dic = self._field(i, "DICBERCLS")
             if (self._has_star(dic) or self._covers(dic, "&NC&")) and self._covers(self._field(i, "ACTVT"), "02"):
                 val = "*" if self._has_star(dic) else "&NC&"
                 bad.append(self._role_label(i["role"], f"S_TABU_DIS DICBERCLS={val}, ACTVT=02"))
+                objs.extend(self._role_objects(i["role"], i["object"],
+                                               f"DICBERCLS={val},ACTVT=02"))
         self._emit(
             "AUTH-008", "Generic table maintenance via S_TABU_DIS (all / no auth group)",
             self.SEVERITY_HIGH,
@@ -364,13 +436,16 @@ class AbapAuthorizationAuditor(BaseAuditor):
             bad,
             "Assign narrow table authorization groups (transaction SE54) and grant S_TABU_DIS "
             "only for the specific groups needed; avoid '*' and '&NC&' with change access.",
-            ["SAP Security Baseline — S_TABU_DIS", "SAP Help — Table authorization groups"])
+            ["SAP Security Baseline — S_TABU_DIS", "SAP Help — Table authorization groups"],
+            objects=objs)
 
     def check_table_cross_client(self):
         """S_TABU_CLI CLIIDMAINT=X → maintain client-independent (cross-client) tables."""
-        bad = [self._role_label(i["role"], "S_TABU_CLI CLIIDMAINT=X")
-               for i in self._objects("S_TABU_CLI")
-               if self._covers(self._field(i, "CLIIDMAINT"), "X")]
+        bad, objs = [], []
+        for i in self._objects("S_TABU_CLI"):
+            if self._covers(self._field(i, "CLIIDMAINT"), "X"):
+                bad.append(self._role_label(i["role"], "S_TABU_CLI CLIIDMAINT=X"))
+                objs.extend(self._role_objects(i["role"], i["object"], "CLIIDMAINT=X"))
         self._emit(
             "AUTH-009", "Cross-client table maintenance (S_TABU_CLI)",
             self.SEVERITY_HIGH,
@@ -380,14 +455,17 @@ class AbapAuthorizationAuditor(BaseAuditor):
             bad,
             "Grant S_TABU_CLI only to a small set of system administrators; changes to "
             "client-independent tables must be tightly controlled and logged.",
-            ["SAP Help — S_TABU_CLI", "SAP Security Baseline"])
+            ["SAP Help — S_TABU_CLI", "SAP Security Baseline"],
+            objects=objs)
 
     def check_os_file_access(self):
         """S_DATASET FILENAME=* + PROGRAM=* → arbitrary OS file read/write from ABAP."""
-        bad = [self._role_label(i["role"], "S_DATASET FILENAME=*, PROGRAM=*")
-               for i in self._objects("S_DATASET")
-               if self._has_star(self._field(i, "FILENAME"))
-               and self._has_star(self._field(i, "PROGRAM"))]
+        bad, objs = [], []
+        for i in self._objects("S_DATASET"):
+            if (self._has_star(self._field(i, "FILENAME"))
+                    and self._has_star(self._field(i, "PROGRAM"))):
+                bad.append(self._role_label(i["role"], "S_DATASET FILENAME=*, PROGRAM=*"))
+                objs.extend(self._role_objects(i["role"], i["object"], "FILENAME=*,PROGRAM=*"))
         self._emit(
             "AUTH-010", "Arbitrary OS file access from ABAP (S_DATASET)",
             self.SEVERITY_HIGH,
@@ -397,11 +475,12 @@ class AbapAuthorizationAuditor(BaseAuditor):
             bad,
             "Scope S_DATASET to specific file paths and programs; never grant FILENAME='*' with "
             "write access (ACTVT 34). Review custom programs that use OPEN DATASET.",
-            ["SAP Security Baseline — S_DATASET", "SAP Help — S_DATASET"])
+            ["SAP Security Baseline — S_DATASET", "SAP Help — S_DATASET"],
+            objects=objs)
 
     def check_run_any_report(self):
         """S_PROGRAM P_ACTION=SUBMIT + P_GROUP=* / blank → run any ABAP report."""
-        bad = []
+        bad, objs = [], []
         for i in self._objects("S_PROGRAM"):
             act = self._field(i, "P_ACTION")
             grp = self._field(i, "P_GROUP")
@@ -409,6 +488,11 @@ class AbapAuthorizationAuditor(BaseAuditor):
             wide = self._has_star(grp) or any(low.strip() == "" for low, _ in grp) or not grp
             if runs and wide:
                 bad.append(self._role_label(i["role"], "S_PROGRAM P_ACTION=SUBMIT, P_GROUP=*/blank"))
+                # an explicit '*' and an unmaintained (blank/absent) P_GROUP reach the
+                # same place by different routes; keep them distinguishable.
+                objs.extend(self._role_objects(
+                    i["role"], i["object"],
+                    "P_GROUP=*" if self._has_star(grp) else "P_GROUP=blank"))
         self._emit(
             "AUTH-011", "Run-any-report authorization (S_PROGRAM)",
             self.SEVERITY_HIGH,
@@ -419,13 +503,16 @@ class AbapAuthorizationAuditor(BaseAuditor):
             bad,
             "Assign program authorization groups (transaction SE38 → attributes) to sensitive "
             "reports and grant S_PROGRAM only for the required groups.",
-            ["SAP Help — S_PROGRAM", "DSAG Audit — report execution"])
+            ["SAP Help — S_PROGRAM", "DSAG Audit — report execution"],
+            objects=objs)
 
     def check_batch_impersonation(self):
         """S_BTCH_NAM BTCUNAME=* → schedule job steps under any other user."""
-        bad = [self._role_label(i["role"], "S_BTCH_NAM BTCUNAME=*")
-               for i in self._objects("S_BTCH_NAM")
-               if self._has_star(self._field(i, "BTCUNAME"))]
+        bad, objs = [], []
+        for i in self._objects("S_BTCH_NAM"):
+            if self._has_star(self._field(i, "BTCUNAME")):
+                bad.append(self._role_label(i["role"], "S_BTCH_NAM BTCUNAME=*"))
+                objs.extend(self._role_objects(i["role"], i["object"], "BTCUNAME=*"))
         self._emit(
             "AUTH-012", "Background-job impersonation (S_BTCH_NAM BTCUNAME = *)",
             self.SEVERITY_HIGH,
@@ -435,7 +522,8 @@ class AbapAuthorizationAuditor(BaseAuditor):
             bad,
             "Restrict S_BTCH_NAM to the specific step-users a role legitimately needs; never '*'. "
             "Review scheduled jobs that run under privileged batch users.",
-            ["SAP Security Baseline — S_BTCH_NAM", "DSAG Audit — batch impersonation"])
+            ["SAP Security Baseline — S_BTCH_NAM", "DSAG Audit — batch impersonation"],
+            objects=objs)
 
     def check_sensitive_tcodes(self):
         """Sensitive Basis/admin transactions (S_TCODE) present in roles."""
@@ -445,8 +533,13 @@ class AbapAuthorizationAuditor(BaseAuditor):
                 t = str(low).strip().upper()
                 if t in self.CRITICAL_TCODES:
                     role_tcodes.setdefault(i["role"], set()).add(t)
-        bad = [self._role_label(r, "sensitive tcodes: " + ", ".join(sorted(tcs)))
-               for r, tcs in role_tcodes.items()]
+        bad, objs = [], []
+        for r, tcs in role_tcodes.items():
+            bad.append(self._role_label(r, "sensitive tcodes: " + ", ".join(sorted(tcs))))
+            # the transactions themselves are the concrete objects here, so each one is
+            # its own node rather than a qualifier on S_TCODE.
+            objs.extend(self._role_objects(r))
+            objs.extend({"type": "tcode", "name": t} for t in sorted(tcs))
         self._emit(
             "AUTH-013", "Sensitive Basis / administration transactions in roles",
             self.SEVERITY_HIGH,
@@ -457,11 +550,12 @@ class AbapAuthorizationAuditor(BaseAuditor):
             bad,
             "Review each sensitive transaction against the role's business purpose. Move Basis "
             "transactions into dedicated administrator roles under least privilege and four-eyes.",
-            ["DSAG Audit Guideline — critical transactions", "SAP Security Baseline"])
+            ["DSAG Audit Guideline — critical transactions", "SAP Security Baseline"],
+            objects=objs)
 
     def check_developer_change_access(self):
         """S_DEVELOP change access (ACTVT 01/02) on development objects in productive roles."""
-        bad = []
+        bad, objs = [], []
         for i in self._objects("S_DEVELOP"):
             objtype = self._field(i, "OBJTYPE")
             # skip pure Debug&Replace (handled by AUTH-001): only DEBUG present. Any
@@ -471,6 +565,9 @@ class AbapAuthorizationAuditor(BaseAuditor):
                 continue
             if self._covers(self._field(i, "ACTVT"), "01") or self._covers(self._field(i, "ACTVT"), "02"):
                 bad.append(self._role_label(i["role"], "S_DEVELOP ACTVT=01/02 (create/change ABAP objects)"))
+                acts = "/".join(a for a in ("01", "02")
+                                if self._covers(self._field(i, "ACTVT"), a))
+                objs.extend(self._role_objects(i["role"], i["object"], f"ACTVT={acts}"))
         self._emit(
             "AUTH-014", "ABAP development change access (S_DEVELOP create/change)",
             self.SEVERITY_HIGH,
@@ -481,7 +578,8 @@ class AbapAuthorizationAuditor(BaseAuditor):
             bad,
             "Remove development authorizations from productive-system roles; enforce "
             "change-and-transport. Restrict S_DEVELOP to the development system and to developers.",
-            ["SAP Security Baseline — S_DEVELOP", "DSAG Audit — developer access in production"])
+            ["SAP Security Baseline — S_DEVELOP", "DSAG Audit — developer access in production"],
+            objects=objs)
 
     # ==================================================================  MEDIUM
     def check_object_disabling(self):
@@ -512,5 +610,11 @@ class AbapAuthorizationAuditor(BaseAuditor):
                     ),
                     references=["SAP Security Baseline — auth/object_disabling_active",
                                 "SAP Help — Globally deactivating authorization checks"],
+                    # The only per-object finding in this module: it names ONE profile
+                    # parameter, not a set of roles. The value is the qualifier because
+                    # the parameter existing is not the defect — its setting is.
+                    affected_objects=[{"type": "parameter_name", "name": name,
+                                       "qualifier": value}],
+                    scope="object",
                 )
                 return

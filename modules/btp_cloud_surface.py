@@ -61,6 +61,30 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
         "LDAP", "Mail", "AS2", "IDOC", "SuccessFactors",
     ]
 
+    @staticmethod
+    def _add_object(bucket: List[Dict[str, Any]], obj_type: str,
+                    name: Any, qualifier: Any = None) -> None:
+        """Append one structured affected object to `bucket`, or nothing.
+
+        The display strings built by the checks below fall back to the literal
+        "unknown" when an export row carries no name. That is a placeholder for a
+        human reader, not an identity: emitted as an object it would merge every
+        unnamed row — across every export and every run — into one graph node and
+        one finding identity. So an unnamed row contributes no object at all.
+
+        `qualifier` carries the value that makes the object dangerous (a wildcard
+        path, an admin scope, TrustAll=true). Dates and ages are deliberately never
+        used as qualifiers: they change on every run, which would churn the node.
+        """
+        text = "" if name is None else str(name).strip()
+        if not text or text.lower() == "unknown":
+            return
+        obj: Dict[str, Any] = {"type": obj_type, "name": text}
+        qual = "" if qualifier is None else str(qualifier).strip()
+        if qual:
+            obj["qualifier"] = qual
+        bucket.append(obj)
+
     def run_all_checks(self) -> List[Dict[str, Any]]:
         self.check_cloud_connector_backends()
         self.check_cloud_connector_acls()
@@ -104,6 +128,9 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
         wildcard_mappings = []
         high_risk_exposed = []
         all_backends = []
+        wildcard_objects: List[Dict[str, Any]] = []
+        high_risk_objects: List[Dict[str, Any]] = []
+        backend_objects: List[Dict[str, Any]] = []
 
         for backend in backends:
             if not isinstance(backend, dict):
@@ -118,6 +145,7 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                         backend.get("accessPolicy", [])))
 
             all_backends.append(f"{name} → {internal_host} ({protocol})")
+            self._add_object(backend_objects, "cc_backend", name)
 
             if isinstance(resources, list):
                 for res in resources:
@@ -140,12 +168,20 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                             f"{name}: path='{path}' (exactMatch={exact_match}) "
                             f"→ {internal_host}"
                         )
+                        self._add_object(
+                            wildcard_objects, "cc_backend", name,
+                            f"path={path}" if path else None,
+                        )
 
                     # High-risk paths
                     for risky in self.HIGH_RISK_BACKEND_PATHS:
                         if risky.lower() in str(path).lower():
                             high_risk_exposed.append(
                                 f"{name}: {path} → {internal_host}"
+                            )
+                            self._add_object(
+                                high_risk_objects, "cc_backend", name,
+                                f"path={path}" if path else None,
                             )
                             break
 
@@ -172,6 +208,13 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "SAP BTP Cloud Connector Security Guide — Resource Access Control",
                     "SAP Note 2Amazon3222800 — Cloud Connector Hardening",
                 ],
+                affected_objects=wildcard_objects,
+                # One finding summarising every wildcard mapping in the Cloud
+                # Connector. Tightening one backend's mapping must leave the
+                # remaining ones on the SAME finding rather than retiring it and
+                # raising a fresh one with a reset age, so the members are carried
+                # as data and kept out of the identity.
+                scope="aggregate",
             )
 
         if high_risk_exposed:
@@ -194,6 +237,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Document business justification for each exposed resource."
                 ),
                 references=["SAP BTP Security Recommendations — Cloud Connector"],
+                affected_objects=high_risk_objects,
+                # Summary of every high-risk path exposed through the tunnel;
+                # removing one exposure must not reset the finding's age.
+                scope="aggregate",
             )
 
         # Too many backends
@@ -218,6 +265,11 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                 ),
                 references=["SAP BTP Cloud Connector — Architecture Best Practices"],
                 details={"total_backends": len(all_backends)},
+                affected_objects=backend_objects,
+                # A threshold finding about the POPULATION of backends, not about
+                # any one of them. Decommissioning a single backend must keep this
+                # one finding (with one fewer member) rather than raise a new one.
+                scope="aggregate",
             )
 
     def check_cloud_connector_acls(self):
@@ -233,6 +285,7 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
 
         # Check for overly permissive ACLs
         open_acls = []
+        open_acl_objects: List[Dict[str, Any]] = []
         for acl in acls:
             if not isinstance(acl, dict):
                 continue
@@ -247,6 +300,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                 if enabled in (True, "true", "True", 1, "1"):
                     open_acls.append(
                         f"Subaccount: {subaccount} — hosts: {allowed_hosts or 'unrestricted'}"
+                    )
+                    self._add_object(
+                        open_acl_objects, "subaccount", subaccount,
+                        f"allowedHosts={allowed_hosts}" if allowed_hosts else None,
                     )
 
         if open_acls:
@@ -267,6 +324,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Combine with principal propagation for user-level access control."
                 ),
                 references=["SAP BTP Cloud Connector — Access Control Configuration"],
+                affected_objects=open_acl_objects,
+                # Summary of every subaccount whose ACL is unrestricted; restricting
+                # one of them must not retire this finding and reset its age.
+                scope="aggregate",
             )
 
     def check_cloud_connector_certificates(self):
@@ -280,6 +341,8 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
 
         expiring_soon = []
         weak_certs = []
+        expiring_objects: List[Dict[str, Any]] = []
+        weak_cert_objects: List[Dict[str, Any]] = []
         now = datetime.now()
         warning_days = self.get_config("cert_expiry_warning_days", 90)
 
@@ -304,10 +367,14 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                         expiring_soon.append(
                             f"{name} — EXPIRED ({expiry}, {abs(days_remaining)}d ago)"
                         )
+                        # No date qualifier: the days-remaining value changes on
+                        # every run and would churn the certificate's node key.
+                        self._add_object(expiring_objects, "certificate", name)
                     elif days_remaining <= warning_days:
                         expiring_soon.append(
                             f"{name} — expires in {days_remaining}d ({expiry})"
                         )
+                        self._add_object(expiring_objects, "certificate", name)
 
             # Check weak key/algo
             if key_size:
@@ -316,11 +383,15 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                         weak_certs.append(
                             f"{name} — key size: {key_size} bits (min: 2048)"
                         )
+                        self._add_object(weak_cert_objects, "certificate", name,
+                                         f"keySize={key_size}")
                 except ValueError:
                     pass
 
             if algo and any(w in str(algo).upper() for w in ("SHA1", "MD5", "SHA-1")):
                 weak_certs.append(f"{name} — weak algorithm: {algo}")
+                self._add_object(weak_cert_objects, "certificate", name,
+                                 f"algorithm={algo}")
 
         if expiring_soon:
             self.finding(
@@ -340,6 +411,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Schedule renewal 30+ days before expiry to allow testing."
                 ),
                 references=["SAP BTP Cloud Connector — Certificate Management"],
+                affected_objects=expiring_objects,
+                # Summary of the expiring certificate population; renewing one must
+                # not retire the finding covering the others.
+                scope="aggregate",
             )
 
         if weak_certs:
@@ -359,6 +434,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Update all Cloud Connector system and CA certificates."
                 ),
                 references=["SAP Note 510007 — SSL/TLS Configuration"],
+                affected_objects=weak_cert_objects,
+                # Summary of every weak certificate; replacing one must not reset
+                # the age of the finding that still covers the rest.
+                scope="aggregate",
             )
 
     def check_cloud_connector_stale(self):
@@ -372,6 +451,7 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
 
         stale_days = self.get_config("cc_stale_threshold_days", 90)
         stale = []
+        stale_objects: List[Dict[str, Any]] = []
         now = datetime.now()
 
         for backend in backends:
@@ -391,8 +471,12 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                         stale.append(
                             f"{name} — last used: {last_used} ({days_idle}d ago)"
                         )
+                        # Idle days grow every run, so they are not a qualifier.
+                        self._add_object(stale_objects, "cc_backend", name)
             elif status and str(status).upper() in ("DISABLED", "INACTIVE", "DISCONNECTED"):
                 stale.append(f"{name} — status: {status}")
+                self._add_object(stale_objects, "cc_backend", name,
+                                 f"status={status}")
 
         if stale:
             self.finding(
@@ -412,6 +496,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Archive configuration before deletion for reference."
                 ),
                 references=["SAP BTP Cloud Connector — Lifecycle Management"],
+                affected_objects=stale_objects,
+                # Summary of the stale-backend population; deleting one backend must
+                # leave the rest on the same finding.
+                scope="aggregate",
             )
 
     @staticmethod
@@ -486,6 +574,14 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "SAP Security Note 3424610",
                     "SAP BTP Cloud Connector — Release Notes and Upgrade",
                 ],
+                # No affected_objects: the Cloud Connector export carries a version
+                # but no name, host or instance id, and inventing one would merge
+                # every customer's SCC into a single node. The version itself is a
+                # property, not a subject — putting it in the identity would retire
+                # this finding and raise a new one on a 2.15.2 → 2.16.0 upgrade that
+                # is still vulnerable, resetting the age of an unfixed defect. So the
+                # singleton component is identified by (system, client, check_id).
+                scope="aggregate",
             )
         elif vt < cve_intro:
             self.finding(
@@ -509,6 +605,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "patching as part of monthly SAP Security Patch Day handling."
                 ),
                 references=["SAP BTP Cloud Connector — Release Notes and Upgrade"],
+                # Same singleton component, same reasoning as the branch above: the
+                # export names no Cloud Connector instance, and the version is a
+                # property rather than a subject.
+                scope="aggregate",
             )
 
     # ════════════════════════════════════════════════════════════════
@@ -535,6 +635,9 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
         admin_scopes = []
         orphaned = []
         no_rotation = []
+        no_rotation_objects: List[Dict[str, Any]] = []
+        admin_scope_objects: List[Dict[str, Any]] = []
+        orphaned_objects: List[Dict[str, Any]] = []
         rotation_days = self.get_config("binding_rotation_max_days", 180)
         now = datetime.now()
 
@@ -567,6 +670,12 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                             f"{label} — age: {age_days}d (max: {rotation_days}d), "
                             f"last rotated: {rotate_ref}"
                         )
+                        # The service disambiguates two bindings that share a name;
+                        # the age does not, and would churn the node every run.
+                        self._add_object(
+                            no_rotation_objects, "service_binding", name,
+                            f"service={service}" if service else None,
+                        )
 
             # Check admin-level scopes
             if isinstance(scopes, (list, str)):
@@ -579,12 +688,21 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     admin_scopes.append(
                         f"{label} — scopes: {scopes if isinstance(scopes, str) else ', '.join(str(s) for s in scopes[:5])}"
                     )
+                    # The granted scope is what makes this binding dangerous, so it
+                    # qualifies the object: the same binding narrowed to read-only is
+                    # a different defect from the same binding holding admin.
+                    self._add_object(
+                        admin_scope_objects, "service_binding", name,
+                        f"scopes={scopes if isinstance(scopes, str) else ', '.join(str(s) for s in scopes[:5])}",
+                    )
 
             # Orphaned bindings
             if instance_status and str(instance_status).upper() in (
                 "DELETED", "FAILED", "ORPHANED", "DEPROVISIONED"
             ):
                 orphaned.append(f"{label} — instance status: {instance_status}")
+                self._add_object(orphaned_objects, "service_binding", name,
+                                 f"instanceStatus={instance_status}")
 
         if no_rotation:
             self.finding(
@@ -605,6 +723,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Implement credential rotation pipelines in CI/CD."
                 ),
                 references=["SAP BTP Security Guide — Credential Lifecycle Management"],
+                affected_objects=no_rotation_objects,
+                # Summary of every over-age binding; rotating one must not retire the
+                # finding that still covers the others.
+                scope="aggregate",
             )
 
         if admin_scopes:
@@ -625,6 +747,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "admin vs operational use. Review and narrow existing scopes."
                 ),
                 references=["SAP BTP — Service Key Scope Management"],
+                affected_objects=admin_scope_objects,
+                # Summary of every over-scoped binding; narrowing one must not reset
+                # the age of the finding covering the rest.
+                scope="aggregate",
             )
 
         if orphaned:
@@ -645,6 +771,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "are deprovisioned. Audit using BTP Service Manager API."
                 ),
                 references=["SAP BTP — Service Instance Lifecycle"],
+                affected_objects=orphaned_objects,
+                # Summary of the orphaned-binding population; deleting one must not
+                # raise a brand-new finding for the remainder.
+                scope="aggregate",
             )
 
     # ════════════════════════════════════════════════════════════════
@@ -670,6 +800,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
         no_tls_verify = []
         stale_dests = []
         proxy_issues = []
+        stored_cred_objects: List[Dict[str, Any]] = []
+        no_tls_objects: List[Dict[str, Any]] = []
+        stale_dest_objects: List[Dict[str, Any]] = []
+        proxy_objects: List[Dict[str, Any]] = []
         now = datetime.now()
 
         for dest in dest_list:
@@ -695,10 +829,19 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                 stored_creds.append(
                     f"{label} (auth: {auth_type}, user: {user})"
                 )
+                # The authentication type is the defect: the same destination on
+                # OAuth client_credentials is not this finding.
+                self._add_object(stored_cred_objects, "btp_destination", name,
+                                 f"auth={auth_type}")
 
             # TLS verification disabled
             if str(tls_verify).lower() in ("true", "1", "yes"):
                 no_tls_verify.append(f"{label} — TrustAll/SkipSSL = true")
+                self._add_object(no_tls_objects, "btp_destination", name,
+                                 f"TrustAll={tls_verify}")
+                # The URL is the endpoint actually exposed to interception, and is
+                # a graph node in its own right.
+                self._add_object(no_tls_objects, "url", url)
 
             # Proxy type misconfig
             if proxy_type and url:
@@ -710,10 +853,16 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     proxy_issues.append(
                         f"{label} — ProxyType=OnPremise but URL appears external"
                     )
+                    self._add_object(proxy_objects, "btp_destination", name,
+                                     f"ProxyType={proxy_type}")
+                    self._add_object(proxy_objects, "url", url)
                 elif proxy_type.upper() == "INTERNET" and not is_internet_url:
                     proxy_issues.append(
                         f"{label} — ProxyType=Internet but URL appears on-premise"
                     )
+                    self._add_object(proxy_objects, "btp_destination", name,
+                                     f"ProxyType={proxy_type}")
+                    self._add_object(proxy_objects, "url", url)
 
             # Stale destinations
             if last_modified:
@@ -725,6 +874,8 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                         stale_dests.append(
                             f"{label} — last modified: {last_modified} ({days_old}d ago)"
                         )
+                        # No date qualifier — the age grows on every run.
+                        self._add_object(stale_dest_objects, "btp_destination", name)
 
         if stored_creds:
             self.finding(
@@ -744,6 +895,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "use the Credential Store service for secret management."
                 ),
                 references=["SAP BTP Destination Service — Authentication Types"],
+                affected_objects=stored_cred_objects,
+                # Summary of every destination that stores a credential; migrating
+                # one to OAuth must not retire the finding covering the rest.
+                scope="aggregate",
             )
 
         if no_tls_verify:
@@ -764,6 +919,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Never use TrustAll=true in production environments."
                 ),
                 references=["SAP BTP Security Guide — Transport Layer Security"],
+                affected_objects=no_tls_objects,
+                # Summary of every TrustAll destination; fixing one must not reset
+                # the age of the finding covering the others.
+                scope="aggregate",
             )
 
         if proxy_issues:
@@ -784,6 +943,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Verify each destination's network routing path."
                 ),
                 references=["SAP BTP Destination Service — Proxy Configuration"],
+                affected_objects=proxy_objects,
+                # Summary of every proxy-type mismatch; correcting one destination
+                # must leave the rest on the same finding.
+                scope="aggregate",
             )
 
         if stale_dests:
@@ -803,6 +966,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Delete unused destinations. Update credentials on active ones."
                 ),
                 references=["SAP BTP — Destination Lifecycle Management"],
+                affected_objects=stale_dest_objects,
+                # Summary of the stale-destination population; deleting one must not
+                # raise a fresh finding for the remainder.
+                scope="aggregate",
             )
 
     # ════════════════════════════════════════════════════════════════
@@ -826,6 +993,8 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
         no_conditional = []
         no_ip_restrict = []
         no_risk_based = []
+        no_conditional_objects: List[Dict[str, Any]] = []
+        no_ip_objects: List[Dict[str, Any]] = []
 
         for app in apps:
             if not isinstance(app, dict):
@@ -850,9 +1019,14 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
 
             if not auth_rules or (isinstance(auth_rules, list) and len(auth_rules) == 0):
                 no_conditional.append(label)
+                # No qualifier: the defect is the ABSENCE of a rule, so there is no
+                # dangerous value to narrow the object with — and leaving it off lets
+                # this app dedupe with the same app named by the other IAS checks.
+                self._add_object(no_conditional_objects, "ias_application", name)
 
             if not ip_rules or (isinstance(ip_rules, list) and len(ip_rules) == 0):
                 no_ip_restrict.append(label)
+                self._add_object(no_ip_objects, "ias_application", name)
 
             if not risk_based or str(risk_based).lower() in ("false", "0", "no", "disabled"):
                 no_risk_based.append(label)
@@ -876,6 +1050,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Enforce stronger auth for admin or sensitive operations."
                 ),
                 references=["SAP IAS — Conditional Authentication"],
+                affected_objects=no_conditional_objects,
+                # Summary of every IAS application missing conditional auth;
+                # configuring one must not retire the finding for the rest.
+                scope="aggregate",
             )
 
         if no_ip_restrict:
@@ -895,6 +1073,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "IP ranges. Use IAS conditional authentication for IP-based rules."
                 ),
                 references=["SAP IAS — IP Range Restrictions"],
+                affected_objects=no_ip_objects,
+                # Summary of every IAS application without IP restrictions; adding
+                # a range to one must not reset the finding's age.
+                scope="aggregate",
             )
 
     def check_ias_mfa(self):
@@ -907,6 +1089,7 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
             ias.get("applications", ias.get("apps", []))
 
         no_mfa = []
+        no_mfa_objects: List[Dict[str, Any]] = []
         for app in apps:
             if not isinstance(app, dict):
                 continue
@@ -922,6 +1105,7 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
 
             if not mfa or str(mfa).lower() in ("false", "0", "no", "disabled", "none", ""):
                 no_mfa.append(f"{name} (MFA: {mfa or 'not configured'})")
+                self._add_object(no_mfa_objects, "ias_application", name)
 
         if no_mfa:
             self.finding(
@@ -941,6 +1125,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Configure IAS to require MFA as a second authentication factor."
                 ),
                 references=["SAP IAS — Multi-Factor Authentication Configuration"],
+                affected_objects=no_mfa_objects,
+                # Summary of every IAS application without MFA; enabling MFA on one
+                # must not retire the finding that still covers the others.
+                scope="aggregate",
             )
 
     def check_ias_password_policy(self):
@@ -1034,6 +1222,13 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "SAP Cloud Identity Services — Configure Password Policy",
                     "SAP BTP Security Recommendations — Identity Authentication",
                 ],
+                # No affected_objects: `issues` lists DIMENSIONS of one tenant-wide
+                # policy (minimum length, lockout threshold), not objects. The export
+                # carries no tenant name to hang them on, and the policy fields are
+                # IAS settings — not SAP profile parameters — so naming them as
+                # parameter objects would invent SAP identifiers that do not exist.
+                # A tenant singleton is correctly identified by check_id alone.
+                scope="aggregate",
             )
 
     def check_ias_idp_enforcement(self):
@@ -1096,6 +1291,11 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "SAP Cloud Identity Services — Corporate Identity Providers",
                     "SAP BTP Security Recommendations — Enforce Single Sign-On",
                 ],
+                # No affected_objects: `reasons` are enforcement gaps in the tenant's
+                # single corporate-IdP trust, and the export names no identity
+                # provider (only enabled/enforced/fallback flags and a protocol).
+                # Fabricating a name would merge every tenant's IdP into one node.
+                scope="aggregate",
             )
 
     # ════════════════════════════════════════════════════════════════
@@ -1116,6 +1316,8 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
 
         unused_entitled = []
         security_unused = []
+        unused_objects: List[Dict[str, Any]] = []
+        security_unused_objects: List[Dict[str, Any]] = []
 
         for ent in entitled:
             if not isinstance(ent, dict):
@@ -1140,10 +1342,18 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                 if subaccount:
                     label += f" (subaccount: {subaccount})"
                 unused_entitled.append(label)
+                # The plan is part of what is entitled — the same service on a
+                # different plan is a different entitlement.
+                self._add_object(unused_objects, "btp_service", service,
+                                 f"plan={plan}" if plan else None)
+                self._add_object(unused_objects, "subaccount", subaccount)
 
                 # Flag security-critical services that are entitled but unused
                 if any(s in service.lower() for s in self.SECURITY_CRITICAL_SERVICES):
                     security_unused.append(label)
+                    self._add_object(security_unused_objects, "btp_service", service,
+                                     f"plan={plan}" if plan else None)
+                    self._add_object(security_unused_objects, "subaccount", subaccount)
 
         if unused_entitled:
             self.finding(
@@ -1165,6 +1375,12 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                 ),
                 references=["SAP BTP — Entitlement and Quota Management"],
                 details={"total_unused": len(unused_entitled)},
+                # Summary of the unused-entitlement population. The display list is
+                # truncated at 30 for readability; the objects are not, because they
+                # are graph nodes rather than report text — and they stay out of the
+                # identity so deallocating one quota does not reset the age.
+                affected_objects=unused_objects,
+                scope="aggregate",
             )
 
         if security_unused:
@@ -1186,6 +1402,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "(for SIEM integration)."
                 ),
                 references=["SAP BTP Security Recommendations — Essential Services"],
+                affected_objects=security_unused_objects,
+                # Summary of the security services left unprovisioned; provisioning
+                # one must not retire the finding covering the others.
+                scope="aggregate",
             )
 
     # ════════════════════════════════════════════════════════════════
@@ -1209,6 +1429,9 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
         wildcard_topics = []
         no_acl_queues = []
         cross_namespace = []
+        wildcard_topic_objects: List[Dict[str, Any]] = []
+        no_acl_objects: List[Dict[str, Any]] = []
+        cross_namespace_objects: List[Dict[str, Any]] = []
 
         for queue in queues:
             if not isinstance(queue, dict):
@@ -1229,6 +1452,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                         wildcard_topics.append(
                             f"Queue: {name} — topic: {topic_str}"
                         )
+                        # The wildcard pattern is the defect: the same queue bound to
+                        # one explicit topic is not this finding.
+                        self._add_object(wildcard_topic_objects, "event_queue", name,
+                                         f"topic={topic_str}")
 
                     # Cross-namespace subscriptions
                     if namespace and isinstance(topic, str):
@@ -1238,10 +1465,14 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                                 f"Queue: {name} — subscribes to foreign namespace: "
                                 f"{topic_ns} (own: {namespace})"
                             )
+                            self._add_object(cross_namespace_objects, "event_queue",
+                                             name, f"foreignNamespace={topic_ns}")
 
             # No ACL defined
             if not acl or str(acl).upper() in ("NONE", "OPEN", "", "PUBLIC"):
                 no_acl_queues.append(f"{name} — access policy: {acl or 'none'}")
+                self._add_object(no_acl_objects, "event_queue", name,
+                                 f"accessPolicy={acl}" if acl else None)
 
         if wildcard_topics:
             self.finding(
@@ -1261,6 +1492,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Use namespace-qualified topic paths for isolation."
                 ),
                 references=["SAP Event Mesh — Topic Authorization Best Practices"],
+                affected_objects=wildcard_topic_objects,
+                # Summary of every wildcard subscription; narrowing one queue must
+                # not retire the finding covering the rest.
+                scope="aggregate",
             )
 
         if no_acl_queues:
@@ -1281,6 +1516,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Use Event Mesh management API to set queue-level permissions."
                 ),
                 references=["SAP Event Mesh — Queue Access Control"],
+                affected_objects=no_acl_objects,
+                # Summary of every queue without an access policy; adding one policy
+                # must not reset the age of the finding covering the others.
+                scope="aggregate",
             )
 
         if cross_namespace:
@@ -1301,6 +1540,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Use separate Event Mesh instances for isolated domains."
                 ),
                 references=["SAP Event Mesh — Namespace Isolation"],
+                affected_objects=cross_namespace_objects,
+                # Summary of every cross-namespace subscription; unsubscribing one
+                # must leave the rest on the same finding.
+                scope="aggregate",
             )
 
     # ════════════════════════════════════════════════════════════════
@@ -1326,6 +1569,8 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
 
         old_creds = []
         type_issues = []
+        old_cred_objects: List[Dict[str, Any]] = []
+        type_issue_objects: List[Dict[str, Any]] = []
         rotation_days = self.get_config("cpi_credential_rotation_days", 180)
         now = datetime.now()
 
@@ -1350,6 +1595,9 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                         old_creds.append(
                             f"{label} — age: {age_days}d (deployed: {deployed})"
                         )
+                        # Age is the defect but cannot qualify the object: it grows
+                        # every run and would churn the node.
+                        self._add_object(old_cred_objects, "cpi_credential", name)
 
             # Plain text or weak credential types
             if cred_type and cred_type.upper() in (
@@ -1358,6 +1606,9 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                 type_issues.append(
                     f"{label} — consider migrating to OAuth or certificate"
                 )
+                # Here the credential TYPE is exactly what makes it dangerous.
+                self._add_object(type_issue_objects, "cpi_credential", name,
+                                 f"type={cred_type}")
 
         if old_creds:
             self.finding(
@@ -1377,6 +1628,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Implement credential rotation as part of CI/CD pipelines."
                 ),
                 references=["SAP CPI — Security Material Management"],
+                affected_objects=old_cred_objects,
+                # Summary of every over-age credential; rotating one must not retire
+                # the finding covering the others.
+                scope="aggregate",
             )
 
         if type_issues:
@@ -1397,6 +1652,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Use the BTP Credential Store service for centralized secret management."
                 ),
                 references=["SAP CPI Security Best Practices"],
+                affected_objects=type_issue_objects,
+                # Summary of every basic/plaintext credential; migrating one must not
+                # reset the age of the finding covering the rest.
+                scope="aggregate",
             )
 
     def check_cpi_iflow_security(self):
@@ -1414,6 +1673,9 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
         hardcoded_creds = []
         no_auth_sender = []
         http_endpoints = []
+        hardcoded_objects: List[Dict[str, Any]] = []
+        no_auth_objects: List[Dict[str, Any]] = []
+        http_endpoint_objects: List[Dict[str, Any]] = []
 
         for flow in iflows:
             if not isinstance(flow, dict):
@@ -1429,6 +1691,7 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
             # Hardcoded credentials in iFlow
             if has_hardcoded in (True, "true", "True", "1", "yes"):
                 hardcoded_creds.append(f"{name} — contains embedded credentials")
+                self._add_object(hardcoded_objects, "iflow", name)
 
             # No sender authentication
             if sender_auth and str(sender_auth).upper() in (
@@ -1437,6 +1700,9 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                 no_auth_sender.append(
                     f"{name} — sender auth: {sender_auth or 'none'}"
                 )
+                # The configured sender auth is the dangerous value.
+                self._add_object(no_auth_objects, "iflow", name,
+                                 f"senderAuth={sender_auth}")
 
             # HTTP (non-HTTPS) endpoints
             if isinstance(endpoints, list):
@@ -1444,6 +1710,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     ep_str = str(ep).lower()
                     if ep_str.startswith("http://") and "localhost" not in ep_str:
                         http_endpoints.append(f"{name} — endpoint: {ep}")
+                        self._add_object(http_endpoint_objects, "iflow", name)
+                        # The plain-HTTP URL itself is the exposed thing; it is kept
+                        # in its original case because a URL is case-bearing.
+                        self._add_object(http_endpoint_objects, "url", ep)
 
         if hardcoded_creds:
             self.finding(
@@ -1464,6 +1734,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Audit iFlow source for any remaining plaintext secrets."
                 ),
                 references=["SAP CPI — Security Material Externalization"],
+                affected_objects=hardcoded_objects,
+                # Summary of every iFlow carrying an embedded secret; externalising
+                # one must not retire the finding covering the others.
+                scope="aggregate",
             )
 
         if no_auth_sender:
@@ -1484,6 +1758,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Restrict sender access using role-based authorization."
                 ),
                 references=["SAP CPI — Sender Authentication Configuration"],
+                affected_objects=no_auth_objects,
+                # Summary of every unauthenticated inbound channel; securing one must
+                # not reset the age of the finding covering the rest.
+                scope="aggregate",
             )
 
         if http_endpoints:
@@ -1504,6 +1782,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Remove any HTTP fallback configurations."
                 ),
                 references=["SAP CPI — Transport Layer Security"],
+                affected_objects=http_endpoint_objects,
+                # Summary of every plain-HTTP endpoint; moving one to HTTPS must not
+                # retire the finding covering the others.
+                scope="aggregate",
             )
 
     # ════════════════════════════════════════════════════════════════
@@ -1524,6 +1806,8 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
 
         public_endpoints = []
         no_private_link = []
+        public_endpoint_objects: List[Dict[str, Any]] = []
+        no_private_link_objects: List[Dict[str, Any]] = []
 
         for cfg in configs:
             if not isinstance(cfg, dict):
@@ -1542,6 +1826,9 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                 public_endpoints.append(
                     f"{label} — endpoint: {endpoint_type}"
                 )
+                self._add_object(public_endpoint_objects, "btp_service", service,
+                                 f"endpointType={endpoint_type}")
+                self._add_object(public_endpoint_objects, "url", url)
 
             # Critical services without Private Link
             critical_for_pl = ["hana", "s4hana", "abap", "connectivity"]
@@ -1552,6 +1839,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     no_private_link.append(
                         f"{label} — Private Link: not configured"
                     )
+                    # No qualifier: the defect is the absence of Private Link, so
+                    # there is no value from the export to narrow the service with.
+                    self._add_object(no_private_link_objects, "btp_service", service)
+                    self._add_object(no_private_link_objects, "url", url)
 
         if public_endpoints:
             self.finding(
@@ -1571,6 +1862,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Implement WAF/DDoS protection for internet-facing endpoints."
                 ),
                 references=["SAP BTP — Private Link Service"],
+                affected_objects=public_endpoint_objects,
+                # Summary of every publicly-reachable service endpoint; privatising
+                # one must not retire the finding covering the rest.
+                scope="aggregate",
             )
 
         if no_private_link:
@@ -1594,6 +1889,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "SAP BTP — Private Link Service Setup",
                     "SAP Note 3267858 — Private Link for RISE",
                 ],
+                affected_objects=no_private_link_objects,
+                # Summary of every critical service still on public routing; enabling
+                # Private Link for one must not reset the finding's age.
+                scope="aggregate",
             )
 
     # ════════════════════════════════════════════════════════════════
@@ -1617,6 +1916,8 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
         no_audit = []
         no_custom_idp = []
         inconsistent = []
+        no_audit_objects: List[Dict[str, Any]] = []
+        no_custom_idp_objects: List[Dict[str, Any]] = []
 
         for sa in sa_list:
             if not isinstance(sa, dict):
@@ -1638,12 +1939,17 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                 "false", "0", "no", ""
             ):
                 no_audit.append(label)
+                # The subaccount id is preferred over the display name: it is the
+                # stable key, it survives a rename, and it is the same string the
+                # Cloud Connector ACL check names, so both findings land on one node.
+                self._add_object(no_audit_objects, "subaccount", sa_id or name)
 
             # Still using default IDP (no custom IDP configured)
             if not custom_idp or str(custom_idp).lower() in (
                 "sap.default", "default", "", "sap.ids"
             ):
                 no_custom_idp.append(label)
+                self._add_object(no_custom_idp_objects, "subaccount", sa_id or name)
 
         if no_audit:
             self.finding(
@@ -1663,6 +1969,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "Set retention periods to meet compliance requirements."
                 ),
                 references=["SAP BTP — Audit Log Service Configuration"],
+                affected_objects=no_audit_objects,
+                # Summary of every subaccount without audit logging; enabling it in
+                # one must not retire the finding covering the others.
+                scope="aggregate",
             )
 
         if no_custom_idp:
@@ -1684,6 +1994,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "policy enforcement across all subaccounts."
                 ),
                 references=["SAP BTP Security Guide — Identity Federation"],
+                affected_objects=no_custom_idp_objects,
+                # Summary of every subaccount still on the default SAP IDP;
+                # federating one must not reset the age of the finding.
+                scope="aggregate",
             )
 
     # ════════════════════════════════════════════════════════════════
@@ -1704,6 +2018,7 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
 
         apps = ias.get("applications", ias.get("apps", []))
         xsuaa_apps = []
+        xsuaa_objects: List[Dict[str, Any]] = []
 
         for app in apps:
             if not isinstance(app, dict):
@@ -1720,6 +2035,11 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                 xsuaa_apps.append(
                     f"{name} — auth: {auth_type}, trust: {trust_type}"
                 )
+                # The legacy trust chain is what makes the app a finding, so it
+                # qualifies the object: the same app once migrated to IAS is not
+                # the same defect.
+                self._add_object(xsuaa_objects, "ias_application", name,
+                                 f"auth={auth_type}, trust={trust_type}")
 
         if xsuaa_apps:
             self.finding(
@@ -1745,6 +2065,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     "SAP BTP — Migration from XSUAA to Identity Authentication",
                     "SAP Blog — Establishing Trust Between IAS and BTP",
                 ],
+                affected_objects=xsuaa_objects,
+                # Summary of the un-migrated application population; migrating one
+                # app must not retire the finding tracking the remaining backlog.
+                scope="aggregate",
             )
 
     # ════════════════════════════════════════════════════════════════

@@ -56,6 +56,7 @@ class NetworkServiceAuditor(BaseAuditor):
             return
 
         stored_creds = []
+        objects = []
         for row in rfc:
             dest = row.get("RFCDEST", row.get("DESTINATION", ""))
             user = row.get("RFCUSER", row.get("USER", ""))
@@ -66,6 +67,12 @@ class NetworkServiceAuditor(BaseAuditor):
                 stored_creds.append(
                     f"{dest} → user: {user} (auth type: {auth_type or 'stored'})"
                 )
+                if dest and str(dest).strip():
+                    objects.append({
+                        "type": "destination",
+                        "name": dest,
+                        "qualifier": f"user={user.strip()}",
+                    })
 
         if stored_creds:
             self.finding(
@@ -88,6 +95,11 @@ class NetworkServiceAuditor(BaseAuditor):
                     "SAP Note 1480644",
                     "CIS SAP Benchmark Section 4.2",
                 ],
+                affected_objects=objects,
+                # One finding summarising every destination that stores credentials.
+                # Clearing one destination must not retire this finding and raise a
+                # fresh one with a reset age — so the members stay out of identity.
+                scope="aggregate",
             )
 
     def check_rfc_external_destinations(self):
@@ -97,6 +109,7 @@ class NetworkServiceAuditor(BaseAuditor):
             return
 
         external = []
+        objects = []
         internal_patterns = self.get_config("internal_host_patterns", [
             "10.", "172.16.", "172.17.", "172.18.", "172.19.",
             "172.20.", "172.21.", "172.22.", "172.23.", "172.24.",
@@ -115,6 +128,12 @@ class NetworkServiceAuditor(BaseAuditor):
             is_internal = any(host.startswith(p) for p in internal_patterns)
             if not is_internal and host.strip():
                 external.append(f"{dest} → {host} (type: {conn_type})")
+                if dest and str(dest).strip():
+                    objects.append({
+                        "type": "destination",
+                        "name": dest,
+                        "qualifier": f"host={host.strip()}",
+                    })
 
         if external:
             self.finding(
@@ -134,6 +153,10 @@ class NetworkServiceAuditor(BaseAuditor):
                     "Remove any destinations that are no longer needed."
                 ),
                 references=["SAP Note 1480644"],
+                affected_objects=objects,
+                # Summary of every externally-pointing destination; retiring one of
+                # them must not reset the finding's age.
+                scope="aggregate",
             )
 
     def check_rfc_insecure_types(self):
@@ -143,6 +166,7 @@ class NetworkServiceAuditor(BaseAuditor):
             return
 
         insecure = []
+        objects = []
         for row in rfc:
             dest = row.get("RFCDEST", row.get("DESTINATION", ""))
             conn_type = row.get("RFCTYPE", row.get("CONN_TYPE", ""))
@@ -156,6 +180,14 @@ class NetworkServiceAuditor(BaseAuditor):
                         f"{dest} (type: {conn_type}, SNC: disabled) — "
                         f"{self.RISKY_RFC_TYPES[conn_type]}"
                     )
+                    if dest and str(dest).strip():
+                        objects.append({
+                            "type": "destination",
+                            "name": dest,
+                            # The connection type is what carries the exposure: the
+                            # same destination re-typed is a different defect.
+                            "qualifier": f"type={conn_type}",
+                        })
 
         if insecure:
             self.finding(
@@ -175,6 +207,10 @@ class NetworkServiceAuditor(BaseAuditor):
                     "Configure SNC with quality of protection 'integrity + encryption'."
                 ),
                 references=["SAP Note 2416093", "CIS SAP Benchmark Section 4.1"],
+                affected_objects=objects,
+                # Summary of the unencrypted-destination population; SNC-enabling one
+                # destination must shrink the finding, not replace it.
+                scope="aggregate",
             )
 
     def check_icf_high_risk_services(self):
@@ -184,6 +220,7 @@ class NetworkServiceAuditor(BaseAuditor):
             return
 
         active_risky = []
+        objects = []
         for row in icf:
             service_path = row.get("ICF_NAME", row.get("SERVICE_PATH",
                             row.get("PATH", row.get("SERVICE", ""))))
@@ -194,6 +231,14 @@ class NetworkServiceAuditor(BaseAuditor):
                 for risky_path, risk_desc in self.HIGH_RISK_ICF_SERVICES.items():
                     if risky_path.lower() in service_path.lower():
                         active_risky.append(f"{service_path} — {risk_desc}")
+                        if service_path and str(service_path).strip():
+                            # icf_path is case-SENSITIVE — never upper-cased. No
+                            # qualifier: the path IS the object, and leaving it bare
+                            # keeps one SICF node one graph node across NET-004/005.
+                            objects.append({
+                                "type": "icf_path",
+                                "name": service_path,
+                            })
 
         if active_risky:
             self.finding(
@@ -217,6 +262,10 @@ class NetworkServiceAuditor(BaseAuditor):
                     "SAP KBA 2661761 (ICF services: mandatory vs. deactivatable)",
                     "CIS SAP Benchmark Section 5.1",
                 ],
+                affected_objects=objects,
+                # One finding over the active high-risk service population; SICF-
+                # deactivating one node must not churn the finding's identity.
+                scope="aggregate",
             )
 
     def check_icf_no_auth(self):
@@ -226,6 +275,7 @@ class NetworkServiceAuditor(BaseAuditor):
             return
 
         no_auth = []
+        objects = []
         for row in icf:
             service_path = row.get("ICF_NAME", row.get("SERVICE_PATH",
                             row.get("PATH", row.get("SERVICE", ""))))
@@ -238,6 +288,12 @@ class NetworkServiceAuditor(BaseAuditor):
                     # Skip /sap/public/* as these are intentionally public
                     if "/sap/public/" not in service_path.lower():
                         no_auth.append(service_path)
+                        if service_path and str(service_path).strip():
+                            # Case-SENSITIVE path — /sap/bc/webRFC is not /sap/bc/webrfc.
+                            objects.append({
+                                "type": "icf_path",
+                                "name": service_path,
+                            })
 
         if no_auth:
             self.finding(
@@ -256,6 +312,10 @@ class NetworkServiceAuditor(BaseAuditor):
                     "Review and restrict the ICF handler chain."
                 ),
                 references=["SAP KBA 2661761 (ICF services: mandatory vs. deactivatable)", "CIS SAP Benchmark Section 5.2"],
+                affected_objects=objects,
+                # Summary of the anonymous-service population, not a defect in any one
+                # path: enabling auth on one service must leave the finding's age alone.
+                scope="aggregate",
             )
 
     def check_open_transports(self):
@@ -266,6 +326,8 @@ class NetworkServiceAuditor(BaseAuditor):
 
         open_transports = []
         debug_transports = []
+        open_objects = []
+        debug_objects = []
 
         for row in transports:
             tr_id = row.get("TRKORR", row.get("TRANSPORT", row.get("REQUEST", "")))
@@ -277,11 +339,21 @@ class NetworkServiceAuditor(BaseAuditor):
             # Status: D=Modifiable, L=Modifiable(protected), R=Released
             if str(status).upper() in ("D", "L", "MODIFIABLE"):
                 open_transports.append(f"{tr_id} (owner: {owner}, desc: {desc[:60]})")
+                if tr_id and str(tr_id).strip():
+                    open_objects.append({
+                        "type": "transport",
+                        "name": tr_id,
+                        # The modifiable status is the defect; a released request
+                        # of the same number is not the same defect.
+                        "qualifier": f"status={str(status).strip()}",
+                    })
 
             # Check for debug/replace indicators
             desc_lower = desc.lower()
             if any(kw in desc_lower for kw in ("debug", "replace", "breakpoint", "hotfix direct")):
                 debug_transports.append(f"{tr_id} — {desc[:80]}")
+                if tr_id and str(tr_id).strip():
+                    debug_objects.append({"type": "transport", "name": tr_id})
 
         if open_transports:
             self.finding(
@@ -301,6 +373,10 @@ class NetworkServiceAuditor(BaseAuditor):
                     "Ensure TMS configuration enforces proper approval chain."
                 ),
                 references=["CIS SAP Benchmark Section 7.2"],
+                affected_objects=open_objects,
+                # Summary of the open-transport backlog; releasing one request must
+                # shrink this finding rather than replace it with a zero-age clone.
+                scope="aggregate",
             )
 
         if debug_transports:
@@ -320,6 +396,9 @@ class NetworkServiceAuditor(BaseAuditor):
                     "Restrict S_DEVELOP authorization object."
                 ),
                 references=["CIS SAP Benchmark Section 7.1"],
+                affected_objects=debug_objects,
+                # Summary of the flagged-transport set, one finding per run.
+                scope="aggregate",
             )
 
     def check_audit_log_config(self):
@@ -353,4 +432,8 @@ class NetworkServiceAuditor(BaseAuditor):
                     "Enable both static and dynamic profiles."
                 ),
                 references=["SAP Note 2191612", "CIS SAP Benchmark Section 6.1"],
+                # An ABSENCE, not an object: the defect is that the SM19 export
+                # contains no active filter, so there is nothing in the data to name.
+                # Identified by (system, client, check_id) alone — correctly coarse.
+                scope="aggregate",
             )

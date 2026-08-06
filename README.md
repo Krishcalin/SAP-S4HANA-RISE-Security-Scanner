@@ -9,28 +9,84 @@
 <p align="center">
   <a href="https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner/actions/workflows/tests.yml"><img src="https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner/actions/workflows/tests.yml/badge.svg" alt="tests"/></a>
   <img src="https://img.shields.io/badge/python-3.8%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python 3.8+"/>
-  <img src="https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat-square" alt="Zero Dependencies"/>
+  <img src="https://img.shields.io/badge/CLI-stdlib%20only-brightgreen?style=flat-square" alt="CLI: stdlib only"/>
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="MIT License"/>
   <img src="https://img.shields.io/badge/SAP-S%2F4HANA%20RISE-0FAAFF?style=flat-square&logo=sap&logoColor=white" alt="SAP S/4HANA"/>
   <img src="https://img.shields.io/badge/checks-300%2B-red?style=flat-square" alt="300+ Checks"/>
   <img src="https://img.shields.io/badge/reports-HTML%20%C2%B7%20PDF%20%C2%B7%20PPTX-8A2BE2?style=flat-square" alt="HTML · PDF · PPTX Reports"/>
+  <img src="https://img.shields.io/badge/server-FastAPI%20%2B%20PostgreSQL%2016-336791?style=flat-square&logo=postgresql&logoColor=white" alt="Server: FastAPI + PostgreSQL 16"/>
 </p>
 
 ---
 
 ## Overview
 
-**SAP S/4HANA RISE Security Scanner** analyzes exported SAP configuration data (CSV/JSON) and produces an interactive HTML dashboard — plus a formal multi-page **PDF** hand-over report and a per-finding **PowerPoint (PPTX)** deck — with findings, severity ratings, risk prioritization, compliance mapping, and actionable remediation guidance.
+**SAP S/4HANA RISE Security Scanner** analyzes exported SAP configuration data (CSV/JSON) and reports findings, severity ratings, risk prioritization, compliance mapping and actionable remediation.
 
-- **No direct system connection required** — offline & agentless; ideal for RISE environments with restricted RFC access
-- **Zero external dependencies** — runs on Python 3.8+ stdlib only (the HTML, PDF **and** PPTX engines are all hand-built on the standard library)
-- **300+ security checks across 23 audit modules** — from ABAP authorizations and HANA DB to BTP/Cloud, GRC Access Control, SOX financial-config controls, and permission-level Segregation of Duties
-- **Risk-prioritized (P1–P4)** — every finding is ranked by severity × exploitability (actively-exploited / HotNews) × exposure × privilege, so remediation starts with what matters
-- **Compliance mapping** — findings are mapped to **ISO/IEC 27001:2022, NIST CSF 2.0, CIS Controls v8, TISAX/VDA ISA, SOC 2, and EU GDPR** in the report
-- **Cyber-risk quantification (FAIR)** *(optional `--crq`)* — translates the technical findings into a **dollar-denominated Annualized Loss Exposure (ALE)** and a loss-exceedance curve via a FAIR Monte-Carlo simulation, so the board sees financial risk and the **$ reducible by remediation**, not just a severity count
-- **Standards-aligned** — mapped to the CIS SAP Benchmark, DSAG best-practice guide, and the SAP Security Baseline
+It runs in **two modes that share one scanner core**:
 
-**Pipeline:** &nbsp;`LOAD` CSV/JSON exports → `MODULES` (23 auditors) → `CHECKS` (300+ rules) → `RANK` by severity & P1–P4 priority → `MAP` to compliance frameworks → *(optional)* `QUANTIFY` FAIR loss exposure ($) → `REPORT` (interactive HTML dashboard · PDF hand-over · PPTX deck).
+| | **CLI** *(stdlib only)* | **Server** *(client-server)* |
+|---|---|---|
+| Input | `--data-dir` of exports | Browser upload, or the same directory |
+| Output | HTML · PDF · PPTX | Interactive web console + JSON API |
+| State | Single-shot, stateless | PostgreSQL — findings persist across uploads |
+| Use it for | Air-gapped review, one-off assessment | Continuous tracking of the **mitigation journey** |
+
+- **No direct system connection required** — offline & agentless. Nothing is installed in the SAP system, no RFC user, no credentials handed over, no open port. In RISE, third-party ABAP add-ons are an Excluded Task requiring an additional SKU and a multi-week evaluation; an export bundle needs none of that.
+- **300+ security checks across 23 audit modules** — ABAP authorizations, HANA DB, BTP/Cloud, GRC Access Control, SOX financial-config controls, and permission-level Segregation of Duties
+- **Stable finding identity** — every finding is fingerprinted from the concrete SAP objects it names, so it matches itself across re-uploads. That is what makes remediation tracking, aging and MTTR possible rather than approximate.
+- **Risk-prioritized (P1–P4)** — ranked by severity × exploitability × exposure × privilege, with the contributing factors shown. Works on findings CVSS cannot score at all.
+- **Compliance mapping** — **ISO/IEC 27001:2022, NIST CSF 2.0, CIS Controls v8, TISAX/VDA ISA, SOC 2, EU GDPR**
+- **Cyber-risk quantification (FAIR)** *(optional `--crq`)* — a dollar-denominated Annualized Loss Exposure and loss-exceedance curve from a Monte-Carlo simulation, so the board sees financial risk rather than a severity count
+- **RISE-aware** — findings carry a remediation owner. In RISE a customer can *see* a bad profile parameter and cannot change it, so those findings render as a pre-drafted service request to SAP, never as "change this".
+- **Standards-aligned** — CIS SAP Benchmark, DSAG best-practice guide, SAP Security Baseline
+
+**Pipeline:** &nbsp;`LOAD` CSV/JSON exports → `MODULES` (23 auditors) → `CHECKS` (300+ rules) → `RANK` by severity & P1–P4 priority → `MAP` to compliance frameworks → *(optional)* `QUANTIFY` FAIR loss exposure ($) → `REPORT` (HTML · PDF · PPTX) **or** `STORE` (PostgreSQL → web console, run-over-run diff, graph nodes).
+
+> **A note on dependencies.** The CLI still runs on the Python standard library alone — the HTML, PDF and PPTX engines are all hand-built. The **server tier** deliberately ends that rule: a browser console and a durable finding store cannot be built on the stdlib. The discipline that replaces it is a **single-digit runtime dependency count** (currently 5), no ORM, no graph database and no client-side framework. See [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md).
+
+---
+
+## Server mode — quick start
+
+```bash
+cp .env.example .env
+python -c "import secrets; print(secrets.token_urlsafe(48))"   # paste into SESSION_SECRET
+docker compose up -d --build
+
+docker compose exec app python -m server.cli init-db
+docker compose exec app python -m server.cli create-user admin admin
+docker compose exec app python -m server.cli add-landscape "Acme Production" --mode rise_pce
+```
+
+Open <http://127.0.0.1:8000> and upload an export bundle. The scan runs automatically and the
+findings land in the console.
+
+Scanning without a browser — the air-gapped path:
+
+```bash
+python -m server.cli scan "Acme Production" ./exports --sid PRD --client 100
+python -m server.cli runs
+```
+
+**The whole deployment is one app container and one PostgreSQL.** That is deliberate: it is the
+product's clearest structural advantage, and a third service would forfeit it.
+
+### What the server adds over the CLI
+
+- **Mitigation journey** — re-upload the same exports over time; each finding is classified
+  *new · persisting · resolved · regressed*, with age, assignee, due date and MTTR. A finding
+  that comes back re-opens the **same row** with its history intact rather than appearing as new.
+- **Coverage manifest** — *"you supplied 105 of 117 sources; 10 modules ran with incomplete
+  input; 1 source is not obtainable in RISE at all."* Without it a partial upload produces a
+  clean-looking report over a fraction of the estate.
+- **Risk acceptance with expiry**, false-positive disputes with a mandatory reason, and a
+  `submitted_to_provider` state for work handed to SAP under RISE.
+- **Graph nodes** — the SAP objects named by findings are materialised as typed nodes, the
+  substrate for the attack-path view.
+- **RBAC with per-system row scoping**, session auth, and an append-only audit log.
+- **JSON API** rendering from the same query layer as the console, including a
+  `changes since run N` endpoint.
 
 ---
 
@@ -40,7 +96,7 @@
 |--------|--------|-------|
 | 🔐 **User & Authorization** | USR-001→008 | Default users, SAP_ALL, dormant accounts, service accounts |
 | 🛡️ **Advanced IAM** | IAM-SOD/FF/EXP/XID/REV/ROLE/PRIV (28) | SoD conflicts, firefighter access, role lifecycle, cross-system identity |
-| ⚙️ **Security Parameters** | PARAM-* (25+) | Password policy, login security, RFC, gateway, TLS, audit logging |
+| ⚙️ **Security Parameters** | PARAM-* (23) | Password policy, login security, RFC, gateway, TLS, audit logging |
 | 🌐 **Network & Services** | NET-001→008 | RFC destinations, ICF services, transports, audit config |
 | ☁️ **RISE / BTP Core** | RISE-001→007 | Trust config, comm arrangements, API exposure |
 | 🔥 **BTP Cloud Attack Surface** | BTP-CC/SB/DST/IAS/ENT/EM/CPI/NET/GOV/MIG (35) | Cloud Connector (incl. version/CVE-2024-25642), service bindings, destinations, IAS (incl. password policy & corporate-IdP enforcement), Event Mesh, CPI, network isolation |
@@ -1160,6 +1216,18 @@ SAP-S4HANA-RISE-Security-Scanner/
 │   ├── grc_access_control.py       # GRC-*            GRC Access Control (EAM/ARM/SoD governance)
 │   ├── role_governance.py          # RG-*             Role Design & Governance (SU24/profile-gen/derived drift)
 │   └── financial_controls.py       # FIN-*            Financial Controls (SOX ITGC / FI config)
+├── server/                         # Client-server tier (FastAPI + PostgreSQL 16)
+│   ├── identity.py                 # Finding fingerprints + AffectedObject — the load-bearing module
+│   ├── schema.sql                  # 18 tables: systems, runs, findings, lifecycle, graph, CRQ, RBAC
+│   ├── db.py                       # psycopg pool, row scoping (one place), audit log
+│   ├── auth.py                     # PBKDF2 passwords, sessions, ranked roles, per-system scope
+│   ├── queries.py                  # The query layer — console and JSON API share it
+│   ├── coverage.py                 # Per-upload coverage manifest (module→source map is derived)
+│   ├── ingest.py                   # upload → parse → scan → store → run-over-run diff
+│   ├── app.py                      # FastAPI routes, uploads, cancellable background scans
+│   ├── cli.py                      # Admin CLI + the air-gapped `scan` path
+│   ├── config.py                   # Env-only settings; no defaults for secrets
+│   └── templates/                  # Jinja2 console — server-rendered, no client framework
 ├── assets/                         # PhalanxCyber + SAP logos (embedded in reports as data URIs)
 ├── sample_data/                    # 90 crafted demo exports (trigger every check)
 ├── data/
@@ -1167,11 +1235,22 @@ SAP-S4HANA-RISE-Security-Scanner/
 │   └── fair_scenarios.json         # FAIR catalog: 5 SAP loss scenarios + factor/loss ranges (--crq)
 ├── tests/
 │   ├── conftest.py                 # pytest fixtures (DataLoader over sample_data)
-│   └── test_scanner.py             # per-module + full-pipeline + CLI tests
+│   ├── test_scanner.py             # per-module + full-pipeline + CLI tests
+│   ├── test_identity.py            # fingerprint semantics, against the REAL sample_data
+│   └── test_integration_ingest.py  # end-to-end against a real PostgreSQL (skips without DB_DSN)
 ├── docs/
 │   ├── banner.svg                  # README banner
 │   ├── EXPORT_GUIDE.md             # how to export each data file from SAP
-│   └── CHECKS_REFERENCE.md         # complete per-check reference
+│   ├── CHECKS_REFERENCE.md         # complete per-check reference
+│   ├── PIVOT_PLAN.md               # Architecture + 6 phases, with rationale
+│   ├── BUILD_ROADMAP.md            # Execution view: status, dependencies, exit criteria
+│   ├── COMPETITIVE_ANALYSIS.md     # Onapsis, market, attack-path design spec
+│   ├── COMPETITOR_SECURITYBRIDGE.md
+│   └── RISE_SECURITY_MODEL.md      # SAP's contractual line; what a RISE customer can export
+├── Dockerfile                      # Server image (non-root)
+├── docker-compose.yml              # app + PostgreSQL 16 — the entire deployment
+├── .env.example                    # Template; `.env` itself is gitignored
+├── requirements.txt                # 5 server-tier runtime deps (the CLI needs none)
 ├── .github/workflows/tests.yml     # CI: pytest matrix (Python 3.8–3.12) + scanner smoke run
 ├── requirements-dev.txt            # dev-only dependency: pytest
 ├── CLAUDE.md                       # contributor / AI-assistant guidance

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Sign in — SAPSec{% endblock %}
+{% block body %}
+<div style="max-width:360px;margin:9vh auto">
+  <div class="brand" style="font-size:22px;margin-bottom:6px">SAP<span>Sec</span></div>
+  <p class="sub small">Offline SAP security assessment and remediation tracking.</p>
+  {% if error %}<div class="banner bad">{{ error }}</div>{% endif %}
+  <form method="post" action="/login" class="card">
+    <input type="hidden" name="next" value="{{ next }}">
+    <label class="small faint">Username</label>
+    <input type="text" name="username" autofocus required autocomplete="username"
+           style="width:100%;margin:4px 0 12px">
+    <label class="small faint">Password</label>
+    <input type="password" name="password" required autocomplete="current-password"
+           style="width:100%;margin:4px 0 16px">
+    <button type="submit" style="width:100%">Sign in</button>
+  </form>
+</div>
+{% endblock %}

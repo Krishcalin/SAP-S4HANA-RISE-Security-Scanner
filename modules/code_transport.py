@@ -114,6 +114,30 @@ class CodeTransportAuditor(BaseAuditor):
                 return str(v).strip()
         return ""
 
+    @staticmethod
+    def _add_obj(bucket: List[Dict[str, Any]], obj_type: str, name: Any,
+                 qualifier: Any = None) -> None:
+        """Append one structured affected object, de-duplicated.
+
+        A row whose identifying column is empty contributes NO object: a placeholder
+        name would invent a graph node and, for object-scoped findings, an identity
+        that does not correspond to anything in the export. The row still appears in
+        `affected_items`, so nothing is dropped from the report.
+
+        ABAP repository objects (PROG / FUGR / CLAS rows in the code exports) are all
+        typed `program`; the finer OBJECT_TYPE stays in the display string, where it
+        was already, rather than splitting one custom object across several node types.
+        """
+        n = "" if name is None else str(name).strip()
+        if not n:
+            return
+        obj: Dict[str, Any] = {"type": obj_type, "name": n}
+        q = "" if qualifier is None else str(qualifier).strip()
+        if q:
+            obj["qualifier"] = q
+        if obj not in bucket:
+            bucket.append(obj)
+
     # ════════════════════════════════════════════════════════════════
     #  CODE-INJ-*: Code Injection / SQL Injection Patterns
     # ════════════════════════════════════════════════════════════════
@@ -130,6 +154,7 @@ class CodeTransportAuditor(BaseAuditor):
             return
 
         sql_findings = []
+        sql_objects: List[Dict[str, Any]] = []
         for row in scan:
             obj_name = row.get("OBJECT_NAME", row.get("PROGRAM",
                       row.get("REPORT", "")))
@@ -155,6 +180,7 @@ class CodeTransportAuditor(BaseAuditor):
                 sql_findings.append(
                     f"{obj_name} ({obj_type}) line {line}: {description[:100]}"
                 )
+                self._add_obj(sql_objects, "program", obj_name)
 
         if sql_findings:
             self.finding(
@@ -181,6 +207,10 @@ class CodeTransportAuditor(BaseAuditor):
                     "SAP ATC Check — CALL_INJECTION_DYNAMIC_SQL",
                 ],
                 details={"total_count": len(sql_findings)},
+                # One roll-up of every injection hit in the estate. Fixing one program
+                # must shrink this finding, not retire it and raise a fresh one.
+                affected_objects=sql_objects,
+                scope="aggregate",
             )
 
     def check_missing_authority_checks(self):
@@ -193,6 +223,7 @@ class CodeTransportAuditor(BaseAuditor):
             return
 
         missing_auth = []
+        missing_auth_objects: List[Dict[str, Any]] = []
         for row in scan:
             obj_name = row.get("OBJECT_NAME", row.get("PROGRAM", ""))
             obj_type = row.get("OBJECT_TYPE", row.get("TYPE", ""))
@@ -212,6 +243,7 @@ class CodeTransportAuditor(BaseAuditor):
                 missing_auth.append(
                     f"{obj_name} ({obj_type}) line {line}: {description[:100]}"
                 )
+                self._add_obj(missing_auth_objects, "program", obj_name)
 
         if missing_auth:
             self.finding(
@@ -238,6 +270,8 @@ class CodeTransportAuditor(BaseAuditor):
                     "CIS SAP Benchmark — Custom Code Authorization Checks",
                 ],
                 details={"total_count": len(missing_auth)},
+                affected_objects=missing_auth_objects,
+                scope="aggregate",
             )
 
     def check_hardcoded_credentials(self):
@@ -247,6 +281,7 @@ class CodeTransportAuditor(BaseAuditor):
             return
 
         hardcoded = []
+        hardcoded_objects: List[Dict[str, Any]] = []
         for row in scan:
             obj_name = row.get("OBJECT_NAME", row.get("PROGRAM", ""))
             obj_type = row.get("OBJECT_TYPE", row.get("TYPE", ""))
@@ -268,6 +303,7 @@ class CodeTransportAuditor(BaseAuditor):
                 hardcoded.append(
                     f"{obj_name} ({obj_type}) line {line}: {description[:100]}"
                 )
+                self._add_obj(hardcoded_objects, "program", obj_name)
 
         if hardcoded:
             self.finding(
@@ -293,6 +329,8 @@ class CodeTransportAuditor(BaseAuditor):
                     "OWASP — Credential Management Cheat Sheet",
                 ],
                 details={"total_count": len(hardcoded)},
+                affected_objects=hardcoded_objects,
+                scope="aggregate",
             )
 
     def check_dangerous_statements(self):
@@ -302,6 +340,7 @@ class CodeTransportAuditor(BaseAuditor):
             return
 
         dangerous = defaultdict(list)
+        dangerous_objects = defaultdict(list)
         for row in scan:
             obj_name = row.get("OBJECT_NAME", row.get("PROGRAM", ""))
             obj_type = row.get("OBJECT_TYPE", row.get("TYPE", ""))
@@ -316,6 +355,12 @@ class CodeTransportAuditor(BaseAuditor):
                     dangerous[stmt].append(
                         f"{obj_name} ({obj_type}) line {line}"
                     )
+                    # The statement is the qualifier, not just context: it is what makes
+                    # this program a defect, and it is the ONLY thing distinguishing the
+                    # several CODE-STMT-001 findings one run emits. Without it, two
+                    # statements found in the same program would fingerprint identically
+                    # and one of the two findings would silently disappear.
+                    self._add_obj(dangerous_objects[stmt], "program", obj_name, stmt)
                     break
 
         for stmt, items in dangerous.items():
@@ -339,6 +384,12 @@ class CodeTransportAuditor(BaseAuditor):
                 ),
                 references=["SAP Note 1520356 — Secure ABAP Coding Guidelines"],
                 details={"total_count": len(items)},
+                # Object, not aggregate: this check emits one finding PER dangerous
+                # statement under a shared check_id, so the subject has to carry the
+                # statement-qualified programs or all of them collapse into a single
+                # identity and every statement but one vanishes from the journey.
+                affected_objects=dangerous_objects[stmt],
+                scope="object",
             )
 
     def check_atc_critical_findings(self):
@@ -348,7 +399,9 @@ class CodeTransportAuditor(BaseAuditor):
             return
 
         critical_unresolved = []
+        critical_objects: List[Dict[str, Any]] = []
         high_unresolved = []
+        high_objects: List[Dict[str, Any]] = []
         total_findings = 0
 
         for row in scan:
@@ -365,8 +418,10 @@ class CodeTransportAuditor(BaseAuditor):
                 label = f"{obj_name}: {finding_type} — {description[:80]}"
                 if severity in ("1", "CRITICAL", "ERROR", "E"):
                     critical_unresolved.append(label)
+                    self._add_obj(critical_objects, "program", obj_name)
                 elif severity in ("2", "HIGH", "WARNING", "W"):
                     high_unresolved.append(label)
+                    self._add_obj(high_objects, "program", obj_name)
 
         if critical_unresolved:
             self.finding(
@@ -391,6 +446,10 @@ class CodeTransportAuditor(BaseAuditor):
                 ],
                 details={"total_findings": total_findings,
                          "critical_count": len(critical_unresolved)},
+                # A backlog count. Resolving one ATC finding must decrement it, not
+                # reset its age.
+                affected_objects=critical_objects,
+                scope="aggregate",
             )
 
         if high_unresolved:
@@ -410,6 +469,8 @@ class CodeTransportAuditor(BaseAuditor):
                 ),
                 references=["SAP ATC — Finding Management"],
                 details={"total_count": len(high_unresolved)},
+                affected_objects=high_objects,
+                scope="aggregate",
             )
 
     # ════════════════════════════════════════════════════════════════
@@ -426,6 +487,7 @@ class CodeTransportAuditor(BaseAuditor):
 
         # Build route graph
         direct_to_prod = []
+        direct_route_objects: List[Dict[str, Any]] = []
         bypass_qa = []
         prod_indicators = ["PRD", "PROD", "P", "PRODUCTION"]
         qa_indicators = ["QAS", "QA", "Q", "QUALITY", "TST", "TEST"]
@@ -445,6 +507,8 @@ class CodeTransportAuditor(BaseAuditor):
             # Dev directly to prod (bypassing QA)
             if is_source_dev and is_target_prod:
                 direct_to_prod.append(f"{source} → {target} (direct, no QA)")
+                self._add_obj(direct_route_objects, "system", source)
+                self._add_obj(direct_route_objects, "system", target)
 
         if direct_to_prod:
             self.finding(
@@ -467,6 +531,10 @@ class CodeTransportAuditor(BaseAuditor):
                     "CIS SAP Benchmark — Transport Route Configuration",
                     "SAP Note 18898 — TMS Configuration",
                 ],
+                # Every offending route rolled into one TMS-configuration finding;
+                # removing one route must not re-age the remaining ones.
+                affected_objects=direct_route_objects,
+                scope="aggregate",
             )
 
     def check_transport_workflow(self):
@@ -481,8 +549,11 @@ class CodeTransportAuditor(BaseAuditor):
             return
 
         no_approval = []
+        no_approval_objects: List[Dict[str, Any]] = []
         same_user = []
+        same_user_objects: List[Dict[str, Any]] = []
         weekend_imports = []
+        weekend_objects: List[Dict[str, Any]] = []
 
         for row in history:
             tr_id = row.get("TRKORR", row.get("TRANSPORT",
@@ -505,6 +576,9 @@ class CodeTransportAuditor(BaseAuditor):
                 is_prod = any(p in target_upper for p in ["PRD", "PROD", "P"])
                 if is_prod:
                     no_approval.append(f"{label} (imported by: {imported_by})")
+                    self._add_obj(no_approval_objects, "transport_request", tr_id)
+                    self._add_obj(no_approval_objects, "user", imported_by)
+                    self._add_obj(no_approval_objects, "system", target)
 
             # Same user released and imported
             if released_by and imported_by:
@@ -512,6 +586,8 @@ class CodeTransportAuditor(BaseAuditor):
                     same_user.append(
                         f"{label} — released and imported by: {released_by}"
                     )
+                    self._add_obj(same_user_objects, "transport_request", tr_id)
+                    self._add_obj(same_user_objects, "user", released_by)
 
             # Weekend/off-hours imports (basic check)
             if import_date:
@@ -520,6 +596,8 @@ class CodeTransportAuditor(BaseAuditor):
                     weekend_imports.append(
                         f"{label} — imported: {import_date} (weekend)"
                     )
+                    self._add_obj(weekend_objects, "transport_request", tr_id)
+                    self._add_obj(weekend_objects, "system", target)
 
         if no_approval:
             self.finding(
@@ -544,6 +622,10 @@ class CodeTransportAuditor(BaseAuditor):
                     "CIS SAP Benchmark — Transport Approval Controls",
                 ],
                 details={"total_count": len(no_approval)},
+                # A transport is a historical event, not a remediable object: the list
+                # only ever grows. Identity must be the control gap, not the backlog.
+                affected_objects=no_approval_objects,
+                scope="aggregate",
             )
 
         if same_user:
@@ -565,6 +647,8 @@ class CodeTransportAuditor(BaseAuditor):
                 ),
                 references=["CIS SAP Benchmark — Transport SoD Controls"],
                 details={"total_count": len(same_user)},
+                affected_objects=same_user_objects,
+                scope="aggregate",
             )
 
         if weekend_imports:
@@ -586,6 +670,8 @@ class CodeTransportAuditor(BaseAuditor):
                 ),
                 references=["ITIL — Change Window Management"],
                 details={"total_count": len(weekend_imports)},
+                affected_objects=weekend_objects,
+                scope="aggregate",
             )
 
     def check_direct_prod_imports(self):
@@ -595,6 +681,7 @@ class CodeTransportAuditor(BaseAuditor):
             return
 
         direct_imports = []
+        direct_import_objects: List[Dict[str, Any]] = []
         for row in history:
             tr_id = row.get("TRKORR", row.get("TRANSPORT", ""))
             source = row.get("SOURCE", row.get("SOURCE_SYSTEM",
@@ -609,6 +696,9 @@ class CodeTransportAuditor(BaseAuditor):
                 direct_imports.append(
                     f"{tr_id}: {source} → {target} (type: {tr_type})"
                 )
+                self._add_obj(direct_import_objects, "transport_request", tr_id)
+                self._add_obj(direct_import_objects, "system", source)
+                self._add_obj(direct_import_objects, "system", target)
 
         if direct_imports:
             self.finding(
@@ -630,6 +720,8 @@ class CodeTransportAuditor(BaseAuditor):
                 ),
                 references=["CIS SAP Benchmark — Transport Route Enforcement"],
                 details={"total_count": len(direct_imports)},
+                affected_objects=direct_import_objects,
+                scope="aggregate",
             )
 
     # ════════════════════════════════════════════════════════════════
@@ -648,6 +740,7 @@ class CodeTransportAuditor(BaseAuditor):
             return
 
         risky_clients = []
+        risky_client_objects: List[Dict[str, Any]] = []
         for row in clients:
             client = row.get("CLIENT", row.get("MANDT", row.get("CLIENT_NUMBER", "")))
             role = row.get("ROLE", row.get("CLIENT_ROLE", row.get("CCCATEGORY", "")))
@@ -692,6 +785,10 @@ class CodeTransportAuditor(BaseAuditor):
                 risky_clients.append(
                     f"Client {client} (role: {role}) — {'; '.join(issues)}"
                 )
+                # The qualifier carries the SCC4 values themselves: a client open for
+                # cross-client customizing is not the same defect as one open only for
+                # client-specific changes.
+                self._add_obj(risky_client_objects, "client", client, "; ".join(issues))
 
         if risky_clients:
             self.finding(
@@ -716,6 +813,10 @@ class CodeTransportAuditor(BaseAuditor):
                     "SAP Note 135028 — Client Settings for Production",
                     "CIS SAP Benchmark — Client Configuration",
                 ],
+                # One finding covering every unlocked production client in the export;
+                # locking one of them must shrink it, not retire and re-raise it.
+                affected_objects=risky_client_objects,
+                scope="aggregate",
             )
 
     # ════════════════════════════════════════════════════════════════
@@ -734,6 +835,7 @@ class CodeTransportAuditor(BaseAuditor):
         global_modifiable = False
         global_val = ""
         modifiable_scopes = []
+        modifiable_scope_objects: List[Dict[str, Any]] = []
         for r in rows:
             if not isinstance(r, dict):
                 continue
@@ -747,6 +849,7 @@ class CodeTransportAuditor(BaseAuditor):
                     global_modifiable = is_mod
             elif is_mod:
                 modifiable_scopes.append(f"{scope} = {value}")
+                self._add_obj(modifiable_scope_objects, "namespace", scope, value)
         if global_modifiable:
             self.finding(
                 check_id="CODE-SYSCHG-001",
@@ -774,6 +877,11 @@ class CodeTransportAuditor(BaseAuditor):
                             "SOX ITGC — change management (no direct changes in production)",
                             "DSAG Prüfleitfaden — Systemänderbarkeit"],
                 details={"modifiable_scopes": len(modifiable_scopes)},
+                # The defect is one system-wide switch, so identity is correctly
+                # (system, client, check_id) alone. The namespaces ride along as
+                # members and graph nodes; closing one must not re-age the switch.
+                affected_objects=modifiable_scope_objects,
+                scope="aggregate",
             )
         elif modifiable_scopes:
             self.finding(
@@ -792,6 +900,8 @@ class CodeTransportAuditor(BaseAuditor):
                 references=["SAP KBA 2682744 — System change option (SE06)",
                             "SOX ITGC — change management"],
                 details={"modifiable_scopes": len(modifiable_scopes)},
+                affected_objects=modifiable_scope_objects,
+                scope="aggregate",
             )
 
     # ════════════════════════════════════════════════════════════════
@@ -821,6 +931,7 @@ class CodeTransportAuditor(BaseAuditor):
 
         logged_objects = set()
         no_user_changes = []
+        no_user_objects: List[Dict[str, Any]] = []
         high_volume = []
 
         for row in changes:
@@ -839,6 +950,9 @@ class CodeTransportAuditor(BaseAuditor):
                     f"{obj_class} #{change_id} — user: {user or 'empty'}, "
                     f"tcode: {tcode}, date: {change_date}"
                 )
+                # A blank USERNAME is precisely the defect and names nothing, so the
+                # row contributes no object — the display string keeps the evidence.
+                self._add_obj(no_user_objects, "user", user)
 
         # Check for critical objects without change documents
         missing_objects = []
@@ -864,6 +978,11 @@ class CodeTransportAuditor(BaseAuditor):
                     "Check table logging is active for sensitive tables."
                 ),
                 references=["CIS SAP Benchmark — Change Document Logging"],
+                # No affected_objects on purpose. This finding is about object classes
+                # that are ABSENT from the export; the names come from the module's own
+                # expectation list, not from the data, so materialising them as objects
+                # would invent graph nodes for things the scan never observed.
+                scope="aggregate",
             )
 
         if no_user_changes:
@@ -885,6 +1004,8 @@ class CodeTransportAuditor(BaseAuditor):
                 ),
                 references=["SOX Section 404 — Change Audit Trail"],
                 details={"total_count": len(no_user_changes)},
+                affected_objects=no_user_objects,
+                scope="aggregate",
             )
 
     # ════════════════════════════════════════════════════════════════
@@ -901,6 +1022,7 @@ class CodeTransportAuditor(BaseAuditor):
                 return
 
             dev_users = []
+            dev_user_objects: List[Dict[str, Any]] = []
             for row in auth:
                 obj = row.get("OBJECT", row.get("AUTH_OBJECT", "")).upper()
                 user = row.get("UNAME", row.get("BNAME", ""))
@@ -914,6 +1036,12 @@ class CodeTransportAuditor(BaseAuditor):
                         dev_users.append(
                             f"{user} → S_DEVELOP (ACTVT={activity})"
                         )
+                        # The user node stays unqualified so it merges with the same
+                        # user named by other modules; the ACTVT value qualifies the
+                        # auth object, where it is what makes the grant dangerous.
+                        self._add_obj(dev_user_objects, "user", user)
+                        self._add_obj(dev_user_objects, "auth_object", obj,
+                                      f"ACTVT={activity}")
 
             if dev_users:
                 self.finding(
@@ -937,11 +1065,14 @@ class CodeTransportAuditor(BaseAuditor):
                         "SAP Note 2078087 — S_DEVELOP Authorization",
                     ],
                     details={"total_count": len(dev_users)},
+                    affected_objects=dev_user_objects,
+                    scope="aggregate",
                 )
             return
 
         # Process dedicated dev_access_prod export
         dev_users = []
+        dev_user_objects: List[Dict[str, Any]] = []
         for row in dev_access:
             user = row.get("USERNAME", row.get("BNAME", row.get("UNAME", "")))
             tcode = row.get("TCODE", row.get("TRANSACTION", ""))
@@ -951,6 +1082,10 @@ class CodeTransportAuditor(BaseAuditor):
             dev_users.append(
                 f"{user} — tcode: {tcode}, auth: {auth_obj}, activity: {activity}"
             )
+            self._add_obj(dev_user_objects, "user", user)
+            self._add_obj(dev_user_objects, "tcode", tcode)
+            self._add_obj(dev_user_objects, "auth_object", auth_obj,
+                          f"ACTVT={activity}" if activity else None)
 
         if dev_users:
             self.finding(
@@ -969,6 +1104,8 @@ class CodeTransportAuditor(BaseAuditor):
                 ),
                 references=["CIS SAP Benchmark — Development in Production"],
                 details={"total_count": len(dev_users)},
+                affected_objects=dev_user_objects,
+                scope="aggregate",
             )
 
     # ════════════════════════════════════════════════════════════════
@@ -982,8 +1119,11 @@ class CodeTransportAuditor(BaseAuditor):
             return
 
         unregistered = []
+        unregistered_objects: List[Dict[str, Any]] = []
         high_risk = []
+        high_risk_objects: List[Dict[str, Any]] = []
         stale = []
+        stale_objects: List[Dict[str, Any]] = []
         now = datetime.now()
 
         high_risk_namespaces = ["SAPLAUTH", "SAPLSU", "SAPLS38", "SAPLSECUR",
@@ -1006,11 +1146,13 @@ class CodeTransportAuditor(BaseAuditor):
             # Unregistered modifications
             if not registered or registered.strip() == "":
                 unregistered.append(f"{label} — no SAP Note / registration")
+                self._add_obj(unregistered_objects, "program", obj_name)
 
             # Modifications to security-sensitive objects
             for ns in high_risk_namespaces:
                 if ns.upper() in obj_name.upper():
                     high_risk.append(f"{label} — modified security namespace: {ns}")
+                    self._add_obj(high_risk_objects, "program", obj_name)
                     break
 
             # Stale modifications (very old, may cause upgrade issues)
@@ -1022,6 +1164,7 @@ class CodeTransportAuditor(BaseAuditor):
                         stale.append(
                             f"{label} — modified: {mod_date} ({age_years:.0f} years ago)"
                         )
+                        self._add_obj(stale_objects, "program", obj_name)
 
         if unregistered:
             self.finding(
@@ -1043,6 +1186,8 @@ class CodeTransportAuditor(BaseAuditor):
                 ),
                 references=["SAP Note 7920 — Modification Assistant"],
                 details={"total_count": len(unregistered)},
+                affected_objects=unregistered_objects,
+                scope="aggregate",
             )
 
         if high_risk:
@@ -1064,6 +1209,8 @@ class CodeTransportAuditor(BaseAuditor):
                     "Request SAP security review for critical modifications."
                 ),
                 references=["SAP — Modification Guidelines for Security Objects"],
+                affected_objects=high_risk_objects,
+                scope="aggregate",
             )
 
         if stale:
@@ -1085,6 +1232,8 @@ class CodeTransportAuditor(BaseAuditor):
                 ),
                 references=["SAP Upgrade Guide — Modification Handling"],
                 details={"total_count": len(stale)},
+                affected_objects=stale_objects,
+                scope="aggregate",
             )
 
     # ════════════════════════════════════════════════════════════════
@@ -1098,7 +1247,9 @@ class CodeTransportAuditor(BaseAuditor):
             return
 
         unused = []
+        unused_objects: List[Dict[str, Any]] = []
         no_owner = []
+        no_owner_objects: List[Dict[str, Any]] = []
 
         for row in inventory:
             obj_name = row.get("OBJECT_NAME", row.get("PROGRAM",
@@ -1119,13 +1270,16 @@ class CodeTransportAuditor(BaseAuditor):
                 "NO", "FALSE", "0", "NONE"
             ):
                 unused.append(f"{label} — unreferenced, created: {created or 'unknown'}")
+                self._add_obj(unused_objects, "program", obj_name)
             elif not last_used or last_used.strip() == "":
                 # Never executed
                 unused.append(f"{label} — never executed, created: {created or 'unknown'}")
+                self._add_obj(unused_objects, "program", obj_name)
 
             # No owner
             if not owner or owner.strip() == "":
                 no_owner.append(label)
+                self._add_obj(no_owner_objects, "program", obj_name)
 
         if unused:
             max_dead_code = self.get_config("max_dead_code_alert", 50)
@@ -1149,6 +1303,10 @@ class CodeTransportAuditor(BaseAuditor):
                     ),
                     references=["SAP — Custom Code Lifecycle Management"],
                     details={"total_count": len(unused)},
+                    # A threshold breach on a population. Deleting one dead program
+                    # must not retire the backlog finding and reset its age.
+                    affected_objects=unused_objects,
+                    scope="aggregate",
                 )
 
         if no_owner:
@@ -1170,6 +1328,8 @@ class CodeTransportAuditor(BaseAuditor):
                 ),
                 references=["SAP — Custom Code Governance"],
                 details={"total_count": len(no_owner)},
+                affected_objects=no_owner_objects,
+                scope="aggregate",
             )
 
     # ════════════════════════════════════════════════════════════════

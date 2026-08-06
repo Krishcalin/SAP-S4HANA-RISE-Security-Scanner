@@ -34,8 +34,62 @@ class BaseAuditor:
         remediation: str = "",
         references: List[str] = None,
         details: Dict = None,
+        affected_objects: List[Dict[str, Any]] = None,
+        subject: List[Dict[str, Any]] = None,
+        scope: str = None,
+        system: str = None,
+        client: str = None,
     ) -> Dict[str, Any]:
-        """Create a standardized finding dict."""
+        """Create a standardized finding dict.
+
+        `affected_items` remains the human-readable display list every report renderer
+        consumes and is unchanged.
+
+        `affected_objects` is the structured parallel: a list of
+        ``{"type", "name", "system"?, "client"?, "qualifier"?}`` dicts naming the
+        concrete SAP objects the finding is about. It is what gives a finding a stable
+        identity across runs and what supplies the attack-path graph its nodes — with
+        display strings alone, every graph node would be a string and no finding could
+        be matched against itself after a re-upload.
+
+        It is optional so modules can be converted incrementally. A finding without it
+        still gets a stable fingerprint, derived from the display strings instead, which
+        holds as long as the module's formatting holds. See server/identity.py.
+
+        `scope` declares what the finding is ABOUT, and getting it wrong breaks the
+        mitigation journey in one of two directions:
+
+          * ``"object"``    — this finding is about the object(s) named. Four unlocked
+            default users are four findings, and must not collapse into one.
+          * ``"aggregate"`` — this finding summarises a set ("23 dormant accounts").
+            Its identity must exclude the member list, or dismissing one member would
+            retire the finding and raise a new one, resetting its age every run.
+
+        Left unset, a single named object is treated as ``object`` and several as
+        ``aggregate``. Declare it explicitly whenever a check can legitimately name
+        several objects that together constitute ONE defect.
+
+        `subject` splits those two roles apart when a finding is ABOUT one thing but
+        NAMES several. "Role Z_ADMIN grants SAP_ALL to 41 users" is about the role; the
+        41 users are context that changes as people join and leave. Passing all 42 as
+        ``affected_objects`` with ``scope="object"`` would put the users into identity
+        and churn the finding every time somebody changed team; ``scope="aggregate"``
+        would fix the churn but drop the role from identity too. `subject` gives the
+        finding the role's identity while the users ride along as members and as graph
+        nodes.
+
+        Do NOT reach for `subject` merely to make `fingerprint_basis` read ``objects``.
+        A genuine aggregate — one finding rolling up every offending role for a check —
+        is correctly identified by check and system, and ``check_only`` is the honest
+        label for it. Naming a constant as the subject would change the label without
+        changing the guarantee, which is worse than the coarse label: the console
+        presents ``objects`` as "structural, survives rewording", and that would then
+        be a claim the data does not support.
+
+        `system` / `client` let a finding override the run's defaults — a cross-system
+        trust finding belongs to the system it is *about*, not to the one whose export
+        happened to reveal it.
+        """
         f = {
             "check_id": check_id,
             "title": title,
@@ -49,6 +103,21 @@ class BaseAuditor:
             "details": details or {},
             "timestamp": datetime.datetime.now().isoformat(),
         }
+        if affected_objects:
+            f["affected_objects"] = affected_objects
+        if subject:
+            f["subject"] = subject
+            # A finding with an explicit subject is by definition about that subject,
+            # whatever else it names. Defaulting scope here stops a caller from
+            # supplying a subject and then having it silently ignored because the
+            # member count tripped the aggregate heuristic.
+            f.setdefault("scope", "object")
+        if scope:
+            f["scope"] = scope
+        if system:
+            f["system"] = system
+        if client:
+            f["client"] = client
         self.findings.append(f)
         return f
 

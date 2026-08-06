@@ -75,6 +75,15 @@ class SystemTrustAuditor(BaseAuditor):
     def _param(self, name: str) -> Optional[str]:
         return self._params.get(name.lower())
 
+    def _local_sid(self) -> str:
+        """SID of THIS (trusting) system, when the caller's baseline names it.
+
+        A trust finding belongs to the system that grants the trust, not to whichever
+        export happened to reveal it. Empty when the baseline does not name it — in that
+        case the finding falls back to the run-level system rather than inventing a SID.
+        """
+        return str(self.get_config("local_system_sid", "")).strip().upper()
+
     @staticmethod
     def _truthy(v: Any) -> bool:
         return str(v).strip().lower() in ("1", "x", "yes", "true", "on", "y")
@@ -105,6 +114,15 @@ class SystemTrustAuditor(BaseAuditor):
                     "privileges, in ANY client — a well-known full-compromise backdoor."
                 ),
                 affected_items=[f"login/no_automatic_user_sapstar = {val or '(empty)'}"],
+                # One parameter, one defect: the subject is the parameter itself. The
+                # qualifier is safe in identity because the check fires on exactly one
+                # value ("0"), so it cannot drift while the finding is open.
+                affected_objects=[{
+                    "type": "parameter_name",
+                    "name": "login/no_automatic_user_sapstar",
+                    "qualifier": val.strip(),
+                }],
+                scope="object",
                 remediation=(
                     "Set login/no_automatic_user_sapstar = 1 in every instance profile and "
                     "DEFAULT.PFL, then restart. Ensure a real SAP* user exists, is locked, and "
@@ -120,6 +138,7 @@ class SystemTrustAuditor(BaseAuditor):
         if not rows:
             return
         offenders = []
+        objects = []
         for row in rows:
             if not isinstance(row, dict):
                 continue
@@ -133,6 +152,12 @@ class SystemTrustAuditor(BaseAuditor):
             has_default = self._truthy(defpw) or ("default" in dl and not dl.startswith(("no", "not", "kein")))
             if has_default:
                 offenders.append(f"{user} (client {client or '?'}) — default password still valid")
+                # No per-member client: this is an aggregate spanning several clients, and
+                # fingerprint_finding falls back to objs[0].client when the finding does
+                # not declare one. Stamping the client on the members would therefore let
+                # the member list leak into the aggregate's identity — fixing the first
+                # offender would move objs[0] to another client and re-raise the finding.
+                objects.append({"type": "user", "name": user})
         if offenders:
             self.finding(
                 check_id="STDUSR-002",
@@ -145,6 +170,8 @@ class SystemTrustAuditor(BaseAuditor):
                     "These are the first credentials an attacker tries and grant broad access."
                 ),
                 affected_items=offenders,
+                affected_objects=objects,
+                scope="aggregate",
                 remediation=(
                     "Change the passwords of all standard users in every client (including "
                     "000/001/066), then lock the ones not operationally required. Verify with "
@@ -160,6 +187,7 @@ class SystemTrustAuditor(BaseAuditor):
         if not rows:
             return
         offenders = []
+        objects = []
         for row in rows:
             if not isinstance(row, dict):
                 continue
@@ -178,6 +206,9 @@ class SystemTrustAuditor(BaseAuditor):
                 if user in ("SAP*", "DDIC") and dialog:
                     note += ", dialog-capable"
                 offenders.append(f"{user} (client {client or '?'}) — {note}")
+                # Client deliberately omitted on the members — see check_default_passwords.
+                if user:
+                    objects.append({"type": "user", "name": user})
         if offenders:
             self.finding(
                 check_id="STDUSR-003",
@@ -190,6 +221,8 @@ class SystemTrustAuditor(BaseAuditor):
                     "never usable as dialog users) unless a specific task needs them."
                 ),
                 affected_items=offenders,
+                affected_objects=objects,
+                scope="aggregate",
                 remediation=(
                     "Lock standard users that are not required; keep DDIC/SAP* locked except "
                     "for controlled maintenance windows. Never delete SAP* (see STDUSR-001)."
@@ -207,6 +240,7 @@ class SystemTrustAuditor(BaseAuditor):
         """RFCSYSACL: inbound trust relationships, escalating non-production trusted SIDs."""
         local = str(self.get_config("local_system_sid", "")).strip().upper()
         items = []
+        objects = []
         for row in self._trust_rows():
             trusted = self._get(row, "RFCTRUSTSY", "RFCSYSID", "TRUSTED_SID", "TRUSTED_SYSTEM",
                                 "RFC_TRUSTSY", "SID").upper()
@@ -215,6 +249,10 @@ class SystemTrustAuditor(BaseAuditor):
             nonprod = trusted[:1] in self.NONPROD_PREFIXES
             tag = " [likely NON-PRODUCTION tier]" if nonprod else ""
             items.append((nonprod, f"Trusted system {trusted}{tag}"))
+            # No qualifier: the non-production tag is inferred from the SID prefix, not
+            # exported, and qualifying the node would split one trusted system into two
+            # graph nodes across TRUST-001 and TRUST-003.
+            objects.append({"type": "trusted_system", "name": trusted})
         if not items:
             return
         nonprod_any = any(n for n, _ in items)
@@ -231,6 +269,11 @@ class SystemTrustAuditor(BaseAuditor):
                 "D/Q/S/T are flagged as likely non-production."
             ),
             affected_items=[lbl for _, lbl in sorted(items, key=lambda x: (not x[0], x[1]))],
+            # One inventory-style finding over the whole trust list: removing one trusted
+            # system must not retire this finding and raise a fresh one with a reset age.
+            affected_objects=objects,
+            scope="aggregate",
+            system=local or None,
             remediation=(
                 "Remove any trust FROM a lower-tier system. Keep trust one-directional from "
                 "higher to lower security tiers and restrict S_RFCACL to specific users "
@@ -243,15 +286,19 @@ class SystemTrustAuditor(BaseAuditor):
     def check_self_trust(self):
         """rfc/selftrust = 1, or a RFCSYSACL row trusting the local SID."""
         offenders = []
+        objects = []
         val = self._param("rfc/selftrust")
         if val is not None and val.strip() == "1":
             offenders.append("rfc/selftrust = 1")
+            objects.append({"type": "parameter_name", "name": "rfc/selftrust",
+                            "qualifier": val.strip()})
         local = str(self.get_config("local_system_sid", "")).strip().upper()
         if local:
             for row in self._trust_rows():
                 trusted = self._get(row, "RFCTRUSTSY", "RFCSYSID", "TRUSTED_SID", "SID").upper()
                 if trusted == local:
                     offenders.append(f"RFCSYSACL self-trust entry for {local}")
+                    objects.append({"type": "trusted_system", "name": local})
         if offenders:
             self.finding(
                 check_id="TRUST-002",
@@ -265,6 +312,13 @@ class SystemTrustAuditor(BaseAuditor):
                     "destination — a local privilege-escalation path."
                 ),
                 affected_items=offenders,
+                # Two independent indicators (the parameter and the RFCSYSACL row) for ONE
+                # defect. Clearing the parameter while the self-referential entry remains
+                # must keep the same finding, not restart its clock, so identity stays on
+                # (system, client, TRUST-002) and the indicators ride along as members.
+                affected_objects=objects,
+                scope="aggregate",
+                system=local or None,
                 remediation=(
                     "Set rfc/selftrust = 0 and remove self-referential trust entries unless a "
                     "specific, reviewed scenario requires it."
@@ -275,15 +329,20 @@ class SystemTrustAuditor(BaseAuditor):
     def check_trust_migration(self):
         """Legacy trust ticket method still allowed (not migrated to 2020 method)."""
         offenders = []
+        objects = []
         val = self._param("rfc/allowoldticket4tt")
         if val is not None and str(val).strip().lower() in ("yes", "1", "true"):
             offenders.append("rfc/allowoldticket4tt = yes (legacy trust tickets accepted)")
+            # No qualifier: the check accepts yes/1/true, so pinning the exported spelling
+            # would split one parameter into three graph nodes.
+            objects.append({"type": "parameter_name", "name": "rfc/allowoldticket4tt"})
         for row in self._trust_rows():
             trusted = self._get(row, "RFCTRUSTSY", "RFCSYSID", "TRUSTED_SID", "SID").upper()
             migrated = self._get(row, "MIGRATED", "TRUST_METHOD", "TRUSTMETH", "MIGRATION_CODE",
                                  "SECURITY_METHOD")
             if trusted and migrated and not (self._truthy(migrated) or migrated in ("3", "MIGRATED")):
                 offenders.append(f"Trusted system {trusted} — trust method '{migrated}' (not migrated)")
+                objects.append({"type": "trusted_system", "name": trusted})
         if offenders:
             self.finding(
                 check_id="TRUST-003",
@@ -297,6 +356,11 @@ class SystemTrustAuditor(BaseAuditor):
                     "impersonation across the landscape."
                 ),
                 affected_items=offenders,
+                # Aggregate: migrating one relationship shrinks the list but does not fix
+                # the defect, so the finding must keep its identity and its age.
+                affected_objects=objects,
+                scope="aggregate",
+                system=self._local_sid() or None,
                 remediation=(
                     "Migrate all trust relationships to the new method (transaction SMT1 → "
                     "migrate) and set rfc/allowoldticket4tt = no. See SAP Notes 3089413 / 3157268."
@@ -311,6 +375,7 @@ class SystemTrustAuditor(BaseAuditor):
         if not rows:
             return
         offenders = []
+        objects = []
         for row in rows:
             if not isinstance(row, dict):
                 continue
@@ -324,6 +389,12 @@ class SystemTrustAuditor(BaseAuditor):
             if (is_trusted and user and not self._truthy(current)
                     and (rtype in ("3", "") or "3" in rtype)):
                 offenders.append(f"{name} — trusted destination with fixed user '{user}'")
+                # Both halves of the hop are real exported objects: the destination and
+                # the stored user it runs as. The destination carries no qualifier so it
+                # stays the same graph node the RFC-destination checks produce.
+                if name:
+                    objects.append({"type": "destination", "name": name})
+                objects.append({"type": "user", "name": user})
         if offenders:
             self.finding(
                 check_id="TRUST-004",
@@ -337,6 +408,8 @@ class SystemTrustAuditor(BaseAuditor):
                     "runs as the fixed (often highly privileged) user."
                 ),
                 affected_items=offenders,
+                affected_objects=objects,
+                scope="aggregate",
                 remediation=(
                     "For trusted destinations, use 'Current User' (no stored user). If a fixed "
                     "user is required it should be a low-privileged, dedicated technical user."
@@ -381,6 +454,12 @@ class SystemTrustAuditor(BaseAuditor):
                     "internal host/port through the SAProuter, exposing the internal network."
                 ),
                 affected_items=offenders,
+                # Aggregate, and deliberately with no affected_objects: an offending
+                # saprouttab line is identified only by its source/target host and port,
+                # and the offending lines are precisely the ones whose target is "*". A
+                # wildcard is not an object, and inventing a name for it would fabricate a
+                # graph node that does not exist in the export.
+                scope="aggregate",
                 remediation=(
                     "Replace wildcard P/S rules with explicit source, target host and target "
                     "port; deny by default. SAP explicitly forbids wildcards for target host/port."
@@ -392,13 +471,19 @@ class SystemTrustAuditor(BaseAuditor):
     def check_message_server_ports(self):
         """Message server internal/external port not separated, or monitoring exposed."""
         offenders = []
+        objects = []
         internal = self._param("rdisp/msserv_internal")
         if internal is not None and internal.strip() == "0":
             offenders.append("rdisp/msserv_internal = 0 (no dedicated internal port — external "
                              "clients can reach the internal message-server channel)")
+            objects.append({"type": "parameter_name", "name": "rdisp/msserv_internal",
+                            "qualifier": internal.strip()})
         monitor = self._param("ms/monitor")
         if monitor is not None and monitor.strip() not in ("0", ""):
             offenders.append(f"ms/monitor = {monitor} (external message-server administration allowed)")
+            # No qualifier: any non-zero value trips this, so the value must not enter the
+            # node key or a 1 -> 2 change would look like a different object.
+            objects.append({"type": "parameter_name", "name": "ms/monitor"})
         if offenders:
             self.finding(
                 check_id="TRUST-006",
@@ -413,6 +498,12 @@ class SystemTrustAuditor(BaseAuditor):
                     "administer the message server."
                 ),
                 affected_items=offenders,
+                # Two parameters, one weakness. Setting ms/monitor = 0 while the internal
+                # port is still shared must not retire this finding and re-raise it.
+                # No message_server object: no export in this bundle names the message
+                # server's host or instance, and a placeholder would be invented, not read.
+                affected_objects=objects,
+                scope="aggregate",
                 remediation=(
                     "Set rdisp/msserv_internal to a dedicated internal port (firewalled from "
                     "clients), set ms/monitor = 0, and maintain a restrictive ms_acl_info ACL."
@@ -437,6 +528,12 @@ class SystemTrustAuditor(BaseAuditor):
                     "— the RFC attack surface is unrestricted."
                 ),
                 affected_items=[f"ucon/rfc/active = {val or '(empty)'}"],
+                # One parameter is the whole defect, so its identity is the parameter.
+                # No qualifier: the check fires on ANY value other than 1, and putting the
+                # value in identity would retire and re-raise the finding on a 0 -> 2
+                # change that fixes nothing.
+                affected_objects=[{"type": "parameter_name", "name": "ucon/rfc/active"}],
+                scope="object",
                 remediation=(
                     "Run the UCON phases (logging → evaluation → active) in UCONCOCKPIT and set "
                     "ucon/rfc/active = 1 to enforce the RFC allowlist, exposing only the RFMs "
@@ -465,6 +562,10 @@ class SystemTrustAuditor(BaseAuditor):
                     "gateway."
                 ),
                 affected_items=["gw/prxy_info = (empty)"],
+                # The unset parameter IS the object. Its value is empty by definition of
+                # the check, so there is nothing to qualify it with.
+                affected_objects=[{"type": "parameter_name", "name": "gw/prxy_info"}],
+                scope="object",
                 remediation=(
                     "Create a prxyinfo ACL file with explicit source/destination rules, point "
                     "gw/prxy_info at it, and set gw/acl_mode_proxy = 1."
@@ -513,6 +614,12 @@ class SystemTrustAuditor(BaseAuditor):
                     "The ms/* parameter checks cannot see this; it is in the ACL rule content."
                 ),
                 affected_items=(permit_all[:50] or ["ms/acl_info file present but empty"]),
+                # Aggregate over the ACL rule set: tightening one wildcard rule while
+                # another remains must not reset this finding's age. No affected_objects —
+                # a rule is identified by its HOST, and the offending rules are exactly
+                # those whose HOST is "*" (or which have no rules at all). There is no
+                # object there to name without inventing one.
+                scope="aggregate",
                 remediation=(
                     "Populate ms/acl_info with explicit HOST rules listing ONLY the known application "
                     "servers of this system (no HOST=* / wildcard), and ensure ms/acl_info points at "

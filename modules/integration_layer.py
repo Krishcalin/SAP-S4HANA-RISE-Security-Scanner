@@ -101,7 +101,9 @@ class IntegrationLayerAuditor(BaseAuditor):
             apim.get("proxies", apim.get("apiProxies", apim.get("apis", [])))
 
         missing_policies = []
+        missing_policy_objs = []
         no_auth_proxies = []
+        no_auth_objs = []
 
         for proxy in proxies:
             if not isinstance(proxy, dict):
@@ -146,9 +148,13 @@ class IntegrationLayerAuditor(BaseAuditor):
                 missing_policies.append(
                     f"{name} ({base_path}) — missing: {', '.join(proxy_missing)}"
                 )
+                if name:
+                    missing_policy_objs.append({"type": "endpoint", "name": name})
 
             if not has_auth:
                 no_auth_proxies.append(f"{name} ({base_path}) — no authentication policy")
+                if name:
+                    no_auth_objs.append({"type": "endpoint", "name": name})
 
         if missing_policies:
             self.finding(
@@ -163,6 +169,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "and unauthorized access."
                 ),
                 affected_items=missing_policies,
+                affected_objects=missing_policy_objs,
+                scope="aggregate",
                 remediation=(
                     "Apply all required policies to every API proxy: "
                     "spike_arrest (rate limiting), threat_protection (JSON/XML injection), "
@@ -188,6 +196,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "are fully exposed to any caller."
                 ),
                 affected_items=no_auth_proxies,
+                affected_objects=no_auth_objs,
+                scope="aggregate",
                 remediation=(
                     "Add OAuth 2.0 token validation (OAuthV2 policy) or API key "
                     "verification (VerifyAPIKey policy) to every API proxy. "
@@ -206,7 +216,9 @@ class IntegrationLayerAuditor(BaseAuditor):
             apim.get("proxies", apim.get("apiProxies", []))
 
         http_allowed = []
+        http_allowed_objs = []
         weak_tls = []
+        weak_tls_objs = []
 
         for proxy in proxies:
             if not isinstance(proxy, dict):
@@ -221,11 +233,18 @@ class IntegrationLayerAuditor(BaseAuditor):
 
             if not tls_enforced or str(tls_enforced).lower() in ("false", "0", "no", ""):
                 http_allowed.append(f"{name} ({base_path}) — HTTPS not enforced")
+                if name:
+                    http_allowed_objs.append({"type": "endpoint", "name": name})
 
             if tls_version and str(tls_version) in ("1.0", "1.1", "TLSv1", "TLSv1.1"):
                 weak_tls.append(
                     f"{name} ({base_path}) — min TLS: {tls_version} (should be 1.2+)"
                 )
+                if name:
+                    weak_tls_objs.append({
+                        "type": "endpoint", "name": name,
+                        "qualifier": f"min TLS {tls_version}",
+                    })
 
         if http_allowed:
             self.finding(
@@ -239,6 +258,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "and credentials to network interception."
                 ),
                 affected_items=http_allowed,
+                affected_objects=http_allowed_objs,
+                scope="aggregate",
                 remediation=(
                     "Enable HTTPS-only mode on all API proxies. "
                     "Configure virtual hosts to reject HTTP connections. "
@@ -258,6 +279,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "are deprecated and have known vulnerabilities (BEAST, POODLE)."
                 ),
                 affected_items=weak_tls,
+                affected_objects=weak_tls_objs,
+                scope="aggregate",
                 remediation=(
                     "Set minimum TLS version to 1.2 across all API proxies. "
                     "Prefer TLS 1.3 where client compatibility allows. "
@@ -276,6 +299,7 @@ class IntegrationLayerAuditor(BaseAuditor):
             apim.get("proxies", apim.get("apiProxies", []))
 
         passthrough = []
+        passthrough_objs = []
         for proxy in proxies:
             if not isinstance(proxy, dict):
                 continue
@@ -287,6 +311,10 @@ class IntegrationLayerAuditor(BaseAuditor):
 
             if not policies or (isinstance(policies, list) and len(policies) == 0):
                 passthrough.append(f"{name} ({base_path}) → {target}")
+                if name:
+                    passthrough_objs.append({"type": "endpoint", "name": name})
+                if target:
+                    passthrough_objs.append({"type": "url", "name": target})
 
         if passthrough:
             self.finding(
@@ -300,6 +328,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "no authentication, no rate limiting, no threat protection."
                 ),
                 affected_items=passthrough,
+                affected_objects=passthrough_objs,
+                scope="aggregate",
                 remediation=(
                     "Apply at minimum: authentication (OAuth/API key), rate limiting, "
                     "and threat protection policies. If the proxy is unused, undeploy it."
@@ -323,7 +353,9 @@ class IntegrationLayerAuditor(BaseAuditor):
             return
 
         insecure_ports = []
+        insecure_port_objs = []
         file_port_risks = []
+        file_port_objs = []
 
         for row in ports:
             port_name = row.get("PORT", row.get("PORT_NAME", row.get("PORTNAME", "")))
@@ -340,11 +372,21 @@ class IntegrationLayerAuditor(BaseAuditor):
             if port_type.upper() in ("HTTP", "XML_HTTP", "XML-HTTP"):
                 if not tls or str(tls).lower() in ("0", "false", "no", ""):
                     insecure_ports.append(f"{label} — HTTP without TLS, host: {host}")
+                    if port_name:
+                        insecure_port_objs.append({
+                            "type": "idoc_port", "name": port_name,
+                            "qualifier": f"{port_type} without TLS",
+                        })
 
             # RFC ports without SNC
             if port_type.upper() in ("TRFC", "RFC"):
                 if not snc or str(snc).lower() in ("0", "false", "no", ""):
                     insecure_ports.append(f"{label} — RFC without SNC, host: {host}")
+                    if port_name:
+                        insecure_port_objs.append({
+                            "type": "idoc_port", "name": port_name,
+                            "qualifier": f"{port_type} without SNC",
+                        })
 
             # File ports with risky paths
             if port_type.upper() == "FILE" and path:
@@ -352,6 +394,9 @@ class IntegrationLayerAuditor(BaseAuditor):
                                        "/usr/sap", "/sapmnt"]
                 if any(rp.lower() in path.lower() for rp in risky_path_patterns):
                     file_port_risks.append(f"{label} — path: {path}")
+                    if port_name:
+                        file_port_objs.append({"type": "idoc_port", "name": port_name})
+                    file_port_objs.append({"type": "path", "name": path})
 
         if insecure_ports:
             self.finding(
@@ -365,6 +410,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "HR records) that should be encrypted in transit."
                 ),
                 affected_items=insecure_ports,
+                affected_objects=insecure_port_objs,
+                scope="aggregate",
                 remediation=(
                     "Enable TLS on all HTTP/XML IDOC ports. "
                     "Enable SNC on all RFC-based IDOC ports. "
@@ -385,6 +432,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "readable by unauthorized OS users."
                 ),
                 affected_items=file_port_risks,
+                affected_objects=file_port_objs,
+                scope="aggregate",
                 remediation=(
                     "Use dedicated, access-controlled directories for IDOC file ports. "
                     "Set strict OS-level permissions (owner: sidadm, mode: 700). "
@@ -404,7 +453,9 @@ class IntegrationLayerAuditor(BaseAuditor):
             return
 
         wildcard_partners = []
+        wildcard_partner_objs = []
         sensitive_idoc_partners = []
+        sensitive_partner_objs = []
 
         sensitive_idoc_types = [
             "HRMD_A",      # HR master data
@@ -431,6 +482,11 @@ class IntegrationLayerAuditor(BaseAuditor):
                 wildcard_partners.append(
                     f"{label} — message type: {msg_type or 'ALL'} (direction: {direction})"
                 )
+                if partner:
+                    wildcard_partner_objs.append({
+                        "type": "idoc_partner", "name": partner,
+                        "qualifier": f"message type {msg_type.strip()}",
+                    })
 
             if msg_type:
                 for sensitive in sensitive_idoc_types:
@@ -438,6 +494,14 @@ class IntegrationLayerAuditor(BaseAuditor):
                         sensitive_idoc_partners.append(
                             f"{label} — {msg_type} via port {port} ({direction})"
                         )
+                        if partner:
+                            sensitive_partner_objs.append({
+                                "type": "idoc_partner", "name": partner,
+                                "qualifier": f"message type {msg_type}",
+                            })
+                        if port:
+                            sensitive_partner_objs.append(
+                                {"type": "idoc_port", "name": port})
                         break
 
         if wildcard_partners:
@@ -452,6 +516,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "message-type-level authorization."
                 ),
                 affected_items=wildcard_partners,
+                affected_objects=wildcard_partner_objs,
+                scope="aggregate",
                 remediation=(
                     "Restrict each partner profile to specific message types required "
                     "for the business integration. Remove wildcard entries. "
@@ -472,6 +538,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "These require additional scrutiny for authorization and encryption."
                 ),
                 affected_items=sensitive_idoc_partners,
+                affected_objects=sensitive_partner_objs,
+                scope="aggregate",
                 remediation=(
                     "Ensure all sensitive IDOC types use encrypted transport (SNC/TLS). "
                     "Verify the receiving partner is authorized for the data classification. "
@@ -491,7 +559,9 @@ class IntegrationLayerAuditor(BaseAuditor):
             return
 
         high_risk_exposed = []
+        high_risk_objs = []
         all_active = []
+        all_active_objs = []
 
         for row in ws:
             name = row.get("SERVICE_NAME", row.get("NAME", row.get("ENDPOINT", "")))
@@ -505,6 +575,8 @@ class IntegrationLayerAuditor(BaseAuditor):
 
             label = f"{name} (binding: {binding})"
             all_active.append(label)
+            if name:
+                all_active_objs.append({"type": "function_module", "name": name})
 
             name_upper = name.upper()
             for pattern in self.WS_HIGH_RISK_PATTERNS:
@@ -512,6 +584,13 @@ class IntegrationLayerAuditor(BaseAuditor):
                     high_risk_exposed.append(
                         f"{label} — auth: {auth or 'unknown'}, transport: {transport}"
                     )
+                    if name:
+                        high_risk_objs.append({
+                            "type": "function_module", "name": name,
+                            "qualifier": f"auth {auth or 'unknown'}",
+                        })
+                    if binding:
+                        high_risk_objs.append({"type": "endpoint", "name": binding})
                     break
 
         if high_risk_exposed:
@@ -527,6 +606,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "is weak."
                 ),
                 affected_items=high_risk_exposed,
+                affected_objects=high_risk_objs,
+                scope="aggregate",
                 remediation=(
                     "Deactivate unnecessary web service endpoints via SOAMANAGER. "
                     "For required endpoints, enforce strong authentication (X.509 or OAuth). "
@@ -551,6 +632,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "A large web service surface increases attack vectors and management complexity."
                 ),
                 affected_items=all_active[:30],
+                affected_objects=all_active_objs[:30],
+                scope="aggregate",
                 remediation=(
                     "Review all active web service endpoints for continued business need. "
                     "Deactivate unused endpoints. Consolidate into modern OData/REST APIs."
@@ -566,6 +649,7 @@ class IntegrationLayerAuditor(BaseAuditor):
             return
 
         weak_auth = []
+        weak_auth_objs = []
         for row in ws:
             name = row.get("SERVICE_NAME", row.get("NAME", ""))
             status = row.get("STATUS", row.get("ACTIVE", ""))
@@ -579,6 +663,11 @@ class IntegrationLayerAuditor(BaseAuditor):
                 weak_auth.append(
                     f"{name} — auth: {auth or 'none'}, transport: {transport}"
                 )
+                if name:
+                    weak_auth_objs.append({
+                        "type": "function_module", "name": name,
+                        "qualifier": f"auth {auth}",
+                    })
 
         if weak_auth:
             self.finding(
@@ -592,6 +681,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "caller can invoke these services."
                 ),
                 affected_items=weak_auth,
+                affected_objects=weak_auth_objs,
+                scope="aggregate",
                 remediation=(
                     "Configure message-level authentication (WS-Security with X.509 "
                     "certificates, SAML tokens, or username/password with TLS). "
@@ -621,9 +712,13 @@ class IntegrationLayerAuditor(BaseAuditor):
             webhooks.get("subscriptions", [])))
 
         http_callbacks = []
+        http_callback_objs = []
         no_signature = []
+        no_signature_objs = []
         external_callbacks = []
+        external_callback_objs = []
         stale = []
+        stale_objs = []
         now = datetime.now()
 
         internal_patterns = self.get_config("internal_domain_patterns", [
@@ -649,16 +744,26 @@ class IntegrationLayerAuditor(BaseAuditor):
             # HTTP without TLS
             if url and url.lower().startswith("http://"):
                 http_callbacks.append(f"{label} — unencrypted HTTP")
+                if name:
+                    http_callback_objs.append({"type": "endpoint", "name": name})
+                http_callback_objs.append({"type": "url", "name": url})
 
             # No signature verification
             if not signature or str(signature).lower() in ("false", "0", "no", "none", ""):
                 no_signature.append(f"{label} — no HMAC/signature validation")
+                if name:
+                    no_signature_objs.append({"type": "endpoint", "name": name})
+                if url:
+                    no_signature_objs.append({"type": "url", "name": url})
 
             # External callback domains
             if url:
                 is_internal = any(p in url.lower() for p in internal_patterns)
                 if not is_internal:
                     external_callbacks.append(label)
+                    if name:
+                        external_callback_objs.append({"type": "endpoint", "name": name})
+                    external_callback_objs.append({"type": "url", "name": url})
 
             # Stale webhooks
             stale_days = self.get_config("webhook_stale_days", 180)
@@ -670,6 +775,10 @@ class IntegrationLayerAuditor(BaseAuditor):
                         f"{label} — last activity: {ref_date} "
                         f"({(now - parsed).days}d ago)"
                     )
+                    if name:
+                        stale_objs.append({"type": "endpoint", "name": name})
+                    if url:
+                        stale_objs.append({"type": "url", "name": url})
 
         if http_callbacks:
             self.finding(
@@ -683,6 +792,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "authentication tokens that can be intercepted."
                 ),
                 affected_items=http_callbacks,
+                affected_objects=http_callback_objs,
+                scope="aggregate",
                 remediation=(
                     "Update all webhook callback URLs to use HTTPS. "
                     "Reject HTTP callback registrations at the platform level."
@@ -702,6 +813,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "webhook payloads are authentic, enabling replay and spoofing attacks."
                 ),
                 affected_items=no_signature,
+                affected_objects=no_signature_objs,
+                scope="aggregate",
                 remediation=(
                     "Configure HMAC (SHA-256) signature on all webhook registrations. "
                     "Receiving endpoints must validate the signature header before "
@@ -722,6 +835,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "Verify these are authorized and data classification allows it."
                 ),
                 affected_items=external_callbacks,
+                affected_objects=external_callback_objs,
+                scope="aggregate",
                 remediation=(
                     "Review each external webhook for business authorization. "
                     "Ensure data classification allows the event data to leave "
@@ -742,6 +857,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "Stale registrations may point to decommissioned consumers."
                 ),
                 affected_items=stale,
+                affected_objects=stale_objs,
+                scope="aggregate",
                 remediation="Review and remove unused webhook registrations.",
                 references=["Integration Governance — Webhook Lifecycle"],
             )
@@ -762,7 +879,9 @@ class IntegrationLayerAuditor(BaseAuditor):
             return
 
         permit_all = []
+        permit_all_objs = []
         external_exec = []
+        external_exec_objs = []
         has_deny_default = False
 
         for row in secinfo:
@@ -783,12 +902,25 @@ class IntegrationLayerAuditor(BaseAuditor):
             if "PERMIT" in rule_upper or action.upper() == "P":
                 if ("*" in program or not program) and ("*" in host or not host):
                     permit_all.append(f"Rule: {rule_text}")
+                    if rule_text:
+                        permit_all_objs.append({
+                            "type": "gateway", "name": "secinfo",
+                            "qualifier": rule_text,
+                        })
 
             # External program execution
             if "PERMIT" in rule_upper or action.upper() == "P":
                 ext_indicators = ["SAPXPG", "TP_*", "/USR/", "/BIN/", "CMD", "PROGRAM"]
                 if any(ind in rule_upper for ind in ext_indicators):
                     external_exec.append(f"Rule: {rule_text}")
+                    if rule_text:
+                        external_exec_objs.append({
+                            "type": "gateway", "name": "secinfo",
+                            "qualifier": rule_text,
+                        })
+                    if program:
+                        external_exec_objs.append(
+                            {"type": "program", "name": program})
 
         if permit_all:
             self.finding(
@@ -802,6 +934,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "allowing remote program execution via the SAP gateway."
                 ),
                 affected_items=permit_all,
+                affected_objects=permit_all_objs,
+                scope="aggregate",
                 remediation=(
                     "Replace wildcard permit rules with specific entries for each "
                     "required program/host combination. Follow SAP's recommended "
@@ -825,6 +959,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "be implicitly allowed depending on gateway configuration."
                 ),
                 affected_items=["secinfo — no deny-all default found"],
+                affected_objects=[{"type": "gateway", "name": "secinfo"}],
+                scope="object",
                 remediation=(
                     "Add 'D *  *  *' (deny all) as the last rule in secinfo. "
                     "Then add specific permit rules above it for required access."
@@ -844,6 +980,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "exploited for remote code execution."
                 ),
                 affected_items=external_exec,
+                affected_objects=external_exec_objs,
+                scope="aggregate",
                 remediation=(
                     "Remove or restrict external program execution rules. "
                     "If SAPXPG is required, limit to specific programs and hosts. "
@@ -860,6 +998,7 @@ class IntegrationLayerAuditor(BaseAuditor):
             return
 
         permit_all = []
+        permit_all_objs = []
         has_deny_default = False
 
         for row in reginfo:
@@ -877,6 +1016,11 @@ class IntegrationLayerAuditor(BaseAuditor):
             if "PERMIT" in rule_upper or action.upper() == "P":
                 if ("*" in tp or not tp) and ("*" in host or not host):
                     permit_all.append(f"Rule: {rule_text}")
+                    if rule_text:
+                        permit_all_objs.append({
+                            "type": "gateway", "name": "reginfo",
+                            "qualifier": rule_text,
+                        })
 
         if permit_all:
             self.finding(
@@ -890,6 +1034,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "intercept or inject RFC traffic."
                 ),
                 affected_items=permit_all,
+                affected_objects=permit_all_objs,
+                scope="aggregate",
                 remediation=(
                     "Restrict reginfo to specific RFC server programs and source hosts. "
                     "Add a deny-all default rule. Only permit known integration servers."
@@ -911,6 +1057,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "Without it, unrecognized RFC servers may be able to register."
                 ),
                 affected_items=["reginfo — no deny-all default found"],
+                affected_objects=[{"type": "gateway", "name": "reginfo"}],
+                scope="object",
                 remediation="Add 'D *  *' as the last line in reginfo.",
                 references=["SAP Note 1408081"],
             )
@@ -978,6 +1126,7 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "security events go undetected."
                 ),
                 affected_items=missing_alerts,
+                scope="aggregate",
                 remediation=(
                     "Configure alerts for all critical integration events using "
                     "SAP Alert Notification Service or equivalent. "
@@ -999,6 +1148,7 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "correlated with other security data for incident detection."
                 ),
                 affected_items=["SIEM integration: not configured"],
+                scope="aggregate",
                 remediation=(
                     "Configure log forwarding from SAP Alert Notification Service "
                     "to your SIEM (Splunk, Sentinel, QRadar). "
@@ -1029,8 +1179,11 @@ class IntegrationLayerAuditor(BaseAuditor):
             cpi_ds.get("variables", cpi_ds.get("globalVariables", []))
 
         sensitive_stores = []
+        sensitive_store_objs = []
         credential_vars = []
+        credential_var_objs = []
         large_stores = []
+        large_store_objs = []
 
         sensitive_patterns = ["password", "token", "secret", "key", "credential",
                              "ssn", "bank", "salary", "payment", "credit_card",
@@ -1055,6 +1208,11 @@ class IntegrationLayerAuditor(BaseAuditor):
                         sensitive_stores.append(
                             f"{name} — entries: {entry_count}, encrypted: {encrypted}"
                         )
+                        if name:
+                            sensitive_store_objs.append({
+                                "type": "cpi_datastore", "name": name,
+                                "qualifier": "not encrypted",
+                            })
 
                 # Large stores (potential data hoarding)
                 max_entries = self.get_config("max_cpi_datastore_entries", 10000)
@@ -1063,6 +1221,9 @@ class IntegrationLayerAuditor(BaseAuditor):
                         large_stores.append(
                             f"{name} — {entry_count} entries (max: {max_entries})"
                         )
+                        if name:
+                            large_store_objs.append(
+                                {"type": "cpi_datastore", "name": name})
                 except (ValueError, TypeError):
                     pass
 
@@ -1079,6 +1240,9 @@ class IntegrationLayerAuditor(BaseAuditor):
                     credential_vars.append(
                         f"Variable: {name} — may contain sensitive data"
                     )
+                    if name:
+                        credential_var_objs.append(
+                            {"type": "cpi_variable", "name": name})
 
         if sensitive_stores:
             self.finding(
@@ -1092,6 +1256,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "contents are accessible via CPI OData API."
                 ),
                 affected_items=sensitive_stores,
+                affected_objects=sensitive_store_objs,
+                scope="aggregate",
                 remediation=(
                     "Enable encryption for all data stores containing sensitive data. "
                     "Use the CPI Security Material for credential storage instead. "
@@ -1112,6 +1278,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "are not encrypted and are readable via management API."
                 ),
                 affected_items=credential_vars,
+                affected_objects=credential_var_objs,
+                scope="aggregate",
                 remediation=(
                     "Move credentials to CPI Security Material (credential store). "
                     "Do not use global variables for secrets. "
@@ -1132,6 +1300,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "logic, impacting performance and increasing data exposure risk."
                 ),
                 affected_items=large_stores,
+                affected_objects=large_store_objs,
+                scope="aggregate",
                 remediation=(
                     "Implement TTL (time-to-live) on data store entries. "
                     "Add cleanup logic to iFlows or use scheduled cleanup iFlows. "
@@ -1160,8 +1330,11 @@ class IntegrationLayerAuditor(BaseAuditor):
             oauth.get("clients", oauth.get("oauthClients", []))
 
         broad_scope = []
+        broad_scope_objs = []
         deprecated_grants = []
+        deprecated_grant_objs = []
         stale_clients = []
+        stale_client_objs = []
         now = datetime.now()
 
         for client in clients:
@@ -1189,6 +1362,12 @@ class IntegrationLayerAuditor(BaseAuditor):
                     f"{client_id} — scopes: "
                     f"{scopes if isinstance(scopes, str) else ', '.join(str(s) for s in scopes[:5])}"
                 )
+                if client_id:
+                    broad_scope_objs.append({
+                        "type": "oauth_client", "name": client_id,
+                        "qualifier": "scope " + ", ".join(
+                            ind for ind in admin_indicators if ind in scope_str),
+                    })
 
             # Deprecated grant types
             if isinstance(grant_types, list):
@@ -1200,6 +1379,12 @@ class IntegrationLayerAuditor(BaseAuditor):
                 deprecated_grants.append(
                     f"{client_id} — grant types: {grant_types}"
                 )
+                if client_id:
+                    deprecated_grant_objs.append({
+                        "type": "oauth_client", "name": client_id,
+                        "qualifier": "grant " + ", ".join(
+                            d for d in ["PASSWORD", "IMPLICIT"] if d in gt_str),
+                    })
 
             # Stale clients
             ref_date = last_used or created
@@ -1211,6 +1396,9 @@ class IntegrationLayerAuditor(BaseAuditor):
                         f"{client_id} — last activity: {ref_date} "
                         f"({(now - parsed).days}d ago)"
                     )
+                    if client_id:
+                        stale_client_objs.append(
+                            {"type": "oauth_client", "name": client_id})
 
         if broad_scope:
             self.finding(
@@ -1224,6 +1412,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "can lead to full platform takeover."
                 ),
                 affected_items=broad_scope,
+                affected_objects=broad_scope_objs,
+                scope="aggregate",
                 remediation=(
                     "Restrict OAuth client scopes to minimum required permissions. "
                     "Create separate clients for different integration scenarios "
@@ -1244,6 +1434,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "risks (credential exposure, token leakage)."
                 ),
                 affected_items=deprecated_grants,
+                affected_objects=deprecated_grant_objs,
+                scope="aggregate",
                 remediation=(
                     "Migrate to client_credentials (for service-to-service) or "
                     "authorization_code with PKCE (for user-facing apps). "
@@ -1266,6 +1458,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "Stale clients represent unmonitored credential exposure."
                 ),
                 affected_items=stale_clients,
+                affected_objects=stale_client_objs,
+                scope="aggregate",
                 remediation=(
                     "Review and delete unused OAuth clients. "
                     "Implement OAuth client lifecycle management with periodic reviews."
@@ -1297,7 +1491,9 @@ class IntegrationLayerAuditor(BaseAuditor):
         inbound_count: Dict[str, int] = defaultdict(int)
         outbound_count: Dict[str, int] = defaultdict(int)
         unencrypted = []
+        unencrypted_objs = []
         deprecated_systems = []
+        deprecated_system_objs = []
 
         deprecated_indicators = self.get_config("deprecated_system_patterns", [
             "ECC", "R/3", "BW_3", "CRM_5", "SRM_7", "XI_7",
@@ -1323,11 +1519,17 @@ class IntegrationLayerAuditor(BaseAuditor):
             # Unencrypted connections
             if encrypted is not None and str(encrypted).lower() in ("false", "0", "no"):
                 unencrypted.append(f"{source} → {target} (protocol: {protocol})")
+                for sys_name in (source, target):
+                    if sys_name:
+                        unencrypted_objs.append({"type": "system", "name": sys_name})
             elif protocol and protocol.upper() in ("HTTP", "RFC", "FTP", "SMTP"):
                 if not encrypted or str(encrypted).lower() in ("", "unknown"):
                     unencrypted.append(
                         f"{source} → {target} (protocol: {protocol}, encryption: unknown)"
                     )
+                    for sys_name in (source, target):
+                        if sys_name:
+                            unencrypted_objs.append({"type": "system", "name": sys_name})
 
             # Deprecated systems
             for sys_name in (source, target):
@@ -1335,10 +1537,14 @@ class IntegrationLayerAuditor(BaseAuditor):
                     deprecated_systems.append(
                         f"{source} → {target} (system: {sys_name})"
                     )
+                    if sys_name:
+                        deprecated_system_objs.append(
+                            {"type": "system", "name": sys_name})
 
         # Hub systems (excessive connections)
         max_connections = self.get_config("max_system_connections", 15)
         hub_systems = []
+        hub_system_objs = []
         all_counts = defaultdict(int)
         for sys_name, count in inbound_count.items():
             all_counts[sys_name] += count
@@ -1352,6 +1558,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     f"(in: {inbound_count.get(sys_name, 0)}, "
                     f"out: {outbound_count.get(sys_name, 0)})"
                 )
+                if sys_name:
+                    hub_system_objs.append({"type": "system", "name": sys_name})
 
         if unencrypted:
             self.finding(
@@ -1365,6 +1573,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "Business data traversing these connections is at risk of interception."
                 ),
                 affected_items=unencrypted,
+                affected_objects=unencrypted_objs,
+                scope="aggregate",
                 remediation=(
                     "Enable TLS/SNC on all integration connections. "
                     "Migrate FTP to SFTP, HTTP to HTTPS, and RFC to SNC-secured RFC. "
@@ -1386,6 +1596,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "connected systems."
                 ),
                 affected_items=hub_systems,
+                affected_objects=hub_system_objs,
+                scope="aggregate",
                 remediation=(
                     "Review hub system security posture with extra scrutiny. "
                     "Consider distributing integrations via middleware (CPI/Event Mesh) "
@@ -1398,6 +1610,12 @@ class IntegrationLayerAuditor(BaseAuditor):
         if deprecated_systems:
             # Deduplicate
             unique_deprecated = list(set(deprecated_systems))
+            seen_deprecated: Set[str] = set()
+            unique_deprecated_objs = []
+            for obj in deprecated_system_objs:
+                if obj["name"] not in seen_deprecated:
+                    seen_deprecated.add(obj["name"])
+                    unique_deprecated_objs.append(obj)
             self.finding(
                 check_id="INTG-TOPO-003",
                 title="Integration connections to deprecated/legacy systems",
@@ -1409,6 +1627,8 @@ class IntegrationLayerAuditor(BaseAuditor):
                     "Legacy systems often have weaker security posture and may lack patches."
                 ),
                 affected_items=unique_deprecated[:30],
+                affected_objects=unique_deprecated_objs[:30],
+                scope="aggregate",
                 remediation=(
                     "Validate each legacy system connection for business necessity. "
                     "Prioritize migration to supported systems. "

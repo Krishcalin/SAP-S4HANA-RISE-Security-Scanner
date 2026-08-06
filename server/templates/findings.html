@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% set nav = 'findings' %}
+{% block title %}Findings — SAPSec{% endblock %}
+{% block body %}
+
+<h1>Findings</h1>
+<p class="sub">
+  {{ total }} finding{{ '' if total == 1 else 's' }}.
+  Every finding type — parameters, authorizations, SoD, HANA, BTP, code and transports —
+  in one queue with one lifecycle.
+</p>
+
+<form class="filters" method="get">
+  <select name="system_id">
+    <option value="">All systems</option>
+    {% for s in systems %}
+    <option value="{{ s.id }}" {{ 'selected' if filters.system_id == s.id }}>
+      {{ s.sid }}/{{ s.client }} ({{ s.tier }})
+    </option>
+    {% endfor %}
+  </select>
+  <select name="severity">
+    <option value="">Any severity</option>
+    {% for sv in ['CRITICAL','HIGH','MEDIUM','LOW','INFO'] %}
+    <option value="{{ sv }}" {{ 'selected' if filters.severity == sv }}>{{ sv }}</option>
+    {% endfor %}
+  </select>
+  <select name="state">
+    <option value="">Open (default)</option>
+    {% for st in ['open','submitted_to_provider','mitigated','accepted','false_positive','resolved'] %}
+    <option value="{{ st }}" {{ 'selected' if filters.state == st }}>{{ st.replace('_',' ') }}</option>
+    {% endfor %}
+  </select>
+  <select name="owner">
+    <option value="">Any owner</option>
+    <option value="customer_fixable" {{ 'selected' if filters.owner=='customer_fixable' }}>Yours to fix</option>
+    <option value="ticket_to_sap" {{ 'selected' if filters.owner=='ticket_to_sap' }}>Raise with SAP</option>
+    <option value="provider_owned" {{ 'selected' if filters.owner=='provider_owned' }}>SAP's under RISE</option>
+    <option value="not_assessable" {{ 'selected' if filters.owner=='not_assessable' }}>Out of reach</option>
+  </select>
+  <select name="team">
+    <option value="">Any team</option>
+    {% for t in ['basis','authorizations','development','integration','data_protection','identity'] %}
+    <option value="{{ t }}" {{ 'selected' if filters.team == t }}>{{ t.replace('_',' ') }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">Apply</button>
+  <a class="btn ghost" href="/findings">Reset</a>
+</form>
+
+<div class="card wrap" style="padding:0">
+<table>
+  <thead><tr>
+    <th style="width:88px">Severity</th>
+    <th style="width:120px">Check</th>
+    <th>Title</th>
+    <th style="width:110px">System</th>
+    <th style="width:130px">Ownership</th>
+    <th style="width:100px">State</th>
+    <th style="width:70px" class="right">Age</th>
+  </tr></thead>
+  <tbody>
+  {% for f in findings %}
+    <tr>
+      <td><span class="pill sev-{{ f.severity or 'INFO' }}">{{ f.severity or 'INFO' }}</span></td>
+      <td class="mono small"><a href="/findings/{{ f.id }}">{{ f.check_id }}</a></td>
+      <td>
+        <a href="/findings/{{ f.id }}">{{ f.title }}</a>
+        {% if f.regression_count %}
+          <span class="pill st" title="previously resolved, then seen again"
+                style="color:var(--high)">regressed &times;{{ f.regression_count }}</span>
+        {% endif %}
+        {% if f.expired_acceptance %}
+          <span class="pill st" style="color:var(--crit)">acceptance expired</span>
+        {% endif %}
+        {# Identity strength, shown inline rather than hidden: it tells a user how
+           much to trust this row's age and history. #}
+        {% if f.fingerprint_basis != 'objects' %}
+          <span class="faint small" title="matched across runs by {{ f.fingerprint_basis }}">
+            &middot; {{ f.fingerprint_basis }}
+          </span>
+        {% endif %}
+      </td>
+      <td class="mono small">{{ f.sid or '—' }}{% if f.system_client %}/{{ f.system_client }}{% endif %}</td>
+      <td><span class="own own-{{ f.remediation_owner }}">
+        {{ {'customer_fixable':'Yours to fix','ticket_to_sap':'Raise with SAP',
+            'provider_owned':"SAP's",'not_assessable':'Out of reach'}[f.remediation_owner] }}
+      </span></td>
+      <td><span class="pill st st-{{ f.state }}">{{ f.state.replace('_',' ') }}</span></td>
+      <td class="right mono small">{{ f.days_open }}d</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="7" class="empty">
+      No findings match these filters.
+      {% if not filters.state %}Resolved findings are hidden by default.{% endif %}
+    </td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if pages > 1 %}
+<div style="margin-top:14px;display:flex;gap:8px;align-items:center">
+  {% if page > 1 %}<a class="btn ghost" href="?page={{ page-1 }}">Previous</a>{% endif %}
+  <span class="muted small">Page {{ page }} of {{ pages }}</span>
+  {% if page < pages %}<a class="btn ghost" href="?page={{ page+1 }}">Next</a>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

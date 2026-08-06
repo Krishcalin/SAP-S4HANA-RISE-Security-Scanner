@@ -479,6 +479,7 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
         role_index = self._build_role_index()
         if not role_index:
             return self.findings  # no AGR_1251 export → module self-skips
+        self._role_index = role_index   # kept so a finding can name the role that carries a function
         self._units, self._mode = self._build_units(role_index)
         self._mit = self._load_mitigations()
         ruleset = self._effective_ruleset()
@@ -700,6 +701,99 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
                     offenders.append(uid)
         return offenders
 
+    # --------------------------------------------------------- structured naming
+    # Everything below names what the check already decided. It never widens or narrows
+    # a decision, and every name is read back out of the loaded export — a unit, role or
+    # authorization object that is not in the data is omitted rather than invented.
+
+    def _match_instance(self, auths: List[Dict[str, Any]], obj: str,
+                        reqs: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """The authorization instance of `obj` that satisfies ALL its field requirements,
+        or None. Read-only twin of `_object_ok`: it decides nothing, it recovers WHICH
+        instance the check accepted so the finding can name it and quote its values."""
+        obj = obj.upper()
+        for inst in auths:
+            if inst["object"] != obj:
+                continue
+            if all(self._field_ok(inst, r) for r in reqs):
+                return inst
+        return None
+
+    @staticmethod
+    def _held_qualifier(inst: Dict[str, Any], reqs: List[Dict[str, Any]]) -> Optional[str]:
+        """`FIELD=value,...` built from the values the unit ACTUALLY holds, not the values
+        the rule asked for. This is what makes the object dangerous and so belongs in the
+        qualifier: S_TABU_DIS with ACTVT=* is a different defect from a narrow one."""
+        by_field: Dict[str, str] = {}
+        for req in reqs:
+            field = str(req.get("field", "")).strip().upper()
+            if not field or field in by_field:
+                continue
+            vals = set()
+            for low, high in inst["fields"].get(field, []):
+                lo, hi = str(low).strip().upper(), str(high).strip().upper()
+                if not lo:
+                    continue
+                vals.add(f"{lo}-{hi}" if hi and hi != lo else lo)
+            if vals:
+                by_field[field] = f"{field}={','.join(sorted(vals))}"
+        return ";".join(by_field[f] for f in sorted(by_field)) or None
+
+    def _risk_objects(self, risk: Dict[str, Any], units: List[str]) -> List[Dict[str, Any]]:
+        """Structured affected objects for one access-risk finding.
+
+        The offending user is named first — it is the subject an auditor remediates. In
+        per-role fallback mode the unit IS a role, so the role is the subject instead. The
+        roles that actually carry a conflicting function and the authorization objects
+        that grant it ride along, so the attack-path graph gets
+        user → role → auth_object nodes instead of one display string.
+        """
+        funcs = risk.get("functions") or []
+        rtype = str(risk.get("risk_type", "SOD")).upper()
+        perm_match = risk.get("perm_match") or ("all" if rtype.startswith("CRITICAL") else "any")
+        objs: List[Dict[str, Any]] = []
+        seen = set()
+
+        def add(otype: str, name: Any, qualifier: Optional[str] = None) -> None:
+            n = str(name or "").strip()
+            if not n:
+                return                    # a row without a name is omitted, never invented
+            key = (otype, n.upper(), qualifier or "")
+            if key in seen:
+                return
+            seen.add(key)
+            o: Dict[str, Any] = {"type": otype, "name": n}
+            if qualifier:
+                o["qualifier"] = qualifier
+            objs.append(o)
+
+        unit_type = "user" if self._mode == "user" else "role"
+        for uid in units:
+            add(unit_type, uid)
+
+        for uid in units:
+            unit = self._units.get(uid) or {}
+            if self._mode == "user":
+                # Only roles that hold a whole conflicting function on their own are named.
+                # A capability assembled ACROSS roles has no single guilty role, and naming
+                # an arbitrary one of them would be a fabrication.
+                for role in unit.get("roles", []):
+                    ri = self._role_index.get(role)
+                    if ri and any(self._function_held(ri, f, perm_match) for f in funcs):
+                        add("role", role)
+            auths = unit.get("auths") or []
+            for func in funcs:
+                by_obj: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+                for p in (func.get("permissions") or []):
+                    o = str(p.get("object", "")).strip().upper()
+                    if o:
+                        by_obj[o].append(p)
+                for obj, reqs in by_obj.items():
+                    inst = self._match_instance(auths, obj, reqs)
+                    if inst is not None:
+                        add("auth_object", obj, self._held_qualifier(inst, reqs))
+        return objs
+
     # ------------------------------------------------------------------ emission
     def _evaluate_risk(self, risk: Dict[str, Any], user_risk: Dict[str, List[tuple]]):
         offenders = self._risk_offenders(risk)
@@ -759,6 +853,13 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
             references=refs,
             details={"total_affected": len(residual), "mitigated": mitigated,
                      "risk_type": rtype, "process": risk.get("process", "")},
+            affected_objects=self._risk_objects(risk, residual[:100]),
+            # AGGREGATE: one finding per RISK summarising every user that holds it, so the
+            # member list must stay out of its identity. Remediating one of five offenders
+            # would otherwise retire this finding and raise a fresh one, resetting the
+            # risk's age on every run. check_id already carries the risk id (ARA-<rid>),
+            # which is the correct, stable subject here.
+            scope="aggregate",
         )
 
     def _emit_user_risk_profile(self, user_risk: Dict[str, List[tuple]]):
@@ -774,6 +875,7 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
         threshold = self.get_config("ara_user_risk_threshold", 2)
         top = [f"{uid} — {n} risk(s), {crit} critical, score {score}"
                for score, n, crit, uid in ranked if n >= threshold]
+        top_uids = [uid for _score, n, _crit, uid in ranked if n >= threshold]
         if not top:
             return
         self.finding(
@@ -795,6 +897,11 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
             ),
             references=["SAP GRC Access Control — Access Risk Analysis (user-level risk)"],
             details={"users_over_threshold": len(top), "threshold": threshold},
+            affected_objects=[{"type": "user", "name": uid} for uid in top_uids[:100]],
+            # AGGREGATE by construction: this finding IS the population statement ("N users
+            # carry 2+ unmitigated risks"). Its members change every time any other ARA
+            # risk moves, so binding them into its identity would churn it perpetually.
+            scope="aggregate",
         )
 
     # ------------------------------------------------------------------ helpers

@@ -97,6 +97,25 @@ class HanaDbSecurityAuditor(BaseAuditor):
     def _falsy(value: Any) -> bool:
         return str(value).strip().lower() in ("false", "0", "no", "off", "disabled", "", "none")
 
+    @staticmethod
+    def _add_obj(objects: List[Dict[str, Any]], otype: str, name: Any,
+                 qualifier: Any = None) -> None:
+        """Append one structured affected object, de-duplicated.
+
+        A row whose identifying field is missing is SKIPPED rather than given a
+        placeholder: an object with no name cannot be fingerprinted, and inventing one
+        would put a graph node into the attack path that does not exist in the system.
+        """
+        n = "" if name is None else str(name).strip()
+        if not n:
+            return
+        obj: Dict[str, Any] = {"type": otype, "name": n}
+        q = "" if qualifier is None else str(qualifier).strip()
+        if q:
+            obj["qualifier"] = q
+        if obj not in objects:
+            objects.append(obj)
+
     def _param_index(self):
         """Build {(file, section, key_lower): value} from hana_parameters.csv."""
         rows = self.data.get("hana_parameters") or []
@@ -182,6 +201,12 @@ class HanaDbSecurityAuditor(BaseAuditor):
                         "CIS SAP HANA Benchmark — Deactivate SYSTEM user",
                         "SAP HANA Security Guide — The SYSTEM User",
                     ],
+                    # One named user, one defect: the subject IS SYSTEM. No qualifier —
+                    # the check fires on exactly one state, so a qualifier would add no
+                    # discrimination while inheriting the export's spelling of the
+                    # ACTIVE/DEACTIVATED flag ("FALSE" vs "false" vs "0").
+                    affected_objects=[{"type": "hana_user", "name": name}],
+                    scope="object",
                 )
             return
 
@@ -192,6 +217,7 @@ class HanaDbSecurityAuditor(BaseAuditor):
         if not users:
             return
         offenders = []
+        objects: List[Dict[str, Any]] = []
         for row in users:
             name = str(row.get("USER_NAME", row.get("USER", row.get("NAME", "")))).strip()
             if not name or name.upper() in self.TECHNICAL_USERS or name.startswith("_SYS"):
@@ -203,6 +229,7 @@ class HanaDbSecurityAuditor(BaseAuditor):
                 continue
             if self._falsy(lifetime):
                 offenders.append(f"{name} — password lifetime check: disabled")
+                self._add_obj(objects, "hana_user", name)
         if offenders:
             self.finding(
                 check_id="HANADB-USER-002",
@@ -225,6 +252,11 @@ class HanaDbSecurityAuditor(BaseAuditor):
                     "CIS SAP HANA Benchmark — Password lifetime",
                     "SAP HANA Security Guide — Password Policy",
                 ],
+                affected_objects=objects,
+                # One finding over the never-expiring-password population. Enabling the
+                # lifetime check on one user must SHRINK this finding, not retire it and
+                # raise a zero-age replacement — so the members stay out of identity.
+                scope="aggregate",
             )
 
     def check_dormant_users(self):
@@ -235,6 +267,7 @@ class HanaDbSecurityAuditor(BaseAuditor):
         threshold = self.get_config("hana_dormant_days", 90)
         now = datetime.now()
         dormant = []
+        objects: List[Dict[str, Any]] = []
         for row in users:
             name = str(row.get("USER_NAME", row.get("USER", row.get("NAME", "")))).strip()
             if not name or name.upper() in self.TECHNICAL_USERS or name.startswith("_SYS"):
@@ -247,8 +280,10 @@ class HanaDbSecurityAuditor(BaseAuditor):
             parsed = self._parse_date(last)
             if last in ("", None) or str(last).strip() == "?":
                 dormant.append(f"{name} — never connected")
+                self._add_obj(objects, "hana_user", name)
             elif parsed and (now - parsed).days >= threshold:
                 dormant.append(f"{name} — last connect {(now - parsed).days}d ago ({last})")
+                self._add_obj(objects, "hana_user", name)
         if dormant:
             self.finding(
                 check_id="HANADB-USER-003",
@@ -266,6 +301,12 @@ class HanaDbSecurityAuditor(BaseAuditor):
                     "and drop them after a review period. Automate dormancy review."
                 ),
                 references=["CIS SAP HANA Benchmark — Unused users"],
+                affected_objects=objects,
+                # The canonical aggregate: "N dormant accounts" is about the check, not
+                # about any one account. Deactivating one dormant user must not retire
+                # the finding and reset its age. No qualifier carries the day count
+                # either — it grows every run and would re-key the node daily.
+                scope="aggregate",
             )
 
     # --------------------------------------------------------------- privileges
@@ -284,12 +325,20 @@ class HanaDbSecurityAuditor(BaseAuditor):
         if not self.data.get("hana_granted_privileges"):
             return
         offenders = []
+        objects: List[Dict[str, Any]] = []
         for grantee, gtype, priv, obj, _ in self._iter_priv_rows():
             if grantee.upper() != "PUBLIC":
                 continue
             if priv in self.HIGH_SYSTEM_PRIVS or priv == self.CP_ALL or "ADMIN" in priv:
                 label = f"PUBLIC ← {priv}" + (f" ON {obj}" if obj else "")
                 offenders.append(label)
+                self._add_obj(objects, "hana_role", grantee)
+                # OBJECT_NAME is a qualifier, not an object of its own: the export does
+                # not say whether it names a schema, a procedure or a user, so typing it
+                # would be a guess. It still belongs in identity — CATALOG READ on one
+                # object is a different grant from the unrestricted system privilege.
+                self._add_obj(objects, "hana_privilege", priv,
+                              f"on={obj}" if obj else None)
         if offenders:
             self.finding(
                 check_id="HANADB-PRIV-001",
@@ -312,6 +361,11 @@ class HanaDbSecurityAuditor(BaseAuditor):
                     "CIS SAP HANA Benchmark — Restrict PUBLIC role",
                     "SAP HANA Security Guide — The PUBLIC Role",
                 ],
+                affected_objects=objects,
+                # One finding summarising every sensitive privilege PUBLIC holds.
+                # Revoking one of them must shrink the finding rather than replace it,
+                # so the privilege list is stored as members and excluded from identity.
+                scope="aggregate",
             )
 
     def check_system_privileges(self):
@@ -319,6 +373,8 @@ class HanaDbSecurityAuditor(BaseAuditor):
         if not self.data.get("hana_granted_privileges"):
             return
         crit, high = [], []
+        crit_objects: List[Dict[str, Any]] = []
+        high_objects: List[Dict[str, Any]] = []
         for grantee, gtype, priv, obj, _ in self._iter_priv_rows():
             gu = grantee.upper()
             if gu in ("PUBLIC",) or gu in self.TECHNICAL_USERS or gu.startswith("_SYS"):
@@ -327,8 +383,14 @@ class HanaDbSecurityAuditor(BaseAuditor):
                 continue
             if priv in self.CRITICAL_SYSTEM_PRIVS:
                 crit.append(f"{grantee} ← {priv}")
+                # A grant is an edge: both ends become graph nodes, as in the
+                # user -> profile modelling the identity tests use.
+                self._add_obj(crit_objects, "hana_user", grantee)
+                self._add_obj(crit_objects, "hana_privilege", priv)
             elif priv in self.HIGH_SYSTEM_PRIVS:
                 high.append(f"{grantee} ← {priv}")
+                self._add_obj(high_objects, "hana_user", grantee)
+                self._add_obj(high_objects, "hana_privilege", priv)
         if crit:
             self.finding(
                 check_id="HANADB-PRIV-002",
@@ -351,6 +413,12 @@ class HanaDbSecurityAuditor(BaseAuditor):
                     "CIS SAP HANA Benchmark — System privileges",
                     "SAP HANA Security Guide — System Privileges",
                 ],
+                affected_objects=crit_objects,
+                # Every critical direct grant in the system rolls up into this ONE
+                # finding. Revoking DATA ADMIN from one user while another keeps USER
+                # ADMIN must leave the finding standing with its age intact, so the
+                # grantee/privilege pairs are members rather than the subject.
+                scope="aggregate",
             )
         if high:
             self.finding(
@@ -369,6 +437,9 @@ class HanaDbSecurityAuditor(BaseAuditor):
                     "review each direct grant for necessity."
                 ),
                 references=["SAP HANA Security Guide — System Privileges"],
+                affected_objects=high_objects,
+                # Same rollup as HANADB-PRIV-002, one severity band down.
+                scope="aggregate",
             )
 
     def check_grantable_privileges(self):
@@ -376,12 +447,18 @@ class HanaDbSecurityAuditor(BaseAuditor):
         if not self.data.get("hana_granted_privileges"):
             return
         offenders = []
+        objects: List[Dict[str, Any]] = []
         for grantee, gtype, priv, obj, grantable in self._iter_priv_rows():
             gu = grantee.upper()
             if gu in self.TECHNICAL_USERS or gu.startswith("_SYS"):
                 continue
             if self._truthy(grantable) and (priv in self.HIGH_SYSTEM_PRIVS or "ADMIN" in priv):
                 offenders.append(f"{grantee} ← {priv} (WITH ADMIN/GRANT OPTION)")
+                self._add_obj(objects, "hana_user", grantee)
+                # No "grantable" qualifier: the delegation is what the CHECK is about,
+                # and pinning it onto the node would fork DATA ADMIN into two graph
+                # nodes that HANADB-PRIV-002 and this check could never share.
+                self._add_obj(objects, "hana_privilege", priv)
         if offenders:
             self.finding(
                 check_id="HANADB-PRIV-004",
@@ -399,21 +476,30 @@ class HanaDbSecurityAuditor(BaseAuditor):
                     "required and governed. Regularly review WITH ADMIN OPTION grants."
                 ),
                 references=["SAP HANA Security Guide — Granting Privileges"],
+                affected_objects=objects,
+                # One finding over the delegated-grant population; re-granting one
+                # privilege without the admin option must shrink it, not churn it.
+                scope="aggregate",
             )
 
     def check_analytic_privilege_bypass(self):
         """CRITICAL: _SYS_BI_CP_ALL disables analytic-privilege data filtering."""
         offenders = []
+        objects: List[Dict[str, Any]] = []
         for grantee, gtype, priv, obj, _ in self._iter_priv_rows():
             target = f"{priv} {obj}".upper()
             if self.CP_ALL in target or self.CP_ALL in grantee.upper():
                 if grantee.upper() not in self.TECHNICAL_USERS:
                     offenders.append(f"{grantee} ← {self.CP_ALL}")
+                    self._add_obj(objects, "hana_user", grantee)
+                    self._add_obj(objects, "hana_privilege", self.CP_ALL)
         for row in (self.data.get("hana_granted_roles") or []):
             grantee = str(row.get("GRANTEE", row.get("USER_NAME", ""))).strip()
             role = str(row.get("ROLE_NAME", row.get("ROLE", ""))).strip().upper()
             if self.CP_ALL in role and grantee.upper() not in self.TECHNICAL_USERS:
                 offenders.append(f"{grantee} ← role {role}")
+                self._add_obj(objects, "hana_user", grantee)
+                self._add_obj(objects, "hana_role", role)
         if offenders:
             self.finding(
                 check_id="HANADB-PRIV-005",
@@ -435,6 +521,11 @@ class HanaDbSecurityAuditor(BaseAuditor):
                     "CIS SAP HANA Benchmark — _SYS_BI_CP_ALL",
                     "SAP HANA Security Guide — Analytic Privileges",
                 ],
+                affected_objects=objects,
+                # "N grantee(s) hold _SYS_BI_CP_ALL" is a population statement, and it
+                # merges two sources (direct grants and role grants). Revoking it from
+                # one grantee must shrink the finding, not raise a fresh one.
+                scope="aggregate",
             )
 
     def check_powerful_roles(self):
@@ -443,6 +534,7 @@ class HanaDbSecurityAuditor(BaseAuditor):
         if not roles:
             return
         offenders = []
+        objects: List[Dict[str, Any]] = []
         for row in roles:
             grantee = str(row.get("GRANTEE", row.get("USER_NAME", ""))).strip()
             role = str(row.get("ROLE_NAME", row.get("ROLE", ""))).strip()
@@ -453,6 +545,8 @@ class HanaDbSecurityAuditor(BaseAuditor):
             ru = role.upper()
             if ru in self.POWERFUL_ROLES or ru.endswith("ADMIN") or "SUPPORT" in ru:
                 offenders.append(f"{grantee} ← role {role}")
+                self._add_obj(objects, "hana_user", grantee)
+                self._add_obj(objects, "hana_role", role)
         if offenders:
             self.finding(
                 check_id="HANADB-ROLE-001",
@@ -474,6 +568,11 @@ class HanaDbSecurityAuditor(BaseAuditor):
                     "CIS SAP HANA Benchmark — SAP_INTERNAL_HANA_SUPPORT",
                     "SAP HANA Security Guide — Predefined Roles",
                 ],
+                affected_objects=objects,
+                # One finding over every powerful-role grant. Revoking
+                # SAP_INTERNAL_HANA_SUPPORT after a support case must shrink this
+                # finding, leaving the remaining grants' age untouched.
+                scope="aggregate",
             )
 
     # --------------------------------------------------------------- auditing
@@ -508,6 +607,12 @@ class HanaDbSecurityAuditor(BaseAuditor):
                     "CIS SAP HANA Benchmark — Enable auditing",
                     "SAP HANA Security Guide — Auditing Activity",
                 ],
+                # One parameter, one defect. No qualifier: the check fires on any falsy
+                # spelling ("false", "0", "off", empty), so pinning the exported value
+                # would split one parameter into several identities and several nodes.
+                affected_objects=[{"type": "parameter_name",
+                                   "name": "global_auditing_state"}],
+                scope="object",
             )
 
     def check_audit_trail_target(self):
@@ -516,10 +621,12 @@ class HanaDbSecurityAuditor(BaseAuditor):
         if not idx:
             return
         offenders = []
+        objects: List[Dict[str, Any]] = []
         for key in ("default_audit_trail_type", "emergency_audit_trail_type"):
             val = self._get_param(idx, key, "auditing configuration")
             if val and "CSVTEXTFILE" in str(val).upper():
                 offenders.append(f"{key} = {val}")
+                self._add_obj(objects, "parameter_name", key, val)
         if offenders:
             self.finding(
                 check_id="HANADB-AUDIT-002",
@@ -541,6 +648,12 @@ class HanaDbSecurityAuditor(BaseAuditor):
                     "CIS SAP HANA Benchmark — Audit trail target",
                     "SAP HANA Security Guide — Audit Trail Targets",
                 ],
+                affected_objects=objects,
+                # Two parameters can name the same defect ("the audit trail is a text
+                # file"). Aggregate so that fixing the default trail while the emergency
+                # trail is still CSVTEXTFILE shrinks this finding instead of retiring it
+                # and raising a zero-age clone for the leftover parameter.
+                scope="aggregate",
             )
 
     def check_audit_policy_coverage(self):
@@ -587,6 +700,11 @@ class HanaDbSecurityAuditor(BaseAuditor):
                     "authentication)."
                 ),
                 references=["SAP HANA Security Guide — Audit Policies"],
+                # No affected_objects: the defect is the ABSENCE of an active policy, so
+                # there is no offending object to name. Listing the inactive policies
+                # would make activating any one of them re-key the finding. Aggregate,
+                # and therefore correctly identified by check_id alone.
+                scope="aggregate",
             )
         elif missing:
             self.finding(
@@ -605,6 +723,11 @@ class HanaDbSecurityAuditor(BaseAuditor):
                     "(GRANT/REVOKE, CREATE/ALTER/DROP USER, SYSTEM CONFIGURATION, CONNECT)."
                 ),
                 references=["CIS SAP HANA Benchmark — Audit policy coverage"],
+                # No affected_objects: the members here are this module's own action-
+                # group labels (GRANT, REVOKE, CONNECT …), not objects that exist in the
+                # system, and inventing a type for them would put fictional nodes in the
+                # graph. Aggregate: covering one more group must shrink the finding.
+                scope="aggregate",
             )
 
     # ------------------------------------------------------------- parameters
@@ -615,24 +738,31 @@ class HanaDbSecurityAuditor(BaseAuditor):
             return
         section = "password policy"
         issues = []
+        objects: List[Dict[str, Any]] = []
 
         min_len = self._get_param(idx, "minimal_password_length", section)
         if min_len is not None:
             try:
                 if int(str(min_len)) < 8:
                     issues.append(f"minimal_password_length = {min_len} (recommend ≥ 8)")
+                    self._add_obj(objects, "parameter_name",
+                                  "minimal_password_length", min_len)
             except ValueError:
                 pass
 
         force_first = self._get_param(idx, "force_first_password_change", section)
         if force_first is not None and self._falsy(force_first):
             issues.append("force_first_password_change = false (initial passwords not forced to change)")
+            self._add_obj(objects, "parameter_name",
+                          "force_first_password_change", force_first)
 
         max_attempts = self._get_param(idx, "maximum_invalid_connect_attempts", section)
         if max_attempts is not None:
             try:
                 if int(str(max_attempts)) > 6:
                     issues.append(f"maximum_invalid_connect_attempts = {max_attempts} (recommend ≤ 6)")
+                    self._add_obj(objects, "parameter_name",
+                                  "maximum_invalid_connect_attempts", max_attempts)
             except ValueError:
                 pass
 
@@ -641,6 +771,8 @@ class HanaDbSecurityAuditor(BaseAuditor):
             try:
                 if int(str(lifetime)) > 365:
                     issues.append(f"maximum_password_lifetime = {lifetime}d (recommend ≤ 365)")
+                    self._add_obj(objects, "parameter_name",
+                                  "maximum_password_lifetime", lifetime)
             except ValueError:
                 pass
 
@@ -667,6 +799,12 @@ class HanaDbSecurityAuditor(BaseAuditor):
                     "CIS SAP HANA Benchmark — Password policy",
                     "SAP HANA Security Guide — Password Policy Parameters",
                 ],
+                affected_objects=objects,
+                # Up to four parameters roll up into ONE "weak password policy" finding.
+                # Aggregate is what keeps the value in each qualifier safe: raising
+                # minimal_password_length from 6 to 7 (still weak) must not retire the
+                # finding and reset its age just because a member's value moved.
+                scope="aggregate",
             )
 
     def check_error_disclosure(self):
@@ -698,6 +836,11 @@ class HanaDbSecurityAuditor(BaseAuditor):
                     "CIS SAP HANA Benchmark — detailed_error_on_connect",
                     "SAP HANA Security Guide — Error Disclosure",
                 ],
+                # One parameter, one defect. No qualifier: any truthy spelling fires the
+                # check, so the exported value would fragment one parameter's identity.
+                affected_objects=[{"type": "parameter_name",
+                                   "name": "detailed_error_on_connect"}],
+                scope="object",
             )
 
     def check_sql_tls_enforced(self):
@@ -730,6 +873,9 @@ class HanaDbSecurityAuditor(BaseAuditor):
                     "CIS SAP HANA Benchmark — Enforce SSL for SQL",
                     "SAP HANA Security Guide — Secure Client Communication",
                 ],
+                # One parameter, one defect. No qualifier: any falsy spelling fires.
+                affected_objects=[{"type": "parameter_name", "name": "sslenforce"}],
+                scope="object",
             )
 
     # ---------------------------------------------------------------- recovery
@@ -773,6 +919,12 @@ class HanaDbSecurityAuditor(BaseAuditor):
                     "SAP HANA Administration Guide — Log Modes",
                     "SAP HANA Administration Guide — Backup and Recovery",
                 ],
+                # One parameter, one defect. No qualifier: the check fires on exactly one
+                # value, compared case-insensitively, so carrying "overwrite" vs
+                # "OVERWRITE" into identity would split the finding on export casing
+                # alone while adding no discrimination.
+                affected_objects=[{"type": "parameter_name", "name": "log_mode"}],
+                scope="object",
             )
 
     def check_cross_database_access(self):
@@ -816,6 +968,13 @@ class HanaDbSecurityAuditor(BaseAuditor):
                     "SAP HANA Administration Guide — Cross-Database Access in MDC",
                     "SAP HANA Security Guide — Tenant Database Isolation",
                 ],
+                # One parameter, one defect. The key in M_INIFILE_CONTENTS is literally
+                # "enabled", which is not an identity on its own — every ini section has
+                # one — so the section narrows it. That is exactly what a qualifier is
+                # for, and it is constant for this check, so identity stays stable.
+                affected_objects=[{"type": "parameter_name", "name": "enabled",
+                                   "qualifier": "section=cross_database_access"}],
+                scope="object",
             )
 
     def check_debug_privileges(self):
@@ -823,6 +982,7 @@ class HanaDbSecurityAuditor(BaseAuditor):
         if not self.data.get("hana_granted_privileges"):
             return
         offenders = []
+        objects: List[Dict[str, Any]] = []
         for grantee, gtype, priv, obj, _ in self._iter_priv_rows():
             gu = grantee.upper()
             if gu.startswith("_SYS") or gu == "SYS":
@@ -830,6 +990,13 @@ class HanaDbSecurityAuditor(BaseAuditor):
             if priv in ("DEBUG", "ATTACH DEBUGGER"):
                 label = f"{grantee} ← {priv}" + (f" ON {obj}" if obj else "")
                 offenders.append(label)
+                self._add_obj(objects, "hana_user", grantee)
+                # The debug target rides as a qualifier, not as its own object: the
+                # export gives a bare OBJECT_NAME that may be a procedure ("DEBUG ON
+                # ZFI_PAYMENT_RUN") or a user ("ATTACH DEBUGGER ON DBADMIN"), and there
+                # is no field that says which — typing it would be a guess.
+                self._add_obj(objects, "hana_privilege", priv,
+                              f"on={obj}" if obj else None)
         if offenders:
             self.finding(
                 check_id="HANADB-PRIV-006",
@@ -863,4 +1030,9 @@ class HanaDbSecurityAuditor(BaseAuditor):
                     "SAP HANA Security Guide — Debugging Privileges",
                     "SAP HANA SQLScript Reference — Debugging",
                 ],
+                affected_objects=objects,
+                # One finding over every debug grant found. Revoking DEBUG from one user
+                # while another still holds ATTACH DEBUGGER must shrink this finding
+                # rather than close it and open a fresh, zero-age one.
+                scope="aggregate",
             )

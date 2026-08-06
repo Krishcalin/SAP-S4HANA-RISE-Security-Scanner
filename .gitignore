@@ -15,6 +15,23 @@ env/
 .venv/
 .env/
 
+# Secrets. `.env` holds SESSION_SECRET and POSTGRES_PASSWORD. Note the pattern above
+# is `.env/` — a DIRECTORY — and does not match the file, which is exactly how a
+# secret gets committed by accident. `.env.example` is the template and is tracked.
+.env
+!.env.example
+*.pem
+*.key
+
+# Server runtime state — uploaded bundles are a customer's SAP configuration
+var/
+uploads/
+
+# Test caches
+.pytest_cache/
+.coverage
+htmlcov/
+
 # IDE
 .vscode/
 .idea/
@@ -32,6 +49,10 @@ desktop.ini
 # Scan outputs (don't commit real reports)
 *.html
 !sample_data/sample_report.html
+# The console's Jinja2 templates are SOURCE, not scan output. Without this the
+# blanket *.html above silently drops the entire web tier from the repo.
+!server/templates/
+!server/templates/*.html
 *.pdf
 !docs/*.pdf
 sample_report.*

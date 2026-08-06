@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% set nav = 'dash' %}
+{% block title %}Dashboard — SAPSec{% endblock %}
+{% block body %}
+
+<h1>Security posture</h1>
+<p class="sub">Open findings across {{ systems|length }} system{{ '' if systems|length == 1 else 's' }}.</p>
+
+{# An expired risk acceptance is itself an audit finding, so it is surfaced here
+   rather than behind a filter nobody applies. #}
+{% if summary.expired_acceptances %}
+<div class="banner bad">
+  <strong>{{ summary.expired_acceptances }} risk acceptance{{ '' if summary.expired_acceptances == 1 else 's' }} expired.</strong>
+  The underlying defect is open again and the time-box has passed.
+  <a href="/findings?state=accepted">Review</a>
+</div>
+{% endif %}
+
+{% if summary.regressed %}
+<div class="banner warn">
+  <strong>{{ summary.regressed }} finding{{ '' if summary.regressed == 1 else 's' }} regressed</strong> —
+  previously resolved, then seen again. A recurring defect is a process failure, not a one-off.
+</div>
+{% endif %}
+
+{# Honesty about identity strength. A journey feature that cannot say which rows
+   match reliably is not trustworthy, so we say it on the landing page. #}
+{% if summary.weak_identity %}
+<div class="banner info">
+  {{ summary.weak_identity }} finding{{ '' if summary.weak_identity == 1 else 's' }} are matched across runs by
+  display text rather than by structured object identity. They track correctly today, but
+  their history would reset if the check's wording changed.
+</div>
+{% endif %}
+
+<div class="grid g4">
+  <div class="card">
+    <h3>Open findings</h3>
+    <div class="kpi">{{ summary.open_total }}</div>
+    <div class="kpi-note">excluding resolved and disputed</div>
+  </div>
+  <div class="card">
+    <h3>Critical</h3>
+    <div class="kpi crit">{{ summary.by_severity.get('CRITICAL', 0) }}</div>
+    <div class="kpi-note">{{ summary.by_severity.get('HIGH', 0) }} high</div>
+  </div>
+  <div class="card">
+    <h3>Yours to fix</h3>
+    <div class="kpi ok">{{ summary.by_remediation_owner.get('customer_fixable', 0) }}</div>
+    <div class="kpi-note">actionable without SAP</div>
+  </div>
+  <div class="card">
+    <h3>Raise with SAP</h3>
+    <div class="kpi warn">{{ summary.by_remediation_owner.get('ticket_to_sap', 0) }}</div>
+    <div class="kpi-note">
+      {{ summary.by_state.get('submitted_to_provider', 0) }} already submitted
+    </div>
+  </div>
+</div>
+
+<div class="grid g2" style="margin-top:14px">
+  <div class="card">
+    <h3>By severity</h3>
+    <table>
+      {% for sev in ['CRITICAL','HIGH','MEDIUM','LOW','INFO'] %}
+        {% set n = summary.by_severity.get(sev, 0) %}
+        {% if n %}
+        <tr>
+          <td style="width:110px"><span class="pill sev-{{ sev }}">{{ sev }}</span></td>
+          <td class="right mono">{{ n }}</td>
+          <td style="width:55%">
+            <div class="bar"><i style="width:{{ (100 * n / summary.open_total) if summary.open_total else 0 }}%"></i></div>
+          </td>
+        </tr>
+        {% endif %}
+      {% endfor %}
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>Remediation ownership</h3>
+    {# Four classes, because reporting an SAP-owned setting as a customer failure —
+       or as "unknown" — is how a RISE report fills with unactionable noise. #}
+    <table>
+      {% for key, label in [
+          ('customer_fixable','Yours to fix'),
+          ('ticket_to_sap','Raise with SAP'),
+          ('provider_owned',"SAP's under RISE"),
+          ('not_assessable','Out of reach in RISE')] %}
+      <tr>
+        <td><span class="own own-{{ key }}">{{ label }}</span></td>
+        <td class="right mono">{{ summary.by_remediation_owner.get(key, 0) }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+
+<h2>Systems</h2>
+<div class="card wrap" style="padding:0">
+  <table>
+    <thead><tr>
+      <th>SID</th><th>Client</th><th>Tier</th><th>Criticality</th>
+      <th>Exposure</th><th>Mode</th><th>Owner</th>
+    </tr></thead>
+    <tbody>
+      {% for s in systems %}
+      <tr>
+        <td><a href="/findings?system_id={{ s.id }}" class="mono">{{ s.sid }}</a></td>
+        <td class="mono">{{ s.client }}</td>
+        <td>{{ s.tier }}</td>
+        <td>{{ s.criticality }}</td>
+        <td class="muted">{{ s.exposure_zone }}</td>
+        <td class="small muted">{{ s.deployment_mode }}</td>
+        <td class="muted">{{ s.owner or '—' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="empty">No systems registered yet. Upload a bundle to create one.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<h2>Recent scans</h2>
+<div class="card wrap" style="padding:0">
+  <table>
+    <thead><tr>
+      <th>Run</th><th>System</th><th>Started</th><th>Status</th><th>Coverage</th><th>By</th>
+    </tr></thead>
+    <tbody>
+      {% for r in recent_runs %}
+      <tr>
+        <td><a href="/runs/{{ r.id }}">#{{ r.id }}</a></td>
+        <td class="mono">{{ r.sid or '—' }}{% if r.client %}/{{ r.client }}{% endif %}</td>
+        <td class="muted small">{{ r.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td>
+          <span class="pill st st-{{ r.status }}">{{ r.status }}</span>
+          {% if r.status in ('parsing','scanning','deriving') and r.progress_total %}
+            <span class="faint small">{{ r.progress_done }}/{{ r.progress_total }}</span>
+          {% endif %}
+        </td>
+        <td class="small muted">
+          {% if r.coverage and r.coverage.counts %}
+            {{ r.coverage.counts.sources_supplied }}/{{ r.coverage.counts.sources_known }} sources
+            {% if r.coverage.counts.modules_degraded %}
+              · <span style="color:var(--high)">{{ r.coverage.counts.modules_degraded }} degraded</span>
+            {% endif %}
+          {% else %}—{% endif %}
+        </td>
+        <td class="muted small">{{ r.uploaded_by or '—' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="empty">No scans yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

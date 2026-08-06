@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% set nav = 'findings' %}
+{% block title %}{{ finding.check_id }} — SAPSec{% endblock %}
+{% block body %}
+
+<p class="small"><a href="/findings">&larr; Findings</a></p>
+<h1>
+  <span class="pill sev-{{ finding.severity or 'INFO' }}">{{ finding.severity or 'INFO' }}</span>
+  {{ finding.title }}
+</h1>
+<p class="sub">
+  <span class="mono">{{ finding.check_id }}</span>
+  {% if finding.sid %}· <span class="mono">{{ finding.sid }}/{{ finding.system_client }}</span>{% endif %}
+  {% if finding.baseline_req_id %}
+    · SAP Security Baseline <span class="mono">{{ finding.baseline_req_id }}</span>
+  {% endif %}
+</p>
+
+{% if finding.remediation_owner == 'ticket_to_sap' %}
+{# In RISE the customer can SEE this and cannot fix it. Saying "change this" would be
+   unactionable noise, so the finding renders as a service request instead. #}
+<div class="banner info">
+  <strong>This is SAP's to change.</strong> Under {{ finding.deployment_mode }}, the
+  setting is operated by the provider. Raise a service request rather than attempting the
+  change — the pre-drafted text is below.
+  {% if finding.provider_ticket_ref %}
+    Submitted as <span class="mono">{{ finding.provider_ticket_ref }}</span>.
+  {% endif %}
+</div>
+{% elif finding.remediation_owner == 'provider_owned' %}
+<div class="banner">
+  <strong>No customer action.</strong> Shown for completeness and for your auditor.
+</div>
+{% elif finding.remediation_owner == 'not_assessable' %}
+<div class="banner warn">
+  <strong>Out of reach in RISE.</strong> This check needs OS-level access, which RISE
+  customers contractually do not have. It is listed so the coverage map stays honest, and
+  it is excluded from the score.
+</div>
+{% endif %}
+
+{% if finding.expired_acceptance %}
+<div class="banner bad">
+  <strong>Risk acceptance expired</strong> on {{ finding.acceptance_due }}. The defect is
+  open and the time-box has passed.
+</div>
+{% endif %}
+
+<div class="grid g2">
+  <div class="card">
+    <h3>Status</h3>
+    <dl class="kv">
+      <dt>State</dt><dd><span class="pill st st-{{ finding.state }}">{{ finding.state.replace('_',' ') }}</span></dd>
+      <dt>Ownership</dt><dd><span class="own own-{{ finding.remediation_owner }}">
+        {{ finding.remediation_owner.replace('_',' ') }}</span></dd>
+      <dt>Responsibility</dt><dd class="muted">{{ finding.responsibility or 'unknown' }}</dd>
+      <dt>Assignee</dt><dd>{{ finding.assignee or '—' }}</dd>
+      <dt>Team</dt><dd>{{ finding.owning_team or '—' }}</dd>
+      <dt>Due</dt><dd>{{ finding.due_date or '—' }}</dd>
+      <dt>First seen</dt><dd>{{ finding.first_seen_at.strftime('%Y-%m-%d') }}</dd>
+      <dt>Last detected</dt><dd>{{ finding.last_detected_at.strftime('%Y-%m-%d') }}</dd>
+      {% if finding.regression_count %}
+      <dt>Regressions</dt><dd style="color:var(--high)">{{ finding.regression_count }}</dd>
+      {% endif %}
+    </dl>
+  </div>
+
+  <div class="card">
+    <h3>Identity</h3>
+    {# Stored, not inferred. A journey feature that cannot explain why two findings did
+       or did not match across runs is not trustworthy. #}
+    <dl class="kv">
+      <dt>Matched by</dt>
+      <dd>
+        {{ finding.fingerprint_basis }}
+        <div class="small faint" style="margin-top:2px">
+          {% if finding.fingerprint_basis == 'objects' %}
+            Structural — identity comes from the named SAP objects and survives rewording.
+          {% elif finding.fingerprint_basis == 'display' %}
+            Derived from display text. Stable while this check's wording is stable.
+          {% else %}
+            Aggregate — identified by check and system. Correctly coarse: its members
+            change between runs without resetting its age.
+          {% endif %}
+        </div>
+      </dd>
+      <dt>Scope</dt><dd>{{ finding.scope }}</dd>
+      <dt>Fingerprint</dt><dd class="mono small faint">{{ finding.fingerprint[:32] }}…</dd>
+    </dl>
+    {% if finding.subject %}
+    <h3 style="margin-top:14px">Affected objects</h3>
+    <table>
+      {% for o in finding.subject %}
+      <tr>
+        <td class="small faint" style="width:120px">{{ o.type }}</td>
+        <td class="mono small">{{ o.name }}{% if o.qualifier %}
+          <span class="faint">· {{ o.qualifier }}</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+  </div>
+</div>
+
+<h2>Risk</h2>
+<div class="card"><p style="margin:0">{{ finding.risk_narrative }}</p></div>
+
+<h2>Remediation</h2>
+<div class="card">
+  <p style="margin:0 0 10px">{{ finding.remediation }}</p>
+  {% if finding.remediation_owner == 'ticket_to_sap' %}
+  <h3>Service request text</h3>
+  <pre class="mono small" style="white-space:pre-wrap;background:var(--panel-2);
+       padding:12px;border-radius:6px;margin:0">System: {{ finding.sid }}/{{ finding.system_client }}
+Check:  {{ finding.check_id }} — {{ finding.title }}
+Request: apply the target configuration described below.
+Reference: {{ finding.baseline_req_id or 'SAP Security Baseline' }}
+
+{{ finding.remediation }}</pre>
+  {% endif %}
+</div>
+
+{% if finding.references_json %}
+<h2>References</h2>
+<div class="card"><ul style="margin:0;padding-left:18px">
+  {% for ref in finding.references_json %}<li class="small">{{ ref }}</li>{% endfor %}
+</ul></div>
+{% endif %}
+
+<h2>History</h2>
+<div class="card wrap" style="padding:0"><table>
+  <thead><tr><th style="width:150px">When</th><th style="width:200px">Change</th>
+    <th style="width:110px">By</th><th>Reason</th></tr></thead>
+  <tbody>
+  {% for t in history %}
+  <tr>
+    <td class="small muted">{{ t.occurred_at.strftime('%Y-%m-%d %H:%M') }}</td>
+    <td class="small">{{ t.from_state or '—' }} &rarr; <strong>{{ t.to_state }}</strong></td>
+    <td class="small">{{ t.actor }}</td>
+    <td class="small muted">{{ t.reason or '' }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+
+<h2>Observed in</h2>
+<div class="card wrap" style="padding:0"><table>
+  <thead><tr><th style="width:150px">Run</th><th style="width:90px">Severity</th>
+    <th class="right" style="width:80px">Items</th><th>Members</th></tr></thead>
+  <tbody>
+  {% for o in observations %}
+  <tr>
+    <td class="small"><a href="/runs/{{ o.scan_run_id }}">#{{ o.scan_run_id }}</a>
+      <span class="faint">{{ o.started_at.strftime('%Y-%m-%d') }}</span></td>
+    <td><span class="pill sev-{{ o.severity or 'INFO' }}">{{ o.severity }}</span></td>
+    <td class="right mono small">{{ o.affected_count }}</td>
+    <td class="small muted">{{ o.affected_items[:6]|join(', ') }}{% if o.affected_items|length > 6 %} …{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+
+{% if user.role in ('analyst','admin') %}
+<h2>Update</h2>
+<form class="card" method="post" action="/api/findings/{{ finding.id }}/state"
+      style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;max-width:820px">
+  <div>
+    <label class="small faint">Move to</label><br>
+    <select name="state" style="margin-top:4px">
+      <option value="submitted_to_provider">Submitted to SAP</option>
+      <option value="mitigated">Mitigated</option>
+      <option value="accepted">Risk accepted</option>
+      <option value="false_positive">False positive</option>
+      <option value="open">Re-open</option>
+    </select>
+  </div>
+  <div style="flex:1;min-width:220px">
+    <label class="small faint">Reason (required to accept or dispute)</label><br>
+    <input type="text" name="reason" style="width:100%;margin-top:4px">
+  </div>
+  <div>
+    <label class="small faint">SAP ticket</label><br>
+    <input type="text" name="ticket" placeholder="e.g. 1234567890" style="margin-top:4px">
+  </div>
+  <button type="submit">Apply</button>
+</form>
+{% endif %}
+{% endblock %}

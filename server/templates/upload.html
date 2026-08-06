@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% set nav = 'upload' %}
+{% block title %}Upload — SAPSec{% endblock %}
+{% block body %}
+<h1>Upload an export bundle</h1>
+<p class="sub">
+  CSV/JSON exports, or a zip of them. Nothing is installed in your SAP system and no
+  connection is made — the scan runs entirely against the files you supply.
+</p>
+
+<div class="banner info">
+  Re-uploading the same bundle is fine and is how the mitigation journey is tracked. An
+  identical bundle is detected and noted, not rejected.
+</div>
+
+<form class="card" method="post" action="/api/upload" enctype="multipart/form-data"
+      style="max-width:620px">
+  <label class="small faint">Landscape</label>
+  <select name="landscape_id" required style="width:100%;margin:4px 0 14px">
+    {% for l in landscapes %}
+    <option value="{{ l.id }}">{{ l.name }} ({{ l.deployment_mode }})</option>
+    {% else %}
+    <option value="" disabled>No landscape configured — an admin must create one first</option>
+    {% endfor %}
+  </select>
+
+  <label class="small faint">System (optional — leave blank to register later)</label>
+  <select name="system_id" style="width:100%;margin:4px 0 14px">
+    <option value="">Unassigned</option>
+    {% for s in systems %}
+    <option value="{{ s.id }}">{{ s.sid }}/{{ s.client }} — {{ s.tier }}</option>
+    {% endfor %}
+  </select>
+
+  <div style="display:flex;gap:10px;margin-bottom:14px">
+    <div style="flex:1">
+      <label class="small faint">SID</label>
+      <input type="text" name="sid" placeholder="PRD" maxlength="8" style="width:100%;margin-top:4px">
+    </div>
+    <div style="flex:1">
+      <label class="small faint">Client</label>
+      <input type="text" name="client" placeholder="100" maxlength="3" style="width:100%;margin-top:4px">
+    </div>
+  </div>
+  <p class="small faint" style="margin:-6px 0 14px">
+    SID and client identify the findings. Without them, uploads from two systems are
+    indistinguishable and a landscape view is impossible.
+  </p>
+
+  <label class="small faint">Files</label>
+  <input type="file" name="files" multiple required
+         style="width:100%;margin:4px 0 16px;padding:8px;border:1px dashed var(--line);
+                border-radius:6px;background:var(--panel-2)">
+  <button type="submit">Upload and scan</button>
+</form>
+{% endblock %}
