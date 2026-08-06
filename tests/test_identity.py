@@ -374,6 +374,73 @@ def test_nodes_are_deduplicated_and_counted_across_findings():
     assert user["check_ids"] == ["AUTH-001", "USR-002"]
 
 
+# --------------------------------------------------------------------------- #
+#  Cloud objects do not live in the ABAP system                               #
+# --------------------------------------------------------------------------- #
+
+def test_cloud_objects_are_not_stamped_with_the_abap_sid():
+    """A BTP subaccount entity has nothing to do with whichever ABAP system was
+    scanned. Before this rule the extractor produced
+    `role_collection:Subaccount_Admin@PRD`, filing a cloud role under an on-premise
+    SID."""
+    nodes = extract_nodes([{
+        "check_id": "IAM-XID-003",
+        "affected_objects": [
+            {"type": "btp_user", "name": "jsmith@company.com"},
+            {"type": "role_collection", "name": "Subaccount_Admin"},
+            {"type": "user", "name": "JSMITH"},          # ABAP — SHOULD be stamped
+        ]}], default_system="PRD")
+    keys = {n["key"] for n in nodes}
+    assert "btp_user:JSMITH@COMPANY.COM" in keys
+    assert "role_collection:Subaccount_Admin" in keys
+    assert "user:JSMITH@PRD" in keys, "an ABAP object must still carry its system"
+    assert not any(k.startswith(("btp_user:", "role_collection:")) and "@PRD" in k
+                   for k in keys), "a cloud object was filed under the ABAP SID"
+
+
+def test_a_btp_identity_and_an_abap_user_of_the_same_name_are_different_nodes():
+    """Different principals reached by different means. Merging them would hide the
+    on-prem/BTP crossing that the cloud-to-on-prem attack path exists to show — the
+    boundary IS the path."""
+    nodes = extract_nodes([{
+        "check_id": "X",
+        "affected_objects": [{"type": "user", "name": "JSMITH"},
+                             {"type": "btp_user", "name": "JSMITH"}],
+    }], default_system="PRD")
+    assert len(nodes) == 2, "a cloud identity was merged with an ABAP user"
+
+
+def test_a_btp_user_folds_case_so_one_person_is_one_node():
+    """BTP user names are email addresses. RFC 5321 makes the local part
+    case-sensitive in theory and no identity provider treats it so in practice, and
+    the module upper-cases them to compare. Splitting on case would make one person
+    two nodes the moment two exports disagreed."""
+    nodes = extract_nodes([{
+        "check_id": "X",
+        "affected_objects": [{"type": "btp_user", "name": "jsmith@company.com"},
+                             {"type": "btp_user", "name": "JSmith@Company.com"}],
+    }])
+    assert len(nodes) == 1
+
+
+def test_a_cloud_object_keeps_a_system_it_names_itself():
+    """The rule suppresses a BORROWED default, not a real scope: when something can
+    name the subaccount, that must survive."""
+    nodes = extract_nodes([{
+        "check_id": "X",
+        "affected_objects": [{"type": "btp_user", "name": "a@b.com", "system": "SUB1"}],
+    }], default_system="PRD")
+    assert nodes[0]["key"] == "btp_user:A@B.COM@SUB1"
+
+
+def test_every_cloud_scoped_type_has_a_case_rule():
+    """A type registered cloud-scoped but in neither case registry would fall to the
+    unknown-type default and be silently upper-cased."""
+    from server.identity import _CLOUD_SCOPED_TYPES
+    unregistered = _CLOUD_SCOPED_TYPES - _UPPERCASE_TYPES - _CASE_SENSITIVE_TYPES
+    assert not unregistered, f"cloud types with no case rule: {sorted(unregistered)}"
+
+
 def test_a_malformed_object_does_not_abort_node_extraction():
     """One bad row in one export must not empty the graph."""
     nodes = extract_nodes([{"check_id": "X", "affected_objects": [

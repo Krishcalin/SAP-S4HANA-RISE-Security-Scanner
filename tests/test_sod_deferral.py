@@ -155,3 +155,75 @@ def test_the_deferral_note_is_routed_and_identifiable():
     fp, basis = fingerprint_finding(
         {"check_id": "IAM-SOD-DEFERRED", "scope": "aggregate"}, "PRD", "100")
     assert len(fp) == 64 and basis == "check_only"
+
+
+# --------------------------------------------------------------------------- #
+#  The two conversion judgement calls, resolved                               #
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")
+def test_btp_identities_are_typed_as_cloud_users_not_abap_users():
+    """The cross-system check matches the two user masters in Python and reports the
+    result; the GRAPH must still keep them apart. Typing BTP identities as `user`
+    filed them under the ABAP SID and would merge a BTP JSMITH with an ABAP JSMITH."""
+    from server.identity import extract_nodes
+
+    findings = AdvancedIamAuditor(
+        _data(), None, run_context={"modules": {"iam"}}).run_all_checks()
+    xid = [f for f in findings if f["check_id"].startswith("IAM-XID")]
+    assert xid, "the cross-system identity checks did not fire"
+
+    types = {o["type"] for f in xid for o in (f.get("affected_objects") or [])}
+    assert "btp_user" in types, "BTP identities are not typed as cloud users"
+
+    keys = {n["key"] for n in extract_nodes(xid, "PRD")}
+    assert keys, "no graph nodes were produced"
+    for key in keys:
+        if key.startswith(("btp_user:", "role_collection:")):
+            assert "@PRD" not in key, (
+                f"{key} files a BTP object under the ABAP system's SID")
+
+
+@pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")
+def test_access_reviews_name_the_campaign_and_never_the_reviewer():
+    """A campaign is a real governance object with an id and belongs in the evidence.
+    The reviewer is NOT the defect — naming them would put a person in the graph as
+    though they were."""
+    data = _data()
+    findings = AdvancedIamAuditor(
+        data, None, run_context={"modules": {"iam"}}).run_all_checks()
+    rev = [f for f in findings if f["check_id"].startswith("IAM-REV")]
+    assert rev, "the access-review checks did not fire"
+
+    reviewers = {str(r.get("REVIEWER", "")).upper()
+                 for r in data["access_reviews"] if r.get("REVIEWER")}
+    campaign_ids = {str(r.get("REVIEW_ID", "")).upper()
+                    for r in data["access_reviews"]}
+
+    for f in rev:
+        objs = f.get("affected_objects") or []
+        assert objs, f"{f['check_id']} carries no structured evidence"
+        for o in objs:
+            assert o["type"] == "review_campaign", \
+                f"{f['check_id']} named a {o['type']} — only campaigns belong here"
+            assert o["name"].upper() in campaign_ids
+            assert o["name"].upper() not in reviewers, \
+                "a reviewer was named as though they were the defect"
+
+
+@pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")
+def test_completing_one_campaign_does_not_reset_the_others_age():
+    """The campaigns are evidence, not identity. IAM-REV-001 stays aggregate, so
+    closing one overdue review shrinks the member list without retiring the finding
+    and restarting the clock on the rest."""
+    from server.identity import fingerprint_finding
+
+    def rev001(campaigns):
+        return {"check_id": "IAM-REV-001", "scope": "aggregate",
+                "affected_objects": [{"type": "review_campaign", "name": c}
+                                     for c in campaigns]}
+
+    before = fingerprint_finding(rev001(["REV-A", "REV-B", "REV-C"]), "PRD", "100")
+    after = fingerprint_finding(rev001(["REV-A", "REV-C"]), "PRD", "100")
+    assert before[0] == after[0]
+    assert before[1] == "check_only"

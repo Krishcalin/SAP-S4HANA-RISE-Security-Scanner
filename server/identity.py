@@ -97,6 +97,22 @@ _UPPERCASE_TYPES = frozenset({
     # the component identifier is not, so an export that lower-cases it must not mint a
     # second node for the same library.
     "crypto_library",
+    # A BTP subaccount user, kept DISTINCT from an ABAP `user`. Both name a person,
+    # and the cross-system identity check exists precisely to match them — but it
+    # does that matching in Python, on normalised strings, and reports the result.
+    # The GRAPH must keep them apart: a BTP identity and an ABAP user of the same
+    # name are different principals reached by different means, and merging them
+    # would hide the on-prem/BTP crossing rather than reveal it.
+    #
+    # Case-INSENSITIVE even though BTP user names are email addresses. RFC 5321
+    # makes the local part case-sensitive in theory; no identity provider treats it
+    # so in practice, and the module itself upper-cases these to compare them.
+    # Making it case-sensitive would split one person into two nodes the moment two
+    # exports disagreed on capitalisation.
+    "btp_user",
+    # A GRC access-review campaign id ("REV-2025-Q1-FI"), issued by GRC Access
+    # Control. Upper-case identifier, not a case-bearing authored name.
+    "review_campaign",
 })
 
 #: Object types whose names are case-SENSITIVE and must never be upper-cased.
@@ -133,6 +149,39 @@ _CASE_SENSITIVE_TYPES = frozenset({
     # an admin-entered name — both are cloud-cockpit entities that keep the case they
     # were created with, exactly like the BTP entities above, not ABAP repository
     # objects that SAP upper-cases.
+    "idp_trust", "comm_arrangement",
+})
+
+#: A BTP subaccount user, kept DISTINCT from an ABAP `user`.
+#:
+#: Both name a person, and the cross-system identity check exists precisely to
+#: match them — but it does that matching in Python, on normalised strings, and
+#: reports the result. The GRAPH must keep them apart: a BTP identity and an ABAP
+#: user of the same name are different principals reached by different means, and
+#: merging them would hide the on-prem/BTP crossing rather than reveal it.
+#:
+#: Case-INSENSITIVE despite BTP user names being email addresses. RFC 5321 makes
+#: the local part case-sensitive in theory; in practice no identity provider
+#: treats it so, and the module itself upper-cases these to compare them. Making
+#: this case-sensitive would split one person into two nodes the moment two
+#: exports disagreed on capitalisation.
+_BTP_USER_TYPE = "btp_user"
+
+#: Types that do NOT live inside the ABAP system being scanned.
+#:
+#: `extract_nodes` stamps the run's SID onto any object that does not name its own
+#: system. That is right for ABAP objects and WRONG for cloud ones: it produced
+#: `role_collection:Subaccount_Admin@PRD`, attributing a BTP subaccount role to the
+#: on-premise ABAP system PRD, and it would merge a BTP user named JSMITH with an
+#: ABAP user of the same name into one node.
+#:
+#: That erases exactly the boundary the cloud-to-on-prem attack path is about:
+#: BTP identity -> Cloud Connector -> ABAP backend is only a PATH if its two ends
+#: are distinguishable. Cloud objects therefore stay un-stamped until something can
+#: name their real scope (a subaccount), rather than borrowing the ABAP SID.
+_CLOUD_SCOPED_TYPES = frozenset({
+    "btp_user", "subaccount", "role_collection", "service_binding", "iflow",
+    "destination_url", "cpi_datastore", "cpi_variable", "oauth_client",
     "idp_trust", "comm_arrangement",
 })
 
@@ -380,7 +429,11 @@ def extract_nodes(findings: Iterable[Dict[str, Any]],
                 obj = AffectedObject.coerce(raw)
             except IdentityError:
                 continue          # a malformed object must not abort node extraction
-            if obj.system is None and default_system:
+            # Cloud objects are never stamped with the ABAP SID — see
+            # _CLOUD_SCOPED_TYPES. Borrowing it would place a BTP subaccount
+            # entity inside the on-premise system's namespace.
+            if (obj.system is None and default_system
+                    and obj.type not in _CLOUD_SCOPED_TYPES):
                 obj = AffectedObject(obj.type, obj.name, default_system,
                                      obj.client, obj.qualifier)
             key = obj.key()

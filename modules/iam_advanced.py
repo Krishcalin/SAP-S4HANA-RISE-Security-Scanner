@@ -951,11 +951,15 @@ class AdvancedIamAuditor(BaseAuditor):
             if uid not in s4_identities and email not in s4_identities:
                 role_str = ", ".join(roles[:3]) if isinstance(roles, list) else str(roles)
                 btp_only.append(f"{uid} (roles: {role_str})")
-                # Typed `user`, not a separate BTP type: this check exists precisely to
-                # treat the S/4 and BTP user masters as ONE identity namespace, and it
-                # already folds case (`uid` is upper-cased above) to compare them. A
-                # second type here would split the very identity the check is matching.
-                btp_only_objs.append(("user", uid))
+                # Typed `btp_user`, NOT `user`. The matching that unifies the two user
+                # masters has already happened above, in Python, on normalised strings —
+                # that is what produced this list. The GRAPH must keep the two apart: a
+                # BTP identity and an ABAP user of the same name are different principals
+                # reached by different means, and merging them into one node would hide
+                # the on-prem/BTP crossing that the cloud-to-on-prem attack path exists
+                # to show. `btp_user` is also cloud-scoped, so it is never stamped with
+                # the ABAP SID of the system being scanned.
+                btp_only_objs.append(("btp_user", uid))
 
         # S/4 locked users still active in BTP
         locked_but_active_btp = []
@@ -996,7 +1000,7 @@ class AdvancedIamAuditor(BaseAuditor):
                     # is what keeps a BTP "Subaccount_Admin" from being upper-cased and
                     # conflated with a PFCG role of the same spelling.
                     btp_admin_objs.append(
-                        [("user", uid)]
+                        [("btp_user", uid)]
                         + [("role_collection", str(r)) for r in admin_roles]
                     )
 
@@ -1097,6 +1101,9 @@ class AdvancedIamAuditor(BaseAuditor):
         overdue = []
         incomplete = []
         no_reviewer = []
+        overdue_objs = []
+        incomplete_objs = []
+        no_reviewer_objs = []
 
         for row in reviews:
             review_id = row.get("REVIEW_ID", row.get("CAMPAIGN_ID", row.get("ID", "")))
@@ -1115,6 +1122,7 @@ class AdvancedIamAuditor(BaseAuditor):
                     if status.upper() not in ("COMPLETED", "CLOSED", "DONE", "FINISHED"):
                         days_overdue = (now - parsed_due).days
                         overdue.append(f"{label} — due: {due_date}, {days_overdue}d overdue")
+                        overdue_objs.append(("review_campaign", review_id or review_name))
 
             # Check incomplete
             if completion:
@@ -1122,12 +1130,15 @@ class AdvancedIamAuditor(BaseAuditor):
                     pct = float(completion.replace("%", "").strip())
                     if pct < 100 and status.upper() in ("COMPLETED", "CLOSED", "DONE"):
                         incomplete.append(f"{label} — status: {status}, completion: {pct}%")
+                        incomplete_objs.append(
+                            ("review_campaign", review_id or review_name))
                 except ValueError:
                     pass
 
             # Check missing reviewer
             if not reviewer or not reviewer.strip():
                 no_reviewer.append(label)
+                no_reviewer_objs.append(("review_campaign", review_id or review_name))
 
         if overdue:
             self.finding(
@@ -1141,11 +1152,14 @@ class AdvancedIamAuditor(BaseAuditor):
                     "periodic access recertification process."
                 ),
                 affected_items=overdue,
-                # Aggregate, and deliberately with no affected_objects: the members are
-                # GRC review CAMPAIGNS, which are not SAP objects of any registered type
-                # and have no presence in the attack-path graph. Naming the campaign
-                # owner instead would put the reviewer in the graph as if they were the
-                # defect, which they are not.
+                # The campaign IS the object — a GRC governance entity with its own id.
+                # The REVIEWER deliberately is not: a person who has not completed a
+                # review is not the defect, and naming them would put an individual in
+                # the graph as though they were.
+                #
+                # Aggregate, so completing one campaign shrinks the member list without
+                # retiring the finding and resetting the age of the rest.
+                affected_objects=self._objects(overdue_objs),
                 scope="aggregate",
                 remediation=(
                     "Escalate overdue reviews to management immediately. "
@@ -1170,8 +1184,8 @@ class AdvancedIamAuditor(BaseAuditor):
                     "unvalidated access in place."
                 ),
                 affected_items=incomplete,
-                # Aggregate over review campaigns — no registered object type, see
-                # IAM-REV-001 above.
+                # Campaigns as objects, aggregate identity — see IAM-REV-001.
+                affected_objects=self._objects(incomplete_objs),
                 scope="aggregate",
                 remediation=(
                     "Reopen campaigns and ensure 100% review coverage. "
@@ -1192,8 +1206,9 @@ class AdvancedIamAuditor(BaseAuditor):
                     "Unowned reviews will never be completed."
                 ),
                 affected_items=no_reviewer,
-                # Aggregate over review campaigns — no registered object type, and by
-                # definition no reviewer to name either. See IAM-REV-001 above.
+                # The campaign is the object. There is by definition no reviewer to
+                # name here — which is precisely the finding. See IAM-REV-001.
+                affected_objects=self._objects(no_reviewer_objs),
                 scope="aggregate",
                 remediation=(
                     "Assign reviewers to all campaigns based on business process ownership. "

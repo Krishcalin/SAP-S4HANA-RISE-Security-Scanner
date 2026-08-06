@@ -117,6 +117,14 @@ at startup rather than silently run on a value published in this repo.
   - Types must be registered in `_UPPERCASE_TYPES` or `_CASE_SENSITIVE_TYPES` in
     `server/identity.py`, never both. Case-bearing things (ICF paths, URLs, BTP entities,
     schemas) are case-**sensitive**; SAP identifiers are not.
+  - **A cloud object must also be registered in `_CLOUD_SCOPED_TYPES`.** `extract_nodes`
+    stamps the run's SID onto anything that does not name its own system — right for ABAP
+    objects, wrong for BTP ones. Unregistered, a BTP subaccount role became
+    `role_collection:Subaccount_Admin@PRD`, filing a cloud entity under an on-premise SID, and
+    a BTP `JSMITH` merged with an ABAP `JSMITH` into one node. That erases the very boundary
+    the cloud-to-on-prem attack path exists to show, so **`btp_user` is deliberately distinct
+    from `user`** even though the cross-system check matches them: the matching happens in
+    Python and reports its result; the graph must still keep the two principals apart.
   - **Do not reach for `subject` just to make `fingerprint_basis` read `objects`.** A genuine
     aggregate is honestly `check_only`; the console presents `objects` as "structural, survives
     rewording", so mislabelling it is a claim the data does not support.

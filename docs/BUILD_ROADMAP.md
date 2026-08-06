@@ -390,13 +390,30 @@ Re-verified end to end after conversion: scanning the same bundle twice still gi
    genuinely in the run, and **says so** with an INFO finding when it does. A caller that
    supplies no context keeps the historical behaviour rather than having it changed underneath
    it. Measured: `--modules iam` went from **0 SoD findings to 7**.
-2. Review two judgement calls the conversion surfaced, both defensible and both worth a second
-   opinion: BTP users typed as `user` rather than a separate `btp_user` (deliberate — the check
-   exists to treat the S/4 and BTP user masters as one identity namespace), and the GRC access-
-   review findings carrying no objects at all (review campaigns are not SAP objects; naming the
-   reviewer would put a person in the graph as though they were the defect)
-3. Begin Phase 4 — the attack-path graph. The node substrate is now in place: 620 typed nodes
-   from real exports, where before the pivot every node would have been a string.
+2. ~~Review two conversion judgement calls~~ ✅ **DONE**, and reviewing them found a defect
+   neither report mentioned.
+
+   **BTP identities.** The defence — "the check exists to treat the S/4 and BTP user masters as
+   one identity namespace" — describes the *matching*, which happens in Python before objects
+   are built. The graph is a different question, and typing them `user` had a concrete cost:
+   `extract_nodes` stamps the run's SID onto anything that does not name its own system, so a
+   BTP subaccount role became **`role_collection:Subaccount_Admin@PRD`** — a cloud entity filed
+   under an on-premise ABAP SID — and a BTP `JSMITH` would have merged with an ABAP `JSMITH`
+   into one node. That erases the exact boundary the cloud-to-on-prem attack path exists to
+   show. Fixed with a `btp_user` type and a `_CLOUD_SCOPED_TYPES` set that is never stamped with
+   the ABAP SID. Case-insensitive despite being email addresses: RFC 5321 makes the local part
+   case-sensitive in theory, nothing treats it so in practice, and the module already folds case
+   to compare — splitting on it would make one person two nodes.
+
+   **GRC access reviews.** Half right. Naming the *reviewer* would indeed put a person in the
+   graph as though they were the defect — that instinct was correct and is preserved. But a
+   review campaign is a real governance object with its own id, and it was being discarded as
+   free text. Campaigns are now `review_campaign` objects; the finding stays **aggregate**, so
+   closing one overdue review shrinks the member list without retiring the finding and
+   restarting the clock on the rest.
+
+3. Begin Phase 4 — the attack-path graph. The node substrate is in place: **626 typed nodes**
+   from real exports, with cloud and on-premise identities correctly separated.
 
 **Done:** README `PARAM-* (25+)` overstatement corrected to 23. CI now has three jobs including
 a stdlib-purity gate and a skip guard.
