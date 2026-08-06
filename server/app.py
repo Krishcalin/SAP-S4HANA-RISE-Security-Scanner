@@ -22,14 +22,16 @@ import shutil
 import tempfile
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import parse_qs, urlencode, urlparse
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from server import auth, db, ingest, queries
+from server import analytics, auth, db, ingest, queries
 from server.config import settings
 
 log = logging.getLogger(__name__)
@@ -45,18 +47,18 @@ _scan_pool = ThreadPoolExecutor(max_workers=max(1, settings.max_concurrent_scans
                                 thread_name_prefix="scan")
 
 
-@app.on_event("startup")
-def _startup() -> None:
+@asynccontextmanager
+async def _lifespan(_: FastAPI):
     settings.validate()
     db.init_schema()
     settings.upload_dir.mkdir(parents=True, exist_ok=True)
     log.info("ready")
-
-
-@app.on_event("shutdown")
-def _shutdown() -> None:
+    yield
     _scan_pool.shutdown(wait=False, cancel_futures=True)
     db.close_pool()
+
+
+app.router.lifespan_context = _lifespan
 
 
 # --------------------------------------------------------------------------- #
@@ -88,7 +90,7 @@ async def _unauth(request: Request, exc: HTTPException):
 
 @app.get("/login", response_class=HTMLResponse)
 def login_form(request: Request, next: str = "/"):
-    return TEMPLATES.TemplateResponse("login.html", {"request": request, "next": next})
+    return TEMPLATES.TemplateResponse(request, "login.html", {"next": next})
 
 
 @app.post("/login")
@@ -97,8 +99,8 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
     user = auth.authenticate(username, password)
     if user is None:
         return TEMPLATES.TemplateResponse(
-            "login.html",
-            {"request": request, "next": next, "error": "Invalid credentials"},
+            request, "login.html",
+            {"next": next, "error": "Invalid credentials"},
             status_code=401)
     token = auth.create_session(user["id"], request.headers.get("user-agent", ""))
     # Redirect target is constrained to a local path: an open redirect here would
@@ -128,8 +130,8 @@ def logout(request: Request):
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, user: Dict[str, Any] = Depends(current_user)):
     scope = auth.scope_for(user)
-    return TEMPLATES.TemplateResponse("dashboard.html", {
-        "request": request, "user": user,
+    return TEMPLATES.TemplateResponse(request, "dashboard.html", {
+        "user": user,
         "summary": queries.dashboard_summary(scope),
         "systems": queries.list_systems(scope),
         "recent_runs": queries.recent_runs(scope, limit=10),
@@ -140,17 +142,99 @@ def dashboard(request: Request, user: Dict[str, Any] = Depends(current_user)):
 def findings_page(request: Request, user: Dict[str, Any] = Depends(current_user),
                   system_id: Optional[int] = None, state: Optional[str] = None,
                   severity: Optional[str] = None, team: Optional[str] = None,
-                  owner: Optional[str] = None, page: int = 1):
+                  owner: Optional[str] = None, tier: Optional[str] = None,
+                  assignee: Optional[str] = None, overdue: bool = False,
+                  page: int = 1):
     scope = auth.scope_for(user)
     result = queries.list_findings(scope, system_id=system_id, state=state,
                                    severity=severity, team=team,
-                                   remediation_owner=owner, page=page)
-    return TEMPLATES.TemplateResponse("findings.html", {
-        "request": request, "user": user, **result,
+                                   remediation_owner=owner, tier=tier,
+                                   assignee=assignee, overdue=overdue, page=page)
+    return TEMPLATES.TemplateResponse(request, "findings.html", {
+        "user": user, **result,
         "filters": {"system_id": system_id, "state": state, "severity": severity,
-                    "team": team, "owner": owner},
+                    "team": team, "owner": owner, "tier": tier,
+                    "assignee": assignee, "overdue": overdue},
         "systems": queries.list_systems(scope),
+        "views": queries.list_views(user["username"], "findings"),
     })
+
+
+@app.get("/trend", response_class=HTMLResponse)
+def trend_page(request: Request, user: Dict[str, Any] = Depends(current_user),
+               days: int = 180):
+    """The mitigation journey — answers "is it getting better" without an export."""
+    scope = auth.scope_for(user)
+    return TEMPLATES.TemplateResponse(request, "trend.html", {
+        "user": user, "days": days,
+        "j": analytics.journey_summary(scope, days),
+    })
+
+
+@app.get("/v/{slug}")
+def open_view(slug: str, user: Dict[str, Any] = Depends(current_user)):
+    """Open a saved view — the durable, permission-scoped URL per audience.
+
+    The stored FILTERS are replayed as query parameters and the query re-runs under
+    THIS caller's row scope, so a shared link can never widen access: two people
+    following the same URL each see the systems they are entitled to.
+    """
+    view = queries.get_view(slug, user["username"])
+    if view is None:
+        raise HTTPException(404, "no such view")
+    qs = urlencode({k: v for k, v in (view["filters"] or {}).items()
+                    if v not in (None, "")})
+    target = {"findings": "/findings", "trend": "/trend"}.get(view["kind"], "/findings")
+    return RedirectResponse(f"{target}?{qs}" if qs else target, status_code=303)
+
+
+@app.post("/api/views")
+def api_save_view(name: str = Form(...), slug: str = Form(...),
+                  kind: str = Form("findings"), shared: bool = Form(True),
+                  description: str = Form(""), request: Request = None,
+                  user: Dict[str, Any] = Depends(require("analyst"))):
+    """Save the current filters as a durable URL.
+
+    Filters come from the referring page's query string rather than a body, so
+    "save this view" is literally "save what I am looking at".
+    """
+    ref = urlparse(request.headers.get("referer", "")) if request else None
+    filters = {k: v[0] for k, v in parse_qs(ref.query).items()} if ref else {}
+    try:
+        view = queries.save_view(slug, name, kind, filters, user["username"],
+                                 description, shared)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"slug": view["slug"], "url": f"/v/{view['slug']}",
+            "filters": view["filters"]}
+
+
+@app.post("/api/findings/{finding_id}/assign")
+def api_assign(finding_id: int, assignee: str = Form(None), team: str = Form(None),
+               due_date: str = Form(None),
+               user: Dict[str, Any] = Depends(require("analyst"))):
+    try:
+        return queries.assign_finding(finding_id, user["username"], assignee, team,
+                                      due_date, auth.scope_for(user))
+    except queries.TransitionError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/api/findings/bulk-state")
+def api_bulk_state(finding_ids: str = Form(...), state: str = Form(...),
+                   reason: str = Form(""), ticket: str = Form(""),
+                   user: Dict[str, Any] = Depends(require("analyst"))):
+    """Move several findings at once. Partial success is reported, not hidden."""
+    ids = [int(x) for x in finding_ids.replace(",", " ").split() if x.strip().isdigit()]
+    if not ids:
+        raise HTTPException(400, "no finding ids supplied")
+    return queries.bulk_transition(ids, state, user["username"], reason, ticket,
+                                   auth.scope_for(user))
+
+
+@app.get("/api/trend")
+def api_trend(days: int = 180, user: Dict[str, Any] = Depends(current_user)):
+    return analytics.journey_summary(auth.scope_for(user), days)
 
 
 @app.get("/findings/{finding_id}", response_class=HTMLResponse)
@@ -160,8 +244,8 @@ def finding_detail(finding_id: int, request: Request,
     finding = queries.get_finding(finding_id, scope)
     if finding is None:
         raise HTTPException(404, "not found")
-    return TEMPLATES.TemplateResponse("finding_detail.html", {
-        "request": request, "user": user, "finding": finding,
+    return TEMPLATES.TemplateResponse(request, "finding_detail.html", {
+        "user": user, "finding": finding,
         "history": queries.finding_history(finding_id),
         "observations": queries.finding_observations(finding_id),
     })
@@ -174,16 +258,16 @@ def run_detail(run_id: int, request: Request,
     run = queries.get_run(run_id, scope)
     if run is None:
         raise HTTPException(404, "not found")
-    return TEMPLATES.TemplateResponse("run_detail.html", {
-        "request": request, "user": user, "run": run,
+    return TEMPLATES.TemplateResponse(request, "run_detail.html", {
+        "user": user, "run": run,
         "diff": queries.run_diff(run_id, scope),
     })
 
 
 @app.get("/upload", response_class=HTMLResponse)
 def upload_form(request: Request, user: Dict[str, Any] = Depends(require("analyst"))):
-    return TEMPLATES.TemplateResponse("upload.html", {
-        "request": request, "user": user,
+    return TEMPLATES.TemplateResponse(request, "upload.html", {
+        "user": user,
         "systems": queries.list_systems(auth.scope_for(user)),
         "landscapes": queries.list_landscapes(),
     })

@@ -163,13 +163,15 @@ at startup rather than silently run on a value published in this repo.
 | file | role |
 |---|---|
 | `identity.py` | **The load-bearing module.** `AffectedObject`, normalization, `compute_fingerprint`, `extract_nodes`. Read its docstring before changing anything about finding identity. |
-| `schema.sql` | 18 tables. Single-tenant (no `tenant_id`); `landscape` preserves the option. Idempotent — every statement is `IF NOT EXISTS`. |
+| `schema.sql` | 20 tables. Single-tenant (no `tenant_id`); `landscape` preserves the option. Idempotent — re-running it upgrades an existing deployment. |
 | `db.py` | psycopg pool, `scope_clause` (**the one place** row scoping is expressed), `audit`. |
 | `auth.py` | PBKDF2 passwords, sessions, ranked roles, per-system scope. |
-| `queries.py` | Every read of findings/runs/systems. HTML pages and the JSON API call the same functions — that is what keeps "everything the console shows is in the API" structural. |
+| `queries.py` | Every read of findings/runs/systems, plus assignment, bulk actions and saved views. HTML pages and the JSON API call the same functions — that is what keeps "everything the console shows is in the API" structural. |
+| `enrich.py` | Priority tier, owning team, **remediation owner** and SLA window. The team map is a prefix table; the ownership map is deployment-mode dependent. |
+| `analytics.py` | The mitigation journey: MTTR, burndown, aging, backlog trajectory, team and domain scorecards. |
 | `coverage.py` | The per-upload manifest. Module→source mapping is **derived from source at import**, never hand-maintained, so it cannot drift. |
-| `ingest.py` | upload → parse → scan → store → diff. Holds `store_run` (the journey) and `_rebase`. |
-| `app.py` | FastAPI. Uploads, cancellable background scans, `/health`. |
+| `ingest.py` | upload → parse → scan → enrich → store → diff → notify. Holds `store_run` (the journey), `_rebase` and `queue_notifications`. |
+| `app.py` | FastAPI. Uploads, cancellable background scans, saved-view redirects, `/health`. |
 | `cli.py` | Admin + the air-gapped `scan` path. |
 | `templates/` | Jinja2, server-rendered, one stylesheet, no client framework. |
 
@@ -194,6 +196,27 @@ at startup rather than silently run on a value published in this repo.
   discharge is a good idea, but the published PDFs' ID-to-task pairings drift under text
   extraction and are **unverified**. Tag to the task description. See
   `docs/RISE_SECURITY_MODEL.md` §0.
+- *The scanner owns severity and priority; a HUMAN owns the assignee.* A re-scan must never
+  quietly undo somebody's assignment, and the SLA clock restarts only when the tier actually
+  moves — recomputing the due date every run would mean nothing could ever be overdue.
+- *Provider-bound work is a separate series in every metric.* A finding a RISE customer cannot
+  fix sits open until SAP acts. Rolling `ticket_to_sap` into the customer's MTTR or overdue
+  count measures the wrong organisation, which is why it also carries a longer SLA window.
+- *Count resolved occurrences, never average a severity.* A mean that falls because a batch of
+  LOW findings arrived reports progress where none happened. Likewise MTTR counts only findings
+  actually **resolved**: including still-open ones as "time so far" makes it fall whenever new
+  findings arrive, which is exactly backwards.
+- *A saved view stores FILTERS, never rows*, and the filter keys are an allowlist. Opening a
+  shared link re-runs the query under the caller's own row scope, so it can never widen access.
+
+**Two traps this tier has already fallen into — do not re-introduce them:**
+- *`CREATE OR REPLACE VIEW` over `SELECT f.*` breaks the upgrade path.* A view's column list
+  cannot change, so the first `ALTER TABLE` that adds a column makes re-running `schema.sql`
+  fail. If a view is ever wanted, enumerate its columns and `DROP` before recreating.
+- *`TemplateResponse` takes `request` FIRST* in current Starlette. The legacy
+  `(name, context)` form passes the context dict as the template name and breaks every page —
+  while imports succeed and templates parse. `tests/test_http_console.py` exists because that
+  is only catchable over HTTP.
 
 ### The 23 modules (module key → class → focus)
 
@@ -275,15 +298,19 @@ at startup rather than silently run on a value published in this repo.
   of key check ids to `EXPECTED_CHECKS` so a regression that stops your checks firing is caught.
   Module tests stay stdlib + `pytest`-only; type hints stay `typing`-based (`List`/`Dict`/
   `Optional`, not `list[...]`/`X | Y`) for the 3.8–3.12 matrix.
-- **`tests/test_integration_ingest.py` needs a real PostgreSQL and SKIPS without `DB_DSN`.**
-  The mitigation journey is implemented in SQL; a mocked database proves the Python is
-  self-consistent and proves nothing about whether the journey works. Run it:
+- **Three suites need a real PostgreSQL and SKIP without `DB_DSN`** —
+  `test_integration_ingest.py` (the journey), `test_integration_journey.py` (analytics, saved
+  views, bulk actions) and `test_http_console.py` (every route returns 200). The journey is
+  implemented in SQL, so a mocked database proves the Python is self-consistent and proves
+  nothing about whether it works. Run them:
   ```bash
   docker run -d --name sapsec-test-db -e POSTGRES_USER=sapsec -e POSTGRES_PASSWORD=sapsec \
       -e POSTGRES_DB=sapsec -p 55433:5432 postgres:16
   DB_DSN=postgresql://sapsec:sapsec@localhost:55433/sapsec \
   SESSION_SECRET=$(python -c "import secrets;print(secrets.token_urlsafe(48))") \
-      python -m pytest tests/test_integration_ingest.py -q
+      python -m pytest tests/test_integration_ingest.py \
+                       tests/test_integration_journey.py \
+                       tests/test_http_console.py -q
   ```
 - **The Phase-1 exit criterion is a test, and it must stay green:** scan the same bundle twice
   and get `new 0 · persisting N · resolved 0`. If it ever fails, finding identity has broken

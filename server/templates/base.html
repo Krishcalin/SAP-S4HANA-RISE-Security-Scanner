@@ -99,6 +99,16 @@ button,.btn{background:var(--accent);color:#fff;border:0;border-radius:6px;
 button:hover,.btn:hover{filter:brightness(1.08);text-decoration:none}
 button.ghost,.btn.ghost{background:var(--panel-2);color:var(--ink);border:1px solid var(--line)}
 
+/* Priority tier. Ranked above severity in the queue because the tier already
+   folds in exploitability, exposure and privilege — an unreachable CRITICAL
+   should not outrank an actively-exploited HIGH. */
+.tier{display:inline-block;padding:2px 7px;border-radius:4px;font-size:11px;
+  font-weight:700;letter-spacing:.03em}
+.tier-P1{background:var(--crit);color:#fff}
+.tier-P2{background:var(--high);color:#1c2128}
+.tier-P3{background:var(--panel-2);color:var(--ink-dim);border:1px solid var(--line)}
+.tier-P4{background:transparent;color:var(--ink-faint);border:1px dashed var(--line)}
+
 .muted{color:var(--ink-dim)}
 .faint{color:var(--ink-faint)}
 .small{font-size:12px}
@@ -119,6 +129,7 @@ dl.kv dd{margin:0}
   <nav class="main">
     <a href="/" class="{{ 'on' if nav=='dash' }}">Dashboard</a>
     <a href="/findings" class="{{ 'on' if nav=='findings' }}">Findings</a>
+    <a href="/trend" class="{{ 'on' if nav=='trend' }}">Trend</a>
     {% if user.role in ('analyst','admin') %}
     <a href="/upload" class="{{ 'on' if nav=='upload' }}">Upload</a>
     {% endif %}

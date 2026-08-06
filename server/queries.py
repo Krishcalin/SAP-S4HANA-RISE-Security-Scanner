@@ -122,6 +122,8 @@ def recent_runs(scope: Optional[Sequence[int]], limit: int = 10) -> List[Dict[st
 def list_findings(scope: Optional[Sequence[int]], system_id: Optional[int] = None,
                   state: Optional[str] = None, severity: Optional[str] = None,
                   team: Optional[str] = None, remediation_owner: Optional[str] = None,
+                  tier: Optional[str] = None, category: Optional[str] = None,
+                  assignee: Optional[str] = None, overdue: bool = False,
                   page: int = 1) -> Dict[str, Any]:
     where: List[str] = []
     params: List[Any] = []
@@ -139,6 +141,14 @@ def list_findings(scope: Optional[Sequence[int]], system_id: Optional[int] = Non
         where.append("COALESCE(f.owning_team, cd.owning_team) = %s"); params.append(team)
     if remediation_owner:
         where.append("f.remediation_owner = %s"); params.append(remediation_owner)
+    if tier:
+        where.append("f.priority_tier = %s"); params.append(tier)
+    if category:
+        where.append("cd.category = %s"); params.append(category)
+    if assignee:
+        where.append("f.assignee = %s"); params.append(assignee)
+    if overdue:
+        where.append("f.due_date IS NOT NULL AND f.due_date < CURRENT_DATE")
 
     w = " AND ".join(where)
     total = db.one(
@@ -149,16 +159,24 @@ def list_findings(scope: Optional[Sequence[int]], system_id: Optional[int] = Non
     rows = db.query(
         f"""
         SELECT f.*, cd.title, cd.category, cd.owning_team AS default_team,
-               cd.baseline_req_id, s.sid, s.client AS system_client, s.tier,
+               cd.baseline_req_id, s.sid, s.client AS system_client,
+               s.tier AS system_tier,
                (f.state = 'accepted' AND f.acceptance_due IS NOT NULL
                 AND f.acceptance_due < CURRENT_DATE) AS expired_acceptance,
+               (f.due_date IS NOT NULL AND f.due_date < CURRENT_DATE
+                AND f.state IN ('open','submitted_to_provider')) AS is_overdue,
                GREATEST(0, EXTRACT(DAY FROM (COALESCE(f.resolved_at, now())
                                              - f.first_seen_at))::int) AS days_open
         FROM finding f
         JOIN check_definition cd ON cd.check_id = f.check_id
         LEFT JOIN sap_system s ON s.id = f.system_id
         WHERE {w}
-        ORDER BY CASE f.severity WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1
+        -- Priority tier first, severity second. The tier already folds in
+        -- exploitability, exposure and privilege; sorting by raw severity would
+        -- put an unreachable CRITICAL above an actively-exploited HIGH.
+        ORDER BY CASE f.priority_tier WHEN 'P1' THEN 0 WHEN 'P2' THEN 1
+                                      WHEN 'P3' THEN 2 WHEN 'P4' THEN 3 ELSE 4 END,
+                 CASE f.severity WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1
                                  WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 ELSE 4 END,
                  f.first_seen_at
         LIMIT %s OFFSET %s
@@ -286,6 +304,135 @@ def run_diff(run_id: int, scope: Optional[Sequence[int]]) -> Dict[str, Any]:
     return {"new": new, "new_count": len(new), "persisting": persisting,
             "resolved": resolved, "regressed": regressed,
             "regressed_count": len(regressed)}
+
+
+# --------------------------------------------------------------------------- #
+#  Assignment and bulk actions                                                #
+# --------------------------------------------------------------------------- #
+
+def assign_finding(finding_id: int, actor: str, assignee: Optional[str] = None,
+                   team: Optional[str] = None, due_date: Optional[str] = None,
+                   scope: Optional[Sequence[int]] = None) -> Dict[str, Any]:
+    """Set assignee / team / due date without changing state.
+
+    Kept out of `transition_finding` because assigning work is not a lifecycle
+    event: a finding can change hands three times while staying open, and folding
+    that into the state machine would fill the transition history with entries
+    that say nothing about the defect.
+    """
+    if get_finding(finding_id, scope) is None:
+        raise TransitionError("finding not found or not visible")
+
+    sets: List[str] = []
+    params: List[Any] = []
+    if assignee is not None:
+        sets.append("assignee = %s"); params.append(assignee or None)
+    if team is not None:
+        sets.append("owning_team = %s"); params.append(team or None)
+    if due_date is not None:
+        sets.append("due_date = %s"); params.append(due_date or None)
+    if not sets:
+        return {"finding_id": finding_id, "changed": False}
+
+    params.append(finding_id)
+    with db.connection() as conn:
+        conn.execute(f"UPDATE finding SET {', '.join(sets)} WHERE id = %s", params)
+        db.audit(conn, actor, "finding.assign", "finding", str(finding_id),
+                 {"assignee": assignee, "team": team, "due_date": due_date})
+        conn.commit()
+    return {"finding_id": finding_id, "changed": True}
+
+
+def bulk_transition(finding_ids: Sequence[int], to_state: str, actor: str,
+                    reason: str = "", ticket: str = "",
+                    scope: Optional[Sequence[int]] = None) -> Dict[str, Any]:
+    """Move several findings at once, reporting per-finding outcomes.
+
+    Deliberately NOT all-or-nothing. Over 40 findings where 3 are in a state that
+    cannot make the move, apply the 37 and say which 3 were skipped and why:
+    failing the whole batch makes the feature unusable, and skipping silently
+    misreports what happened.
+    """
+    applied: List[int] = []
+    skipped: List[Dict[str, Any]] = []
+    for fid in finding_ids:
+        try:
+            transition_finding(fid, to_state, actor, reason, ticket, scope)
+            applied.append(fid)
+        except TransitionError as exc:
+            skipped.append({"finding_id": fid, "reason": str(exc)})
+    return {"applied": applied, "applied_count": len(applied),
+            "skipped": skipped, "skipped_count": len(skipped)}
+
+
+# --------------------------------------------------------------------------- #
+#  Saved views                                                                #
+# --------------------------------------------------------------------------- #
+
+#: Only these keys may be stored in a view. An allowlist rather than a passthrough:
+#: stored filters are replayed into the query layer, so accepting arbitrary keys
+#: would let a saved view smuggle in a parameter nothing validated.
+VIEW_FILTER_KEYS = frozenset({
+    "system_id", "state", "severity", "team", "owner", "tier", "category",
+    "assignee", "overdue", "days",
+})
+
+
+def list_views(username: str, kind: Optional[str] = None) -> List[Dict[str, Any]]:
+    where = ["(is_shared OR created_by = %s)"]
+    params: List[Any] = [username]
+    if kind:
+        where.append("kind = %s"); params.append(kind)
+    return db.query(
+        f"SELECT * FROM saved_view WHERE {' AND '.join(where)} ORDER BY name", params)
+
+
+def get_view(slug: str, username: str) -> Optional[Dict[str, Any]]:
+    return db.one(
+        "SELECT * FROM saved_view WHERE slug = %s AND (is_shared OR created_by = %s)",
+        (slug, username))
+
+
+def save_view(slug: str, name: str, kind: str, filters: Dict[str, Any], actor: str,
+              description: str = "", is_shared: bool = True) -> Dict[str, Any]:
+    """Store a view's FILTERS — never its rows.
+
+    That is what makes a shared link safe: opening it re-runs the query under the
+    caller's own row scope, so two people following the same URL each see only the
+    systems they are entitled to. **A saved view can never widen access.**
+    """
+    from psycopg.types.json import Jsonb
+
+    clean = {k: v for k, v in (filters or {}).items()
+             if k in VIEW_FILTER_KEYS and v not in (None, "")}
+    slug = "".join(c for c in (slug or "").lower().replace(" ", "-")
+                   if c.isalnum() or c in "-_")[:64]
+    if not slug:
+        raise ValueError("a view needs a URL-safe slug")
+
+    with db.connection() as conn:
+        row = conn.execute(
+            """
+            INSERT INTO saved_view (slug, name, description, kind, filters,
+                                    created_by, is_shared)
+            VALUES (%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (slug) DO UPDATE SET
+                name = EXCLUDED.name, description = EXCLUDED.description,
+                kind = EXCLUDED.kind, filters = EXCLUDED.filters,
+                is_shared = EXCLUDED.is_shared, updated_at = now()
+            RETURNING *
+            """,
+            (slug, name, description, kind, Jsonb(clean), actor, is_shared)).fetchone()
+        db.audit(conn, actor, "view.save", "saved_view", slug, {"kind": kind})
+        conn.commit()
+    return row
+
+
+def delete_view(slug: str, actor: str) -> None:
+    with db.connection() as conn:
+        conn.execute("DELETE FROM saved_view WHERE slug = %s", (slug,))
+        db.audit(conn, actor, "view.delete", "saved_view", slug)
+        conn.commit()
 
 
 def changes_since(run_id: int, scope: Optional[Sequence[int]]) -> Dict[str, Any]:

@@ -80,26 +80,84 @@ attaching one defect's history to another is worse than losing it.
 
 ---
 
-## Phase 2 — Console and the mitigation journey
+## Phase 2 — Console and the mitigation journey ✅ **COMPLETE**
 
-**Depends on:** Phase 1. **Build to be credible, not to differentiate** — both incumbents ship
-this and the free tool in our niche claims it.
+**Built to be credible, not to differentiate** — both incumbents ship this and the free tool in
+our niche claims it.
 
-- [ ] Saved views + **permission-scoped durable URLs** per audience (Basis worklist, auditor
-      evidence view, executive view). Reporting is read access, not file production
-- [ ] Trend screen: MTTR by severity and by module, backlog trajectory, burndown by P-tier,
-      technical-debt accumulation
-- [ ] Aging view and SLA breach tiles from the existing P1–P4 windows
-- [ ] Per-domain % score by Area of Responsibility — computable from one export, and the number
-      an exec repeats
-- [ ] Assignment, due dates, bulk transition
-- [ ] Wire `risk_prioritizer.py` into ingest so `priority_tier` / `priority_factors` populate
-- [ ] Wire `finding_kb.py` (323 entries) into `check_definition`
-- [ ] Notification on new CRITICAL findings
+| Component | File | Status |
+|---|---|---|
+| Priority, team, RISE ownership, SLA windows | `server/enrich.py` | ✅ |
+| MTTR · burndown · aging · trajectory · scorecards | `server/analytics.py` | ✅ |
+| Trend screen | `server/templates/trend.html` | ✅ |
+| Saved views + permission-scoped durable URLs | `queries.py`, `/v/{slug}` | ✅ |
+| Assignment, due dates, bulk transitions | `queries.py`, `app.py` | ✅ |
+| Notifications on new CRITICAL + regressions | `ingest.queue_notifications` | ✅ |
+| `risk_prioritizer.py` wired into ingest | `server/ingest.py` | ✅ |
+| `finding_kb.py` (323 entries) into the catalogue | `server/ingest.py` | ✅ |
+| Schema v2: `saved_view`, `notification`, SLA columns | `server/schema.sql` | ✅ |
 
-**Exit:** a user can answer *"what changed since last month, who owns it, and is it getting
-better"* without exporting anything. The trend view sits on the same rows being triaged — not on
-a separate executive tab, which is the incumbent's architectural mistake.
+### Exit criterion — **PASSED**
+
+> Answer *"what changed since last month, who owns it, and is it getting better"* without
+> exporting anything.
+
+```
+unit                       213 passed, 1 skipped
+integration + HTTP          43 passed   (real PostgreSQL 16)
+                           ---
+                           256 tests
+```
+
+Measured on `sample_data` in a RISE landscape: **P1 26 · P2 32 · P3 169 · P4 69**;
+**31 findings routed to `ticket_to_sap`**; 253 of 292 checks KB-backed; **227 due dates**, which
+is exactly 296 − 69 because P4 deliberately carries no clock.
+
+### Decisions worth keeping
+
+- **Priority outranks severity in the queue.** The tier already folds in exploitability, exposure
+  and privilege, so sorting by raw severity would put an unreachable CRITICAL above an
+  actively-exploited HIGH.
+- **Provider-bound work is a separate series everywhere.** A finding a RISE customer cannot fix
+  sits open until SAP acts; rolling it into the same MTTR or overdue count measures the wrong
+  organisation. `ticket_to_sap` also gets a longer SLA window for the same reason.
+- **MTTR counts only findings actually resolved.** Including still-open ones as "time so far"
+  makes MTTR *fall* whenever a burst of new findings arrives — exactly backwards.
+- **Burndown is per run, not per calendar day.** The backlog only changes when a scan observes
+  it; a daily series over weekly scans draws six flat days and one cliff, implying activity on
+  days nothing was measured.
+- **Counts of resolved occurrences, never an average severity.** A mean that falls because a
+  batch of LOW findings arrived would report progress where none happened.
+- **The domain score is over checks that ran**, not the whole catalogue — otherwise supplying
+  fewer exports improves the score.
+- **Saved views store filters, never rows**, so a shared link re-runs under the caller's own row
+  scope and can never widen access.
+- **Bulk actions are deliberately not all-or-nothing** — apply what can move, report what could
+  not and why.
+- **The scanner never overwrites a human's assignment**, and the SLA clock only restarts when the
+  tier actually moves; recomputing the due date every run would mean nothing could ever be overdue.
+
+### Three defects found during the build
+
+**1. Every page in the console was broken.** `TemplateResponse(name, context)` is the legacy
+Starlette signature — the current one takes `request` first, so the old form passed the context
+dict where the template name belongs. Imports succeeded, templates parsed, and the query layer
+was covered by integration tests; not one page could render. Only an HTTP request exposed it, so
+`tests/test_http_console.py` now asserts every route returns 200 against a real database.
+
+**2. The documented upgrade path was broken.** `CREATE OR REPLACE VIEW` cannot change a view's
+column list, and `finding_effective` selected `f.*` — so the first `ALTER TABLE finding` made
+re-running `schema.sql` fail with *"cannot change name of view column"*. The view was removed
+rather than nursed: nothing used it, both its derivations are computed inline in `queries.py`,
+and an unused view that breaks migrations is strictly negative. Schema idempotency is now proven
+by re-running it twice.
+
+**3. Eight checks belonged to nobody.** The team table carried `S4AUTH-` against the scanner's
+actual `S4AUTHZ-` prefix, so those findings routed to `unassigned` and would never have appeared
+on any team's worklist. Nothing failed — the work was silently orphaned. A test now asserts every
+check the scanner emits routes to a team, because a prefix table mis-matches quietly.
+
+---
 
 ---
 
@@ -230,10 +288,14 @@ Being crisp buys credibility for what we do claim.
 
 ## Immediate next actions
 
-1. Finish converting the remaining modules to structured `affected_objects` (in flight)
-2. Fix the README `PARAM-* (25+)` overstatement — code has 23. A buyer who catches one inflated
-   number discounts every other number we give them
-3. Fix or document the dead path at `modules/iam_advanced.py:185` — it returns early and emits
+1. Convert the remaining 15 modules to structured `affected_objects` (8 done). They track
+   correctly today on the display fallback, and `_rebase` means converting them later will not
+   destroy their history
+2. Fix or document the dead path at `modules/iam_advanced.py:185` — it returns early and emits
    nothing whenever `role_auth_values.csv` is present
-4. Add CI: unit suite on every push, integration suite against a PostgreSQL service container
-5. Begin Phase 2
+3. Add CI: unit suite on every push, integration suite against a PostgreSQL service container
+   (the 43 DB-backed tests currently only run locally, which is exactly how the console-wide
+   render bug survived)
+4. Begin Phase 3 — FAIR on the front page
+
+**Done:** README `PARAM-* (25+)` overstatement corrected to 23.

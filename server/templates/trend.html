@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% set nav = 'trend' %}
+{% block title %}Trend — SAPSec{% endblock %}
+{% block body %}
+
+<h1>Mitigation journey</h1>
+<p class="sub">
+  What changed, who owns it, and whether it is getting better — over the last {{ days }} days.
+</p>
+
+{% set sla = j.sla %}
+{% set debt = j.technical_debt %}
+
+<div class="grid g4">
+  <div class="card">
+    <h3>Overdue — yours</h3>
+    <div class="kpi {{ 'crit' if sla.overdue_customer else 'ok' }}">{{ sla.overdue_customer }}</div>
+    <div class="kpi-note">{{ sla.due_soon_customer }} due within 7 days</div>
+  </div>
+  <div class="card">
+    <h3>Overdue — with SAP</h3>
+    <div class="kpi {{ 'warn' if sla.overdue_provider else '' }}">{{ sla.overdue_provider }}</div>
+    {# Reported separately on purpose. Rolling provider-bound work into the
+       customer's breach count measures the wrong organisation. #}
+    <div class="kpi-note">provider queue, not your clock</div>
+  </div>
+  <div class="card">
+    <h3>Mean time to remediate</h3>
+    <div class="kpi">{{ j.mttr.overall.mean_days if j.mttr.overall and j.mttr.overall.mean_days else '—' }}<span class="small muted" style="font-size:15px">d</span></div>
+    <div class="kpi-note">over {{ j.mttr.overall.resolved if j.mttr.overall else 0 }} resolved</div>
+  </div>
+  <div class="card">
+    <h3>Open &gt; 90 days</h3>
+    <div class="kpi {{ 'warn' if debt.stale_over_90d else '' }}">{{ debt.stale_over_90d }}</div>
+    <div class="kpi-note">accumulated technical debt</div>
+  </div>
+</div>
+
+<h2>Backlog trajectory</h2>
+<div class="card">
+  {% if j.burndown|length > 1 %}
+    {% set maxv = j.burndown|map(attribute='open_after')|max %}
+    {# Per RUN, not per calendar day: the backlog only changes when a scan
+       observes it, and a daily series over weekly scans would draw six flat days
+       and one cliff — implying activity on days nothing was measured. #}
+    <div style="display:flex;align-items:flex-end;gap:6px;height:150px;
+                padding:8px 0;overflow-x:auto">
+      {% for b in j.burndown %}
+      <div style="display:flex;flex-direction:column;align-items:center;gap:4px;min-width:44px">
+        <span class="small mono faint">{{ b.open_after }}</span>
+        <div style="width:26px;background:var(--accent);border-radius:3px 3px 0 0;
+                    height:{{ (110 * b.open_after / maxv)|round|int if maxv else 2 }}px"
+             title="run #{{ b.run_id }}: {{ b.open_after }} open, {{ b.new }} new"></div>
+        {% if b.critical %}
+        <div style="width:26px;background:var(--crit);border-radius:0 0 3px 3px;
+                    height:{{ (110 * b.critical / maxv)|round|int if maxv else 1 }}px"
+             title="{{ b.critical }} critical"></div>
+        {% endif %}
+        <span class="small faint" style="font-size:10px">{{ b.started_at.strftime('%d %b') }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="small faint" style="margin:6px 0 0">
+      Blue = open findings after each scan · red = critical. Counts of open
+      findings, never an average severity: a mean that falls because a batch of
+      LOW findings arrived would say nothing was fixed.
+    </p>
+  {% else %}
+    <div class="empty">
+      Not enough history yet — the trajectory appears after a second completed scan.
+    </div>
+  {% endif %}
+</div>
+
+<div class="grid g2">
+  <div class="card">
+    <h3>Backlog by priority</h3>
+    <table>
+      <thead><tr><th>Tier</th><th class="right">Open</th><th class="right">Overdue</th>
+        <th class="right">With SAP</th><th class="right">Avg age</th></tr></thead>
+      <tbody>
+      {% for t in j.backlog_by_tier %}
+      <tr>
+        <td><a href="/findings?tier={{ t.tier }}"><strong>{{ t.tier }}</strong></a></td>
+        <td class="right mono">{{ t.open }}</td>
+        <td class="right mono {{ 'crit' if t.overdue }}"
+            style="{{ 'color:var(--crit)' if t.overdue }}">{{ t.overdue }}</td>
+        <td class="right mono muted">{{ t.with_sap }}</td>
+        <td class="right mono muted">{{ t.avg_age_days or '—' }}d</td>
+      </tr>
+      {% else %}<tr><td colspan="5" class="empty">No open findings.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>Time to remediate, by severity</h3>
+    <table>
+      <thead><tr><th>Severity</th><th class="right">Resolved</th>
+        <th class="right">Mean</th><th class="right">Median</th></tr></thead>
+      <tbody>
+      {% for m in j.mttr.by_severity %}
+      <tr>
+        <td><span class="pill sev-{{ m.severity or 'INFO' }}">{{ m.severity }}</span></td>
+        <td class="right mono">{{ m.resolved }}</td>
+        <td class="right mono">{{ m.mean_days }}d</td>
+        <td class="right mono muted">{{ m.median_days }}d</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="empty">
+        Nothing resolved in this window yet. MTTR counts findings actually closed —
+        including still-open ones would make it fall whenever new findings arrive.
+      </td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<h2>Who owns the work</h2>
+<div class="card wrap" style="padding:0">
+  <table>
+    <thead><tr>
+      <th>Team</th><th class="right">Open</th><th class="right">Critical</th>
+      <th class="right">High</th><th class="right">Overdue</th>
+      <th class="right">Actionable now</th><th class="right">Avg age</th>
+      <th class="right">MTTR</th>
+    </tr></thead>
+    <tbody>
+    {% set mttr_by_team = {} %}
+    {% for m in j.mttr.by_team %}{% set _ = mttr_by_team.update({m.team: m}) %}{% endfor %}
+    {% for t in j.teams %}
+    <tr>
+      <td><a href="/findings?team={{ t.team }}">{{ t.team.replace('_',' ') }}</a></td>
+      <td class="right mono">{{ t.open }}</td>
+      <td class="right mono" style="{{ 'color:var(--crit)' if t.critical }}">{{ t.critical }}</td>
+      <td class="right mono">{{ t.high }}</td>
+      <td class="right mono" style="{{ 'color:var(--crit)' if t.overdue }}">{{ t.overdue }}</td>
+      {# "Actionable now" excludes findings only SAP can change — otherwise a team
+         looks like it is ignoring work it is not permitted to do. #}
+      <td class="right mono ok" style="color:var(--ok)">{{ t.actionable }}</td>
+      <td class="right mono muted">{{ t.avg_age_days or '—' }}d</td>
+      <td class="right mono muted">
+        {{ mttr_by_team[t.team].mean_days ~ 'd' if t.team in mttr_by_team else '—' }}
+      </td>
+    </tr>
+    {% else %}<tr><td colspan="8" class="empty">No open findings.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<h2>Compliance by domain</h2>
+<div class="card wrap" style="padding:0">
+  <table>
+    <thead><tr><th>Category</th><th style="width:36%">Compliant</th>
+      <th class="right">Checks run</th><th class="right">Failing</th></tr></thead>
+    <tbody>
+    {% for d in j.domains %}
+    <tr>
+      <td><a href="/findings?category={{ d.category|urlencode }}">{{ d.category }}</a></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="bar" style="flex:1;margin:0">
+            <i style="width:{{ d.pct_compliant or 0 }}%;
+                      background:{{ 'var(--ok)' if (d.pct_compliant or 0) >= 80
+                                    else 'var(--med)' if (d.pct_compliant or 0) >= 60
+                                    else 'var(--crit)' }}"></i>
+          </div>
+          <span class="mono small" style="width:38px;text-align:right">{{ d.pct_compliant or 0 }}%</span>
+        </div>
+      </td>
+      <td class="right mono muted">{{ d.checks_run }}</td>
+      <td class="right mono">{{ d.checks_failing }}</td>
+    </tr>
+    {% else %}<tr><td colspan="4" class="empty">No findings yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  <p class="small faint" style="padding:10px 14px;margin:0">
+    Scored over checks that actually ran for these systems, not the whole catalogue —
+    otherwise supplying fewer exports would improve the score.
+  </p>
+</div>
+
+<h2>Aging</h2>
+<div class="card wrap" style="padding:0">
+  <table>
+    <thead><tr><th>Severity</th><th class="right">0–7d</th><th class="right">7–30d</th>
+      <th class="right">30–90d</th><th class="right">90d+</th>
+      <th class="right">Total</th><th class="right">Avg</th></tr></thead>
+    <tbody>
+    {% for a in j.aging %}
+    <tr>
+      <td><span class="pill sev-{{ a.severity or 'INFO' }}">{{ a.severity }}</span></td>
+      <td class="right mono muted">{{ a.d0_7 }}</td>
+      <td class="right mono muted">{{ a.d7_30 }}</td>
+      <td class="right mono">{{ a.d30_90 }}</td>
+      <td class="right mono" style="{{ 'color:var(--crit)' if a.d90_plus }}">{{ a.d90_plus }}</td>
+      <td class="right mono">{{ a.total }}</td>
+      <td class="right mono muted">{{ a.avg_days }}d</td>
+    </tr>
+    {% else %}<tr><td colspan="7" class="empty">No open findings.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if debt.recurring %}
+<h2>Recurring defects</h2>
+<div class="banner warn">
+  These were fixed and came back. A defect that returns is a <strong>process</strong>
+  failure, not a backlog item — and it is invisible if you only look at current state.
+</div>
+<div class="card wrap" style="padding:0">
+  <table>
+    <thead><tr><th style="width:88px">Severity</th><th style="width:130px">Check</th>
+      <th>Title</th><th style="width:100px">System</th>
+      <th class="right" style="width:90px">Times back</th></tr></thead>
+    <tbody>
+    {% for r in debt.recurring %}
+    <tr>
+      <td><span class="pill sev-{{ r.severity or 'INFO' }}">{{ r.severity }}</span></td>
+      <td class="mono small"><a href="/findings/{{ r.id }}">{{ r.check_id }}</a></td>
+      <td>{{ r.title }}</td>
+      <td class="mono small muted">{{ r.sid or '—' }}</td>
+      <td class="right mono" style="color:var(--high)">{{ r.regression_count }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% if debt.expired_acceptances %}
+<h2>Expired risk acceptances</h2>
+<div class="banner bad">
+  An acceptance that has passed its expiry is itself an audit finding — the defect is
+  open and the time-box has run out.
+</div>
+<div class="card wrap" style="padding:0">
+  <table>
+    <thead><tr><th style="width:130px">Check</th><th>Title</th>
+      <th style="width:140px">Accepted by</th><th style="width:110px">Expired</th></tr></thead>
+    <tbody>
+    {% for a in debt.expired_acceptances %}
+    <tr>
+      <td class="mono small"><a href="/findings/{{ a.id }}">{{ a.check_id }}</a></td>
+      <td>{{ a.title }}</td>
+      <td class="small muted">{{ a.accepted_by or '—' }}</td>
+      <td class="small" style="color:var(--crit)">{{ a.acceptance_due }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

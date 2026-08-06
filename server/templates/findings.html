@@ -10,7 +10,25 @@
   in one queue with one lifecycle.
 </p>
 
+{% if views %}
+{# Durable, permission-scoped URLs per audience. Reporting is read access, not
+   file production: a shared link re-runs under the viewer's own row scope, so it
+   can never widen access. #}
+<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+  <span class="small faint">Saved views:</span>
+  {% for v in views %}
+  <a class="btn ghost" href="/v/{{ v.slug }}" title="{{ v.description or '' }}">{{ v.name }}</a>
+  {% endfor %}
+</div>
+{% endif %}
+
 <form class="filters" method="get">
+  <select name="tier">
+    <option value="">Any priority</option>
+    {% for t in ['P1','P2','P3','P4'] %}
+    <option value="{{ t }}" {{ 'selected' if filters.tier == t }}>{{ t }}</option>
+    {% endfor %}
+  </select>
   <select name="system_id">
     <option value="">All systems</option>
     {% for s in systems %}
@@ -44,41 +62,76 @@
     <option value="{{ t }}" {{ 'selected' if filters.team == t }}>{{ t.replace('_',' ') }}</option>
     {% endfor %}
   </select>
+  <label class="small muted" style="display:flex;align-items:center;gap:5px">
+    <input type="checkbox" name="overdue" value="true" {{ 'checked' if filters.overdue }}>
+    Overdue only
+  </label>
   <button type="submit">Apply</button>
   <a class="btn ghost" href="/findings">Reset</a>
 </form>
 
+{% if user.role in ('analyst','admin') %}
+<details style="margin-bottom:14px">
+  <summary class="small muted" style="cursor:pointer">Save this view as a durable link</summary>
+  <form class="card" method="post" action="/api/views"
+        style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">
+    <div><label class="small faint">Name</label><br>
+      <input type="text" name="name" placeholder="Basis worklist" required style="margin-top:4px"></div>
+    <div><label class="small faint">URL slug</label><br>
+      <input type="text" name="slug" placeholder="basis-worklist" required style="margin-top:4px"></div>
+    <div style="flex:1;min-width:180px"><label class="small faint">Description</label><br>
+      <input type="text" name="description" style="width:100%;margin-top:4px"></div>
+    <input type="hidden" name="kind" value="findings">
+    <button type="submit">Save view</button>
+    <span class="small faint" style="flex-basis:100%">
+      Saves the filters above, never the rows — anyone opening the link sees only the
+      systems they are entitled to.
+    </span>
+  </form>
+</details>
+{% endif %}
+
+<form method="post" action="/api/findings/bulk-state" id="bulkform">
 <div class="card wrap" style="padding:0">
 <table>
   <thead><tr>
+    {% if user.role in ('analyst','admin') %}<th style="width:26px"></th>{% endif %}
+    <th style="width:42px">P</th>
     <th style="width:88px">Severity</th>
-    <th style="width:120px">Check</th>
+    <th style="width:118px">Check</th>
     <th>Title</th>
-    <th style="width:110px">System</th>
-    <th style="width:130px">Ownership</th>
-    <th style="width:100px">State</th>
-    <th style="width:70px" class="right">Age</th>
+    <th style="width:100px">System</th>
+    <th style="width:118px">Ownership</th>
+    <th style="width:94px">State</th>
+    <th style="width:92px" class="right">Age / due</th>
   </tr></thead>
   <tbody>
   {% for f in findings %}
     <tr>
+      {% if user.role in ('analyst','admin') %}
+      <td><input type="checkbox" name="_ids" value="{{ f.id }}" class="bulkbox"></td>
+      {% endif %}
+      {# Tier first: it already folds in exploitability, exposure and privilege,
+         so it is a better sort key than raw severity. #}
+      <td>{% if f.priority_tier %}
+        <span class="tier tier-{{ f.priority_tier }}"
+              title="{{ f.priority_rationale or '' }}">{{ f.priority_tier }}</span>
+      {% else %}<span class="faint small">—</span>{% endif %}</td>
       <td><span class="pill sev-{{ f.severity or 'INFO' }}">{{ f.severity or 'INFO' }}</span></td>
       <td class="mono small"><a href="/findings/{{ f.id }}">{{ f.check_id }}</a></td>
       <td>
         <a href="/findings/{{ f.id }}">{{ f.title }}</a>
         {% if f.regression_count %}
-          <span class="pill st" title="previously resolved, then seen again"
-                style="color:var(--high)">regressed &times;{{ f.regression_count }}</span>
+          <span class="pill st" style="color:var(--high)"
+                title="previously resolved, then seen again">regressed &times;{{ f.regression_count }}</span>
         {% endif %}
         {% if f.expired_acceptance %}
           <span class="pill st" style="color:var(--crit)">acceptance expired</span>
         {% endif %}
-        {# Identity strength, shown inline rather than hidden: it tells a user how
-           much to trust this row's age and history. #}
+        {% if f.assignee %}<span class="small muted">· {{ f.assignee }}</span>{% endif %}
         {% if f.fingerprint_basis != 'objects' %}
           <span class="faint small" title="matched across runs by {{ f.fingerprint_basis }}">
-            &middot; {{ f.fingerprint_basis }}
-          </span>
+            &middot; {{ f.fingerprint_basis }}</span>
         {% endif %}
       </td>
       <td class="mono small">{{ f.sid or '—' }}{% if f.system_client %}/{{ f.system_client }}{% endif %}</td>
@@ -87,10 +140,17 @@
             'provider_owned':"SAP's",'not_assessable':'Out of reach'}[f.remediation_owner] }}
       </span></td>
       <td><span class="pill st st-{{ f.state }}">{{ f.state.replace('_',' ') }}</span></td>
-      <td class="right mono small">{{ f.days_open }}d</td>
+      <td class="right mono small">
+        {{ f.days_open }}d
+        {% if f.is_overdue %}
+          <div class="small" style="color:var(--crit)">overdue</div>
+        {% elif f.due_date %}
+          <div class="small faint">{{ f.due_date.strftime('%d %b') }}</div>
+        {% endif %}
+      </td>
     </tr>
   {% else %}
-    <tr><td colspan="7" class="empty">
+    <tr><td colspan="9" class="empty">
       No findings match these filters.
       {% if not filters.state %}Resolved findings are hidden by default.{% endif %}
     </td></tr>
@@ -99,6 +159,30 @@
 </table>
 </div>
 
+{% if user.role in ('analyst','admin') and findings %}
+<div class="card" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+  <input type="hidden" name="finding_ids" id="bulkids">
+  <div><label class="small faint">Move selected to</label><br>
+    <select name="state" style="margin-top:4px">
+      <option value="submitted_to_provider">Submitted to SAP</option>
+      <option value="mitigated">Mitigated</option>
+      <option value="accepted">Risk accepted</option>
+      <option value="false_positive">False positive</option>
+      <option value="open">Re-open</option>
+    </select></div>
+  <div style="flex:1;min-width:200px"><label class="small faint">Reason</label><br>
+    <input type="text" name="reason" style="width:100%;margin-top:4px"></div>
+  <div><label class="small faint">SAP ticket</label><br>
+    <input type="text" name="ticket" style="margin-top:4px"></div>
+  <button type="submit">Apply to selected</button>
+  <span class="small faint" style="flex-basis:100%">
+    Findings that cannot make the move are skipped and reported individually — the
+    batch is deliberately not all-or-nothing.
+  </span>
+</div>
+{% endif %}
+</form>
+
 {% if pages > 1 %}
 <div style="margin-top:14px;display:flex;gap:8px;align-items:center">
   {% if page > 1 %}<a class="btn ghost" href="?page={{ page-1 }}">Previous</a>{% endif %}
@@ -106,4 +190,15 @@
   {% if page < pages %}<a class="btn ghost" href="?page={{ page+1 }}">Next</a>{% endif %}
 </div>
 {% endif %}
+
+<script>
+// Collect checked ids into the single field the endpoint reads. Done on submit
+// rather than per-click so the page keeps no state of its own.
+document.getElementById('bulkform')?.addEventListener('submit', function (e) {
+  var ids = Array.from(document.querySelectorAll('.bulkbox:checked'))
+                 .map(function (b) { return b.value; });
+  if (!ids.length) { e.preventDefault(); alert('Select at least one finding.'); return; }
+  document.getElementById('bulkids').value = ids.join(',');
+});
+</script>
 {% endblock %}

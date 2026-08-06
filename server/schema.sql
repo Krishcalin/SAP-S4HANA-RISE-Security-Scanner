@@ -233,15 +233,19 @@ CREATE INDEX IF NOT EXISTS finding_open_idx         ON finding (landscape_id, pr
     WHERE state IN ('open', 'submitted_to_provider');
 CREATE INDEX IF NOT EXISTS finding_subject_idx      ON finding USING gin (subject);
 
--- Derived, not stored: an acceptance is expired when its due date has passed.
-CREATE OR REPLACE VIEW finding_effective AS
-SELECT f.*,
-       (f.state = 'accepted'
-        AND f.acceptance_due IS NOT NULL
-        AND f.acceptance_due < CURRENT_DATE)          AS expired_acceptance,
-       GREATEST(0, EXTRACT(DAY FROM (COALESCE(f.resolved_at, now()) - f.first_seen_at))::int)
-                                                      AS days_open
-FROM finding f;
+-- NOTE: there was a `finding_effective` view here that computed `expired_acceptance`
+-- and `days_open` over `SELECT f.*`. It has been REMOVED, and should not come back
+-- in that form.
+--
+-- `CREATE OR REPLACE VIEW` cannot change a view's column list, and `f.*` expands to
+-- whatever the table currently has — so the moment any ALTER TABLE added a column to
+-- `finding`, re-running this file failed with "cannot change name of view column".
+-- That broke the documented upgrade path (re-run schema.sql), and it broke it
+-- silently until someone actually upgraded.
+--
+-- Nothing used the view: server/queries.py computes both derivations inline where
+-- they are needed. If a view is ever wanted here, enumerate its columns explicitly
+-- and DROP it before recreating.
 
 CREATE TABLE IF NOT EXISTS finding_observation (
     id              bigserial PRIMARY KEY,
@@ -444,6 +448,78 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE INDEX IF NOT EXISTS audit_log_time_idx ON audit_log (occurred_at DESC);
 
 -- ---------------------------------------------------------------------
+--  Saved views  (Phase 2)
+-- ---------------------------------------------------------------------
+--  Reporting is READ ACCESS, not file production. Each audience gets a durable,
+--  permission-scoped URL — a Basis worklist, an auditor evidence view, an
+--  executive summary — rather than a document somebody must fetch and forward.
+--  The alternative is what an incumbent's customers actually resorted to: batch
+--  scripts re-posting files to SharePoint because reports could not be delivered
+--  per audience from the tool itself.
+--
+--  A saved view stores FILTERS, never rows. Opening one re-runs the query through
+--  the caller's own row scope, so sharing a link can never widen access: two
+--  people opening the same URL each see the systems they are entitled to.
+
+CREATE TABLE IF NOT EXISTS saved_view (
+    id           bigserial PRIMARY KEY,
+    slug         text NOT NULL UNIQUE,
+    name         text NOT NULL,
+    description  text,
+    -- which screen the stored filters apply to
+    kind         text NOT NULL DEFAULT 'findings'
+                 CHECK (kind IN ('findings', 'trend', 'coverage')),
+    filters      jsonb NOT NULL DEFAULT '{}'::jsonb,
+    created_by   text,
+    -- Shared views appear in everyone's list; private ones only for their owner.
+    is_shared    boolean NOT NULL DEFAULT true,
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    updated_at   timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS saved_view_kind_idx ON saved_view (kind, name);
+
+-- ---------------------------------------------------------------------
+--  Notifications  (Phase 2)
+-- ---------------------------------------------------------------------
+--  Queued in the database, never sent inline. A scan that cannot reach a mail
+--  relay must still complete and store its findings — the notification is the
+--  least important thing happening in that transaction.
+
+CREATE TABLE IF NOT EXISTS notification (
+    id             bigserial PRIMARY KEY,
+    scan_run_id    bigint REFERENCES scan_run(id) ON DELETE CASCADE,
+    kind           text NOT NULL,
+    severity       text,
+    subject        text NOT NULL,
+    body           text NOT NULL,
+    payload        jsonb NOT NULL DEFAULT '{}'::jsonb,
+    created_at     timestamptz NOT NULL DEFAULT now(),
+    delivered_at   timestamptz,
+    delivery_error text
+);
+
+CREATE INDEX IF NOT EXISTS notification_undelivered_idx
+    ON notification (created_at) WHERE delivered_at IS NULL;
+
+-- ---------------------------------------------------------------------
+--  Phase 2 columns on existing tables
+-- ---------------------------------------------------------------------
+--  Added as ALTERs rather than edited into the CREATEs above, so an existing
+--  deployment upgrades simply by re-running this file.
+
+ALTER TABLE finding ADD COLUMN IF NOT EXISTS priority_rationale text;
+-- When the SLA clock started. Deliberately distinct from first_seen_at:
+-- re-prioritising a finding restarts its window, and an "overdue" count computed
+-- from first_seen would blame the customer for a tier we assigned yesterday.
+ALTER TABLE finding ADD COLUMN IF NOT EXISTS sla_started_at timestamptz;
+
+CREATE INDEX IF NOT EXISTS finding_due_idx ON finding (due_date)
+    WHERE state IN ('open', 'submitted_to_provider') AND due_date IS NOT NULL;
+CREATE INDEX IF NOT EXISTS finding_tier_idx ON finding (landscape_id, priority_tier)
+    WHERE state IN ('open', 'submitted_to_provider');
+
+-- ---------------------------------------------------------------------
 --  Schema version
 -- ---------------------------------------------------------------------
 
@@ -453,3 +529,4 @@ CREATE TABLE IF NOT EXISTS schema_version (
 );
 
 INSERT INTO schema_version (version) VALUES (1) ON CONFLICT DO NOTHING;
+INSERT INTO schema_version (version) VALUES (2) ON CONFLICT DO NOTHING;

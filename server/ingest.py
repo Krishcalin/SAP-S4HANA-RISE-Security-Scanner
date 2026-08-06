@@ -153,22 +153,31 @@ def _upsert_check_definitions(conn: psycopg.Connection,
                               findings: Iterable[Dict[str, Any]]) -> None:
     """Ensure a catalogue row exists for every check_id seen.
 
-    Only the catalogue's *descriptive* columns are refreshed. Curated columns —
-    owning_team, responsibility, baseline_req_id — are set once and left alone,
-    because they are human judgements that a scan must not silently overwrite.
+    Descriptive columns refresh on every run. Risk narrative and remediation prefer
+    the 323-entry knowledge base — a paragraph of risk analysis plus step-by-step
+    remediation per check — and fall back to the finding's own text where the KB
+    has no entry.
+
+    `owning_team` is derived once and then LEFT ALONE, as are `responsibility` and
+    `baseline_req_id`: those are human judgements, and a scan must never silently
+    overwrite a curation decision.
     """
+    from server.enrich import kb_content, team_for
+
     seen: Dict[str, Dict[str, Any]] = {}
     for f in findings:
         cid = (f.get("check_id") or "").strip().upper()
         if cid and cid not in seen:
             seen[cid] = f
+
     for cid, f in seen.items():
+        kb_risk, kb_fix = kb_content(cid)
         conn.execute(
             """
             INSERT INTO check_definition
                 (check_id, title, category, default_severity, remediation,
-                 risk_narrative, references_json)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                 risk_narrative, references_json, owning_team)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (check_id) DO UPDATE SET
                 title            = EXCLUDED.title,
                 category         = EXCLUDED.category,
@@ -176,11 +185,15 @@ def _upsert_check_definitions(conn: psycopg.Connection,
                 remediation      = EXCLUDED.remediation,
                 risk_narrative   = EXCLUDED.risk_narrative,
                 references_json  = EXCLUDED.references_json,
+                -- COALESCE, not EXCLUDED: a curated team survives the next scan.
+                owning_team      = COALESCE(check_definition.owning_team,
+                                            EXCLUDED.owning_team),
                 updated_at       = now()
             """,
             (cid, f.get("title", ""), f.get("category"), f.get("severity"),
-             f.get("remediation", ""), f.get("description", ""),
-             Jsonb(f.get("references") or [])),
+             kb_fix or f.get("remediation", ""),
+             kb_risk or f.get("description", ""),
+             Jsonb(f.get("references") or []), team_for(cid)),
         )
 
 
@@ -237,13 +250,20 @@ def _rebase(conn: psycopg.Connection,
 def store_run(conn: psycopg.Connection, run_id: int, landscape_id: int,
               system_id: Optional[int], findings: List[Dict[str, Any]],
               default_sid: Optional[str] = None,
-              default_client: Optional[str] = None) -> RunDiff:
+              default_client: Optional[str] = None,
+              enrichment: Optional[Dict[int, Dict[str, Any]]] = None) -> RunDiff:
     """Persist a run's findings and compute the diff against what was open before.
+
+    `enrichment` maps `id(finding)` to the priority / ownership / SLA values from
+    `server.enrich.enrich`. Passing None stores findings without a tier, which is
+    valid but leaves the console unable to sort by priority — the CLI path and the
+    tests both supply it.
 
     Runs inside the caller's transaction so that a failure leaves no half-stored
     run behind.
     """
     _upsert_check_definitions(conn, findings)
+    enrichment = enrichment or {}
 
     # What was open for this system before this run. Compared by fingerprint, so
     # a finding matches itself regardless of how its wording or severity moved.
@@ -288,18 +308,27 @@ def store_run(conn: psycopg.Connection, run_id: int, landscape_id: int,
         if row is None:
             row = _rebase(conn, rebase_pool, cid, basis, fp, previously_open)
 
+        en = enrichment.get(id(f), {})
+
         if row is None:
             finding_id = conn.execute(
                 """
                 INSERT INTO finding
                     (landscape_id, system_id, fingerprint, check_id, client,
                      fingerprint_basis, scope, subject, severity,
-                     first_seen_run, last_seen_run)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                     priority_tier, priority_score, priority_factors,
+                     priority_rationale, owning_team, remediation_owner,
+                     due_date, sla_started_at, first_seen_run, last_seen_run)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now(),%s,%s)
                 RETURNING id
                 """,
                 (landscape_id, system_id, fp, cid, default_client, basis, scope,
-                 Jsonb(subject), f.get("severity"), run_id, run_id)).fetchone()["id"]
+                 Jsonb(subject), f.get("severity"),
+                 en.get("priority_tier"), en.get("priority_score"),
+                 Jsonb(en.get("priority_factors") or []),
+                 en.get("priority_rationale"), en.get("owning_team"),
+                 en.get("remediation_owner", "customer_fixable"),
+                 en.get("due_date"), run_id, run_id)).fetchone()["id"]
             diff.new.append(finding_id)
             conn.execute(
                 "INSERT INTO finding_transition (finding_id, scan_run_id, from_state, "
@@ -329,6 +358,36 @@ def store_run(conn: psycopg.Connection, run_id: int, landscape_id: int,
                     "severity = %s, subject = %s, fingerprint_basis = %s WHERE id = %s",
                     (run_id, f.get("severity"), Jsonb(subject), basis, finding_id))
                 diff.persisting.append(finding_id)
+
+            # Re-apply enrichment to an existing row. The SLA clock and due date
+            # are only touched when the TIER ACTUALLY MOVED — recomputing the due
+            # date every run would silently push it forward each scan and no
+            # finding could ever be overdue. `assignee` is never touched here: it
+            # is a human decision and the scanner has no business overwriting it.
+            if en:
+                conn.execute(
+                    """
+                    UPDATE finding SET
+                        priority_score     = %(score)s,
+                        priority_factors   = %(factors)s,
+                        priority_rationale = %(rationale)s,
+                        remediation_owner  = %(owner)s,
+                        owning_team        = COALESCE(owning_team, %(team)s),
+                        due_date = CASE WHEN priority_tier IS DISTINCT FROM %(tier)s
+                                        THEN %(due)s ELSE due_date END,
+                        sla_started_at = CASE WHEN priority_tier IS DISTINCT FROM %(tier)s
+                                              THEN now() ELSE sla_started_at END,
+                        priority_tier = %(tier)s
+                    WHERE id = %(id)s
+                    """,
+                    {"score": en.get("priority_score"),
+                     "factors": Jsonb(en.get("priority_factors") or []),
+                     "rationale": en.get("priority_rationale"),
+                     "owner": en.get("remediation_owner", "customer_fixable"),
+                     "team": en.get("owning_team"),
+                     "tier": en.get("priority_tier"),
+                     "due": en.get("due_date"),
+                     "id": finding_id})
 
         conn.execute(
             """
@@ -392,6 +451,53 @@ def store_graph_nodes(conn: psycopg.Connection, run_id: int, landscape_id: int,
     return len(nodes)
 
 
+def queue_notifications(conn: psycopg.Connection, run_id: int, landscape_id: int,
+                        diff: RunDiff) -> int:
+    """Queue alerts for the two things nobody should have to go looking for.
+
+    Queued, not sent: a scan that cannot reach a mail relay must still complete
+    and store its findings. Delivery is a separate concern with its own retry.
+
+    Only NEW criticals and REGRESSIONS are notified. Notifying on persisting
+    findings would send the same alert every scan until it is fixed, and an alert
+    that fires every day is an alert nobody reads.
+    """
+    queued = 0
+
+    if diff.new:
+        crit = conn.execute(
+            "SELECT f.id, f.check_id, cd.title, s.sid, s.client "
+            "FROM finding f JOIN check_definition cd ON cd.check_id = f.check_id "
+            "LEFT JOIN sap_system s ON s.id = f.system_id "
+            "WHERE f.id = ANY(%s) AND f.severity = 'CRITICAL'",
+            (diff.new,)).fetchall()
+        if crit:
+            lines = [f"  {r['check_id']}  {r['title']}"
+                     f"  [{r['sid'] or '?'}/{r['client'] or '?'}]" for r in crit]
+            conn.execute(
+                "INSERT INTO notification (scan_run_id, kind, severity, subject, body, "
+                "payload) VALUES (%s,'new_critical','CRITICAL',%s,%s,%s)",
+                (run_id, f"{len(crit)} new CRITICAL finding(s) in run #{run_id}",
+                 "\n".join(lines), Jsonb({"finding_ids": [r["id"] for r in crit]})))
+            queued += 1
+
+    if diff.regressed:
+        rows = conn.execute(
+            "SELECT f.id, f.check_id, f.regression_count, cd.title "
+            "FROM finding f JOIN check_definition cd ON cd.check_id = f.check_id "
+            "WHERE f.id = ANY(%s)", (diff.regressed,)).fetchall()
+        lines = [f"  {r['check_id']}  {r['title']}  (back for the "
+                 f"{r['regression_count']}. time)" for r in rows]
+        conn.execute(
+            "INSERT INTO notification (scan_run_id, kind, severity, subject, body, "
+            "payload) VALUES (%s,'regression',NULL,%s,%s,%s)",
+            (run_id, f"{len(rows)} finding(s) regressed in run #{run_id}",
+             "\n".join(lines), Jsonb({"finding_ids": [r["id"] for r in rows]})))
+        queued += 1
+
+    return queued
+
+
 def scan_directory(data_dir: Path, landscape_id: int, system_id: Optional[int],
                    run_id: int, deployment_mode: str = "on_prem",
                    default_sid: Optional[str] = None,
@@ -410,10 +516,16 @@ def scan_directory(data_dir: Path, landscape_id: int, system_id: Optional[int],
                                       deployment_mode=deployment_mode)
 
             conn.execute("UPDATE scan_run SET status = 'deriving' WHERE id = %s", (run_id,))
+
+            from server.enrich import enrich
+            supplied = {k for k, v in data.items() if v}
+            enrichment = enrich(findings, deployment_mode, supplied)
+
             diff = store_run(conn, run_id, landscape_id, system_id, findings,
-                             default_sid, default_client)
+                             default_sid, default_client, enrichment)
             node_count = store_graph_nodes(conn, run_id, landscape_id, system_id,
                                            findings, default_sid)
+            queue_notifications(conn, run_id, landscape_id, diff)
 
             conn.execute(
                 "UPDATE scan_run SET status = 'complete', finished_at = now(), "
