@@ -80,7 +80,7 @@ on the default cp1252 console. Always run with `PYTHONIOENCODING=utf-8` on Windo
 cp .env.example .env          # then set SESSION_SECRET (>=32 chars) and POSTGRES_PASSWORD
 docker compose up -d --build
 docker compose exec app python -m server.cli init-db
-docker compose exec app python -m server.cli create-user admin admin
+docker compose exec app python -m server.cli create-user admin admin --generate
 docker compose exec app python -m server.cli add-landscape "Acme Prod" --mode rise_pce
 
 # scan without a browser (air-gapped path)

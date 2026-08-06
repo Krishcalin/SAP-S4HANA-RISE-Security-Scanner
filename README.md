@@ -55,7 +55,7 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"   # paste into SESS
 docker compose up -d --build
 
 docker compose exec app python -m server.cli init-db
-docker compose exec app python -m server.cli create-user admin admin
+docker compose exec app python -m server.cli create-user admin admin --generate
 docker compose exec app python -m server.cli add-landscape "Acme Production" --mode rise_pce
 ```
 

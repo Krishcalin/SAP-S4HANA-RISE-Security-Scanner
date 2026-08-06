@@ -8,15 +8,19 @@ Server administration CLI.
     python -m server.cli scan          <landscape> <data-dir> [--sid PRD --client 100]
     python -m server.cli runs
 
-Passwords are read interactively and never taken from argv — an argument is
-visible in `ps` output and in shell history.
+Passwords are never taken from argv — an argument is visible in `ps` output and
+in shell history. They come from a TTY prompt, from stdin when piped, or from
+`--generate`. The container has no TTY, so `--generate` is the documented way to
+bootstrap the first admin.
 """
 from __future__ import annotations
 
 import argparse
 import getpass
+import secrets
 import sys
 from pathlib import Path
+from typing import Optional
 
 from server import auth, db, ingest
 
@@ -27,10 +31,47 @@ def cmd_init_db(args: argparse.Namespace) -> int:
     return 0
 
 
+def _read_password(generate: bool) -> Optional[str]:
+    """Obtain a password without ever putting it on the command line.
+
+    THREE WAYS IN, AND WHY THERE ARE THREE
+    A password passed as an argument is visible in `ps` output and in shell
+    history, so `--password` does not exist and must not be added.
+
+    But interactive-only was wrong in a different way: the documented Docker setup
+    step — `docker compose exec app python -m server.cli create-user admin admin` —
+    has no TTY in most contexts and died with an EOFError out of getpass. It is the
+    first command a new user runs, and it could not work.
+
+    So a TTY gets a prompt, a pipe gets read, and `--generate` mints a strong one
+    and prints it to stderr — which is the right default for bootstrapping a first
+    admin, and keeps the secret out of stdout if the caller is capturing it.
+    """
+    if generate:
+        pw = secrets.token_urlsafe(18)
+        print(f"generated password: {pw}", file=sys.stderr)
+        print("store it now — it is not recoverable.", file=sys.stderr)
+        return pw
+
+    if sys.stdin.isatty():
+        pw = getpass.getpass("password: ")
+        if pw != getpass.getpass("confirm: "):
+            print("passwords do not match", file=sys.stderr)
+            return None
+        return pw
+
+    # Piped: echo 'secret' | docker compose exec -T app ... create-user admin admin
+    pw = sys.stdin.readline().rstrip("\n")
+    if not pw:
+        print("no password supplied. Run interactively, pipe one in, or pass "
+              "--generate.", file=sys.stderr)
+        return None
+    return pw
+
+
 def cmd_create_user(args: argparse.Namespace) -> int:
-    pw = getpass.getpass("password: ")
-    if pw != getpass.getpass("confirm: "):
-        print("passwords do not match", file=sys.stderr)
+    pw = _read_password(args.generate)
+    if pw is None:
         return 1
     try:
         uid = auth.create_user(args.username, pw, args.role)
@@ -171,6 +212,10 @@ def main(argv=None) -> int:
     cu = sub.add_parser("create-user")
     cu.add_argument("username")
     cu.add_argument("role", choices=sorted(auth.ROLE_RANK), nargs="?", default="viewer")
+    cu.add_argument("--generate", action="store_true",
+                    help="mint a strong password and print it to stderr, instead of "
+                         "prompting. Use this for the first admin in a container, "
+                         "where there is no TTY.")
     cu.set_defaults(fn=cmd_create_user)
 
     al = sub.add_parser("add-landscape")
