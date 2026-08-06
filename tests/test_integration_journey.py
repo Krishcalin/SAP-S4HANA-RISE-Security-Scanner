@@ -214,6 +214,48 @@ def test_notifications_fire_for_new_criticals_and_regressions(database, landscap
 #  Saved views and bulk actions                                               #
 # --------------------------------------------------------------------------- #
 
+@pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")
+def test_crq_is_computed_and_priced_on_the_complete_finding_set(database, landscape,
+                                                                system):
+    """The one way to make this number dishonest is to price it on a filtered
+    list, so the input count is stored and asserted against the scan."""
+    from server import crq
+
+    result = _scan(database, landscape, system)
+    row = crq.latest([system])
+    assert row is not None, "no CRQ result was stored"
+    assert row["input_finding_count"] == result["findings"], (
+        "CRQ was priced on a different number of findings than the scan produced — "
+        "a display filter must never be able to move the currency figure")
+
+    assert row["detail"]["engine_found"] is True, (
+        "no Monte-Carlo engine was found, so the headline differentiator produced "
+        "no number at all")
+    assert row["ale_p90"] and row["ale_p90"] > 0
+    assert row["ale_p50"] <= row["ale_p90"], "median exceeds the 90th percentile"
+
+    # Residual after remediation must be non-zero: "fix everything and your risk
+    # is exactly $0" is not a claim any risk function accepts.
+    residual = (row["detail"].get("target_portfolio") or {}).get("ale_p90")
+    assert residual and float(residual) > 0, \
+        "the model reported zero residual risk after remediation"
+
+    scenarios = crq.scenarios_for_run(row["run_id"])
+    assert len(scenarios) == 5, f"expected 5 scoped SAP scenarios, got {len(scenarios)}"
+    assert all(s["ale_p90"] is not None for s in scenarios)
+
+
+@pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")
+def test_the_unrouted_count_is_carried_not_hidden(database, landscape, system):
+    """Disclosing what the model did NOT price is what separates this from vendor
+    hand-waving, and it is the first thing a risk function tests."""
+    from server import crq
+    _scan(database, landscape, system)
+    row = crq.latest([system])
+    assert row["unrouted_count"] is not None, "the unrouted count was not stored"
+    assert row["unrouted_count"] >= 0
+
+
 def test_a_saved_view_stores_filters_and_can_never_widen_access(database, landscape,
                                                                 system):
     """The security property of the whole saved-view feature: it stores FILTERS,

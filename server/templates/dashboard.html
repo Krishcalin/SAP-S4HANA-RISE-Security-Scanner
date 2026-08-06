@@ -58,6 +58,42 @@
   </div>
 </div>
 
+{# The currency figure belongs beside the finding counts rather than behind a
+   flag — neither incumbent produces one at all. #}
+{% if crq and crq.ale_p90 %}
+<div class="grid g2" style="margin-top:14px">
+  <div class="card">
+    <h3>Annualised loss exposure</h3>
+    <div style="display:flex;align-items:baseline;gap:18px;flex-wrap:wrap">
+      <div class="kpi">{{ money(crq.ale_p90) }}</div>
+      <div class="muted small">
+        90th percentile · median {{ money(crq.ale_p50) }}<br>
+        <span style="color:var(--ok)">{{ money(crq.detail.reducible_ale_p90) }}</span>
+        reducible by remediation
+      </div>
+    </div>
+    <div class="kpi-note">
+      Priced on all {{ crq.input_finding_count }} findings — a display filter cannot
+      move this number.
+      {% if crq.unrouted_count %}{{ crq.unrouted_count }} unattributed and disclosed.{% endif %}
+      <a href="/risk">Breakdown &rarr;</a>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Where the exposure sits</h3>
+    <table>
+      {% for s in crq_scenarios[:5] %}
+      <tr>
+        <td class="mono small" style="width:104px">{{ s.scenario_id }}</td>
+        <td class="small muted">{{ (s.detail.name or '')[:42] }}</td>
+        <td class="right mono">{{ money(s.ale_p90) }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endif %}
+
 <div class="grid g2" style="margin-top:14px">
   <div class="card">
     <h3>By severity</h3>

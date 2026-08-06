@@ -157,6 +157,23 @@ at startup rather than silently run on a value published in this repo.
     `category` **byte-for-byte**.
   - **Loss ranges are modelled estimates from public benchmarks, not measurements** — cite real
     sources in the catalog's `sources[]`, and keep the report's "modelled estimate" disclaimer.
+- **`modules/crq_engine.py`** — the FAIR Monte-Carlo engine, bundled. It exists because the
+  sibling repo `fair_adapter` looks for is not present in a normal checkout, so `--crq` silently
+  degraded to "inputs exported, not simulated" and produced no number at all. It is **last** in
+  `_ENGINE_CANDIDATES`, so `--crq-engine`, `CRQ_ENGINE` and an external sibling engine all still
+  take precedence.
+  - ⚠️ **The vulnerability function is not a free choice.** `data/fair_scenarios.json` documents
+    it — `clamp((TC - RS + 50) / 100, 0, 1)` — and its resistance-strength bands are calibrated
+    to it (`hardened` ~0.3–0.4, `CRITICAL` ~0.8–0.85 against TC ~50–72). A plain `TC > RS`
+    comparison is defensible FAIR theory and **wrong for this catalogue**: the hardened band is
+    barely reachable, vulnerability collapses to ~0, and the model claims remediating everything
+    drives residual risk to exactly $0. If the function ever changes, **re-calibrate the bands in
+    the same commit** — `tests/test_crq_engine.py` fails if they drift apart.
+  - Other invariants with tests: frequency is Poisson (a 0.3 expected frequency means "usually
+    zero, sometimes one", not "0.3 of an incident"), secondary loss is **conditional** on
+    escalation rather than applied to every event, and identical input yields an identical figure
+    — a currency number that drifts between runs is indistinguishable from a real change in
+    exposure and makes the trend chart worthless.
 
 ### The server tier (`server/`)
 
@@ -169,6 +186,7 @@ at startup rather than silently run on a value published in this repo.
 | `queries.py` | Every read of findings/runs/systems, plus assignment, bulk actions and saved views. HTML pages and the JSON API call the same functions — that is what keeps "everything the console shows is in the API" structural. |
 | `enrich.py` | Priority tier, owning team, **remediation owner** and SLA window. The team map is a prefix table; the ownership map is deployment-mode dependent. |
 | `analytics.py` | The mitigation journey: MTTR, burndown, aging, backlog trajectory, team and domain scorecards. |
+| `crq.py` | FAIR quantification per run — portfolio ALE, the 5 scoped scenarios, the unrouted count, and system criticality as a calibration input. |
 | `coverage.py` | The per-upload manifest. Module→source mapping is **derived from source at import**, never hand-maintained, so it cannot drift. |
 | `ingest.py` | upload → parse → scan → enrich → store → diff → notify. Holds `store_run` (the journey), `_rebase` and `queue_notifications`. |
 | `app.py` | FastAPI. Uploads, cancellable background scans, saved-view redirects, `/health`. |
@@ -315,6 +333,12 @@ at startup rather than silently run on a value published in this repo.
 - **The Phase-1 exit criterion is a test, and it must stay green:** scan the same bundle twice
   and get `new 0 · persisting N · resolved 0`. If it ever fails, finding identity has broken
   and every re-upload will report the whole estate as newly broken.
+- **CI has three jobs, and the skip guard is load-bearing.** `cli` (3.8–3.12, pytest only, so a
+  third-party import into the scanner core fails the build), `purity` (walks the AST of
+  `modules/` and rejects any non-stdlib import), and `server` (PostgreSQL 16, applies the schema
+  **twice** because idempotency is the upgrade path and it has broken once). The `server` job
+  **fails if more than one test skips** — before that guard, `pytest -q` ran the DB-backed
+  suites, they skipped for want of `DB_DSN`, and the job went green having verified nothing.
 - **`tests/test_identity.py` runs against the REAL `sample_data`, not fixtures**, and asserts
   the `check_id` collisions still exist before asserting they resolve. If the sample data ever
   stops colliding, the test fails loudly rather than silently proving less.

@@ -1,0 +1,219 @@
+"""
+Cyber-risk quantification: findings as a currency figure.
+
+WHY THIS IS ON THE FRONT PAGE AND NOT BEHIND A FLAG
+-----------------------------------------------------
+Research across both incumbents found no monetary risk output of any kind — one
+carries a prose `business_impact` field, the other's only money artifact computes
+the ROI of buying the tool. This is the cleanest open lane the product has, and it
+already existed here as a `--crq` flag on a report generator.
+
+FOUR DISCIPLINES THAT MUST SURVIVE CONTACT WITH THE CONSOLE
+------------------------------------------------------------
+These are inherited from `modules/fair_adapter.py`, are what make the number
+defensible, and are exactly what a buyer with a risk function will probe:
+
+1. **A finding is not a risk.** Findings are evidence that shifts a scenario's
+   factors. No finding gets its own ALE, and ALEs are never summed per finding.
+
+2. **The portfolio is an element-wise Monte-Carlo sum, never a sum of
+   percentiles.** Adding five scenarios' P90s produces a number that is not any
+   percentile of anything.
+
+3. **A display filter must never move the figure.** FAIR runs on the COMPLETE
+   finding set. If filtering the console to CRITICAL changed the dollar number,
+   the number would be a rendering artifact rather than a measurement — so the
+   input count is stored alongside the result and asserted in tests.
+
+4. **Disclose what was not priced.** The `unrouted` count is carried to the UI.
+   Findings that could not be attributed to a specific loss scenario are folded
+   conservatively into SAP-PRIV-03 and may overstate it; hiding that would be the
+   vendor hand-waving this feature exists to beat.
+
+SYSTEM CRITICALITY
+------------------
+A production ledger and a sandbox must not carry the same exposure band. The
+console captures per-system criticality, which CVSS structurally cannot express —
+the incumbent concedes as much ("not all systems are the same"). It is applied as
+a **calibration input**, i.e. by selecting a band, never by multiplying a score.
+"""
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict, List, Optional, Sequence
+
+from psycopg.types.json import Jsonb
+
+from server import db
+
+log = logging.getLogger(__name__)
+
+#: Criticality -> revenue-at-risk weight. Selects a band; does NOT scale a score.
+#: A landscape whose scanned systems are all sandboxes should not report the same
+#: loss exposure as one centred on a production ledger.
+CRITICALITY_WEIGHT: Dict[str, float] = {
+    "critical": 1.0,
+    "high": 0.6,
+    "medium": 0.3,
+    "low": 0.1,
+}
+
+
+def landscape_exposure_weight(conn, landscape_id: int) -> float:
+    """The heaviest criticality among the landscape's systems.
+
+    MAX rather than mean: a landscape containing one production ledger is exposed
+    to a production-ledger loss, and averaging it against four sandboxes would
+    quietly discount the only system that matters.
+    """
+    row = conn.execute(
+        "SELECT criticality, count(*) AS n FROM sap_system "
+        "WHERE landscape_id = %s GROUP BY criticality", (landscape_id,)).fetchall()
+    if not row:
+        return CRITICALITY_WEIGHT["medium"]
+    return max(CRITICALITY_WEIGHT.get(r["criticality"], 0.3) for r in row)
+
+
+def compute_and_store(conn, run_id: int, landscape_id: int,
+                      findings: List[Dict[str, Any]],
+                      enrichment: Optional[Dict[int, Dict[str, Any]]] = None,
+                      revenue: Optional[float] = None,
+                      industry: Optional[str] = None,
+                      simulations: int = 10000) -> Dict[str, Any]:
+    """Run FAIR over a scan's findings and persist the result.
+
+    `findings` MUST be the complete, unfiltered set. Passing a filtered list here
+    is the one way to make this number dishonest, so the count that went in is
+    stored on every row.
+
+    Degrades rather than fails: if the adapter or the Monte-Carlo engine is
+    unavailable, the run still completes and the console shows that CRQ did not
+    compute — a scan is not worth losing over a chart.
+    """
+    try:
+        from modules.fair_adapter import run as fair_run
+    except Exception:                                    # noqa: BLE001
+        log.exception("FAIR adapter unavailable")
+        return {"computed": False, "reason": "fair adapter not importable"}
+
+    # The prioritiser's own exposed/exploited flags are what calibrate contact
+    # frequency and probability of action, so CRQ needs the same PriorityResult
+    # objects the console stores — not a re-derivation.
+    try:
+        from modules.risk_prioritizer import prioritize
+        priorities = prioritize(findings)
+    except Exception:                                    # noqa: BLE001
+        log.exception("prioritiser unavailable; CRQ cannot calibrate")
+        return {"computed": False, "reason": "prioritiser not available"}
+
+    weight = landscape_exposure_weight(conn, landscape_id)
+    overrides: Dict[str, Any] = {}
+    if revenue:
+        overrides["annual_revenue"] = float(revenue) * weight
+    if industry:
+        overrides["industry"] = industry
+
+    try:
+        result = fair_run(findings, priorities, org_overrides=overrides or None,
+                          simulations=simulations)
+    except Exception:                                    # noqa: BLE001
+        log.exception("FAIR run failed")
+        return {"computed": False, "reason": "FAIR run raised"}
+
+    summary = result.get("summary")
+    unrouted = int(result.get("unrouted") or 0)
+    input_count = len(findings)
+
+    if not summary:
+        # No Monte-Carlo engine. Still record that CRQ was attempted and how many
+        # findings went unpriced — silence would read as "nothing to report".
+        conn.execute(
+            "INSERT INTO crq_result (scan_run_id, scenario_id, unrouted_count, "
+            "input_finding_count, detail) VALUES (%s,NULL,%s,%s,%s)",
+            (run_id, unrouted, input_count,
+             Jsonb({"engine_found": False,
+                    "reason": "Monte-Carlo engine not locatable; scenario inputs "
+                              "were built but not simulated",
+                    "exposure_weight": weight})))
+        return {"computed": False, "engine_found": False, "unrouted": unrouted,
+                "reason": "Monte-Carlo engine not locatable"}
+
+    portfolio = summary.get("portfolio") or {}
+    conn.execute(
+        """
+        INSERT INTO crq_result (scan_run_id, scenario_id, ale_p10, ale_p50, ale_p90,
+                                ale_mean, unrouted_count, input_finding_count, detail)
+        VALUES (%s, NULL, %s, %s, %s, %s, %s, %s, %s)
+        """,
+        (run_id, portfolio.get("ale_p10"), portfolio.get("ale_p50"),
+         portfolio.get("ale_p90"), portfolio.get("mean_ale"), unrouted, input_count,
+         Jsonb({"engine_found": True,
+                "simulations": summary.get("simulations"),
+                "organization": summary.get("organization"),
+                "exposure_weight": weight,
+                "target_portfolio": summary.get("target_portfolio"),
+                "reducible_ale_p90": summary.get("reducible_ale_p90"),
+                "reducible_ale_mean": summary.get("reducible_ale_mean"),
+                "detection": summary.get("detection")})))
+
+    for sc in summary.get("scenarios") or []:
+        conn.execute(
+            """
+            INSERT INTO crq_result (scan_run_id, scenario_id, ale_p10, ale_p50,
+                                    ale_p90, ale_mean, unrouted_count,
+                                    input_finding_count, detail)
+            VALUES (%s,%s,%s,%s,%s,%s,0,%s,%s)
+            """,
+            (run_id, sc.get("id"), sc.get("ale_p10"), sc.get("ale_p50"),
+             sc.get("ale_p90"), sc.get("mean_ale"), input_count,
+             Jsonb({"name": sc.get("name"),
+                    "finding_count": sc.get("finding_count"),
+                    "worst_severity": sc.get("worst_severity"),
+                    "exposed": sc.get("exposed"),
+                    "exploited": sc.get("exploited")})))
+
+    return {"computed": True, "engine_found": True, "unrouted": unrouted,
+            "input_finding_count": input_count,
+            "portfolio": portfolio,
+            "reducible_ale_p90": summary.get("reducible_ale_p90"),
+            "scenarios": len(summary.get("scenarios") or [])}
+
+
+# --------------------------------------------------------------------------- #
+#  Reads                                                                      #
+# --------------------------------------------------------------------------- #
+
+def latest(scope: Optional[Sequence[int]] = None) -> Optional[Dict[str, Any]]:
+    """Portfolio CRQ from the most recent completed run in scope."""
+    clause, params = db.scope_clause(scope, "r.system_id")
+    return db.one(
+        f"""
+        SELECT c.*, r.started_at, r.id AS run_id, s.sid, s.client
+        FROM crq_result c
+        JOIN scan_run r ON r.id = c.scan_run_id
+        LEFT JOIN sap_system s ON s.id = r.system_id
+        WHERE c.scenario_id IS NULL AND r.status = 'complete' AND {clause}
+        ORDER BY r.started_at DESC LIMIT 1
+        """, params)
+
+
+def scenarios_for_run(run_id: int) -> List[Dict[str, Any]]:
+    return db.query(
+        "SELECT * FROM crq_result WHERE scan_run_id = %s AND scenario_id IS NOT NULL "
+        "ORDER BY ale_p90 DESC NULLS LAST", (run_id,))
+
+
+def trend(scope: Optional[Sequence[int]] = None, limit: int = 12) -> List[Dict[str, Any]]:
+    """Portfolio ALE per run — does the money figure move as findings are fixed?"""
+    clause, params = db.scope_clause(scope, "r.system_id")
+    rows = db.query(
+        f"""
+        SELECT c.ale_p50, c.ale_p90, c.ale_mean, c.unrouted_count,
+               r.id AS run_id, r.started_at
+        FROM crq_result c
+        JOIN scan_run r ON r.id = c.scan_run_id
+        WHERE c.scenario_id IS NULL AND r.status = 'complete'
+          AND c.ale_p90 IS NOT NULL AND {clause}
+        ORDER BY r.started_at DESC LIMIT %s
+        """, list(params) + [limit])
+    return list(reversed(rows))

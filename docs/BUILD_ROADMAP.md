@@ -161,22 +161,92 @@ check the scanner emits routes to a team, because a prefix table mis-matches qui
 
 ---
 
-## Phase 3 — FAIR on the front page
+## Phase 3 — FAIR on the front page ✅ **COMPLETE**
 
-**Depends on:** Phase 2. **The cleanest open lane** — neither incumbent has any monetary output.
+**The cleanest open lane** — neither incumbent has any monetary output at all.
 
-- [ ] Wire `fair_adapter.py` into ingest; persist to `crq_result`
-- [ ] Portfolio ALE on the landing dashboard beside the finding counts
-- [ ] The 5 scoped scenarios as a board view
-- [ ] Carry the **unrouted count** into the UI — disclosing what the model did not price is what
-      separates this from hand-waving, and a buyer with a risk function will test it
-- [ ] Add system `criticality` as a calibration input
-- [ ] Differentiate remediation effort for `ticket_to_sap` findings — time-to-fix depends on
-      SAP's queue, not the customer's
+| Component | File | Status |
+|---|---|---|
+| FAIR run per scan, persisted to `crq_result` | `server/crq.py` | ✅ |
+| **The Monte-Carlo engine itself** | `modules/crq_engine.py` | ✅ (see below) |
+| `/risk` board view — portfolio, scenarios, exposure over time | `templates/risk.html` | ✅ |
+| ALE tile on the landing dashboard | `templates/dashboard.html` | ✅ |
+| Unrouted count carried into the UI | both views | ✅ |
+| System criticality as a calibration input | `crq.landscape_exposure_weight` | ✅ |
+| `/api/risk` | `server/app.py` | ✅ |
 
-**Exit:** the dashboard shows a currency figure that survives a hostile question about method.
-Preserve both disciplines already in the code: FAIR runs on the **unfiltered** finding set, and
-portfolio ALE is an **element-wise Monte-Carlo sum**, never a sum of percentiles.
+### The engine did not exist
+
+`fair_adapter.py` builds calibrated scenario inputs and hands them to an engine it locates on
+disk — historically a sibling repository. **That repository is not present and never has been**,
+so `--crq` had always degraded to *"scenario inputs exported, not simulated"*. The product's
+headline differentiator produced no number.
+
+`modules/crq_engine.py` is that engine: Open FAIR, BetaPERT three-point sampling, Poisson event
+counts, conditional secondary loss, seeded for reproducibility. Standard library only, because
+`modules/` is stdlib-only by charter and CI now enforces it. It is **last** in
+`_ENGINE_CANDIDATES`, so an explicit `--crq-engine` path, `CRQ_ENGINE`, or an external sibling
+engine all still win — bundling must not silently change results for anyone who already has one.
+
+### The bug that made the number wrong
+
+First implementation resolved vulnerability as a plain `TC > RS` comparison — defensible FAIR
+theory in the abstract, and **measurably wrong for this catalogue**. `data/fair_scenarios.json`
+documents the function it was calibrated against:
+
+```
+Vulnerability = clamp((TC - RS + 50) / 100, 0, 1)
+```
+
+with bands tuned so `hardened` lands ~0.3–0.4 and `CRITICAL` ~0.8–0.85 against threat
+capabilities of ~50–72. Under binary comparison the hardened band (68/82/95) is barely reachable
+by threat capability (55/72/85), so vulnerability collapsed to ~0 and the model reported that
+**remediating everything drives residual risk to exactly $0** — the first number a risk
+professional would challenge. Corrected, and pinned by tests that fail if the engine and the
+bands ever drift apart.
+
+### Exit criterion — **PASSED**
+
+Measured on `sample_data`, 10,000 simulations:
+
+```
+portfolio        P50 $27.2M    P90 $80.8M
+reducible                      $73.0M
+residual                        $7.8M    (~10% — non-zero, as it must be)
+priced on        296 findings (the complete set)   unrouted 0
+
+SAP-RCE-01   $67.6M   18 findings   exploited · exposed
+SAP-DATA-04  $22.8M   50 findings   exposed
+SAP-PRIV-03  $21.8M  124 findings   exposed
+SAP-INTF-05  $10.9M   67 findings   exposed
+SAP-FRAUD-02  $1.9M   24 findings   exposed
+```
+
+Disciplines preserved and asserted in tests: FAIR runs on the **unfiltered** finding set (the
+input count is stored on every row and checked against the scan), the portfolio is an
+**element-wise Monte-Carlo sum** rather than a sum of percentiles, the **unrouted count is
+disclosed**, and identical input yields an identical figure — a currency number that drifts
+between runs is indistinguishable from a real change in exposure.
+
+---
+
+## Continuous integration ✅ **COMPLETE**
+
+Three jobs in `.github/workflows/tests.yml`:
+
+- **`cli`** — Python 3.8–3.12, installs *only* pytest. If anyone imports a third-party package
+  into the scanner core it fails here rather than at a customer who installed nothing.
+- **`purity`** — walks the AST of `modules/` and `sap_scanner.py` and fails on any non-stdlib
+  import. "`modules/` stays stdlib-only" lived only in CLAUDE.md, and a rule that lives only in
+  a document erodes.
+- **`server`** — PostgreSQL 16 service container, applies `schema.sql` **twice** (idempotency is
+  the documented upgrade path, and it has broken once), runs the full suite, and renders every
+  console page end to end.
+
+**The load-bearing part is the skip guard.** Before it, `pytest -q` ran the DB-backed suites,
+they skipped for want of `DB_DSN`, and the job went green having verified none of the journey,
+none of the analytics and none of the HTTP layer. That is how a bug breaking *every page in the
+console* reached main. Exactly one skip is expected and accounted for; more fails the build.
 
 ---
 

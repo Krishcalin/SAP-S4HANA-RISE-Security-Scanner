@@ -50,6 +50,12 @@ _ENGINE_CANDIDATES = [
     / "Cyber-Risk-Quantification" / "Cyber-Risk-Quantification" / "crq_engine.py",
     Path(__file__).resolve().parent.parent.parent
     / "Cyber-Risk-Quantification" / "crq_engine.py",
+    # Bundled engine, deliberately LAST. An explicit --crq-engine path, the
+    # CRQ_ENGINE environment variable and an external sibling repo all still win,
+    # so shipping this cannot silently change results for anyone who already had
+    # an engine. It exists because none of the paths above resolve in a normal
+    # checkout, which meant --crq produced no number at all.
+    Path(__file__).resolve().parent / "crq_engine.py",
 ]
 
 

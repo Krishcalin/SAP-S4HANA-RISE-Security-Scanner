@@ -527,6 +527,12 @@ def scan_directory(data_dir: Path, landscape_id: int, system_id: Optional[int],
                                            findings, default_sid)
             queue_notifications(conn, run_id, landscape_id, diff)
 
+            # CRQ runs on the COMPLETE finding set — the same list the auditors
+            # produced, before any display filter exists. That is what stops a
+            # console filter from moving the currency figure.
+            from server.crq import compute_and_store
+            crq = compute_and_store(conn, run_id, landscape_id, findings, enrichment)
+
             conn.execute(
                 "UPDATE scan_run SET status = 'complete', finished_at = now(), "
                 "coverage = %s, module_status = %s WHERE id = %s",
@@ -537,7 +543,7 @@ def scan_directory(data_dir: Path, landscape_id: int, system_id: Optional[int],
 
             return {"run_id": run_id, "findings": len(findings), "nodes": node_count,
                     "diff": diff.as_counts(), "coverage": manifest,
-                    "module_status": module_status}
+                    "module_status": module_status, "crq": crq}
 
         except ScanCancelled as exc:
             conn.rollback()

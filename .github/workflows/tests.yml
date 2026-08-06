@@ -6,8 +6,20 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  # ------------------------------------------------------------------ #
+  #  CLI — the standard-library half of the product                    #
+  # ------------------------------------------------------------------ #
+  # The charter changed for `server/`, NOT for `modules/` and
+  # `sap_scanner.py`. This job installs nothing but pytest, so if anyone
+  # imports a third-party package into the scanner core it fails here
+  # rather than at a customer who pip-installed nothing.
+  cli:
+    name: cli (stdlib only, Python ${{ matrix.python-version }})
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -21,13 +33,200 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install test dependencies
+      - name: Install test dependencies (pytest ONLY — this is the point of the job)
         run: python -m pip install --upgrade pip pytest
 
-      - name: Run unit tests
-        run: pytest -q
+      - name: Byte-compile the scanner core
+        run: python -m compileall modules sap_scanner.py -q
+
+      # The DB-backed suites skip without DB_DSN, which is correct here — this
+      # job has no database. They are covered by the `server` job below, and
+      # that job FAILS if they skip, so the coverage cannot quietly vanish.
+      - name: Run scanner tests
+        run: |
+          pytest -q \
+            --ignore=tests/test_integration_ingest.py \
+            --ignore=tests/test_integration_journey.py \
+            --ignore=tests/test_http_console.py
 
       - name: Smoke-run the scanner (all modules over sample_data)
         env:
           PYTHONIOENCODING: utf-8
         run: python sap_scanner.py --data-dir ./sample_data --output /tmp/sap_report.html
+
+  # ------------------------------------------------------------------ #
+  #  Stdlib purity — enforce the charter boundary mechanically         #
+  # ------------------------------------------------------------------ #
+  # "modules/ stays stdlib-only" is written in CLAUDE.md, and a rule that
+  # lives only in a document is a rule that erodes. This makes it fail a build.
+  purity:
+    name: modules/ imports nothing third-party
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check every import in modules/ and sap_scanner.py
+        run: |
+          python - <<'PY'
+          import ast, sys
+          from pathlib import Path
+
+          allowed = set(sys.stdlib_module_names) | {"modules", "server", "data"}
+          offenders = []
+
+          for path in sorted(Path("modules").glob("*.py")) + [Path("sap_scanner.py")]:
+              tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+              for node in ast.walk(tree):
+                  if isinstance(node, ast.Import):
+                      names = [a.name for a in node.names]
+                  elif isinstance(node, ast.ImportFrom):
+                      # level > 0 is a relative import, always local
+                      names = [node.module or ""] if not node.level else []
+                  else:
+                      continue
+                  for name in names:
+                      root = name.split(".")[0]
+                      if root and root not in allowed:
+                          offenders.append(f"{path}:{node.lineno}  {name}")
+
+          if offenders:
+              print("::error::modules/ and sap_scanner.py must import only the "
+                    "standard library. The charter change applies to server/ ONLY.")
+              for o in offenders:
+                  print("  ", o)
+              sys.exit(1)
+          print("clean: the scanner core imports only the standard library")
+          PY
+
+  # ------------------------------------------------------------------ #
+  #  Server — needs a real PostgreSQL                                  #
+  # ------------------------------------------------------------------ #
+  server:
+    name: server (PostgreSQL 16)
+    runs-on: ubuntu-22.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sapsec
+          POSTGRES_PASSWORD: sapsec
+          POSTGRES_DB: sapsec
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sapsec -d sapsec"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      DB_DSN: postgresql://sapsec:sapsec@localhost:5432/sapsec
+      SESSION_SECRET: ci-session-secret-not-a-real-deployment-value-0123456789
+      PYTHONIOENCODING: utf-8
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      # `httpx` is TEST tooling, not a runtime dependency, which is why it is
+      # here and not in requirements.txt: starlette's TestClient refuses to
+      # construct without it, and tests/test_http_console.py goes through it.
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest httpx
+
+      - name: Byte-compile the server (catches syntax errors in files tests skip)
+        run: python -m compileall server -q
+
+      - name: Verify PostgreSQL is actually reachable
+        run: |
+          pg_isready -d "$DB_DSN" \
+            || { echo "::error::PostgreSQL unreachable — every DB-backed test would SKIP and the job would still pass"; exit 1; }
+          psql "$DB_DSN" -v ON_ERROR_STOP=1 -c 'SELECT version();'
+
+      # The schema is the documented upgrade path: an existing deployment
+      # upgrades by re-running this file. It has already broken once (a
+      # CREATE OR REPLACE VIEW over SELECT f.* could not survive an ALTER
+      # TABLE), so applying it TWICE is the regression test.
+      - name: Apply the schema twice — idempotency is the upgrade path
+        run: |
+          python -m server.cli init-db
+          python -m server.cli init-db
+
+      - name: Run the full test suite
+        run: |
+          set -o pipefail
+          pytest -q -W ignore::DeprecationWarning | tee /tmp/pytest.out
+
+      # THE GUARD. Before this existed, `pytest -q` ran the DB-backed suites,
+      # they skipped for want of DB_DSN, and the job went green having verified
+      # none of the journey, none of the analytics and none of the HTTP layer.
+      # That is how a bug that broke EVERY page in the console reached main.
+      - name: Fail if the database-backed tests skipped
+        run: |
+          for suite in test_integration_ingest test_integration_journey test_http_console; do
+            n=$(pytest --collect-only -q "tests/$suite.py" 2>/dev/null | tail -1)
+            echo "$suite: $n"
+          done
+          if grep -qE '[0-9]+ skipped' /tmp/pytest.out; then
+            skipped=$(grep -oE '[0-9]+ skipped' /tmp/pytest.out | head -1)
+            # One skip is expected and accounted for (a scanner test that needs
+            # an optional sibling engine). More than that means the DB-backed
+            # suites are silently not running.
+            count=${skipped%% *}
+            if [ "$count" -gt 1 ]; then
+              echo "::error::$skipped — the DB-backed suites are not executing. A suite that silently skips is worse than one that does not exist, because it LOOKS verified."
+              exit 1
+            fi
+          fi
+
+      - name: Prove the console actually renders end to end
+        run: |
+          python - <<'PY'
+          import sys; sys.path.insert(0, ".")
+          from pathlib import Path
+          from fastapi.testclient import TestClient
+          from server import app as appmod, auth, db, ingest
+
+          db.init_schema()
+          auth.create_user("ci", "ci-password-1234", "admin")
+
+          land = db.one("INSERT INTO landscape (name, deployment_mode) "
+                        "VALUES ('ci','rise_pce') RETURNING id")["id"]
+          sysid = db.one("INSERT INTO sap_system (landscape_id, sid, client, tier) "
+                         "VALUES (%s,'PRD','100','prod') RETURNING id", (land,))["id"]
+          run = db.one("INSERT INTO scan_run (landscape_id, system_id, status) "
+                       "VALUES (%s,%s,'pending') RETURNING id", (land, sysid))["id"]
+          res = ingest.scan_directory(Path("sample_data"), land, sysid, run,
+                                      deployment_mode="rise_pce",
+                                      default_sid="PRD", default_client="100")
+          print(f"scanned: {res['findings']} findings, {res['nodes']} graph nodes")
+          assert res["findings"] > 0, "the CI scan produced no findings"
+
+          c = TestClient(appmod.app)
+          r = c.post("/login", data={"username": "ci", "password": "ci-password-1234",
+                                     "next": "/"}, follow_redirects=False)
+          assert r.status_code == 303, r.text[:300]
+
+          failed = []
+          for path in ("/", "/findings", "/trend", "/upload", "/findings?tier=P1",
+                       f"/runs/{run}", "/health", "/api/trend", "/api/findings"):
+              resp = c.get(path)
+              print(f"  {resp.status_code}  {path}")
+              if resp.status_code != 200:
+                  failed.append((path, resp.status_code, resp.text[:300]))
+          if failed:
+              print("::error::console pages did not render")
+              for f in failed:
+                  print("  ", f)
+              raise SystemExit(1)
+          print("console renders")
+          PY

@@ -31,13 +31,36 @@ from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile, 
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from server import analytics, auth, db, ingest, queries
+from server import analytics, auth, crq, db, ingest, queries
 from server.config import settings
 
 log = logging.getLogger(__name__)
 
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).with_name("templates")))
 SESSION_COOKIE = "sapsec_session"
+
+
+def _money(value: Any) -> str:
+    """Render a currency figure the way a board reads one.
+
+    Loss exposure spans several orders of magnitude across scenarios, and
+    "$1,240,000" next to "$8,300" is harder to compare at a glance than
+    "$1.24M" next to "$8.3K". `None` renders as an em dash rather than "$0" —
+    "not computed" and "zero risk" are very different claims.
+    """
+    if value is None:
+        return "—"
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return "—"
+    for limit, suffix in ((1e9, "B"), (1e6, "M"), (1e3, "K")):
+        if abs(n) >= limit:
+            return f"${n / limit:,.2f}{suffix}".replace(".00", "")
+    return f"${n:,.0f}"
+
+
+TEMPLATES.env.globals["money"] = _money
 
 app = FastAPI(title="SAP Security Platform", docs_url="/api/docs")
 
@@ -130,11 +153,14 @@ def logout(request: Request):
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, user: Dict[str, Any] = Depends(current_user)):
     scope = auth.scope_for(user)
+    latest_crq = crq.latest(scope)
     return TEMPLATES.TemplateResponse(request, "dashboard.html", {
         "user": user,
         "summary": queries.dashboard_summary(scope),
         "systems": queries.list_systems(scope),
         "recent_runs": queries.recent_runs(scope, limit=10),
+        "crq": latest_crq,
+        "crq_scenarios": crq.scenarios_for_run(latest_crq["run_id"]) if latest_crq else [],
     })
 
 
@@ -169,6 +195,32 @@ def trend_page(request: Request, user: Dict[str, Any] = Depends(current_user),
         "user": user, "days": days,
         "j": analytics.journey_summary(scope, days),
     })
+
+
+@app.get("/risk", response_class=HTMLResponse)
+def risk_page(request: Request, user: Dict[str, Any] = Depends(current_user)):
+    """Financial risk exposure — the board view.
+
+    Neither incumbent produces a currency figure at all, which makes this the
+    cleanest differentiated screen in the product.
+    """
+    scope = auth.scope_for(user)
+    latest = crq.latest(scope)
+    return TEMPLATES.TemplateResponse(request, "risk.html", {
+        "user": user,
+        "crq": latest,
+        "scenarios": crq.scenarios_for_run(latest["run_id"]) if latest else [],
+        "trend": crq.trend(scope),
+    })
+
+
+@app.get("/api/risk")
+def api_risk(user: Dict[str, Any] = Depends(current_user)):
+    scope = auth.scope_for(user)
+    latest = crq.latest(scope)
+    return {"portfolio": latest,
+            "scenarios": crq.scenarios_for_run(latest["run_id"]) if latest else [],
+            "trend": crq.trend(scope)}
 
 
 @app.get("/v/{slug}")

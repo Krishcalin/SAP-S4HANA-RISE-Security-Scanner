@@ -37,7 +37,7 @@ It runs in **two modes that share one scanner core**:
 - **Stable finding identity** — every finding is fingerprinted from the concrete SAP objects it names, so it matches itself across re-uploads. That is what makes remediation tracking, aging and MTTR possible rather than approximate.
 - **Risk-prioritized (P1–P4)** — ranked by severity × exploitability × exposure × privilege, with the contributing factors shown. Works on findings CVSS cannot score at all.
 - **Compliance mapping** — **ISO/IEC 27001:2022, NIST CSF 2.0, CIS Controls v8, TISAX/VDA ISA, SOC 2, EU GDPR**
-- **Cyber-risk quantification (FAIR)** *(optional `--crq`)* — a dollar-denominated Annualized Loss Exposure and loss-exceedance curve from a Monte-Carlo simulation, so the board sees financial risk rather than a severity count
+- **Cyber-risk quantification (FAIR)** — a dollar-denominated Annualised Loss Exposure and loss-exceedance curve from a bundled Monte-Carlo engine, so the board sees financial risk rather than a severity count. On the CLI via `--crq`; in the server it runs on **every** scan and lands on the dashboard. Priced on the complete, unfiltered finding set — the input count is stored beside the figure, so a display filter can never move the number — with the unattributed count disclosed rather than hidden.
 - **RISE-aware** — findings carry a remediation owner. In RISE a customer can *see* a bad profile parameter and cannot change it, so those findings render as a pre-drafted service request to SAP, never as "change this".
 - **Standards-aligned** — CIS SAP Benchmark, DSAG best-practice guide, SAP Security Baseline
 
@@ -1215,13 +1215,17 @@ SAP-S4HANA-RISE-Security-Scanner/
 │   ├── basis_job_command.py        # JOBCMD-*         Basis Jobs & External OS Commands
 │   ├── grc_access_control.py       # GRC-*            GRC Access Control (EAM/ARM/SoD governance)
 │   ├── role_governance.py          # RG-*             Role Design & Governance (SU24/profile-gen/derived drift)
-│   └── financial_controls.py       # FIN-*            Financial Controls (SOX ITGC / FI config)
+│   ├── financial_controls.py       # FIN-*            Financial Controls (SOX ITGC / FI config)
+│   └── crq_engine.py               # FAIR Monte-Carlo engine (stdlib; bundled, overridable)
 ├── server/                         # Client-server tier (FastAPI + PostgreSQL 16)
 │   ├── identity.py                 # Finding fingerprints + AffectedObject — the load-bearing module
-│   ├── schema.sql                  # 18 tables: systems, runs, findings, lifecycle, graph, CRQ, RBAC
+│   ├── schema.sql                  # 20 tables: systems, runs, findings, lifecycle, graph, CRQ, RBAC
 │   ├── db.py                       # psycopg pool, row scoping (one place), audit log
 │   ├── auth.py                     # PBKDF2 passwords, sessions, ranked roles, per-system scope
 │   ├── queries.py                  # The query layer — console and JSON API share it
+│   ├── enrich.py                   # Priority tier, owning team, RISE remediation owner, SLA
+│   ├── analytics.py                # MTTR, burndown, aging, trajectory, scorecards
+│   ├── crq.py                      # FAIR quantification per run (portfolio + 5 scenarios)
 │   ├── coverage.py                 # Per-upload coverage manifest (module→source map is derived)
 │   ├── ingest.py                   # upload → parse → scan → store → run-over-run diff
 │   ├── app.py                      # FastAPI routes, uploads, cancellable background scans

@@ -74,7 +74,8 @@ def seeded(client):
 
 
 @pytest.mark.parametrize("path", [
-    "/", "/findings", "/trend", "/upload",
+    "/", "/findings", "/trend", "/risk", "/upload",
+    "/api/risk",
     "/findings?tier=P1",
     "/findings?owner=ticket_to_sap",
     "/findings?overdue=true",
