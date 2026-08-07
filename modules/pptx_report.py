@@ -182,7 +182,7 @@ class PPTXReportGenerator:
     def _footer(self, s):
         W, H = self.w.W, self.w.H
         s.text(Inches(0.6), H - Inches(0.42), W - Inches(3.0), Inches(0.3),
-               [_p("PhalanxCyber  ·  SAP S/4HANA RISE Security Assessment  ·  CONFIDENTIAL", 8, color=MUTED)])
+               [_p("MonitorRisk  ·  SAP S/4HANA RISE Security Assessment  ·  CONFIDENTIAL", 8, color=MUTED)])
         s.text(W - Inches(1.4), H - Inches(0.42), Inches(0.8), Inches(0.3),
                [_p(str(self.pageno), 8, color=MUTED, align="r")])
 
@@ -191,7 +191,7 @@ class PPTXReportGenerator:
         """full=True → executive front matter + per-framework compliance mapping +
         one slide per finding (300+ slides). full=False → the short exec deck."""
         self.w = PPTXWriter(title="SAP S/4HANA RISE — Security Assessment",
-                            author="PhalanxCyber")
+                            author="MonitorRisk")
         self.pageno = 0
         # executive front matter
         self._slide_title()
@@ -236,11 +236,11 @@ class PPTXReportGenerator:
         W, H = self.w.W, self.w.H
         # logos on white top strip
         sap = str(self.assets / "sap-logo.png")
-        pha = str(self.assets / "phalanxcyber-logo.png")
+        brand = str(self.assets / "monitorrisk-logo.png")
         if Path(sap).exists():
             self._logo(s, sap, Inches(0.6), Inches(0.5), 0.55)
-        if Path(pha).exists():
-            self._logo(s, pha, 0, Inches(0.42), 0.72, right_x=W - Inches(0.6))
+        if Path(brand).exists():
+            self._logo(s, brand, 0, Inches(0.42), 0.72, right_x=W - Inches(0.6))
         # navy title band
         s.rect(0, Inches(1.7), W, Inches(3.5), fill=NAVY)
         s.rect(0, Inches(1.7), W, Inches(0.06), fill=ACCENT)
@@ -263,7 +263,7 @@ class PPTXReportGenerator:
                    "of exported configuration; no SAP system was connected to or modified.", 9,
                    color=MUTED)])
         s.text(Inches(0.6), H - Inches(0.55), W - Inches(1.2), Inches(0.35),
-               [_p("Prepared with PhalanxCyber — open-source security tooling · built for defenders", 9,
+               [_p("Prepared with MonitorRisk — SAP threat, vulnerability & GRC posture", 9,
                    b=True, color=ACCENT)])
 
     def _stat_card(self, s, x, y, w, h, top_color, big, big_color, label, sub=None):
@@ -476,7 +476,7 @@ class PPTXReportGenerator:
                    [_p(st, 14, color="E5ECF4", bullet=True)])
             y += Inches(0.52)
         s.text(Inches(0.9), H - Inches(0.9), W - Inches(1.8), Inches(0.5),
-               [_p("PhalanxCyber — open-source cybersecurity platform · built for defenders", 11,
+               [_p("MonitorRisk — SAP threat, vulnerability & GRC posture", 11,
                    b=True, color=LTBLUE)])
         s.text(Inches(0.9), H - Inches(0.6), W - Inches(1.8), Inches(0.4),
                [_p("For lawful, authorized security testing and educational use only.", 9,

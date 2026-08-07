@@ -43,7 +43,7 @@ Background and the full plan: [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md),
   (**CHECKS** → **RANK**) → a **REPORT** is written. When you add a module, refresh
   `docs/banner.svg`'s module/check counts too.
 - **Reports** (`--format html|pdf|pptx|both|all`, `--pptx-mode full|summary`):
-  `report_generator.py` (light-themed HTML dashboard, PhalanxCyber + SAP branding),
+  `report_generator.py` (light-themed HTML dashboard, MonitorRisk + SAP branding),
   `pdf_report.py` (multi-page hand-over PDF on the stdlib `pdf_writer.py` engine), and
   `pptx_report.py` (PowerPoint deck on the stdlib `pptx_writer.py` OOXML engine — one slide
   per finding in `full` mode). **All three engines are pure standard library** — do not add
@@ -129,9 +129,12 @@ Two places consume it differently, and the difference is forced by contrast:
   purpose — see the comment in `base.html`; it mirrors the stylesheet, where `:root` is
   dark and only `prefers-color-scheme: light` overrides.
 
-**Not rebranded:** the CLI's HTML/PDF/PPTX reports carry a different brand,
-`PhalanxCyber`, with its own logo art in `assets/` embedded as data URIs. That is a
-separate decision from the console name and was left alone.
+**One brand everywhere, since 2026-08-07.** The CLI's HTML/PDF/PPTX reports used to
+carry a different vendor brand (`PhalanxCyber`) while the console said MonitorRisk —
+customer-visible, in the deliverable the customer keeps. They now embed
+`assets/monitorrisk-logo.png`, the same transparent lockup the console serves. The
+rounded tile and drop shadow went with the old logo: that art carried its own dark
+backdrop and the new art does not, so the frame would have framed nothing.
 
 **Passwords never come from argv** — an argument is visible in `ps` and in shell history, so
 `--password` does not exist and must not be added. `_read_password` takes a TTY prompt, a pipe,

@@ -899,7 +899,7 @@ Choose the output with `--format html` (default), `pdf`, `pptx`, `both` (html+pd
 
 | Format | Best for | Contents |
 |--------|----------|----------|
-| **HTML** | Interactive triage | Clean, light-themed dashboard (PhalanxCyber + SAP branding) with an overall risk score, the P1–P4 priority queue, severity/category breakdown, a compliance-mapping panel, a live severity filter, and collapsible findings — each with its detailed risk narrative and step-by-step remediation. Single self-contained file (logos embedded as data URIs). |
+| **HTML** | Interactive triage | Clean, light-themed dashboard (MonitorRisk + SAP branding) with an overall risk score, the P1–P4 priority queue, severity/category breakdown, a compliance-mapping panel, a live severity filter, and collapsible findings — each with its detailed risk narrative and step-by-step remediation. Single self-contained file (logos embedded as data URIs). |
 | **PDF** | Formal hand-over to the SAP Basis / security team | A multi-page assessment report ordered **cover → risk-priority queue (P1–P4) → findings-by-area → compliance mapping → per-finding detail pages** (fix-first order), each with the affected objects, a detailed **Security Risk** explanation, a numbered step-by-step **Remediation** procedure, and references. Running header/footer, page numbers, confidentiality banner. Built with a **pure-standard-library PDF engine**. |
 | **PPTX** | Presenting findings in a meeting / to leadership | A PowerPoint deck. `--pptx-mode full` (default) = title, executive summary, priority queue, findings-by-area, recommended actions, a compliance snapshot + one slide per framework, then **one slide per finding** (fix-first, ~300+ slides) with severity/priority chips, exploit tags, and a summarized Security Risk + High-Level Mitigation. `--pptx-mode summary` = a short executive-only deck. Built with a **pure-standard-library OOXML/PPTX engine**. |
 
@@ -1252,7 +1252,7 @@ SAP-S4HANA-RISE-Security-Scanner/
 │   ├── cli.py                      # Admin CLI + the air-gapped `scan` path
 │   ├── config.py                   # Env-only settings; no defaults for secrets
 │   └── templates/                  # Jinja2 console — server-rendered, no client framework
-├── assets/                         # PhalanxCyber + SAP logos (embedded in reports as data URIs)
+├── assets/                         # MonitorRisk + SAP logos (embedded in reports as data URIs)
 ├── sample_data/                    # 90 crafted demo exports (trigger every check)
 ├── data/
 │   ├── finding_details.json        # Knowledge base: detailed risk + step-by-step remediation per check

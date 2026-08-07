@@ -140,7 +140,7 @@ class Slide:
 
 class PPTXWriter:
     def __init__(self, w_in: float = 13.333, h_in: float = 7.5,
-                 title: str = "Presentation", author: str = "PhalanxCyber"):
+                 title: str = "Presentation", author: str = "MonitorRisk"):
         self.cx = Inches(w_in)
         self.cy = Inches(h_in)
         self.title = title
@@ -216,7 +216,7 @@ class PPTXWriter:
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" '
             'xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">'
-            f'<Application>PhalanxCyber SAP Scanner</Application><Slides>{len(self.slides)}</Slides>'
+            f'<Application>MonitorRisk SAP Scanner</Application><Slides>{len(self.slides)}</Slides>'
             '</Properties>')
 
         # ppt/presentation.xml

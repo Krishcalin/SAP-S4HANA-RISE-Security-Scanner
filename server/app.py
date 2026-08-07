@@ -648,6 +648,32 @@ def api_changes(since_run: int, user: Dict[str, Any] = Depends(current_user)):
     return queries.changes_since(since_run, auth.scope_for(user))
 
 
+# DECLARED AFTER /api/findings/changes ON PURPOSE. Starlette matches routes in
+# declaration order, so a `{finding_id}` path registered above it would capture
+# "changes" and fail int coercion with a 422 — the incremental-sync endpoint would
+# break, and the failure would look like a client bug rather than a routing one.
+@app.get("/api/findings/{finding_id}")
+def api_finding(finding_id: int, user: Dict[str, Any] = Depends(current_user)):
+    """One finding in full, including its risk narrative and remediation.
+
+    Closes a gap against this module's own stated invariant: "everything the
+    dashboard shows is available via the API". It was not — the list endpoints
+    never select `cd.remediation` or `cd.risk_narrative`, and there was no
+    single-finding route at all, so the two fields a consumer most wants when
+    building a ticket were reachable only by scraping the HTML page.
+
+    No query change was needed: `queries.get_finding` already selects both, plus
+    the latest observation's details, and applies the caller's system scope.
+    """
+    finding = queries.get_finding(finding_id, auth.scope_for(user))
+    if finding is None:
+        # 404 whether the finding does not exist OR is out of the caller's scope.
+        # Distinguishing them would let a scoped user enumerate ids in landscapes
+        # they cannot see.
+        raise HTTPException(status_code=404, detail="not found")
+    return finding
+
+
 @app.post("/api/findings/{finding_id}/state")
 def api_set_state(finding_id: int, state: str = Form(...), reason: str = Form(""),
                   ticket: str = Form(""),

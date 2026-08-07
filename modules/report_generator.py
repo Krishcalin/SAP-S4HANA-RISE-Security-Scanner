@@ -74,8 +74,8 @@ class ReportGenerator:
 
     @staticmethod
     def _logo_data_uri() -> str:
-        """PhalanxCyber tool-vendor logo (top-right)."""
-        return ReportGenerator._asset_data_uri("phalanxcyber-logo.png")
+        """MonitorRisk tool-vendor logo (top-right)."""
+        return ReportGenerator._asset_data_uri("monitorrisk-logo.png")
 
     def generate(self, output_path: str):
         """Generate complete HTML report."""
@@ -141,7 +141,7 @@ class ReportGenerator:
 
         logo_uri = self._logo_data_uri()
         logo_html = (
-            f'<img class="brand-logo" src="{logo_uri}" alt="PhalanxCyber" />'
+            f'<img class="brand-logo" src="{logo_uri}" alt="MonitorRisk" />'
             if logo_uri else ""
         )
 
@@ -300,14 +300,14 @@ class ReportGenerator:
     display: block;
   }}
 
-  /* PhalanxCyber brand logo — top right. The logo art has its own dark
-     backdrop, shown as a rounded tile so it sits cleanly on the white page. */
+  /* MonitorRisk brand logo — top right. Sits directly on the white page: the
+     art is transparent with a navy wordmark, so the rounded tile and shadow
+     the previous logo needed (it carried its own dark backdrop) would now
+     frame nothing. */
   .brand-logo {{
-    width: 210px;
+    width: 230px;
     max-width: 45vw;
     height: auto;
-    border-radius: 10px;
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
   }}
 
   /* Copyright / usage notice, directly under the header. */
@@ -942,7 +942,7 @@ class ReportGenerator:
   </div>
 
   <div class="copyright-banner">
-    <strong>&copy; 2026 PhalanxCyber &mdash; Open-source cybersecurity platform.</strong> Built for defenders.<br>
+    <strong>&copy; 2026 MonitorRisk &mdash; SAP threat, vulnerability &amp; GRC posture.</strong> Built for defenders.<br>
     All tools are provided for lawful, authorized security testing and educational use only.
     Offensive/red-team tooling is benign-by-default and intended for environments you own or are authorized to test.
   </div>
