@@ -160,6 +160,17 @@ class ReachabilityIndex:
         if today is None:
             import datetime
             today = int(datetime.date.today().strftime("%Y%m%d"))
+        # A date in the FUTURE is not evidence of recent use. Without this guard
+        # the subtraction goes negative, compares as comfortably inside the
+        # window, and a placeholder `LAST_USED` of 20991231 makes an unreferenced
+        # object read as recently executed — so a clock-skewed or templated export
+        # SUPPRESSED the dead-code finding instead of raising one.
+        #
+        # Treated as no evidence rather than as staleness: an impossible date does
+        # not tell us whether the object runs, and inventing either verdict from it
+        # would be worse than declining to answer.
+        if last_used > today:
+            return None
         # Whole-year arithmetic on YYYYMMDD is close enough for a one-year window
         # and keeps this module free of date parsing beyond the stdlib.
         return (today - last_used) < (_STALE_DAYS * 10000) // 365

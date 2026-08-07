@@ -409,7 +409,13 @@ class PPTXReportGenerator:
         s.text(Inches(0.6), Inches(1.68), W - Inches(1.2), Inches(0.5),
                [_p("Findings mapped to the control areas of common frameworks — a gap view for audit "
                    "navigation, not a certification.", 11, color=SUB)])
-        fws = [f for f in self.compliance if f["controls"]][:6]
+        # No cap. This was `[:6]` back when there were exactly six frameworks, so
+        # the truncation was invisible; adding NIST 800-53 and DORA silently
+        # dropped two of them off this slide. In --pptx-mode summary this is the
+        # ONLY compliance slide, so a framework missing here is missing from the
+        # deck — and a compliance overview that quietly omits frameworks is worse
+        # than one that admits it covers none.
+        fws = [f for f in self.compliance if f["controls"]]
         y = Inches(2.35)
         rh = Inches(0.66)
         bar_x = Inches(6.6)

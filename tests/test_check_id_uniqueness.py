@@ -161,3 +161,50 @@ def test_check_ids_follow_the_house_format():
     bad = [cid for cid in _titles_by_id()
            if not re.fullmatch(r"[A-Z][A-Z0-9]*(-[A-Z0-9]+)+", cid)]
     assert not bad, f"check ids not matching MODULE-SUBAREA-NNN: {sorted(bad)}"
+
+
+# --------------------------------------------------------------------------- #
+#  The stricter, orthogonal guard: one id, two FILES                          #
+# --------------------------------------------------------------------------- #
+#: Ids legitimately emitted from more than one module. Empty on purpose — add an
+#: entry only with the reason, exactly as REVIEWED_MULTI_TITLE requires.
+REVIEWED_MULTI_MODULE: dict = {}
+
+
+def _ids_by_module() -> dict:
+    """check_id -> {module names that emit it}, by literal, over every module."""
+    out: dict = defaultdict(set)
+    pattern = re.compile(r"""["']([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+)["']""")
+    for path in sorted(MODULES.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call)
+                    and getattr(node.func, "attr", "") == "finding"):
+                continue
+            for kw in node.keywords:
+                if kw.arg == "check_id" and isinstance(kw.value, ast.Constant) \
+                        and isinstance(kw.value.value, str):
+                    if pattern.fullmatch(f'"{kw.value.value}"'):
+                        out[kw.value.value].add(path.name)
+    return out
+
+
+def test_no_check_id_is_emitted_by_two_different_modules():
+    """A SEPARATE defect from id-reuse-with-a-different-title, and one that guard
+    misses: two modules can pick the same id with similar enough wording to slip
+    the title heuristic.
+
+    That is what happened. `modules/resilience_posture.py` shipped LOG-RET-001 and
+    LOG-IR-001, both of which already existed in `modules/log_monitoring.py` — two
+    unrelated checks sharing a foreign key into the remediation knowledge base, the
+    compliance mapping and the fingerprint. The title-based test passed throughout.
+
+    Two modules reaching for one id is essentially always a mistake, so this asks
+    no judgement about wording: it fails on the collision itself.
+    """
+    collisions = {cid: sorted(mods) for cid, mods in _ids_by_module().items()
+                  if len(mods) > 1 and cid not in REVIEWED_MULTI_MODULE}
+    assert not collisions, (
+        "these check ids are emitted by more than one module, so they share a "
+        f"remediation, a control mapping and an identity: {collisions}. Give one "
+        "of them its own id, or add it to REVIEWED_MULTI_MODULE with the reason.")

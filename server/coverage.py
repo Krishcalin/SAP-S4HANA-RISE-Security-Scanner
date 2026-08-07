@@ -62,6 +62,8 @@ RISE_MODULE_SCOPE: Dict[str, str] = {
     "btp_cloud_surface": "in_scope",      # the only end-to-end automatable module
     "integration_layer": "split",         # gateway ACL *files* are OS artifacts
     "data_protection": "in_scope",
+    "code_inventory_report": "in_scope",   # the custom code is the customer's own
+    "resilience_posture": "in_scope",      # customer produces the backup/DR evidence
     "code_transport": "split",            # SE06/SCC4 are ticket-to-SAP
     "log_monitoring": "in_scope",
     # A retrospective review reads an export the customer produces themselves from

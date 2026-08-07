@@ -13,18 +13,54 @@ Extended IAM checks beyond the base user/auth module:
   - User group segmentation violations
   - Reference user misuse
   - Privilege escalation paths (indirect role chains)
+  - Identity federation hygiene and SCIM/provisioning de-provisioning (IAM-FED-*)
 
 Data sources:
   - sod_ruleset.json     → SoD conflict rule definitions
   - firefighter_log.csv  → Emergency access / firefighter usage log (GRC SPM)
   - role_expiry.csv      → Role assignments with validity dates (AGR_USERS)
   - btp_users.json       → BTP subaccount user/role collection export
+  - btp_trust.json       → BTP subaccount trust configurations (IAM-FED-*)
+  - comm_arrangements.json → Communication arrangements, read ONLY as evidence that
+                             an identity-provisioning integration exists (IAM-FED-004)
+  - ias_config.json      → IAS tenant config, likewise read only for provisioning
+                           evidence (IAM-FED-004)
   - role_details.csv     → Role metadata (owner, description, type)
   - access_reviews.csv   → Periodic access review completion records
   - user_groups.csv      → User group assignments (USGRP from USR02)
+
+────────────────────────────────────────────────────────────────────────────────
+WHAT THE FEDERATION CHECKS ASSUME ABOUT `btp_trust.json`   (measured 2026-08-07)
+────────────────────────────────────────────────────────────────────────────────
+Only five fields are OBSERVED in this repository's own export fixture
+(`sample_data/btp_trust.json`, the shape `docs/EXPORT_GUIDE.md` tells a customer to
+produce):
+
+    identityProvider, originKey, status, createShadowUsers, description
+
+Everything else the checks below read — whether a trust is offered for interactive
+user logon, which users of the IdP it admits, and when its certificate expires — is
+a DOCUMENTED shape we accept if a tenant's export happens to carry it, not one we
+have seen from a real tenant. Those field names are marked "UNVERIFIED:" at the
+point of use.
+
+The consequence is deliberate and is the conservative direction: a check whose field
+is absent stays SILENT. It never reads "the export did not say" as "the trust is
+unrestricted" or "the certificate has expired", because absence of evidence turning
+into a finding is how a federation report becomes something nobody trusts.
+
+WHAT IS DELIBERATELY NOT REPEATED HERE
+--------------------------------------
+`rise_btp_checks` already reports the SAP default IdP being active (RISE-001) and
+shadow-user auto-creation per trust (RISE-002), and `btp_cloud_surface` already
+reports the IAS tenant permitting local password logon alongside a corporate IdP
+(BTP-IAS-005). None of those is restated. What none of them can see is the SHAPE of
+the federation as a whole — how many independent ways in exist, whether the identity
+lifecycle closes, and whether the trust's own certificate is about to strand it —
+and that is what IAM-FED-* adds.
 """
 
-from typing import Dict, List, Any, Set, Tuple
+from typing import Dict, List, Any, Optional, Set, Tuple
 from datetime import datetime, timedelta
 from collections import defaultdict
 from modules.base_auditor import BaseAuditor
@@ -149,6 +185,23 @@ class AdvancedIamAuditor(BaseAuditor):
     FF_MAX_SESSIONS_PER_MONTH = 5
     FF_REQUIRE_REASON = True
 
+    # ── Federation / SCIM ───────────────────────────────────────────
+    #: Days before a trust certificate expires at which it becomes a finding. Chosen
+    #: to be longer than a normal change window, because renewing a federation
+    #: certificate needs the IdP owner and the BTP owner in the same room.
+    TRUST_CERT_WARNING_DAYS = 30
+
+    #: Values that mean "everyone" where a restriction was expected. An EMPTY value is
+    #: included only when the field is PRESENT — see `_logon_restriction`.
+    FED_WILDCARDS = {"*", "ANY", "ALL", "ALL_USERS", "*@*", "*.*"}
+
+    #: Word-level tokens in a communication-arrangement or IAS configuration name that
+    #: evidence an identity-PROVISIONING integration rather than a business one.
+    #: Matched on whole tokens, not substrings, so "SF_EMPLOYEE_SYNC" (HR master-data
+    #: replication) is not mistaken for identity provisioning — it moves employee
+    #: records, not the shadow users whose removal this check is about.
+    FED_PROVISIONING_TOKENS = {"SCIM", "PROVISION", "PROVISIONING", "IPS", "IDM"}
+
     def run_all_checks(self) -> List[Dict[str, Any]]:
         self.check_sod_conflicts()
         self.check_firefighter_usage()
@@ -160,6 +213,10 @@ class AdvancedIamAuditor(BaseAuditor):
         self.check_user_group_segmentation()
         self.check_reference_user_misuse()
         self.check_privilege_escalation_paths()
+        self.check_federation_logon_paths()
+        self.check_federation_trust_restriction()
+        self.check_federation_certificate_expiry()
+        self.check_scim_deprovisioning()
         return self.findings
 
     # ════════════════════════════════════════════════════════════════
@@ -1619,6 +1676,570 @@ class AdvancedIamAuditor(BaseAuditor):
                     "ISACA — Privilege Escalation Prevention",
                 ],
             )
+
+    # ════════════════════════════════════════════════════════════════
+    #  IAM-FED-*: Identity Federation & SCIM Provisioning
+    # ════════════════════════════════════════════════════════════════
+
+    _FED_TRUE = {"TRUE", "X", "YES", "Y", "1", "ACTIVE", "ENABLED", "ON"}
+    _FED_FALSE = {"FALSE", "NO", "N", "0", "INACTIVE", "DISABLED", "OFF", "NONE"}
+
+    @classmethod
+    def _flag(cls, value: Any) -> Optional[bool]:
+        """Read an export flag as True / False / None-for-"the export did not say".
+
+        Tri-state on purpose. `bool(value)` is wrong twice over here: BTP writes trust
+        status as either a JSON boolean or the string "inactive", and the string is
+        TRUTHY, so a plain truth test reports a decommissioned trust as live. And a
+        MISSING field is not a `False` — collapsing the two would let every check
+        below fire on an export that simply does not carry the column, which is the
+        one direction a federation finding must never be wrong in.
+        """
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return value
+        text = str(value).strip().upper()
+        if not text:
+            return None
+        if text in cls._FED_TRUE:
+            return True
+        if text in cls._FED_FALSE:
+            return False
+        return None
+
+    @staticmethod
+    def _trust_rows(trust: Any) -> List[Dict[str, Any]]:
+        """The trust configurations in a `btp_trust` export, whatever wraps them.
+
+        Unwrapped exactly as `rise_btp_checks.check_btp_trust_config` unwraps them —
+        a bare list, a `{"trusts": [...]}` envelope, or a single trust object — so the
+        two modules always talk about the same rows. Non-dict entries are dropped
+        rather than coerced: a stray string in the array names no trust, and inventing
+        one would put a fictional node in the graph.
+        """
+        if not trust:
+            return []
+        if isinstance(trust, list):
+            rows = trust
+        elif isinstance(trust, dict):
+            rows = trust.get("trusts", trust.get("trust_configurations"))
+            if not isinstance(rows, list):
+                rows = [trust]
+        else:
+            return []
+        return [r for r in rows if isinstance(r, dict)]
+
+    @staticmethod
+    def _trust_key(row: Dict[str, Any]) -> str:
+        """Name a trust by its originKey, falling back to the IdP display name.
+
+        Identical to `rise_btp_checks._trust_name`, and identical ON PURPOSE: the
+        origin is the technical key and `identityProvider` is an editable label, so
+        keying on the origin makes RISE-001, RISE-002 and every IAM-FED-* finding
+        point at ONE `idp_trust` node per trust. Diverging here would silently split
+        one trust into two nodes and hide that the same trust carries several defects.
+        """
+        origin = row.get("originKey", row.get("origin", ""))
+        idp = row.get("identityProvider", row.get("idp_name", row.get("name", "")))
+        for candidate in (origin, idp):
+            text = "" if candidate is None else str(candidate).strip()
+            if text and text.lower() != "unknown":
+                return text
+        return ""
+
+    @classmethod
+    def _trust_admits_users(cls, row: Dict[str, Any]) -> bool:
+        """Can a person interactively log on through this trust?
+
+        Absence counts as YES, which inverts this module's usual rule, and the reason
+        is that the default is not neutral here: a trust configuration EXISTS in order
+        to authenticate people. The two fields below SUBTRACT from that — they say
+        "decommissioned" or "not offered on the logon screen" — they do not grant it.
+        Requiring positive evidence would make the whole check dormant on the only
+        real-world export shape we have seen, which carries neither field.
+        """
+        if cls._flag(row.get("status", row.get("enabled", row.get("active")))) is False:
+            return False
+        # UNVERIFIED: `availableForUserLogon` is a documented BTP trust attribute we
+        # have not observed in any export in this repository. Absent, it subtracts
+        # nothing.
+        logon = cls._flag(row.get("availableForUserLogon",
+                                  row.get("available_for_user_logon")))
+        return logon is not False
+
+    @classmethod
+    def _auto_creates_identities(cls, row: Dict[str, Any]) -> bool:
+        """Does logging on through this trust MATERIALISE a BTP identity?
+
+        This is the same field RISE-002 reports, read for a different question. RISE-002
+        asks whether creation is automatic; IAM-FED-004 asks whether the identities so
+        created are ever taken away again, which is a lifecycle question RISE-002 does
+        not answer and cannot.
+        """
+        return cls._flag(row.get("createShadowUsers",
+                                 row.get("auto_create_shadow_users"))) is True
+
+    @staticmethod
+    def _logon_restriction(row: Dict[str, Any]) -> Tuple[bool, str]:
+        """(field was present, its value) for "which IdP users may log on".
+
+        Returns presence separately from value because the two mean different things:
+        an ABSENT field is an export that does not describe the restriction, and an
+        EMPTY one is a trust that admits everybody. Only the second is a finding.
+        """
+        # UNVERIFIED: these four are documented/plausible names for the user-admission
+        # restriction on a BTP trust configuration; none has been observed in an export
+        # in this repository, so this check is dormant until one carries it.
+        for field in ("userRestriction", "allowedUsers",
+                      "allowedUserDomains", "allowedDomains"):
+            if field in row:
+                value = row[field]
+                if isinstance(value, (list, tuple, set)):
+                    return True, ", ".join(str(v) for v in value)
+                return True, "" if value is None else str(value)
+        return False, ""
+
+    @staticmethod
+    def _trust_cert_expiry(row: Dict[str, Any]) -> str:
+        """The raw certificate-expiry string a trust row carries, or ""."""
+        # UNVERIFIED: documented/plausible names for the signing-certificate validity
+        # end on a BTP trust configuration. Not observed in any export here.
+        for field in ("certificateExpiryDate", "certificateValidTo",
+                      "signingCertificateExpiry", "certificate_expiry",
+                      "certificateExpiry"):
+            value = row.get(field)
+            if value not in (None, ""):
+                return str(value).strip()
+        return ""
+
+    @staticmethod
+    def _tokens(*texts: Any) -> Set[str]:
+        """Upper-case alphanumeric word tokens across several strings.
+
+        Word-level, not substring: "PROVISION" as a substring matches nothing useful,
+        whereas a substring search for "IPS" would match "SHIPS", "TIPS" and any
+        arrangement whose name happens to contain those letters — and a FALSE piece of
+        provisioning evidence silences IAM-FED-004, which is the dangerous direction.
+        """
+        out: Set[str] = set()
+        for text in texts:
+            if text in (None, ""):
+                continue
+            token = ""
+            for ch in str(text).upper():
+                if ch.isalnum():
+                    token += ch
+                elif token:
+                    out.add(token)
+                    token = ""
+            if token:
+                out.add(token)
+        return out
+
+    def _provisioning_evidence(self) -> List[str]:
+        """Anything in the supplied exports that evidences automated user provisioning.
+
+        This is EVIDENCE GATHERING, not detection: a customer whose SCIM provisioning
+        is wired but who never exported the arrangement that carries it will still be
+        told IAM-FED-004, and the finding says so in as many words. Reporting "we could
+        not see it" is honest; reporting "it is not there" would not be.
+        """
+        evidence: List[str] = []
+
+        for arr in self._arrangement_rows():
+            name = arr.get("name", arr.get("arrangement_name", ""))
+            scenario = arr.get("scenario_id", arr.get("communication_scenario", ""))
+            if self._tokens(name, scenario) & self.FED_PROVISIONING_TOKENS:
+                evidence.append(f"communication arrangement '{name}'")
+
+        ias = self.data.get("ias_config")
+        if isinstance(ias, dict):
+            for field in ("provisioning", "userProvisioning", "scim", "scimProvisioning"):
+                if field not in ias:
+                    continue
+                block = ias[field]
+                if block in (None, "", {}, [], ()):
+                    # A key that is present but carries nothing describes no integration.
+                    # Reading it as evidence would SILENCE IAM-FED-004 — the direction
+                    # this check must never be wrong in, because the customer is then
+                    # told nothing at all about a lifecycle gap that is really there.
+                    continue
+                if isinstance(block, dict):
+                    # A block that explicitly says it is switched off is the OPPOSITE
+                    # of evidence, so it must not silence the finding.
+                    if self._flag(block.get("enabled", block.get("active"))) is False:
+                        continue
+                    evidence.append(f"IAS '{field}' configuration")
+                elif self._flag(block) is not False:
+                    evidence.append(f"IAS '{field}' configuration")
+
+        return evidence
+
+    def _arrangement_rows(self) -> List[Dict[str, Any]]:
+        """Communication arrangements, unwrapped as `rise_btp_checks` unwraps them."""
+        comms = self.data.get("comm_arrangements")
+        if not comms:
+            return []
+        if isinstance(comms, list):
+            rows = comms
+        elif isinstance(comms, dict):
+            rows = comms.get("arrangements", comms.get("items", []))
+        else:
+            return []
+        return [r for r in rows if isinstance(r, dict)]
+
+    # ────────────────────────────────────────────────────────────────
+
+    def check_federation_logon_paths(self):
+        """IAM-FED-001 — how many independent ways in does this subaccount have?
+
+        The assurance level of a federated subaccount is the MINIMUM over every trust
+        that can authenticate a person, not the maximum. Conditional access, MFA and
+        session policy live in the IdP, so a second live trust is a second policy
+        engine — and an attacker only has to find the weaker one.
+
+        This is NOT RISE-001. RISE-001 reports one specific trust (SAP's default IdP)
+        and is silent when the second logon path is a legacy corporate SAML tenant, a
+        partner IdP left behind after a migration, or a test IdP that was never
+        removed — which are exactly the cases that survive an audit precisely because
+        nothing names them.
+        """
+        rows = self._trust_rows(self.data.get("btp_trust"))
+        if not rows:
+            return
+
+        paths = []
+        path_objs = []
+        seen: Set[str] = set()
+        for row in rows:
+            if not self._trust_admits_users(row):
+                continue
+            key = self._trust_key(row)
+            if not key:
+                continue
+            # One row per trust, counted once. Exports get concatenated and hand-merged,
+            # and a trust that appears twice is still ONE way in: counting it twice would
+            # make the finding contradict itself — "2 trust configuration(s)" in the text
+            # while `_objects` de-duplicates to a single node underneath — and send the
+            # owner hunting for a second logon path that does not exist.
+            if key.upper() in seen:
+                continue
+            seen.add(key.upper())
+            idp = row.get("identityProvider", row.get("idp_name", ""))
+            paths.append(f"{key}" + (f" ({idp})" if idp and str(idp) != key else ""))
+            path_objs.append(("idp_trust", key))
+
+        if len(paths) < 2:
+            return
+
+        self.finding(
+            check_id="IAM-FED-001",
+            title="Several identity providers can authenticate users into one subaccount",
+            severity=self.SEVERITY_MEDIUM,
+            category="Identity & Access Management",
+            description=(
+                f"{len(paths)} trust configuration(s) in this subaccount can "
+                "interactively authenticate users. Every one of them is an independent "
+                "policy engine: multi-factor enforcement, conditional access, session "
+                "lifetime, and joiner/mover/leaver de-provisioning are all decided by "
+                "the identity provider behind the trust, not by BTP. The effective "
+                "assurance of the subaccount is therefore the weakest of these paths, "
+                "not the strongest, and an attacker chooses which one to attack. "
+                "Second logon paths are rarely deliberate — they are usually a legacy "
+                "SAML tenant kept 'until the migration finishes', a partner IdP from a "
+                "project that ended, or a test trust nobody removed. Each is listed "
+                "below so the owner can confirm it is intended and carries the same "
+                "controls as the primary corporate provider."
+            ),
+            affected_items=paths,
+            # One finding ABOUT the set of logon paths: retiring one legacy trust must
+            # shrink the member list rather than retire this finding and raise a new one
+            # whose age starts at zero while the remaining paths are unchanged. The
+            # trusts still ride along as `idp_trust` nodes, keyed on originKey so they
+            # are the same nodes RISE-001/RISE-002 name.
+            affected_objects=self._objects(path_objs),
+            scope="aggregate",
+            remediation=(
+                "Confirm every trust listed is still required. Remove or set to "
+                "inactive any trust left over from a migration, a pilot or an ended "
+                "partner engagement (BTP Cockpit → Subaccount → Security → Trust "
+                "Configuration). For each trust that must stay, verify at the identity "
+                "provider that it enforces the same multi-factor and conditional-access "
+                "policy as the primary corporate provider, and that it is included in "
+                "the same joiner/mover/leaver process — a trust whose IdP does not "
+                "de-provision leavers keeps access alive after the corporate account "
+                "is closed."
+            ),
+            references=[
+                "SAP BTP Security Guide — Trust Configuration",
+                "SAP Security Baseline — Identity Federation",
+            ],
+            details={"logon_path_count": len(paths)},
+        )
+
+    def check_federation_trust_restriction(self):
+        """IAM-FED-002 — a trust that admits every user of its identity provider.
+
+        A trust is a statement about WHICH identities an IdP may assert, and a
+        corporate IdP's population is routinely larger than the population that should
+        reach a production SAP subaccount: contractors, service identities, guest and
+        B2B accounts from directory federation. Left unrestricted, every one of them
+        can authenticate — authorization then becomes the only control, and shadow-user
+        auto-creation removes even the step where somebody notices a new account.
+
+        Silent unless the export explicitly carries the restriction field and it is
+        empty or a wildcard: see the module docstring on absence-of-evidence.
+        """
+        for row in self._trust_rows(self.data.get("btp_trust")):
+            if not self._trust_admits_users(row):
+                continue
+            present, value = self._logon_restriction(row)
+            if not present:
+                continue
+            cleaned = value.strip()
+            if cleaned and cleaned.upper() not in self.FED_WILDCARDS:
+                continue
+
+            key = self._trust_key(row)
+            if not key:
+                continue
+            idp = row.get("identityProvider", row.get("idp_name", key))
+            stated = cleaned if cleaned else "(empty)"
+
+            self.finding(
+                check_id="IAM-FED-002",
+                title=f"Trust configuration admits any user of the identity provider: {key}",
+                severity=self.SEVERITY_HIGH,
+                category="Identity & Access Management",
+                description=(
+                    f"Trust '{key}' ({idp}) carries no restriction on which users of "
+                    f"its identity provider may log on — the restriction is "
+                    f"'{stated}'. Every identity the provider will authenticate can "
+                    "therefore reach this subaccount, including populations that were "
+                    "never intended to: contractors, B2B guest accounts inherited "
+                    "through directory federation, service identities, and accounts "
+                    "in directory branches belonging to other business units. "
+                    "Where the same trust also creates shadow users automatically, "
+                    "there is no point at which a human sees a new principal appear."
+                ),
+                affected_items=[f"Trust: {key} — user restriction: {stated}"],
+                # One finding per trust, matching how RISE-001/RISE-002 treat a trust
+                # row: restricting trust A is its own change with its own approval and
+                # leaves trust B exactly as it was, so the two must not share an
+                # identity or one of them would vanish from the report.
+                affected_objects=self._objects([("idp_trust", key)]),
+                scope="object",
+                remediation=(
+                    "Restrict the trust to the population that is meant to reach this "
+                    "subaccount. At the identity provider, scope the application/"
+                    "assertion to a specific group or directory branch rather than to "
+                    "all users; in IAS, use conditional authentication rules on the "
+                    "corresponding application. Then re-export the trust configuration "
+                    "and confirm the restriction is recorded. Where the trust also "
+                    "auto-creates shadow users, restricting admission is the control "
+                    "that stops unknown principals materialising."
+                ),
+                references=[
+                    "SAP BTP Security Guide — Trust Configuration",
+                    "SAP Security Baseline — Identity Federation",
+                ],
+            )
+
+    def check_federation_certificate_expiry(self):
+        """IAM-FED-003 — the certificate that holds the federation up.
+
+        A federation signing certificate expires for everybody at once and without
+        warning to end users, and the field workaround is depressingly consistent:
+        re-enable the default or local identity provider "just until the certificate is
+        renewed". That converts a certificate-management lapse into an authentication-
+        assurance downgrade at precisely the moment nobody has time to review it, which
+        is why this belongs in an identity report and not only in a monitoring alert.
+
+        Silent unless the export carries an expiry date, and silent on a date it cannot
+        parse — guessing a date would be inventing the evidence.
+        """
+        rows = self._trust_rows(self.data.get("btp_trust"))
+        if not rows:
+            return
+
+        # A baseline override arrives from hand-written JSON/YAML and is routinely typed
+        # as a string ("90"). Comparing int <= str raises, and this method runs inside
+        # run_all_checks(), so one mistyped baseline entry would take down every other
+        # IAM check in the run. A value we cannot read as a number falls back to the
+        # shipped default rather than silently disabling the check.
+        try:
+            warn_days = int(self.get_config("trust_cert_warning_days",
+                                            self.TRUST_CERT_WARNING_DAYS))
+        except (TypeError, ValueError):
+            warn_days = self.TRUST_CERT_WARNING_DAYS
+
+        # Compare CALENDAR DATES, not instants. `_parse_date` returns midnight, so
+        # subtracting a mid-afternoon `datetime.now()` floors an extra day off every
+        # answer: a certificate valid until 23:59 TODAY was reported as "expired 1
+        # day(s) ago" at HIGH severity — stating as fact an outage that has not
+        # happened. The field carries a date and no more, so a date is the only
+        # precision we are entitled to claim.
+        today = datetime.now().date()
+
+        for row in rows:
+            raw = self._trust_cert_expiry(row)
+            if not raw:
+                continue
+            # ISO timestamps carry a time part the SAP date formats do not; drop it
+            # rather than fail to parse and stay silent about a real expiry.
+            parsed = self._parse_date(raw.split("T")[0].split(" ")[0])
+            if not parsed:
+                continue
+
+            key = self._trust_key(row)
+            if not key:
+                continue
+
+            days = (parsed.date() - today).days
+            if days < 0:
+                severity, state = self.SEVERITY_HIGH, f"expired {abs(days)} day(s) ago"
+            elif days <= warn_days:
+                # "expires in 0 day(s)" is the date arithmetic showing through. The
+                # certificate is good until the end of today, and that is what the
+                # finding should say.
+                severity = self.SEVERITY_MEDIUM
+                state = "expires today" if days == 0 else f"expires in {days} day(s)"
+            else:
+                continue
+
+            self.finding(
+                check_id="IAM-FED-003",
+                title=f"Identity federation certificate {state}: {key}",
+                severity=severity,
+                category="Identity & Access Management",
+                description=(
+                    f"The certificate on trust configuration '{key}' {state} "
+                    f"(valid to {raw}). When a federation certificate lapses, single "
+                    "sign-on fails for every user of that trust simultaneously and "
+                    "without a graceful degradation path. The usual emergency response "
+                    "— re-enabling the default or local identity provider so people can "
+                    "work — reintroduces exactly the authentication bypass that "
+                    "federating away from it was meant to close, and it is done under "
+                    "outage pressure, without review, and frequently left in place "
+                    "afterwards. Certificate renewal needs both the identity-provider "
+                    "owner and the BTP subaccount owner, so it is scheduled work, not "
+                    "something that can be absorbed on the day it fails."
+                ),
+                affected_items=[f"Trust: {key} — certificate valid to {raw} ({state})"],
+                # Per trust, like IAM-FED-002 and RISE-001/002: each certificate is
+                # renewed on its own with its own two owners, and collapsing several
+                # expiring trusts into one finding would hide all but one of them.
+                affected_objects=self._objects([("idp_trust", key)]),
+                scope="object",
+                remediation=(
+                    "Renew the certificate with the identity-provider owner and upload "
+                    "the new metadata to the subaccount trust configuration before the "
+                    "current one lapses. Schedule renewals as recurring change work at "
+                    f"least {warn_days} days ahead rather than on expiry, and add "
+                    "certificate expiry to the landscape monitoring that already "
+                    "watches the systems themselves. Do not plan to fall back to the "
+                    "default identity provider during a renewal outage — if a "
+                    "break-glass path is genuinely required, define it in advance with "
+                    "multi-factor authentication, a named account list and an "
+                    "expiry date."
+                ),
+                references=[
+                    "SAP BTP Security Guide — Trust Configuration",
+                    "SAP Security Baseline — Identity Federation",
+                ],
+                details={"days_to_expiry": days, "valid_to": raw},
+            )
+
+    def check_scim_deprovisioning(self):
+        """IAM-FED-004 — identities appear automatically; does anything remove them?
+
+        THE classic federation failure, and the reason Onapsis names SCIM explicitly.
+        A trust with shadow-user creation enabled materialises a BTP principal — with
+        whatever role collections a group mapping grants it — the first time somebody
+        authenticates. Nothing in that flow runs in reverse. When HR processes a leaver
+        and the corporate directory account is disabled, the BTP shadow user, its role
+        collections and any long-lived tokens issued to it remain exactly as they were
+        unless a provisioning integration (SAP Cloud Identity Services / IPS, or any
+        SCIM client) is wired to de-provision them. The account stops being reachable
+        through the corporate IdP and stays reachable through every other trust.
+
+        This reports a GAP IN THE EVIDENCE, not a proven absence, and says so: a tenant
+        that provisions correctly but did not export the arrangement carrying it will
+        see this finding, and closing it is a matter of supplying that export. The
+        alternative — staying silent because we cannot see the control — would let the
+        commonest lifecycle failure in a federated landscape go unmentioned.
+        """
+        rows = self._trust_rows(self.data.get("btp_trust"))
+        if not rows:
+            return
+
+        auto_trusts = []
+        auto_objs = []
+        for row in rows:
+            if not self._auto_creates_identities(row):
+                continue
+            key = self._trust_key(row)
+            if not key:
+                continue
+            auto_trusts.append(key)
+            auto_objs.append(("idp_trust", key))
+
+        if not auto_trusts:
+            return  # identities are created deliberately; somebody owns each one.
+
+        if self._provisioning_evidence():
+            return
+
+        self.finding(
+            check_id="IAM-FED-004",
+            title="Federated identities are auto-created with no evidence of de-provisioning",
+            severity=self.SEVERITY_MEDIUM,
+            category="Identity & Access Management",
+            description=(
+                f"{len(auto_trusts)} trust configuration(s) create a BTP identity "
+                "automatically the first time a user authenticates, and nothing in the "
+                "supplied exports evidences an automated provisioning integration "
+                "(SAP Cloud Identity Services / Identity Provisioning, or any SCIM "
+                "client) that would remove those identities again. Shadow-user "
+                "creation is one-directional: disabling a person's account in the "
+                "corporate directory does not delete the BTP principal it created, nor "
+                "its role collections, nor tokens already issued to it. After an HR "
+                "leaver event the identity therefore survives — invisible to the "
+                "corporate directory that everyone reviews, and reachable through any "
+                "trust or local credential that does not consult it. This is the "
+                "commonest way a federated SAP landscape ends up with access that "
+                "belongs to nobody. Note this reports what the exports could not show: "
+                "if provisioning IS configured, the export that carries it was not "
+                "supplied."
+            ),
+            affected_items=[f"Trust: {t} — shadow users created automatically"
+                            for t in auto_trusts],
+            # One finding about the lifecycle gap, listing the trusts that feed it.
+            # Wiring de-provisioning is a single integration that closes the gap for
+            # every trust at once, so per-trust findings would misdescribe the work.
+            affected_objects=self._objects(auto_objs),
+            scope="aggregate",
+            remediation=(
+                "Wire de-provisioning, then evidence it. Configure SAP Cloud Identity "
+                "Services (Identity Provisioning) or another SCIM client to read the "
+                "authoritative HR/directory source and to DELETE or deactivate BTP "
+                "shadow users when the source identity is disabled — read-only "
+                "provisioning that only creates is the failure this finding describes. "
+                "Confirm the job runs on a schedule and that its failures alert "
+                "somebody. Until it exists, reconcile BTP users against the corporate "
+                "directory on the same cadence as your access reviews and remove "
+                "identities with no active source record. Re-run the scan with the "
+                "communication arrangement or IAS provisioning configuration included "
+                "in the export so the control can be seen."
+            ),
+            references=[
+                "SAP Cloud Identity Services — Identity Provisioning",
+                "SAP BTP — User Lifecycle Management",
+                "SAP Security Baseline — Identity Federation",
+            ],
+            details={"auto_creating_trusts": len(auto_trusts)},
+        )
 
     # ════════════════════════════════════════════════════════════════
     #  Utility Methods

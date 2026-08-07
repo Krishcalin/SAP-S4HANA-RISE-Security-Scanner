@@ -21,6 +21,8 @@ import datetime
 from pathlib import Path
 
 from modules import release_gate
+from modules.code_inventory_report import CodeInventoryAuditor
+from modules.resilience_posture import ResiliencePostureAuditor
 from modules.user_auth_audit import UserAuthAuditor
 from modules.security_params import SecurityParamAuditor
 from modules.network_services import NetworkServiceAuditor
@@ -118,7 +120,7 @@ def main():
     )
     parser.add_argument(
         "--modules", nargs="+",
-        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "atc", "cva", "logmon", "logreview", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust", "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov", "fincontrols", "all"],
+        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "atc", "cva", "logmon", "logreview", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust", "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov", "fincontrols", "codeinv", "resilience", "all"],
         default=["all"],
         help="Which audit modules to run (default: all)"
     )
@@ -212,7 +214,7 @@ def main():
     run_modules = args.modules if "all" not in args.modules else [
         "users", "params", "network", "rise", "iam", "btpcloud",
         "intglayer", "dataprot", "codetrans", "atc", "cva", "logmon", "logreview", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust",
-        "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov", "fincontrols"
+        "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov", "fincontrols", "codeinv", "resilience"
     ]
 
     all_findings = []
@@ -288,6 +290,22 @@ def main():
     if "dataprot" in run_modules:
         print("[*] Running Data Protection & Privacy Checks...")
         auditor = DataProtectionAuditor(data, baseline_overrides)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- Custom-code estate inventory ---
+    if "codeinv" in run_modules:
+        print("[*] Running Custom-Code Estate Inventory...")
+        auditor = CodeInventoryAuditor(data, baseline_overrides)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- Resilience & Recovery Readiness ---
+    if "resilience" in run_modules:
+        print("[*] Running Resilience & Recovery Readiness Checks...")
+        auditor = ResiliencePostureAuditor(data, baseline_overrides)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")

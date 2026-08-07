@@ -64,6 +64,17 @@ TEAM_BY_PREFIX: List[Tuple[str, str]] = [
     ("LOG-", "data_protection"),
     ("LREV-", "data_protection"),   # audit-log retrospective review — same owner as LOG-
     ("FIN-", "data_protection"),
+    # Resilience & recovery readiness. Deliberately NOT under the LOG- prefix it
+    # was first written with, for two reasons that were both measured:
+    #   * LOG-RET-001 and LOG-IR-001 already existed in modules/log_monitoring.py,
+    #     so two unrelated checks shared an id — which collides in the finding KB
+    #     and in fingerprinting, and the uniqueness test did not look across
+    #     modules.
+    #   * modules/fair_adapter.py:_is_detection() matches on the check-id prefix,
+    #     so everything under LOG- was priced as a DETECTION gap. A missing backup
+    #     is not a detection gap, and the module's docstring claimed the prefix
+    #     made it under-price when in fact it mis-priced.
+    ("RES-", "basis"),
 ]
 
 #: Check families the CUSTOMER cannot change in a RISE tenant, because SAP operates
