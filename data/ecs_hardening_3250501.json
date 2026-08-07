@@ -1,0 +1,489 @@
+{
+ "source": {
+  "note": "Facts only \u2014 parameter names, ECS standard values and SAP-permitted exceptions. SAP's descriptive text is NOT reproduced (SAP copyright).",
+  "version": 46,
+  "released": "2026-05-15",
+  "component": "XX-HST-OPR-SRV",
+  "scope": "AS ABAP in SAP Enterprise Cloud Services (ECS)",
+  "obtained": "customer S-user, 2026-08-07"
+ },
+ "parameters": {
+  "auth/object_disabling_active": {
+   "ecs": "N",
+   "allowed": []
+  },
+  "auth/no_check_in_some_cases": {
+   "ecs": "Y",
+   "allowed": []
+  },
+  "abap/ext_debugging_possible": {
+   "ecs": "2",
+   "allowed": [
+    "0"
+   ]
+  },
+  "auth/check/calltransaction": {
+   "ecs": "3",
+   "allowed": [
+    "2"
+   ]
+  },
+  "auth/rfc_authority_check": {
+   "ecs": "6",
+   "allowed": [
+    "1"
+   ]
+  },
+  "dbs/dba/ccms_maintenance": {
+   "ecs": "1",
+   "allowed": []
+  },
+  "dbs/dba/ccms_security_level": {
+   "ecs": "1",
+   "allowed": []
+  },
+  "gw/accept_remote_trace_level": {
+   "ecs": "0",
+   "allowed": []
+  },
+  "gw/acl_mode_proxy": {
+   "ecs": "1",
+   "allowed": [
+    "0"
+   ]
+  },
+  "gw/rem_start": {
+   "ecs": "DISABLED",
+   "allowed": []
+  },
+  "gw/acl_mode": {
+   "ecs": "1",
+   "allowed": []
+  },
+  "gw/logging": {
+   "ecs": "ACTION=SsPXM",
+   "allowed": []
+  },
+  "gw/prxy_info": {
+   "ecs": "$(DIR_GLOBAL)$(DIR_SEP)prxyinfo$(FT_DAT)",
+   "allowed": []
+  },
+  "gw/reg_info": {
+   "ecs": "$(DIR_GLOBAL)$(DIR_SEP)reginfo$(FT_DAT)",
+   "allowed": []
+  },
+  "gw/reg_no_conn_info": {
+   "ecs": "255",
+   "allowed": []
+  },
+  "gw/sec_info": {
+   "ecs": "$(DIR_GLOBAL)$(DIR_SEP)secinfo$(FT_DAT)",
+   "allowed": []
+  },
+  "icf/reject_expired_passwd": {
+   "ecs": "1",
+   "allowed": []
+  },
+  "login/disable_cpic": {
+   "ecs": "1",
+   "allowed": []
+  },
+  "icf/set_HTTPonly_flag_on_cookies": {
+   "ecs": "0",
+   "allowed": []
+  },
+  "icf/user_recheck": {
+   "ecs": "1",
+   "allowed": []
+  },
+  "icm/accept_remote_trace_level": {
+   "ecs": "0",
+   "allowed": []
+  },
+  "icm/HTTP/logging_0": {
+   "ecs": "PREFIX=/",
+   "allowed": []
+  },
+  "icm/HTTP/logging_client_0": {
+   "ecs": "PREFIX=/",
+   "allowed": []
+  },
+  "icm/HTTP/redirect_0": {
+   "ecs": "PROT=https",
+   "allowed": []
+  },
+  "icm/HTTPS/verify_client": {
+   "ecs": "1",
+   "allowed": []
+  },
+  "icm/security_log": {
+   "ecs": "LEVEL=3",
+   "allowed": []
+  },
+  "is/HTTP/show_detailed_errors": {
+   "ecs": "FALSE",
+   "allowed": []
+  },
+  "is/HTTP/show_server_header": {
+   "ecs": "FALSE",
+   "allowed": []
+  },
+  "ixml/dtd_restriction": {
+   "ecs": "prohibited",
+   "allowed": [
+    "expansion"
+   ]
+  },
+  "login/show_detailed_errors": {
+   "ecs": "0",
+   "allowed": []
+  },
+  "login/accept_sso2_ticket": {
+   "ecs": "1",
+   "allowed": [
+    "2"
+   ]
+  },
+  "login/create_sso2_ticket": {
+   "ecs": "3",
+   "allowed": [
+    "2"
+   ]
+  },
+  "login/failed_user_auto_unlock": {
+   "ecs": "0",
+   "allowed": []
+  },
+  "login/fails_to_session_end": {
+   "ecs": "3",
+   "allowed": [
+    "<=3 not 0"
+   ]
+  },
+  "login/fails_to_user_lock": {
+   "ecs": "6",
+   "allowed": [
+    "<=6 not 0"
+   ]
+  },
+  "login/min_password_diff": {
+   "ecs": "1",
+   "allowed": [
+    ">=1"
+   ]
+  },
+  "login/min_password_digits": {
+   "ecs": "1",
+   "allowed": [
+    ">=1"
+   ]
+  },
+  "login/min_password_letters": {
+   "ecs": "1",
+   "allowed": [
+    ">=1"
+   ]
+  },
+  "login/min_password_lng": {
+   "ecs": "15",
+   "allowed": [
+    ">=15"
+   ]
+  },
+  "login/min_password_lowercase": {
+   "ecs": "1",
+   "allowed": [
+    ">=1"
+   ]
+  },
+  "login/min_password_specials": {
+   "ecs": "1",
+   "allowed": [
+    ">=1"
+   ]
+  },
+  "login/min_password_uppercase": {
+   "ecs": "1",
+   "allowed": [
+    ">=1"
+   ]
+  },
+  "login/no_automatic_user_sapstar": {
+   "ecs": "1",
+   "allowed": []
+  },
+  "login/password_change_waittime": {
+   "ecs": "1",
+   "allowed": [
+    ">=1"
+   ]
+  },
+  "login/password_compliance_to_current_policy": {
+   "ecs": "1",
+   "allowed": [
+    "1"
+   ]
+  },
+  "login/password_downwards_compatibility": {
+   "ecs": "0",
+   "allowed": []
+  },
+  "login/password_expiration_time": {
+   "ecs": "90",
+   "allowed": [
+    "30 to 90"
+   ]
+  },
+  "login/password_history_size": {
+   "ecs": "15",
+   "allowed": [
+    ">=15"
+   ]
+  },
+  "login/password_max_idle_initial": {
+   "ecs": "7",
+   "allowed": [
+    "<=7 not 0"
+   ]
+  },
+  "login/password_max_idle_productive": {
+   "ecs": "90",
+   "allowed": [
+    "30 to 90"
+   ]
+  },
+  "login/ticket_only_by_https": {
+   "ecs": "1",
+   "allowed": []
+  },
+  "login/ticket_only_to_host": {
+   "ecs": "1",
+   "allowed": []
+  },
+  "login/password_change_for_SSO": {
+   "ecs": "1",
+   "allowed": [
+    "2",
+    "3"
+   ]
+  },
+  "ms/acl_info": {
+   "ecs": "$(DIR_GLOBAL)$(DIR_SEP)$(FN_MS_ACL_INFO)",
+   "allowed": []
+  },
+  "ms/monitor": {
+   "ecs": "0",
+   "allowed": []
+  },
+  "rfc/allowoldticket4tt": {
+   "ecs": "no",
+   "allowed": []
+  },
+  "rfc/callback_security_method": {
+   "ecs": "3",
+   "allowed": [
+    "1"
+   ]
+  },
+  "rfc/reject_expired_passwd": {
+   "ecs": "1",
+   "allowed": []
+  },
+  "rfc/authCheckInPlayback": {
+   "ecs": "2",
+   "allowed": []
+  },
+  "rdisp/accept_remote_trace_level": {
+   "ecs": "0",
+   "allowed": []
+  },
+  "rdisp/TRACE_HIDE_SEC_DATA": {
+   "ecs": "ON",
+   "allowed": []
+  },
+  "rec/client": {
+   "ecs": "ALL",
+   "allowed": []
+  },
+  "rsau/enable": {
+   "ecs": "1",
+   "allowed": []
+  },
+  "sapgui/user_scripting": {
+   "ecs": "FALSE",
+   "allowed": [
+    "TRUE"
+   ]
+  },
+  "service/admin_users": {
+   "ecs": "daaadm sapadm dacadm",
+   "allowed": []
+  },
+  "service/protectedwebmethods": {
+   "ecs": "SDEFAULT",
+   "allowed": []
+  },
+  "snc/accept_insecure_cpic": {
+   "ecs": "0",
+   "allowed": [
+    "1"
+   ]
+  },
+  "snc/accept_insecure_gui": {
+   "ecs": "1",
+   "allowed": [
+    "U"
+   ]
+  },
+  "snc/accept_insecure_rfc": {
+   "ecs": "1",
+   "allowed": [
+    "0",
+    "U"
+   ]
+  },
+  "snc/accept_insecure_r3int_rfc": {
+   "ecs": "1",
+   "allowed": [
+    "0"
+   ]
+  },
+  "snc/r3int_rfc_secure": {
+   "ecs": "0",
+   "allowed": [
+    "1"
+   ]
+  },
+  "snc/r3int_rfc_qop": {
+   "ecs": "8",
+   "allowed": []
+  },
+  "snc/only_encrypted_rfc": {
+   "ecs": "0",
+   "allowed": [
+    "1",
+    "2",
+    "3"
+   ]
+  },
+  "snc/only_encrypted_gui": {
+   "ecs": "0",
+   "allowed": [
+    "1"
+   ]
+  },
+  "snc/data_protection/max": {
+   "ecs": "3",
+   "allowed": []
+  },
+  "snc/data_protection/min": {
+   "ecs": "3",
+   "allowed": []
+  },
+  "snc/data_protection/use": {
+   "ecs": "3",
+   "allowed": []
+  },
+  "snc/enable": {
+   "ecs": "1",
+   "allowed": []
+  },
+  "snc/gssapi_lib": {
+   "ecs": "$(DIR_LIBRARY)$(DIR_SEP)$(FT_DLL_PREFIX)sapcrypto$(FT_DLL)",
+   "allowed": []
+  },
+  "snc/permit_insecure_start": {
+   "ecs": "0",
+   "allowed": [
+    "1"
+   ]
+  },
+  "snc/force_login_screen": {
+   "ecs": "0",
+   "allowed": [
+    "1"
+   ]
+  },
+  "snc/identity/as": {
+   "ecs": "p:<SID>_<CID>_SNCS.FQDN",
+   "allowed": []
+  },
+  "igs/snc/library": {
+   "ecs": "$(DIR_LIBRARY)$(DIR_SEP)$(FT_DLL_PREFIX)sapcrypto$(FT_DLL)",
+   "allowed": []
+  },
+  "igs/snc/name": {
+   "ecs": "p:<SID>_<CID>_SNCS.FQDN",
+   "allowed": []
+  },
+  "ssl/ciphersuites": {
+   "ecs": "545:PFS:HIGH::EC_X25519:EC_P256:EC_HIGH",
+   "allowed": [
+    "1568:PFS:HIGH::EC_X25519:EC_P256:EC_HIGH"
+   ]
+  },
+  "ssl/client_ciphersuites": {
+   "ecs": "560:PFS:HIGH::EC_X25519:EC_P256:EC_HIGH",
+   "allowed": [
+    "1584:PFS:HIGH::EC_X25519:EC_P256:EC_HIGH"
+   ]
+  },
+  "icm/HTTPS/client_sni_enabled": {
+   "ecs": "TRUE",
+   "allowed": []
+  },
+  "ssl/client_sni_enabled": {
+   "ecs": "TRUE",
+   "allowed": []
+  },
+  "system/secure_communication": {
+   "ecs": "ON",
+   "allowed": []
+  },
+  "login/password_hash_algorithm": {
+   "ecs": "encoding=RFC2307, algorithm=iSSHA-512, iterations=15000, saltsize=256",
+   "allowed": []
+  },
+  "rdisp/gui_auto_logout": {
+   "ecs": "3600",
+   "allowed": [
+    "<=7200 not 0"
+   ]
+  },
+  "login/create_virtual_user_sapstar": {
+   "ecs": "0",
+   "allowed": []
+  }
+ },
+ "configuration_items": [
+  "delete_unused_clients_001_066",
+  "secure_tmsadm",
+  "secure_ddic_ecs_exception",
+  "secure_sapcpic",
+  "delete_earlywatch_all_clients",
+  "secure_sap_star",
+  "password_hash_tables_authgroup_SPWD",
+  "sal_storage_database_not_filesystem",
+  "sal_filter_all_users_all_clients",
+  "deactivate_critical_icf_services",
+  "gateway_reginfo_acl",
+  "gateway_secinfo_acl",
+  "gateway_prxyinfo_acl",
+  "ssf_pse_d_authgroup_SPSE",
+  "se06_not_modifiable",
+  "scc4_production_client_settings",
+  "ms_acl_info_no_host_wildcard",
+  "icm_admin_port_204"
+ ],
+ "referenced_notes": [
+  "65968",
+  "2654391",
+  "3584984",
+  "3674774",
+  "2715519",
+  "3318423",
+  "3346659",
+  "3480723",
+  "3381209"
+ ]
+}

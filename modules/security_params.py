@@ -25,13 +25,13 @@ class SecurityParamAuditor(BaseAuditor):
     BASELINE = {
         # --- Password Policy ---
         "login/min_password_lng": {
-            "expected": "8",
+            "expected": "15",
             "op": ">=",
             "severity": "HIGH",
             "category": "Password Policy",
-            "desc": "Minimum password length should be at least 8 characters",
-            "fix": "Set login/min_password_lng >= 8 in RZ10 (12+ recommended)",
-            "refs": ["SAP Note 1731549", "CIS SAP Benchmark 1.1.1"],
+            "desc": "Minimum password length must be at least 15 characters (mandatory in ECS)",
+            "fix": "Set login/min_password_lng >= 15 in DEFAULT.PFL. SAP Note 3250501 makes this mandatory for ECS/RISE; the older >= 8 guidance is not sufficient there.",
+            "refs": ["SAP Note 3250501", "CIS SAP Benchmark 1.1.1"],
         },
         "login/min_password_digits": {
             "expected": "1",
@@ -70,7 +70,7 @@ class SecurityParamAuditor(BaseAuditor):
             "refs": ["CIS SAP Benchmark 1.1.6"],
         },
         "login/password_max_idle_initial": {
-            "expected": "14",
+            "expected": "7",
             "op": "<=",
             "severity": "MEDIUM",
             "category": "Password Policy",
@@ -79,12 +79,12 @@ class SecurityParamAuditor(BaseAuditor):
             "refs": ["CIS SAP Benchmark 1.1.7"],
         },
         "login/password_history_size": {
-            "expected": "5",
+            "expected": "15",
             "op": ">=",
             "severity": "LOW",
             "category": "Password Policy",
             "desc": "Password history should prevent reuse of last 5+ passwords",
-            "fix": "Set login/password_history_size >= 5",
+            "fix": "Set login/password_history_size >= 15 (mandatory in ECS, SAP Note 3250501)",
             "refs": ["CIS SAP Benchmark 1.1.8"],
         },
 
@@ -99,12 +99,12 @@ class SecurityParamAuditor(BaseAuditor):
             "refs": ["CIS SAP Benchmark 1.2.1"],
         },
         "login/fails_to_user_lock": {
-            "expected": "5",
+            "expected": "6",
             "op": "<=",
             "severity": "HIGH",
             "category": "Login Security",
             "desc": "Account should lock after max 5 failed logon attempts",
-            "fix": "Set login/fails_to_user_lock <= 5",
+            "fix": "Set login/fails_to_user_lock <= 6 and not 0 (SAP Note 3250501)",
             "refs": ["CIS SAP Benchmark 1.2.2"],
         },
         "login/no_automatic_user_sapstar": {
