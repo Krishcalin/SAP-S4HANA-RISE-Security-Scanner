@@ -191,8 +191,14 @@ def get_finding(finding_id: int, scope: Optional[Sequence[int]]) -> Optional[Dic
     _scoped(where, params, scope)
     return db.one(
         f"SELECT f.*, cd.title, cd.category, cd.remediation, cd.risk_narrative, "
-        f"cd.references_json, cd.baseline_req_id, cd.responsibility, "
-        f"s.sid, s.client AS system_client, s.tier, l.deployment_mode "
+        f"cd.references_json, cd.baseline_req_id, cd.responsibility, cd.cwe, "
+        f"s.sid, s.client AS system_client, s.tier, l.deployment_mode, "
+        # The snippet and the source->sink trace describe what the code looked like
+        # in a PARTICULAR run, so they come from the newest observation rather than
+        # from `finding`. Read here so the detail page stays one round trip.
+        f"(SELECT o.details FROM finding_observation o "
+        f"  WHERE o.finding_id = f.id ORDER BY o.scan_run_id DESC LIMIT 1) "
+        f"  AS latest_details "
         f"FROM finding f JOIN check_definition cd ON cd.check_id = f.check_id "
         f"LEFT JOIN sap_system s ON s.id = f.system_id "
         f"JOIN landscape l ON l.id = f.landscape_id "

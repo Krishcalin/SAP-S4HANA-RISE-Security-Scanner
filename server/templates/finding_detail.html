@@ -102,6 +102,122 @@
   </div>
 </div>
 
+{# ── Code findings ─────────────────────────────────────────────────────────
+   A code finding is unusable without the code. `latest_details` is the newest
+   observation's jsonb: the snippet and the taint trace are what the source looked
+   like in THAT run, which is why they are not columns on the finding. #}
+{% set d = finding.latest_details or {} %}
+{% if d.get('source') in ('abap_scan', 'atc_export') %}
+<h2>Code location</h2>
+<div class="card">
+  <dl class="kv">
+    {% if d.get('file') %}<dt>File</dt><dd class="mono small">{{ d.file }}</dd>{% endif %}
+    {% if d.get('lines') %}
+    <dt>Line{{ 's' if d.lines|length > 1 }}</dt>
+    <dd class="mono small">{{ d.lines[:20]|join(', ') }}{% if d.lines|length > 20 %}
+        <span class="faint">+{{ d.lines|length - 20 }} more</span>{% endif %}</dd>
+    {% endif %}
+    {% if d.get('occurrences') %}
+    <dt>Occurrences</dt><dd>{{ d.occurrences }}</dd>{% endif %}
+    {% if finding.cwe %}<dt>CWE</dt><dd class="mono small">{{ finding.cwe }}</dd>{% endif %}
+
+    <dt>Evidence</dt>
+    <dd>
+      {% if d.get('evidence') == 'sap_atc' %}
+        {# Not our finding. Saying so is the difference between "SAP found this"
+           and "our pattern matched", and a reviewer weighs them differently. #}
+        <span class="pill st st-resolved">SAP ATC / CVA</span>
+        <span class="small faint">reported by SAP's own engine</span>
+      {% elif finding.taint_confidence == 'confirmed' %}
+        <span class="pill sev-CRITICAL">data-flow confirmed</span>
+        <span class="small faint">tainted input provably reaches this statement</span>
+      {% elif finding.taint_confidence == 'tentative' %}
+        <span class="pill sev-MEDIUM">tentative</span>
+        <span class="small faint">the data-flow walk found no evidence either way</span>
+      {% else %}
+        <span class="pill st">pattern only</span>
+        <span class="small faint">matched by statement pattern; no data-flow evidence</span>
+      {% endif %}
+    </dd>
+
+    {% if finding.reachability %}
+    <dt>Reachable</dt>
+    <dd>
+      {% if finding.reachability == 'reachable' %}
+        <span class="own own-ticket_to_sap">reachable</span>
+      {% elif finding.reachability == 'unreachable' %}
+        <span class="own own-provider_owned">no path found</span>
+      {% else %}
+        <span class="own own-not_assessable">unknown</span>
+      {% endif %}
+      {% if d.get('reachability_reasons') %}
+      <div class="small faint" style="margin-top:4px">
+        {{ d.reachability_reasons|join(' · ') }}</div>
+      {% endif %}
+      {% if finding.reachability == 'unknown' %}
+      <div class="small faint" style="margin-top:4px">
+        Supply <span class="mono">REFERENCED</span> / <span class="mono">LAST_USED</span>
+        in <span class="mono">code_inventory.csv</span> to rank this against the rest
+        of the custom code.</div>
+      {% endif %}
+    </dd>
+    {% endif %}
+  </dl>
+
+  {% if d.get('snippet') %}
+  <h3 style="margin-top:18px">Source</h3>
+  <pre class="mono small" style="white-space:pre;overflow-x:auto;background:var(--panel-2);
+       padding:12px;border-radius:6px;margin:0">{{ d.snippet }}</pre>
+  {% endif %}
+
+  {% if d.get('taint_flow') %}
+  {# The best thing this engine produces, and there is nothing else like it in the
+     product: the actual path from the untrusted source to the dangerous sink. #}
+  <h3 style="margin-top:18px">How untrusted input reaches it</h3>
+  <div class="wrap">
+    <table>
+      <thead><tr>
+        <th style="width:70px">Line</th><th style="width:90px">Role</th>
+        <th style="width:130px">Variable</th><th>Statement</th>
+      </tr></thead>
+      <tbody>
+      {% for hop in d.taint_flow %}
+      <tr>
+        <td class="mono small">{{ hop.get('line', '') }}</td>
+        <td>
+          {% if hop.get('role') == 'source' %}
+            <span class="pill sev-HIGH">source</span>
+          {% elif hop.get('role') == 'sink' %}
+            <span class="pill sev-CRITICAL">sink</span>
+          {% else %}<span class="pill st">{{ hop.get('role', '') }}</span>{% endif %}
+        </td>
+        <td class="mono small">{{ hop.get('var', '') }}</td>
+        <td class="mono small">{{ hop.get('code', '') }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if d.get('suppressed_by_source_marker') %}
+  <div class="banner warn" style="margin-top:14px">
+    <strong>Suppressed in source by a #NOSEC marker.</strong> It is reported anyway:
+    a suppression that leaves no record is indistinguishable from clean code. If the
+    claim is right, dismiss it here instead — that decision is attributed, expires
+    and can be reviewed.
+  </div>
+  {% endif %}
+
+  {% if d.get('also_reported_by_atc') %}
+  <div class="banner info" style="margin-top:14px">
+    SAP's ATC also reports a finding on this object. Both are kept: they are
+    independent evidence for the same defect.
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
 <h2>Risk</h2>
 {# Authored one paragraph per line. Inside a single <p> the browser collapses every
    newline to a space and the reader gets a wall of text. #}

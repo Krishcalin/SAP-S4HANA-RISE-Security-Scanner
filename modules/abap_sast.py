@@ -351,21 +351,39 @@ class AbapSourceScanner:
         relevant = [f for f in findings if f["rule_id"] in sinks]
         if not relevant:
             return
-        try:
-            analyzer = TaintAnalyzer(source.splitlines())
-        except Exception:                                # noqa: BLE001
-            return
+
+        # NO try/except around these calls, on purpose. An earlier version wrapped
+        # them and called a `refine()` method that does not exist; the
+        # AttributeError went straight into the `except` and every finding stayed
+        # `pattern-only`. The taint pass appeared to run and did nothing at all,
+        # which is worse than not having it. A broken analyzer must fail loudly.
+        analyzer = TaintAnalyzer(source)
+
         for finding in relevant:
-            try:
-                verdict = analyzer.refine(finding["line"])   # type: ignore[attr-defined]
-            except Exception:                            # noqa: BLE001
+            arg = _sink_argument(finding["statement"])
+            if not arg:
                 continue
-            if not verdict:
-                continue
-            state, flow = verdict if isinstance(verdict, tuple) else (verdict, None)
-            if state:
-                finding["confidence"] = state
-                finding["flow"] = flow
+            verdict = analyzer.classify_sink(arg, finding["line"])
+            if verdict == analyzer.TAINTED:
+                finding["confidence"] = "confirmed"
+                finding["flow"] = analyzer.sink_trace(arg, finding["line"])
+            else:
+                # Downgrade, never hide — including on SANITIZED. The walk is
+                # path-insensitive, so a sanitizer inside one branch of an IF is
+                # credited on every path including the ones it does not cover.
+                # Upstream that silently deleted genuine injections.
+                finding["confidence"] = "tentative"
+
+
+#: The parenthesised expression a dynamic Open SQL clause is built from —
+#: `WHERE (lv_where)`, `FROM (lv_tab)`, `ORDER BY (lv_sort)`. That expression is
+#: what the taint analyzer needs; handing it the whole statement finds nothing.
+_SINK_ARG = re.compile(r"\(\s*([A-Za-z_][A-Za-z0-9_\-]*(?:->[A-Za-z0-9_]+)*)\s*\)")
+
+
+def _sink_argument(statement: str) -> Optional[str]:
+    match = _SINK_ARG.search(statement)
+    return match.group(1) if match else None
 
 
 def _object_name(path: Path) -> str:

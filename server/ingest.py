@@ -198,8 +198,8 @@ def _upsert_check_definitions(conn: psycopg.Connection,
             """
             INSERT INTO check_definition
                 (check_id, title, category, default_severity, remediation,
-                 risk_narrative, references_json, owning_team)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                 risk_narrative, references_json, owning_team, cwe)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (check_id) DO UPDATE SET
                 title            = EXCLUDED.title,
                 category         = EXCLUDED.category,
@@ -207,6 +207,9 @@ def _upsert_check_definitions(conn: psycopg.Connection,
                 remediation      = EXCLUDED.remediation,
                 risk_narrative   = EXCLUDED.risk_narrative,
                 references_json  = EXCLUDED.references_json,
+                -- COALESCE: not every occurrence carries the CWE, and one that
+                -- does must not be erased by one that does not.
+                cwe              = COALESCE(EXCLUDED.cwe, check_definition.cwe),
                 -- COALESCE, not EXCLUDED: a curated team survives the next scan.
                 owning_team      = COALESCE(check_definition.owning_team,
                                             EXCLUDED.owning_team),
@@ -215,7 +218,8 @@ def _upsert_check_definitions(conn: psycopg.Connection,
             (cid, f.get("title", ""), f.get("category"), f.get("severity"),
              kb_fix or f.get("remediation", ""),
              kb_risk or f.get("description", ""),
-             Jsonb(f.get("references") or []), team_for(cid)),
+             Jsonb(f.get("references") or []), team_for(cid),
+             (f.get("details") or {}).get("cwe")),
         )
 
 
@@ -423,6 +427,20 @@ def store_run(conn: psycopg.Connection, run_id: int, landscape_id: int,
              f.get("description", ""), Jsonb(f.get("affected_items") or []),
              Jsonb(subject), f.get("affected_count") or 0,
              Jsonb(f.get("details") or {})))
+
+        # Per-occurrence facts about code findings, refreshed on EVERY run rather
+        # than only at insert. Both genuinely change without the finding changing
+        # identity: a rule goes pattern-only -> confirmed the day a taint path
+        # appears, and a program goes unreachable -> reachable the day something
+        # starts calling it. Writing them only at first sight would leave the
+        # console asserting last quarter's verdict about this quarter's code.
+        _details = f.get("details") or {}
+        if _details.get("confidence") or _details.get("reachability"):
+            conn.execute(
+                "UPDATE finding SET taint_confidence = %s, reachability = %s "
+                "WHERE id = %s",
+                (_details.get("confidence"), _details.get("reachability"),
+                 finding_id))
 
         seen_now[fp] = finding_id
 

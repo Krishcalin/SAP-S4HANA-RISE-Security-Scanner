@@ -1,6 +1,6 @@
 # Merging the Code Vulnerability Analyzer into MonitorRisk
 
-**Status:** Phases 0-4 SHIPPED · Phase 5 partly shipped · Phases 6, 7 open
+**Status:** Phases 0-4, 6 SHIPPED · Phase 5 partly shipped · Phase 7 open
 **Date:** 2026-08-07 · **Last built:** 2026-08-07
 
 | Phase | State | Where |
@@ -12,7 +12,7 @@
 | 4a · reachability join on `code_inventory` | **done** | `modules/reachability.py` |
 | 4b · specify `HANDLER_CLASS` / `IMPL_CLASS` | **done** (specified; awaiting a customer export) | `docs/EXPORT_GUIDE.md` |
 | 5 · trust model | **mostly done** in `bf7532a` — taint on by default, aggregate scoping, per-finding confidence, `#NOSEC` surfaced. Outstanding: excluding pattern-only findings from CRQ pricing | — |
-| 6 · server tier: `cwe` + `confidence` columns, snippet and taint trace in the console | open | — |
+| 6 · server tier + console | **done** | `schema.sql`, `finding_detail.html` |
 | 7 · coverage gaps, AMDP first | open | — |
 **Source repo:** `SAP-Code-Vulnerability-Analyzer` v1.9.0 (`abap_scanner.py`, 3,421 lines)
 **Target:** this repository

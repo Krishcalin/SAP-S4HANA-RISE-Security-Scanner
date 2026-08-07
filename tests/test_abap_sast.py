@@ -252,6 +252,56 @@ def test_pattern_only_findings_aggregate_per_object(tmp_path):
             assert f["scope"] == "aggregate", f"{f['check_id']} is tracked per hit"
 
 
+TAINTED = ("REPORT z.\nDATA lv_where TYPE string.\nSTART-OF-SELECTION.\n"
+           "  lv_where = request->get_form_field( 'q' ).\n"
+           "  SELECT * FROM mara WHERE (lv_where) INTO TABLE @DATA(lt).\n")
+
+
+def test_the_taint_pass_actually_runs():
+    """A REGRESSION TEST FOR A SILENT NO-OP.
+
+    The first version of `_refine` called a `refine()` method that does not exist
+    on TaintAnalyzer and wrapped the call in `except Exception: continue`. The
+    AttributeError went into the except, every finding stayed `pattern-only`, and
+    the taint pass appeared to run while doing nothing whatsoever. Nothing failed;
+    the only symptom was that no finding was ever `confirmed`.
+
+    So this asserts the positive outcome rather than the absence of an error.
+    """
+    hit = next(f for f in scan(TAINTED, data_flow=True)
+               if f["rule_id"] == "ABAP-SQLI-001")
+    assert hit["confidence"] == "confirmed", \
+        "the taint pass did not confirm a textbook source-to-sink flow — check it " \
+        "is being called at all"
+    assert hit["flow"], "confirmed, but with no trace to show for it"
+    roles = [h.get("role") for h in hit["flow"]]
+    assert "source" in roles and "sink" in roles
+
+
+def test_a_literal_argument_is_tentative_not_confirmed():
+    literal = ("REPORT z.\nDATA lv_where TYPE string.\nSTART-OF-SELECTION.\n"
+               "  lv_where = 'MATNR = ''X'''.\n"
+               "  SELECT * FROM mara WHERE (lv_where) INTO TABLE @DATA(lt).\n")
+    hit = next(f for f in scan(literal, data_flow=True)
+               if f["rule_id"] == "ABAP-SQLI-001")
+    assert hit["confidence"] == "tentative"
+
+
+def test_a_sanitized_argument_is_downgraded_but_never_hidden():
+    """The walk is path-insensitive, so a sanitizer inside one branch of an IF is
+    credited on every path — including the ones it does not cover. Upstream that
+    silently deleted genuine injections."""
+    guarded = ("REPORT z.\nDATA lv_where TYPE string.\nSTART-OF-SELECTION.\n"
+               "  lv_where = request->get_form_field( 'q' ).\n"
+               "  IF lv_ok = abap_true.\n"
+               "    lv_where = cl_abap_dyn_prg=>quote( lv_where ).\n"
+               "  ENDIF.\n"
+               "  SELECT * FROM mara WHERE (lv_where) INTO TABLE @DATA(lt).\n")
+    hits = [f for f in scan(guarded, data_flow=True)
+            if f["rule_id"] == "ABAP-SQLI-001"]
+    assert hits, "a sanitizer in one branch removed the finding entirely"
+
+
 def test_every_finding_states_the_evidence_it_rests_on(tmp_path):
     stmt = "SELECT * FROM mara WHERE (lv_w) INTO TABLE @DATA(t).\n"
     for f in _audit(tmp_path, stmt):

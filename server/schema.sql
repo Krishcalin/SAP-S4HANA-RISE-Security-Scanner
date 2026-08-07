@@ -540,6 +540,35 @@ CREATE INDEX IF NOT EXISTS finding_tier_idx ON finding (landscape_id, priority_t
 -- page can never disagree with the row that carries the path's history.
 ALTER TABLE attack_path ADD COLUMN IF NOT EXISTS detail jsonb NOT NULL DEFAULT '{}'::jsonb;
 
+-- ---------------------------------------------------------------------
+--  Code findings
+-- ---------------------------------------------------------------------
+-- Two columns, and only two. The snippet and the source->sink taint trace do NOT
+-- get columns: they live in `finding_observation.details`, which already exists
+-- and is already populated from the auditor's `details` dict. Both describe what
+-- the code looked like in THAT run, which is exactly what a per-observation jsonb
+-- is for -- a column on `finding` would claim they are properties of the durable
+-- defect, and they are not.
+
+-- The catalogue already carries `cve` and `cvss` but had nowhere to put a CWE,
+-- and every rule in the ABAP corpus ships one. It belongs on the definition
+-- because it is a property of the CHECK, not of an occurrence.
+ALTER TABLE check_definition ADD COLUMN IF NOT EXISTS cwe text;
+
+-- Taint confidence CANNOT live on check_definition: the same rule is `confirmed`
+-- in one program and `pattern-only` in another, so it varies per occurrence. It
+-- is the single most decision-relevant field a SAST finding has -- "our regex
+-- matched" and "tainted input provably reaches this sink" are not the same claim
+-- and must never render identically.
+ALTER TABLE finding ADD COLUMN IF NOT EXISTS taint_confidence text
+    CHECK (taint_confidence IN ('confirmed', 'tentative', 'pattern-only'));
+
+-- Reachability from Phase 4a: whether anything in the estate can reach the object
+-- the finding is about. NULL means no code-inventory evidence either way, which is
+-- a third state and must not be read as 'unreachable'.
+ALTER TABLE finding ADD COLUMN IF NOT EXISTS reachability text
+    CHECK (reachability IN ('reachable', 'unreachable', 'unknown'));
+
 CREATE INDEX IF NOT EXISTS attack_path_open_idx
     ON attack_path (landscape_id, severity) WHERE closed_at IS NULL;
 CREATE INDEX IF NOT EXISTS attack_path_closed_idx
