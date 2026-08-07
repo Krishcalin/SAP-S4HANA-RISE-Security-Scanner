@@ -27,7 +27,7 @@ EXEC SQL blocks matchable at all.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 #: AMDP / SQLScript. An AMDP method body is SQLScript executed inside HANA, and
 #: the ABAP compiler does not analyse it: everything between METHOD and ENDMETHOD
@@ -207,6 +207,10 @@ MISC_RULES: List[Dict[str, Any]] = [
         # The URL argument is the sink; a taint verdict on it is exactly the
         # question "can the caller choose where this server connects to".
         "_taint_sink": True,
+        # Without this the generic extractor looked for a parenthesised bare
+        # identifier, found none in `create_by_url( url = lv_url )`, and the rule
+        # could never reach `confirmed` despite shipping a working sink pattern.
+        "_sink_arg": r"create_by_url\s*\([^)]*?\burl\s*=\s*([A-Za-z_]\w*)",
     },
     {
         "id": "ABAP-BKDR-008",
@@ -231,4 +235,74 @@ MISC_RULES: List[Dict[str, Any]] = [
 
 EXTRA_ABAP_RULES: List[Dict[str, Any]] = (
     AMDP_RULES + NATIVE_SQL_RULES + CDS_RULES + MISC_RULES
+)
+
+
+# --------------------------------------------------------------------------- #
+#  Sanitizers — which guard actually clears which sink                        #
+# --------------------------------------------------------------------------- #
+# The vendored analyzer consults ONE flat sanitizer regex for all nine sinks, and
+# it is wrong in three separate directions:
+#
+#   * A blanket `cl_abap_dyn_prg=>` prefix credits ANY method on the class. An XSS
+#     escaper therefore cleared a dynamic FROM clause: five genuine injections were
+#     reproduced being downgraded that way.
+#   * No word boundaries and no call syntax, so the bare identifiers
+#     `lv_escape_quotes` or `lt_check_int_values` matched. Since the regex is
+#     tested against the raw SINK ARGUMENT, a tainted variable merely NAMED like a
+#     guard returned `sanitized` outright.
+#   * The escaping half was listed and the quoting half — the one that adds the
+#     delimiters, without which escaping does not make a value safe — was not.
+#
+# These guards are not interchangeable. A table-name check does not make a column
+# name safe, and neither makes a file path safe. So the mapping is per sink, and
+# a sink with no verified guard gets an empty tuple rather than a guess.
+#
+# Kept here rather than in `abap_sast_rules.py` because that file is regenerated
+# verbatim by `tools/build_abap_rules.py`.
+
+#: Membership in a fixed set constrains a value in ANY position, so this appears
+#: in every entry below.
+_ALLOWLIST = ("check_allowlist", "check_whitelist")
+
+#: `check_whitelist` is retained as an alias only. It is NOT confirmed to be a
+#: released method name — it survived in the vendored list by accident, via the
+#: blanket class prefix — and removing it outright would turn every estate still
+#: using it into a false positive. UNVERIFIED: see U3 in
+#: docs/CVA_ENGINE_IMPROVEMENT_PLAN.md.
+
+SINK_SANITIZERS: Dict[str, Tuple[str, ...]] = {
+    # Dynamic table name
+    "ABAP-SQLI-010": ("check_table_name_str", "check_table_name_tab") + _ALLOWLIST,
+    "ABAP-SQLI-011": ("check_table_name_str", "check_table_name_tab") + _ALLOWLIST,
+    # Dynamic column / sort / grouping term
+    "ABAP-SQLI-006": ("check_column_name",) + _ALLOWLIST,
+    "ABAP-SQLI-007": ("check_column_name",) + _ALLOWLIST,
+    # Dynamic condition or value — quoting, not column checking, is the guard
+    "ABAP-SQLI-001": ("quote", "quote_str", "check_char_literal", "check_int_value")
+                     + _ALLOWLIST,
+    "ABAP-SQLI-008": ("quote", "quote_str", "check_char_literal", "check_int_value")
+                     + _ALLOWLIST,
+    # Dynamic program / class / method name
+    "ABAP-CINJ-005": ("check_variable_name",) + _ALLOWLIST,
+    # Outbound URL: only membership of a known-good set constrains a destination
+    "ABAP-SSRF-001": _ALLOWLIST,
+    # Application-server file path. `file_validate_name` is the documented
+    # physical-path guard; nothing else in the inventory constrains a path.
+    "ABAP-PATH-001": ("file_validate_name",),
+}
+
+#: The default for a sink with no entry above: every guard we know of. Wider than
+#: any per-sink set, so an unmapped sink can only ever be MORE forgiving — a new
+#: sink cannot silently become a false positive by omission.
+DEFAULT_SANITIZERS: Tuple[str, ...] = tuple(sorted({
+    m for methods in SINK_SANITIZERS.values() for m in methods
+}))
+
+#: Output-encoding guards. Deliberately a SEPARATE set that no SQL, path, program
+#: or URL sink may consult: escaping a value for HTML or JavaScript says nothing
+#: about whether it is safe in a FROM clause.
+XSS_SANITIZERS: Tuple[str, ...] = (
+    "escape_xss_html", "escape_xss_javascript", "escape_xss_url",
+    "escape_html", "escape_url",
 )

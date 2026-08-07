@@ -54,12 +54,15 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from modules.abap_sast_extra import CDS_RULES, EXTRA_ABAP_RULES
+from modules.abap_sast_extra import (
+    CDS_RULES, DEFAULT_SANITIZERS, EXTRA_ABAP_RULES, SINK_SANITIZERS,
+)
 from modules.abap_sast_rules import (
     ALL_ABAP_SAST_RULES as _VENDORED_ABAP_RULES,
     ALL_BTP_CONFIG_RULES,
     ALL_JS_RULES,
     TaintAnalyzer,
+    _ABAP_NOISE_WORDS,
 )
 from modules.base_auditor import BaseAuditor
 from modules.reachability import ReachabilityIndex, stamp
@@ -69,6 +72,10 @@ from modules.reachability import ReachabilityIndex, stamp
 #: upstream repository — anything added there would be destroyed on the next
 #: refresh, silently and with no test failing.
 ALL_ABAP_SAST_RULES = _VENDORED_ABAP_RULES + EXTRA_ABAP_RULES
+
+#: For rules the engine emits itself rather than through the generic pattern loop,
+#: so their severity, CWE and customer-facing text stay vendored.
+_RULES_BY_ID: Dict[str, Dict[str, Any]] = {r["id"]: r for r in ALL_ABAP_SAST_RULES}
 
 # --------------------------------------------------------------------------- #
 #  What an abapGit export actually contains                                   #
@@ -121,13 +128,54 @@ PATTERN_FIXES: Dict[str, str] = {
 
 #: Rules named "... without AUTHORITY-CHECK" whose pattern cannot express the
 #: "without" half. Only ABAP-AUTH-001 shipped with the metadata to check; the other
-#: four fired on every UPDATE/DELETE/INSERT/RFC call in the estate, guarded or not.
+#: five fired on every UPDATE/DELETE/INSERT/RFC/transaction call in the estate,
+#: guarded or not.
 AUTHORITY_GUARDED: Tuple[str, ...] = (
     "ABAP-AUTH-001", "ABAP-AUTH-004", "ABAP-AUTH-005",
     "ABAP-AUTH-006", "ABAP-AUTH-007",
+    # Literally named "... without S_TCODE check" and fired on correctly guarded
+    # code because it was never in this table.
+    "ABAP-AUTH-008",
 )
 
-_AUTHORITY_CHECK = re.compile(r"\bAUTHORITY[-\s]?CHECK\b", re.IGNORECASE)
+#: Rules the generic pattern loop must NOT emit, because the engine emits them
+#: itself with evidence a single-statement regex cannot express.
+RULE_HANDLED_IN_ENGINE: Tuple[str, ...] = (
+    # Its pattern needs a literal `.` that `split_statements` strips, plus a
+    # lookahead at the NEXT statement. It could only ever fire when a period
+    # appeared inside a literal — dead in general, and a guaranteed false
+    # positive in the one case that reached it.
+    "ABAP-AUTH-003",
+)
+
+#: Rules matched against `Statement.text_masked` — literal and template CONTENT
+#: blanked — because for these the danger is a keyword appearing as *code*, and a
+#: developer writing the same keyword in a message or a comment-like literal is
+#: not a finding. Measured, both directions were live:
+#:
+#:   * `MESSAGE |Never use EXEC SQL in this program| TYPE 'I'.` raised NSQL-001.
+#:   * A FORM with an unguarded DELETE + UPDATE reported AUTH-005/-006; adding only
+#:     `MESSAGE |Remember to AUTHORITY-CHECK before delete| TYPE 'I'.` silenced
+#:     both — a developer's TODO about missing authorization suppressed the finding
+#:     about missing authorization.
+#:
+#: Deliberately NOT global: rules that key on a literal's VALUE (hardcoded
+#: credentials, `ABAP-SSRF-001`'s URL, `ABAP-CONF-002`) need the content.
+LITERAL_BLIND: frozenset = frozenset({
+    "ABAP-NSQL-001", "ABAP-CINJ-004", "ABAP-AMDP-001", *AUTHORITY_GUARDED,
+})
+
+#: A guard is a STATEMENT, never a message text. Anchored, and it requires the
+#: `FIELD` half: `AUTHORITY-CHECK OBJECT` with no field pair checks nothing.
+#: `[-\s]?` also admitted `AUTHORITY CHECK` and `AUTHORITYCHECK`, neither of which
+#: is the documented spelling.
+_AUTHORITY_CHECK_STMT = re.compile(
+    r"^AUTHORITY-CHECK\s+OBJECT\b(?=.*\bFIELD\b)", re.IGNORECASE)
+
+#: An AUTHORITY-CHECK whose result is never read is a no-op that the old guard
+#: credited in full.
+_SUBRC = re.compile(r"\bSY-SUBRC\b", re.IGNORECASE)
+_CONTROL_FLOW = re.compile(r"^(?:IF|CASE|CHECK|ELSEIF|ASSERT)\b", re.IGNORECASE)
 
 #: Statements that open and close a processing block. A guard inside one FORM does
 #: not protect a sink in the next one.
@@ -138,14 +186,26 @@ _BLOCK_CLOSE = re.compile(
 
 _NOSEC = re.compile(r"#NOSEC(?P<ids>(?:\s+[A-Z0-9][A-Z0-9\-]*,?)*)", re.IGNORECASE)
 
+#: An AMDP method body is SQLScript, not ABAP, and the two disagree about `"`,
+#: `--` and the statement terminator. Entered on the method header, left on a RAW
+#: `ENDMETHOD` line — a SQLScript body contains no ABAP period, so it emits no
+#: statement the loop could react to.
+_AMDP_OPEN = re.compile(r"\bBY\s+DATABASE\s+(?:PROCEDURE|FUNCTION)\b", re.IGNORECASE)
+_AMDP_CLOSE = re.compile(r"^\s*ENDMETHOD\b", re.IGNORECASE)
+
+#: A statement spanning more than this many source lines means the lexer lost its
+#: place. The module's own motivating example is a four-line SELECT.
+_RUNAWAY_LINES = 50
+
 
 class Statement:
     """One ABAP statement, with the source it came from."""
 
-    __slots__ = ("text", "line", "raw", "block", "nosec")
+    __slots__ = ("text", "line", "raw", "block", "nosec", "text_masked", "degraded")
 
     def __init__(self, text: str, line: int, raw: str, block: int,
-                 nosec: Optional[List[str]]):
+                 nosec: Optional[List[str]], text_masked: Optional[str] = None,
+                 degraded: bool = False):
         #: Comments stripped, newlines collapsed — what the rules match against.
         self.text = text
         #: 1-based line where the statement STARTS. Display only; never identity.
@@ -156,31 +216,69 @@ class Statement:
         self.block = block
         #: Rule ids suppressed by a `#NOSEC` marker, or [] for "all rules".
         self.nosec = nosec
+        #: `text` with the CONTENT of literals and of string-template text blanked
+        #: to `#`, delimiters and offsets preserved. What `LITERAL_BLIND` rules and
+        #: the AUTHORITY-CHECK guard match against, so that prose in a message
+        #: cannot invent a finding or silence one. Embedded `{ }` expressions are
+        #: code and are NOT blanked.
+        self.text_masked = text if text_masked is None else text_masked
+        #: True when the runaway guard flushed this — the lexer lost its place and
+        #: everything matched here is suspect. Counted, never silent.
+        self.degraded = degraded
 
 
 def split_statements(source: str) -> List[Statement]:
     """Split ABAP source into statements.
 
-    ABAP terminates a statement with a period. The only things that make this
-    non-trivial are the three places a period does not terminate anything:
-    inside a string literal, inside a comment, and between two digits.
+    ABAP terminates a statement with a period, and the whole difficulty is the
+    places a period does not terminate anything: inside a text literal, inside a
+    string template, inside a template's embedded `{ }` expression, inside a
+    comment, and between two digits.
 
-    Comments: a `*` in column 1 comments the whole line; a `"` outside a string
-    literal comments the rest of it. Both are removed before splitting, so a
-    commented-out `SELECT` cannot raise a finding — the upstream engine's habit of
-    matching commented code was a quiet contributor to its noise.
+    WHY ONE MODE STACK RATHER THAN TWO SCANNERS
+    There used to be two hand-written scanners over this grammar — one stripping
+    comments per raw line, one re-deriving literal state from the joined buffer —
+    and they disagreed about whether literal state survives a newline. Neither
+    modelled `{ }`, so a template embedding an expression that contains its own
+    literal with a pipe in it, e.g.
+
+        DATA(msg) = |Result: { replace( val = t pcre = `a|b` with = `#` ) }|.
+
+    closed the template early, opened a literal that never closed, and collapsed
+    **the entire remainder of the file into one statement** — swallowing every
+    ENDMETHOD, so a guard in one method was credited to a sink in another. One
+    literal pipe turned a whole object into a clean report.
+
+    `_scan_line` is now the single authority. It returns three parallel strings —
+    code, mask, terminator markers — that are joined and normalised in lockstep, so
+    "is this period a terminator" is answered once, where the state lives, instead
+    of being re-derived downstream.
     """
     statements: List[Statement] = []
-    buf: List[str] = []
+    buf_c: List[str] = []
+    buf_m: List[str] = []
+    buf_t: List[str] = []
     raw: List[str] = []
     start_line = 1
     block = 0
     pending_nosec: List[str] = []
     have_nosec = False
-    in_template = False
+    stack: List[Tuple[str, str]] = []
+
+    def emit(text: str, masked: str, degraded: bool = False) -> None:
+        nonlocal block
+        if not text:
+            return
+        if _BLOCK_OPEN.match(text):
+            block += 1
+        statements.append(Statement(
+            text, start_line, "\n".join(raw).strip(), block,
+            pending_nosec if have_nosec else None, masked, degraded))
+        if _BLOCK_CLOSE.match(text):
+            block += 1
 
     for lineno, line in enumerate(source.splitlines(), start=1):
-        if not buf:
+        if not buf_c:
             start_line = lineno
 
         marker = _NOSEC.search(line)
@@ -189,43 +287,58 @@ def split_statements(source: str) -> List[Statement]:
                    for i in marker.group("ids").split() if i.strip()]
             pending_nosec, have_nosec = ids, True
 
-        # Threaded, not recomputed per line: a string template left open at a line
-        # end means a `"` on the next line is text, not the start of a comment.
-        code, in_template = _strip_comments(line, in_template)
+        # An AMDP body ends at a raw ENDMETHOD. It cannot end at a statement,
+        # because SQLScript terminates on `;` and emits no ABAP statement here.
+        if _in_amdp(stack) and _AMDP_CLOSE.match(line):
+            while _in_amdp(stack):
+                stack.pop()
+
+        code, mask, term, stack = _scan_line(line, stack)
         raw.append(line)
 
         if not code.strip():
-            if not "".join(buf).strip():
-                buf, raw = [], []
+            if not "".join(buf_c).strip():
+                buf_c, buf_m, buf_t, raw = [], [], [], []
             continue
 
-        buf.append(code)
-        joined = " ".join(" ".join(buf).split())
+        buf_c.append(code + " ")
+        buf_m.append(mask + " ")
+        buf_t.append(term + "0")
+        c, m, t = _norm3("".join(buf_c), "".join(buf_m), "".join(buf_t))
 
-        # Emit each complete statement in the buffer.
         while True:
-            end = _terminator(joined)
-            if end is None:
+            end = t.find("1")
+            if end < 0:
                 break
-            text, joined = joined[:end].strip(), joined[end + 1:].strip()
-            if text:
-                if _BLOCK_OPEN.match(text):
-                    block += 1
-                statements.append(Statement(
-                    text, start_line, "\n".join(raw).strip(), block,
-                    pending_nosec if have_nosec else None))
-                if _BLOCK_CLOSE.match(text):
-                    block += 1
+            (text, masked, _), (c, m, t) = _cut3(c, m, t, end)
+            emit(text, masked)
+            # A method header carrying the AMDP addition opens a SQLScript body.
+            if text and _AMDP_OPEN.search(masked):
+                stack.append((_M_AMDP, ""))
             pending_nosec, have_nosec = [], False
             raw = []
             start_line = lineno
-        buf = [joined] if joined else []
 
-    trailing = " ".join(" ".join(buf).split()).strip()
-    if trailing:
-        statements.append(Statement(trailing, start_line, "\n".join(raw).strip(),
-                                    block, pending_nosec if have_nosec else None))
+        # T1.2 — the lexer lost its place. Flush what is buffered, reset the mode
+        # stack, and mark it: a mis-lexed file must report as degraded coverage,
+        # never as a clean object.
+        if c and lineno - start_line + 1 > _RUNAWAY_LINES:
+            emit(c, m, degraded=True)
+            c = m = t = ""
+            stack = []
+            pending_nosec, have_nosec = [], False
+            raw = []
+            start_line = lineno + 1
+
+        buf_c, buf_m, buf_t = ([c], [m], [t]) if c else ([], [], [])
+
+    tail_c, tail_m, _ = _norm3("".join(buf_c), "".join(buf_m), "".join(buf_t))
+    emit(tail_c, tail_m)
     return statements
+
+
+def _in_amdp(stack: List[Tuple[str, str]]) -> bool:
+    return any(mode in _AMDP_MODES for mode, _ in stack)
 
 
 def split_cds_statements(source: str) -> List["Statement"]:
@@ -278,92 +391,228 @@ def split_cds_statements(source: str) -> List["Statement"]:
     return statements
 
 
-def _strip_comments(line: str, in_template: bool = False) -> Tuple[str, bool]:
-    """Remove ABAP comments, respecting literals AND string templates.
+# --------------------------------------------------------------------------- #
+#  The lexer                                                                  #
+# --------------------------------------------------------------------------- #
+#: Lexer modes. The stack carries `(mode, delimiter)`; only `_M_LIT` uses the
+#: delimiter. Threading the whole STACK across lines — rather than the single
+#: `in_template` boolean this replaced — is what makes a template that embeds an
+#: expression that opens its own literal lex correctly.
+_M_CODE = "code"
+_M_LIT = "lit"            # '...' or `...`
+_M_TPL = "tpl"            # |...|
+_M_EMB = "emb"            # { ... } inside a template: CODE again
+_M_AMDP = "amdp"          # SQLScript body of an AMDP method
+_M_AMDP_ID = "amdp_id"    # "quoted identifier" — NOT a comment in SQLScript
+_M_AMDP_LIT = "amdp_lit"  # 'string literal' in SQLScript
+_M_AMDP_BLK = "amdp_blk"  # /* ... */, threads across lines
 
-    Returns `(code, still_in_template)`. The template flag has to be threaded
-    across lines by the caller because a template may be left open at a line end,
-    and a `"` on the continuation line is then part of the text rather than the
-    start of a comment. Treating it as a comment silently truncated the statement.
+_AMDP_MODES = (_M_AMDP, _M_AMDP_ID, _M_AMDP_LIT, _M_AMDP_BLK)
 
-    STRING TEMPLATES `|...|`
-    The upstream engine had no notion of them at all, so a statement containing
-    `|Total. Done|` was chopped into three — the period inside the template read as
-    a statement terminator. Templates are pervasive in modern ABAP, so this
-    mis-lexed a large share of real source: findings lost, and garbage "statements"
-    invented and reported. Inside a template `\\` escapes the next character
-    (`\\|`, `\\{`, `\\}`, `\\\\`), and `{ ... }` embeds an expression.
+
+def _scan_line(line: str, stack: List[Tuple[str, str]]
+               ) -> Tuple[str, str, str, List[Tuple[str, str]]]:
+    """Lex one source line under a carried mode stack.
+
+    Returns `(code, mask, term, stack)` — three strings of equal length plus the
+    stack to carry to the next line.
+
+        code   the line with comments removed
+        mask   the same text with the CONTENT of literals and template text
+               replaced by `#`, delimiters and offsets preserved
+        term   `1` where a character terminates a statement, `0` elsewhere
+
+    Keeping the terminator decision here, beside the state that determines it, is
+    the point: downstream only has to find a `1`.
     """
-    if line[:1] == "*":                      # full-line comment: column 1 only
-        return "", in_template
-    out: List[str] = []
-    quote: Optional[str] = None
-    escaped = False
+    stack = list(stack)
+    code: List[str] = []
+    mask: List[str] = []
+    term: List[str] = []
 
-    for ch in line:
-        if in_template:
-            out.append(ch)
-            if escaped:
-                escaped = False
-            elif ch == "\\":
-                escaped = True
-            elif ch == "|":
-                in_template = False
+    def put(ch: str, m: Optional[str] = None, t: str = "0") -> None:
+        code.append(ch)
+        mask.append(ch if m is None else m)
+        term.append(t)
+
+    mode = stack[-1][0] if stack else _M_CODE
+
+    # A `*` in column 1 comments the whole line — but only when we are not inside
+    # a literal or template left open on a previous line, where it is text.
+    if line[:1] == "*" and mode in (_M_CODE, _M_EMB, _M_AMDP):
+        return "", "", "", stack
+
+    i, n = 0, len(line)
+    while i < n:
+        ch = line[i]
+        mode = stack[-1][0] if stack else _M_CODE
+
+        if mode == _M_LIT:
+            delim = stack[-1][1]
+            if ch == delim:
+                if i + 1 < n and line[i + 1] == delim:
+                    put(ch, "#")             # doubled delimiter escapes itself
+                    put(delim, "#")
+                    i += 2
+                    continue
+                stack.pop()
+                put(ch)                      # the delimiter itself is not content
+                i += 1
+                continue
+            put(ch, "#")                     # backslash is NOT an escape here
+            i += 1
             continue
-        if quote:
-            out.append(ch)
-            if ch == quote:
-                quote = None
+
+        if mode == _M_TPL:
+            if ch == "\\":                   # \\ \| \{ \} — consumes one char
+                put(ch, "#")
+                if i + 1 < n:
+                    put(line[i + 1], "#")
+                    i += 2
+                else:
+                    i += 1
+                continue
+            if ch == "|":
+                stack.pop()
+                put(ch)
+                i += 1
+                continue
+            if ch == "{":                    # an embedded expression is CODE
+                stack.append((_M_EMB, ""))
+                put(ch)
+                i += 1
+                continue
+            put(ch, "#")                     # `"` and `.` are template text
+            i += 1
+            continue
+
+        if mode == _M_AMDP_ID:
+            if ch == '"':
+                stack.pop()
+                put(ch)
+            else:
+                put(ch, "#")
+            i += 1
+            continue
+
+        if mode == _M_AMDP_LIT:
+            if ch == "'":
+                if i + 1 < n and line[i + 1] == "'":
+                    put(ch, "#")
+                    put("'", "#")
+                    i += 2
+                    continue
+                stack.pop()
+                put(ch)
+            else:
+                put(ch, "#")
+            i += 1
+            continue
+
+        if mode == _M_AMDP_BLK:
+            if ch == "*" and i + 1 < n and line[i + 1] == "/":
+                stack.pop()
+                i += 2
+            else:
+                i += 1                       # block-comment content is dropped
+            continue
+
+        if mode == _M_AMDP:
+            if ch == "-" and i + 1 < n and line[i + 1] == "-":
+                break                        # SQLScript comment to end of line
+            if ch == "/" and i + 1 < n and line[i + 1] == "*":
+                stack.append((_M_AMDP_BLK, ""))
+                i += 2
+                continue
+            if ch == '"':                    # quoted IDENTIFIER, not a comment
+                stack.append((_M_AMDP_ID, ""))
+                put(ch)
+                i += 1
+                continue
+            if ch == "'":
+                stack.append((_M_AMDP_LIT, ""))
+                put(ch)
+                i += 1
+                continue
+            if ch == ";":                    # SQLScript terminates on `;`
+                put(ch, ch, "1")
+                i += 1
+                continue
+            put(ch)
+            i += 1
+            continue
+
+        # _M_CODE or _M_EMB
+        if mode == _M_EMB and ch == "}":
+            stack.pop()
+            put(ch)
+            i += 1
             continue
         if ch in "'`":
-            quote = ch
-            out.append(ch)
+            stack.append((_M_LIT, ch))
+            put(ch)
+            i += 1
             continue
         if ch == "|":
-            in_template = True
-            out.append(ch)
+            stack.append((_M_TPL, ""))
+            put(ch)
+            i += 1
             continue
         if ch == '"':
-            break                            # comment to end of line
-        out.append(ch)
-    return "".join(out), in_template
-
-
-def _terminator(text: str) -> Optional[int]:
-    """Index of the statement-terminating period, or None.
-
-    A period does not terminate anything inside a text or string literal, inside a
-    string template (including its embedded `{ }` expressions), or between two
-    digits — so `'a.b'`, `|Total. Done|` and a decimal literal all stay intact.
-    """
-    quote: Optional[str] = None
-    in_template = False
-    escaped = False
-
-    for i, ch in enumerate(text):
-        if in_template:
-            if escaped:
-                escaped = False
-            elif ch == "\\":
-                escaped = True
-            elif ch == "|":
-                in_template = False
-            continue
-        if quote:
-            if ch == quote:
-                quote = None
-            continue
-        if ch in "'`":
-            quote = ch
-        elif ch == "|":
-            in_template = True
-        elif ch == ".":
-            before = text[i - 1] if i else ""
-            after = text[i + 1] if i + 1 < len(text) else ""
+            break                            # ABAP comment to end of line
+        if ch == "." and mode == _M_CODE:
+            before = line[i - 1] if i else ""
+            after = line[i + 1] if i + 1 < n else ""
+            # Bare decimals. NOT only "decimal literal": this splitter also sees
+            # SQLScript and native SQL, which live inside `.abap` files, and
+            # removing this manufactured statements like `75 AND rate < 12`.
             if before.isdigit() and after.isdigit():
-                continue                     # decimal literal
-            return i
-    return None
+                put(ch)
+            else:
+                put(ch, ch, "1")
+            i += 1
+            continue
+        put(ch)
+        i += 1
+
+    return "".join(code), "".join(mask), "".join(term), stack
+
+
+def _trim3(c: str, m: str, t: str) -> Tuple[str, str, str]:
+    """Strip `c` and cut `m`/`t` at exactly the same offsets."""
+    lead = len(c) - len(c.lstrip())
+    c, m, t = c[lead:], m[lead:], t[lead:]
+    trail = len(c) - len(c.rstrip())
+    if trail:
+        c, m, t = c[:-trail], m[:-trail], t[:-trail]
+    return c, m, t
+
+
+def _norm3(c: str, m: str, t: str) -> Tuple[str, str, str]:
+    """Collapse whitespace runs across three parallel strings in lockstep."""
+    oc: List[str] = []
+    om: List[str] = []
+    ot: List[str] = []
+    prev_space = True
+    for i, ch in enumerate(c):
+        if ch.isspace():
+            if not prev_space:
+                oc.append(" ")
+                om.append(" ")
+                ot.append("0")
+            prev_space = True
+        else:
+            oc.append(ch)
+            om.append(m[i])
+            ot.append(t[i])
+            prev_space = False
+    return _trim3("".join(oc), "".join(om), "".join(ot))
+
+
+def _cut3(c: str, m: str, t: str, end: int):
+    """Split three parallel strings at `end`, discarding the terminator."""
+    return (_trim3(c[:end], m[:end], t[:end]),
+            _trim3(c[end + 1:], m[end + 1:], t[end + 1:]))
 
 
 class AbapSourceScanner:
@@ -375,6 +624,10 @@ class AbapSourceScanner:
         self.files_scanned = 0
         self.metadata_skipped = 0
         self.unreadable: List[str] = []
+        #: Statements the runaway guard had to flush because the lexer lost its
+        #: place. Reported beside `metadata_skipped`, because a mis-lexed file that
+        #: reports as clean is the one failure this scanner must never have.
+        self.lex_degraded = 0
 
     def _pattern(self, rule: Dict[str, Any]):
         rid = rule["id"]
@@ -437,47 +690,67 @@ class AbapSourceScanner:
         is_cds = str(path).lower().endswith(CDS_SUFFIXES)
         statements = (split_cds_statements(source) if is_cds
                       else split_statements(source))
-        guarded_blocks = {
-            st.block for st in statements if _AUTHORITY_CHECK.search(st.text)}
+        self.lex_degraded += sum(1 for st in statements if st.degraded)
+        guarded_blocks = _guarded_blocks(statements)
 
         out: List[Dict[str, Any]] = []
+
+        def record(rule: Dict[str, Any], st: Statement) -> None:
+            rid = rule["id"]
+            suppressed = st.nosec is not None and (
+                not st.nosec or rid.upper() in st.nosec)
+            out.append({
+                "rule_id": rid,
+                "name": rule["name"],
+                "category": rule.get("category", ""),
+                "severity": rule["severity"],
+                "cwe": rule.get("cwe"),
+                "file": str(path),
+                "object": _object_name(path),
+                "line": st.line,
+                "statement": st.text[:400],
+                "snippet": st.raw[:600],
+                "description": rule.get("description", ""),
+                "recommendation": rule.get("recommendation", ""),
+                # `pattern-only` until taint says otherwise. The evidence class
+                # is the single most decision-relevant field a SAST finding has.
+                "confidence": "pattern-only",
+                "flow": None,
+                "suppressed_by_nosec": suppressed,
+                "lex_degraded": st.degraded,
+            })
+
         for rule in rules:
             rid = rule["id"]
+            if rid in RULE_HANDLED_IN_ENGINE:
+                continue
             pattern = self._pattern(rule)
+            blind = rid in LITERAL_BLIND
             for st in statements:
-                if not pattern.search(st.text):
+                if not pattern.search(st.text_masked if blind else st.text):
                     continue
                 # Named "... without AUTHORITY-CHECK": honour the "without".
                 if rid in AUTHORITY_GUARDED and st.block in guarded_blocks:
                     continue
-                suppressed = st.nosec is not None and (
-                    not st.nosec or rid.upper() in st.nosec)
-                out.append({
-                    "rule_id": rid,
-                    "name": rule["name"],
-                    "category": rule.get("category", ""),
-                    "severity": rule["severity"],
-                    "cwe": rule.get("cwe"),
-                    "file": str(path),
-                    "object": _object_name(path),
-                    "line": st.line,
-                    "statement": st.text[:400],
-                    "snippet": st.raw[:600],
-                    "description": rule.get("description", ""),
-                    "recommendation": rule.get("recommendation", ""),
-                    # `pattern-only` until taint says otherwise. The evidence class
-                    # is the single most decision-relevant field a SAST finding has.
-                    "confidence": "pattern-only",
-                    "flow": None,
-                    "suppressed_by_nosec": suppressed,
-                })
+                record(rule, st)
+
+        # T1.6 — ABAP-AUTH-003 could not be expressed as a single-statement regex
+        # (it needed a literal `.` the splitter strips, and a lookahead at the NEXT
+        # statement), so it was dead code. The engine has both.
+        auth003 = _RULES_BY_ID.get("ABAP-AUTH-003")
+        if auth003 is not None and not is_cds:
+            for i, st in enumerate(statements):
+                if (_AUTHORITY_CHECK_STMT.match(st.text_masked)
+                        and not _subrc_evaluated(statements, i)):
+                    record(auth003, st)
 
         if self.data_flow:
-            self._refine(out, source)
+            self._refine(out, statements, source)
         return out
 
-    def _refine(self, findings: List[Dict[str, Any]], source: str) -> None:
-        """Ask the taint analyzer about the 8 rules that carry a sink.
+    def _refine(self, findings: List[Dict[str, Any]],
+                statements: List[Statement], source: str) -> None:
+        """Ask the taint analyzer about the rules that carry a sink.
 
         A verdict is only ever ADDED — `confirmed` when tainted input reaches the
         sink, `tentative` when the walk found no evidence either way. Nothing is
@@ -491,17 +764,29 @@ class AbapSourceScanner:
         if not relevant:
             return
 
+        # T1.10 — the analyzer used to be handed the RAW file and re-lexed it one
+        # line at a time with `line.split('"', 1)[0]`, which is the exact
+        # line-oriented model this module exists to replace. It could not see a
+        # concatenation split over two lines, and truncated any line containing a
+        # `"` inside a literal. It now gets our statements, laid out on their own
+        # start lines so every line number still means what it meant.
+        aligned = _taint_source(statements, len(source.splitlines()))
+
         # NO try/except around these calls, on purpose. An earlier version wrapped
         # them and called a `refine()` method that does not exist; the
         # AttributeError went straight into the `except` and every finding stayed
         # `pattern-only`. The taint pass appeared to run and did nothing at all,
         # which is worse than not having it. A broken analyzer must fail loudly.
-        analyzer = TaintAnalyzer(source)
+        cache: Dict[str, TaintAnalyzer] = {}
 
         for finding in relevant:
-            arg = _sink_argument(finding["statement"])
+            rid = finding["rule_id"]
+            arg = _sink_argument(finding["statement"], rid)
             if not arg:
                 continue
+            if rid not in cache:
+                cache[rid] = _analyzer_for(rid, aligned)
+            analyzer = cache[rid]
             verdict = analyzer.classify_sink(arg, finding["line"])
             if verdict == analyzer.TAINTED:
                 finding["confidence"] = "confirmed"
@@ -514,15 +799,273 @@ class AbapSourceScanner:
                 finding["confidence"] = "tentative"
 
 
-#: The parenthesised expression a dynamic Open SQL clause is built from —
-#: `WHERE (lv_where)`, `FROM (lv_tab)`, `ORDER BY (lv_sort)`. That expression is
-#: what the taint analyzer needs; handing it the whole statement finds nothing.
-_SINK_ARG = re.compile(r"\(\s*([A-Za-z_][A-Za-z0-9_\-]*(?:->[A-Za-z0-9_]+)*)\s*\)")
+# --------------------------------------------------------------------------- #
+#  Sink arguments                                                             #
+# --------------------------------------------------------------------------- #
+#: Every rule carrying `_taint_sink` also ships a precise `_sink_arg` naming the
+#: clause its dynamic operand lives in. None of them was ever read: `_refine`
+#: called one generic "first `( identifier )` anywhere in the statement" regex.
+#:
+#: `SELECT * FROM (lv_tab) WHERE (lv_where)` therefore graded the WHERE finding on
+#: `lv_tab` — and emitted a `taint_flow` tracing a variable that is not the WHERE
+#: operand, which is a fabricated data-flow trace in a customer report. The two
+#: sinks whose token is not parenthesised at all (`OPEN DATASET lv_file`,
+#: `create_by_url( url = lv_url )`) returned None and could never be confirmed.
+_SINK_ARG_BY_ID: Dict[str, Any] = {
+    r["id"]: re.compile(r["_sink_arg"], re.IGNORECASE)
+    for r in ALL_ABAP_SAST_RULES if r.get("_sink_arg")
+}
+
+#: The generic fallback, for sinks that ship no `_sink_arg`. `DATA(` / `FINAL(`
+#: are skipped: an inline declaration is the statement's TARGET, never its
+#: dynamic operand.
+_SINK_ARG = re.compile(
+    r"(?P<pre>[A-Za-z_]\w*)?\(\s*"
+    r"(?P<arg>[A-Za-z_][A-Za-z0-9_\-]*(?:->[A-Za-z0-9_]+)*)\s*\)")
 
 
-def _sink_argument(statement: str) -> Optional[str]:
-    match = _SINK_ARG.search(statement)
-    return match.group(1) if match else None
+def _sink_argument(statement: str, rule_id: Optional[str] = None) -> Optional[str]:
+    """The dynamic operand a sink is built from, using the rule's own regex."""
+    pattern = _SINK_ARG_BY_ID.get(rule_id or "")
+    if pattern is not None:
+        match = pattern.search(statement)
+        return match.group(1).strip() if match else None
+    for match in _SINK_ARG.finditer(statement):
+        if (match.group("pre") or "").upper() in ("DATA", "FINAL"):
+            continue
+        return match.group("arg")
+    return None
+
+
+# --------------------------------------------------------------------------- #
+#  Authorization guards                                                       #
+# --------------------------------------------------------------------------- #
+
+def _subrc_evaluated(statements: List[Statement], index: int) -> bool:
+    """Was the AUTHORITY-CHECK at `index` actually acted on?
+
+    A check whose `sy-subrc` is never read is a no-op, and the old guard credited
+    it in full — so `AUTHORITY-CHECK ... .` followed directly by the unguarded
+    DELETE silenced the finding about the unguarded DELETE.
+
+    Three statements forward rather than one: it absorbs residual mis-splitting and
+    the `COND #( WHEN sy-subrc = 0 ... )` form.
+    """
+    here = statements[index]
+    for st in statements[index + 1:index + 4]:
+        if st.block != here.block:
+            return False
+        if _SUBRC.search(st.text_masked):
+            return True
+        if _CONTROL_FLOW.match(st.text_masked):
+            return False
+    return False
+
+
+def _guarded_blocks(statements: List[Statement]) -> set:
+    """Blocks holding a real AUTHORITY-CHECK.
+
+    The old test was `\\bAUTHORITY[-\\s]?CHECK\\b` searched anywhere in the raw
+    statement text, which credited a block for four separate no-ops: the keyword
+    inside a string literal (`WRITE 'TODO: add AUTHORITY-CHECK here'`), a check
+    with no FIELD pair at all, a check whose result is discarded, and the
+    undocumented spellings `AUTHORITY CHECK` / `AUTHORITYCHECK`.
+    """
+    return {st.block for i, st in enumerate(statements)
+            if _AUTHORITY_CHECK_STMT.match(st.text_masked)
+            and _subrc_evaluated(statements, i)}
+
+
+# --------------------------------------------------------------------------- #
+#  Taint input                                                                #
+# --------------------------------------------------------------------------- #
+#: An inline declaration is a target, not an operator. `DATA(lv_tab) = p_tab.`
+#: defeated the analyzer's `^\s*([\w/]+)\s*=` because it found the `(` first, so
+#: the assignment was never seen and the propagation was lost.
+_INLINE_DECL = re.compile(r"^\s*@?(?:DATA|FINAL)\s*\(\s*([\w/]+)\s*\)\s*=", re.IGNORECASE)
+
+#: `x &&= y` is `x = x && y`. Written the short way it matched no assignment form.
+_CONCAT_ASSIGN = re.compile(r"^\s*([\w/]+)\s*&&=\s*(.+?)\s*$")
+
+
+def _taint_rewrite(text: str) -> str:
+    """Normalise the two assignment spellings the analyzer cannot parse."""
+    match = _INLINE_DECL.match(text)
+    if match:
+        text = f"{match.group(1)} =" + text[match.end():]
+    match = _CONCAT_ASSIGN.match(text)
+    if match:
+        text = f"{match.group(1)} = {match.group(1)} && {match.group(2)}"
+    return text
+
+
+def _taint_source(statements: List[Statement], line_count: int) -> str:
+    """Lay our statements out on their own start lines, one per line.
+
+    The analyzer is line-oriented and every line number it reports has to keep
+    meaning what it meant, so the shape is "same line count, each statement on the
+    line it starts at, consumed lines blank". Alignment is free: findings carry
+    `Statement.line` and the walk only ever moves strictly before it.
+
+    Masked text, deliberately: it removes the `"` that made the analyzer's own
+    `line.split('"', 1)[0]` truncate a statement, and it stops a source or
+    sanitizer NAME written inside a string literal from being read as one.
+    """
+    lines = [""] * max(line_count, 1)
+    for st in statements:
+        idx = st.line - 1
+        if not 0 <= idx < len(lines):
+            continue
+        while idx < len(lines) and lines[idx]:
+            idx += 1                    # another statement already claimed it
+        if idx < len(lines):
+            lines[idx] = _taint_rewrite(st.text_masked)
+    return "\n".join(lines)
+
+
+class RiseTaintAnalyzer(TaintAnalyzer):
+    """The vendored analyzer with the defects that made its verdicts unsafe fixed.
+
+    Everything here is a narrowing or a correction, never a new suppression: the
+    downgrade-never-hide contract in `AbapSourceScanner._refine` is unchanged.
+    """
+
+    #: Chained declarations. `_PARAM_RE` captured ONE name per line, so
+    #: `PARAMETERS: p_a ..., p_tab ...` tainted only `p_a` and every injection
+    #: through a later member of the chain classified UNKNOWN.
+    _CHAIN_HEAD = re.compile(r"^\s*(?:PARAMETERS?|SELECT-OPTIONS)\s*:?\s*", re.IGNORECASE)
+    _CHAIN_NAME = re.compile(r"(?:^|,)\s*([A-Za-z_][\w/]*)")
+
+    #: `CONSTANTS lc_where TYPE string VALUE 'MANDT = SY-MANDT'.` had no case at
+    #: all, so a clause fixed at compile time reported as a tentative CRITICAL.
+    _DECL_VALUE = re.compile(
+        r"^\s*(?:CONSTANTS|DATA|STATICS)\s*:?\s*([\w/]+)\b[^=]*?\bVALUE\s+(.+?)\s*$",
+        re.IGNORECASE)
+
+    #: `=(?!>)`: `cl_gui_frontend_services=>gui_upload( ... )` parsed as an
+    #: assignment TO the class name, so `gui_upload` — already in the source list —
+    #: could never fire as intended, and every later mention of the class carried
+    #: taint it never had.
+    _ASSIGN = re.compile(r"\s*([\w/]+)\s*=(?!>)\s*(.+?)\.?\s*$")
+
+    #: The sanitizer alternation without the trailing call syntax, for asking
+    #: "does this guard WRAP that identifier".
+    _SAN_NAMES = r"(?:cl_abap_dyn_prg\s*=>\s*)?(?:%s)"
+
+    def __init__(self, text: str, sanitizers: Iterable[str] = DEFAULT_SANITIZERS):
+        names = "|".join(sorted(sanitizers, key=len, reverse=True))
+        # Anchored on both sides AND requiring call syntax. Without the `\(` a
+        # variable merely NAMED `lv_escape_quotes` read as sanitized.
+        self._SANITIZER_RE = re.compile(
+            r"\b" + (self._SAN_NAMES % names) + r"\s*\(", re.IGNORECASE)
+        self._san_names = re.compile(
+            r"\b" + (self._SAN_NAMES % names), re.IGNORECASE)
+
+        # The base built `_code` by cutting each line at the first `"`, which has no
+        # literal awareness at all. Lexing it properly here rather than only in
+        # `_taint_source` keeps the class correct for any caller, not just ours.
+        self._raw = text.splitlines()
+        code_lines: List[str] = []
+        stack: List[Tuple[str, str]] = []
+        for line in self._raw:
+            _code, mask, _term, stack = _scan_line(line, stack)
+            code_lines.append(_taint_rewrite(mask.strip()))
+        self._code = code_lines
+        self._globals = self._collect_globals()
+        self._scopes = self._segment_scopes()
+
+    # -- sources ------------------------------------------------------- #
+
+    def _collect_globals(self) -> dict:
+        g: dict = {}
+        depth = 0
+        for i, c in enumerate(self._code):
+            if self._SCOPE_START_RE.search(c):
+                depth += 1
+            elif self._SCOPE_END_RE.search(c):
+                depth = max(0, depth - 1)
+            elif depth == 0:
+                head = self._CHAIN_HEAD.match(c)
+                if head:
+                    for name in self._CHAIN_NAME.findall(c[head.end():]):
+                        g.setdefault(name.lower(), i + 1)
+        return g
+
+    # -- propagation ---------------------------------------------------- #
+
+    def _apply(self, code: str, state: dict, origin: dict, line_no: int) -> None:
+        m = re.search(r"GET\s+PARAMETER\s+ID\s+\S+\s+FIELD\s+([\w/]+)",
+                      code, re.IGNORECASE)
+        if m:
+            self._set(m.group(1).lower(), self.TAINTED, None, line_no, state, origin)
+            return
+        m = self._DECL_VALUE.match(code)
+        if m:
+            self._assign(m.group(1).lower(), m.group(2), line_no, state, origin)
+            return
+        m = re.search(r"\bCONCATENATE\b(.+?)\bINTO\b\s+([\w/]+)", code, re.IGNORECASE)
+        if m:
+            st = self._combine(m.group(1), state)
+            pred = self._first_tainted(m.group(1), state) if st == self.TAINTED else None
+            self._set(m.group(2).lower(), st, pred, line_no, state, origin)
+            return
+        m = re.match(r"\s*MOVE\s+(.+?)\s+TO\s+([\w/]+)", code, re.IGNORECASE)
+        if m:
+            self._assign(m.group(2).lower(), m.group(1), line_no, state, origin)
+            return
+        m = self._ASSIGN.match(code)
+        if m and not re.search(r"[=<>]=|<>", code):
+            self._assign(m.group(1).lower(), m.group(2), line_no, state, origin)
+
+    # -- classification -------------------------------------------------- #
+
+    def _wraps(self, expr: str, ident: str) -> bool:
+        """Does a recognised guard have `ident` inside its own parentheses?"""
+        return bool(re.search(
+            self._san_names.pattern + r"\s*\([^()]*\b" + re.escape(ident) + r"\b",
+            expr, re.IGNORECASE))
+
+    def _unguarded_tainted(self, expr: str, state: dict) -> Optional[str]:
+        for ident in self._IDENT_RE.findall(expr):
+            il = ident.lower()
+            if il in _ABAP_NOISE_WORDS:
+                continue
+            if (state.get(il) == self.TAINTED or il in self._globals) \
+                    and not self._wraps(expr, ident):
+                return il
+        return None
+
+    def _classify(self, rhs: str, state: dict) -> str:
+        rhs = rhs.strip()
+        # A source is tested FIRST. The base tested the sanitizer first and
+        # returned SANITIZED for the whole expression, so a guard wrapping a safe
+        # literal cleared a tainted value sitting next to it.
+        if self._SOURCE_RE.search(rhs):
+            return self.TAINTED
+        if self._LITERAL_RE.match(rhs):
+            return self.CLEAN
+        return self._combine(rhs, state)
+
+    def _combine(self, expr: str, state: dict) -> str:
+        if self._SOURCE_RE.search(expr):
+            return self.TAINTED
+        if self._SANITIZER_RE.search(expr):
+            # Credit a guard only for what it actually wraps.
+            # `CONCATENATE cl_abap_dyn_prg=>quote( 'LH' ) p_in INTO lv_w` used to
+            # return SANITIZED: the guard wrapped the safe literal and the tainted
+            # `p_in` beside it was never examined.
+            return self.TAINTED if self._unguarded_tainted(expr, state) \
+                else self.SANITIZED
+        return super()._combine(expr, state)
+
+
+def _analyzer_for(rule_id: str, source: str) -> TaintAnalyzer:
+    """One analyzer per sink, because the accepted guards differ by sink.
+
+    A table-name check does not make a column name safe and neither makes a file
+    path safe, but one flat regex was consulted identically for all nine.
+    """
+    return RiseTaintAnalyzer(source, SINK_SANITIZERS.get(rule_id, DEFAULT_SANITIZERS))
 
 
 def _object_name(path: Path) -> str:
@@ -594,6 +1137,40 @@ class AbapSastAuditor(BaseAuditor):
         for (_rid, _obj), members in sorted(grouped.items()):
             self._finding(members[0], members, scope="aggregate")
 
+        if scanner.lex_degraded:
+            self.finding(
+                check_id="ABAP-LEX-001",
+                title="Source the scanner could not lex reliably",
+                severity=self.SEVERITY_INFO,
+                category="Code & Transport Security",
+                description=(
+                    f"{scanner.lex_degraded} statement(s) ran past the runaway "
+                    "bound, which means the lexer lost track of a literal or "
+                    "string template and the statement boundaries after that point "
+                    "are unreliable. Findings in the affected objects are reported "
+                    "as usual, but their absence is NOT evidence of clean code: a "
+                    "mis-lexed file produces a quiet, plausible-looking report. "
+                    "This is stated rather than counted silently because "
+                    "'nothing to find' and 'could not look' are indistinguishable "
+                    "in a report and only one of them is true."
+                ),
+                affected_items=[
+                    f"{scanner.lex_degraded} statement(s) flushed by the runaway "
+                    "guard during this scan"],
+                remediation=(
+                    "1. Identify the objects reported with a degraded statement: "
+                    "the cause is almost always an unterminated literal or a "
+                    "string template the lexer cannot close.\n"
+                    "2. Re-export those objects from abapGit and confirm the "
+                    "source is complete and not truncated in transit.\n"
+                    "3. If the source is intact and complete, the lexer has a gap "
+                    "— raise it, because the statement in question is a case this "
+                    "scanner does not yet model."
+                ),
+                details={"lex_degraded": scanner.lex_degraded, "source": "abap_scan"},
+                scope="aggregate",
+            )
+
         suppressed = [f for f in raw if f["suppressed_by_nosec"]]
         if suppressed:
             self.finding(
@@ -657,6 +1234,10 @@ class AbapSastAuditor(BaseAuditor):
                 "snippet": lead["snippet"],
                 "taint_flow": lead.get("flow"),
                 "suppressed_by_source_marker": lead["suppressed_by_nosec"],
+                # True when the runaway guard had to flush the statement this
+                # finding sits in — its boundaries, and therefore its match, are
+                # not trustworthy.
+                "lex_degraded": lead.get("lex_degraded", False),
                 **stamp({}, getattr(self, "_reach", None), obj),
             },
             affected_objects=[{"type": "program", "name": obj}],

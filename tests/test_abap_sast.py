@@ -191,11 +191,18 @@ def test_the_des_rule_still_fires_on_actual_des():
     ("ABAP-AUTH-007", "INSERT INTO mara VALUES @ls_m."),
 ])
 def test_an_authority_check_in_the_same_block_silences_the_guarded_rules(rule, statement):
-    """Five rules are NAMED "... without AUTHORITY-CHECK"; only one shipped with the
-    metadata to look for one. The other four fired on every such statement in the
-    estate, guarded or not."""
+    """Six rules are NAMED "... without AUTHORITY-CHECK"; only one shipped with the
+    metadata to look for one. The other five fired on every such statement in the
+    estate, guarded or not.
+
+    The guard here evaluates `sy-subrc`, because that is what makes it a guard —
+    see `test_an_authority_check_whose_result_is_discarded_is_not_a_guard`.
+    """
     guarded = (f"FORM do_it.\n"
                f"  AUTHORITY-CHECK OBJECT 'M_MATE_MAT' ID 'ACTVT' FIELD '02'.\n"
+               f"  IF sy-subrc <> 0.\n"
+               f"    MESSAGE 'Not authorised' TYPE 'E'.\n"
+               f"  ENDIF.\n"
                f"  {statement}\n"
                f"ENDFORM.\n")
     unguarded = f"FORM do_it.\n  {statement}\nENDFORM.\n"
@@ -208,6 +215,7 @@ def test_a_guard_in_another_form_does_not_protect_this_one():
     """Block scoping has to mean something, or it is just a global mute button."""
     text = ("FORM safe.\n"
             "  AUTHORITY-CHECK OBJECT 'X' ID 'ACTVT' FIELD '02'.\n"
+            "  IF sy-subrc <> 0. RETURN. ENDIF.\n"
             "ENDFORM.\n"
             "FORM unsafe.\n"
             "  UPDATE mara SET pstat = 'X' WHERE matnr = @lv_m.\n"
