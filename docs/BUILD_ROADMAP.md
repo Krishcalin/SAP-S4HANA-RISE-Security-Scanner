@@ -428,7 +428,16 @@ for SAP's content would be exactly the fabrication this project forbids.
 - [ ] Populate `owning_team` and `responsibility` across the catalogue
 - [ ] **Publish the check catalogue** — 323 auditable vs 550 asserted
 
-⚠️ **No coverage percentage against SAP Note 3250501 until someone with an S-user reads it.**
+✅ **SATISFIED, 2026-08-07.** A customer supplied SAP Note 3250501 v46 (released
+2026-05-15) from their own S-user. It is recorded as facts in
+`data/ecs_hardening_3250501.json` and coverage is **92 of 92 parameters** plus the
+configuration half. Reading it also found four values we had WRONG — three in the
+dangerous direction, e.g. we required `login/min_password_lng >= 8` where SAP
+mandates `>= 15`, so a customer could have been told their password policy was
+clean and then failed an ECS audit on it. The instruction was right to exist.
+
+The same bar still applies to the notes we have NOT read: claim nothing about
+3480723 (HANA) or 3381209 (Java) until someone reads them.
 Third-party counts contradict each other (81+17 vs 150+ vs 120+). Tag checks to R&R *task
 descriptions*, never line-item IDs — the pairings are unverified.
 

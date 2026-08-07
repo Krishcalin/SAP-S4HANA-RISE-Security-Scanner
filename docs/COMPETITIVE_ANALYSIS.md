@@ -636,7 +636,9 @@ positioning, SAP's Apache-2.0 policy repository, and SAP's "monitoring is limite
   docs.
 - SAPMAP itself — invitation-only. UI, node/edge model and the 16 scenario definitions unseen; the
   72-CVE / 1,817-test / 7-exploit figures are vendor-stated.
-- SAP Notes 3250501 / 3480723 / 3381209 and the Security Baseline Template body — S-user gated.
+- SAP Notes 3480723 (HANA) / 3381209 (Java) and the Security Baseline Template body — S-user gated.
+- ~~3250501~~ **obtained 2026-08-07** from a customer's S-user; recorded as facts in
+  `data/ecs_hardening_3250501.json`. ABAP parameter coverage is 92 of 92.
   **Only notes 2253549 and 3137004 were verified first-hand.**
 - Onapsis pricing, editions, licensing metric, SaaS data residency for scanned SAP data, console
   RBAC/SSO details, and the SAP authorizations their scan account requires — none public.

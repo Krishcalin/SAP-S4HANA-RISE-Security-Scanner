@@ -315,7 +315,7 @@ target's current one. The audit log records the event and never the value.
   while imports succeed and templates parse. `tests/test_http_console.py` exists because that
   is only catchable over HTTP.
 
-### The 23 modules (module key → class → focus)
+### The 30 modules (module key → class → focus)
 
 | key | module | focus |
 |---|---|---|
@@ -341,7 +341,59 @@ target's current one. The audit log records the event and never the value.
 | `jobcmd` | basis_job_command | **host-command-execution surface**: SM69/SXPGCOSTAB external cmds (shell-wrap/ADDPAR/path/danger-verb) + TBTCO/TBTCP armed job step users (SAP*/DDIC/SAP_ALL, RSBDCOS0, external steps, deleted/dialog, identity-borrow); reuses users/profiles |
 | `grcac` | grc_access_control | **GRC Access Control**: EAM/Firefighter usage+ownership, ARM access-request workflow, GRC-native SoD violations, mitigating controls, SoD ruleset governance |
 | `rolegov` | role_governance | **role design**: SU24 proposal hygiene for custom tcodes, ungenerated profiles (AGR_1016), derived-role authorization-value drift vs parent |
+| `atc` | atc_import | SAP's own ATC/CVA results, ingested rather than re-derived |
+| `cva` | abap_sast | **our** ABAP/CDS/BDEF scanner — 118 rules, statement lexer, intra-procedural taint |
+| `logreview` | log_review | retrospective SM20 review: what the audit log actually recorded |
+| `codeinv` | code_inventory_report | custom-code estate: size by type, unreachable, dormant, unknown-kept-separate |
+| `resilience` | resilience_posture | backup recency/failure posture, DR test evidence, recovery objectives (RES-*) |
+| `snc` | snc_posture | **the SNC family as one model** — 18 params incl. the ECS-mandated ones |
+| `ecsconfig` | ecs_config_items | the configuration half of Note 3250501 (SPWD/SPSE table groups, clients, SAL) |
 | `fincontrols` | financial_controls | **SOX ITGC / FI config**: posting-period controls (T001B), tolerance groups (T043T), payment dual-control (T055F), document-change rules (TBAER), FI number-range buffering (TNRO) |
+
+### Deployment mode decides what "compliant" means
+
+`--deployment-mode {on_prem,rise_pce,rise_tailored}` reaches every auditor through
+one `run_ctx` built once in `sap_scanner.py`. It is not cosmetic:
+
+    snc/accept_insecure_gui = 1        <- SAP MANDATES this in ECS
+    rfc/callback_security_method = 1   <- explicitly permitted in ECS
+    DDIC unlocked                      <- explicitly NOT required to be locked
+
+All three are findings on classic on-premise ABAP and compliance in ECS. Three
+checks reported HIGH on fully compliant RISE systems before this existed, because
+they reasoned from what a parameter is NAMED rather than from what SAP wrote.
+
+Default is `on_prem`. Guessing ECS would silently relax genuine on-premise
+findings, which is the wrong direction to be wrong in.
+
+### `modules/ecs_baseline.py` is the single oracle
+
+`data/ecs_hardening_3250501.json` holds SAP Note 3250501 (v46, 2026-05-15) — the
+MANDATORY hardening baseline for AS ABAP in SAP Enterprise Cloud Services —
+recorded as **facts only**: parameter names, SAP's standard value, and the
+exceptions SAP explicitly permits. SAP's prose is copyright and is not reproduced.
+
+**Never hand-type a value from that note into Python.** Read it from the JSON. A
+transcription typo tells a customer they are compliant when they are not, which is
+exactly the defect this file was created to fix: we required
+`login/min_password_lng >= 8` where SAP mandates `>= 15`.
+
+`is_compliant()` returns `True` / `False` / **`None`**. `None` means *no opinion* —
+the parameter is not in the note, or the deployment is not ECS. It is never
+"compliant"; a caller must fall back to its own rule, not pass.
+
+Coverage: **92 of 92 parameters** (74 in `security_params`, 18 in `snc_posture`).
+The old standing instruction not to claim coverage against 3250501 until someone
+with an S-user read it is **satisfied** — a customer supplied it on 2026-08-07.
+
+### The release gate
+
+`--gate` turns the scanner from something that reports into something that
+decides. Exit 0 pass / 1 policy violated / 2 could not assess. See
+`docs/RELEASE_GATE.md`. Four rules, each from a specific way gates get switched
+off: judge the delta not the backlog; judge only what the transport touches; never
+block on what the customer cannot fix (`remediation_owner`); and **never fail
+open** — degraded coverage is exit 2, never 0.
 
 ## Adding a new module (the recipe)
 
