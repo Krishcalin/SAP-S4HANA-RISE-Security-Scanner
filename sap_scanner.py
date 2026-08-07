@@ -20,6 +20,7 @@ import sys
 import datetime
 from pathlib import Path
 
+from modules import release_gate
 from modules.user_auth_audit import UserAuthAuditor
 from modules.security_params import SecurityParamAuditor
 from modules.network_services import NetworkServiceAuditor
@@ -53,6 +54,32 @@ from modules.finding_kb import FindingKB
 from modules.risk_prioritizer import RiskPrioritizer
 from modules import fair_adapter
 from modules.data_loader import DataLoader
+
+
+def _make_output_encoding_safe() -> None:
+    """Survive being redirected on Windows.
+
+    An interactive Windows console negotiates UTF-8, but the moment stdout is a
+    pipe or a file Python falls back to the ANSI code page (cp1252 here) and the
+    banner's box-drawing characters raise UnicodeEncodeError before any work
+    starts. The traceback names an encodings module, so it reads like a broken
+    install rather than an unprintable character.
+
+    This is load-bearing for the release gate specifically: a CI pipeline ALWAYS
+    redirects stdout, so on a Windows agent the scanner would die before it
+    reached the gate — and a control that cannot run under redirection is not a
+    control. `errors="replace"` rather than a strict re-encode: a mangled dash in
+    a log is a cosmetic problem, a crashed build step is not.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):        # detached or already closed
+                pass
+
+
+_make_output_encoding_safe()
 
 
 def banner():
@@ -126,6 +153,35 @@ def main():
     parser.add_argument("--crq-org-name", default=None, help="Organization name for the FAIR report.")
     parser.add_argument("--crq-sims", type=int, default=10000,
         help="Monte Carlo iterations per scenario (default: 10000).")
+
+    # ── Release gate ─────────────────────────────────────────────────────────
+    gate = parser.add_argument_group(
+        "release gate",
+        "Decide whether a change may ship, and exit non-zero when it may not. "
+        "Exit codes: 0 pass, 1 policy violated, 2 could not assess.")
+    gate.add_argument(
+        "--gate", action="store_true",
+        help="Evaluate the release gate and exit with its decision.")
+    gate.add_argument(
+        "--gate-policy", default=None, metavar="FILE",
+        help="Gate policy JSON. Merged over the defaults, so a policy naming only "
+             "one key cannot silently switch the others off.")
+    gate.add_argument(
+        "--gate-baseline", default=None, metavar="FILE",
+        help="Accepted-state baseline. Without it EVERY in-scope finding counts as "
+             "new, which is right for a first run and wrong for a pipeline.")
+    gate.add_argument(
+        "--gate-scope", default=None, metavar="FILE",
+        help="Object names the transport touches, one per line. Only findings on "
+             "these objects are judged — a developer cannot be asked to fix "
+             "somebody else's object to ship their own.")
+    gate.add_argument(
+        "--gate-write-baseline", default=None, metavar="FILE",
+        help="Write the current findings out as the accepted baseline and exit 0. "
+             "This is step one of adopting the gate.")
+    gate.add_argument(
+        "--gate-json", default=None, metavar="FILE",
+        help="Write the gate decision as JSON, for a pipeline to consume.")
 
     args = parser.parse_args()
 
@@ -502,6 +558,53 @@ def main():
     print(f"  CRITICAL: {crit}  |  HIGH: {high}  |  MEDIUM: {med}  |  LOW: {low}")
     print(f"  Report(s) saved: {', '.join(saved)}")
     print(f"{'='*55}\n")
+
+    # ── Release gate ─────────────────────────────────────────────────────────
+    # `fair_findings`, not `all_findings`: --severity is a DISPLAY option and the
+    # gate decision must not move because somebody narrowed a report. Same
+    # reasoning as the FAIR figure being priced on the unfiltered set — a control
+    # whose verdict depends on a rendering flag is not a control.
+    if args.gate_write_baseline:
+        payload = release_gate.write_baseline(fair_findings)
+        Path(args.gate_write_baseline).write_text(
+            json.dumps(payload, indent=2), encoding="utf-8")
+        print(f"[*] Baseline written: {args.gate_write_baseline} "
+              f"({payload['count']} accepted finding(s))")
+        sys.exit(0)
+
+    if args.gate:
+        try:
+            policy = release_gate.load_policy(
+                Path(args.gate_policy) if args.gate_policy else None)
+            baseline = (release_gate.load_baseline(Path(args.gate_baseline))
+                        if args.gate_baseline else None)
+            scope = (release_gate.load_scope(Path(args.gate_scope))
+                     if args.gate_scope else None)
+        except (OSError, ValueError) as exc:
+            # Rule 4. An unreadable policy is "could not assess", never "pass":
+            # a typo in a config file must not quietly disarm the gate.
+            print(f"\n[GATE] Cannot assess — {exc}")
+            sys.exit(release_gate.EXIT_CANNOT_ASSESS)
+
+        # Degraded coverage is reported by the scanner as a finding rather than a
+        # side channel, so the gate reads the same evidence a human would.
+        degraded_finding = next(
+            (f for f in fair_findings if f.get("check_id") == "ABAP-LEX-001"), None)
+
+        result = release_gate.evaluate(
+            fair_findings,
+            policy=policy,
+            baseline=baseline,
+            scope=scope,
+            degraded=degraded_finding is not None,
+            degraded_detail=(degraded_finding or {}).get("description", ""))
+
+        print(release_gate.render(result))
+        if args.gate_json:
+            Path(args.gate_json).write_text(
+                json.dumps(result.as_dict(), indent=2), encoding="utf-8")
+            print(f"[*] Gate decision written: {args.gate_json}")
+        sys.exit(result.exit_code)
 
 
 if __name__ == "__main__":
