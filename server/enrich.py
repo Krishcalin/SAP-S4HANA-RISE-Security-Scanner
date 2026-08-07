@@ -37,6 +37,7 @@ log = logging.getLogger(__name__)
 #: check_id prefix -> owning team. Longest prefix wins, so a specific family can
 #: override its module's default.
 TEAM_BY_PREFIX: List[Tuple[str, str]] = [
+    ("ATC-", "development"),
     ("AUTH-", "authorizations"),
     ("USR-", "identity"),
     ("STDUSR-", "basis"),

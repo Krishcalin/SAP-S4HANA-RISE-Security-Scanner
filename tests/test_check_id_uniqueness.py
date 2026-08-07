@@ -29,6 +29,7 @@ the two checks fire on different conditions and `sample_data` only triggered one
 """
 from __future__ import annotations
 
+import ast
 import re
 import sys
 from collections import defaultdict
@@ -57,26 +58,76 @@ REVIEWED_MULTI_TITLE = {
     "BTP-CC-008": "a named CVE and a general out-of-maintenance release; same remediation",
 }
 
-_KW = re.compile(
-    r'check_id\s*=\s*"([A-Z0-9][A-Z0-9_\-]{2,})"\s*,\s*\n?\s*'
-    r'title\s*=\s*f?"([^"]{6,})"')
-_POS = re.compile(
-    r'"([A-Z]{2,}[A-Z0-9_\-]*-[A-Z0-9]+)"\s*,\s*\n?\s*f?"([^"]{6,})"')
-
 #: Two titles differing only by an interpolated value are the same title.
 _NORM = re.compile(r"\{[^}]*\}|\s+")
 
 
+def _literal(node):
+    """Render a title argument: a plain string, or an f-string with its holes kept.
+
+    An f-string becomes e.g. "User {} has profile {}", which `_NORM` collapses
+    exactly as it collapses a real interpolation, so the per-user and roll-up
+    branches of one check still read as one title.
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr):
+        return "".join(
+            part.value
+            if isinstance(part, ast.Constant) and isinstance(part.value, str)
+            else "{}"
+            for part in node.values)
+    return None
+
+
 def _titles_by_id() -> dict:
+    """Every (check_id, title) pair passed to a `finding(...)` call, found by AST.
+
+    WHY THIS IS NO LONGER A REGEX
+    -----------------------------
+    It was two regexes, and the positional one matched ANY two adjacent
+    uppercase-hyphenated string literals. That is exactly the shape of a rule
+    table: `"tokens": ("AUTHORITY-CHECK", "AUTHORITY CHECK", ...)` was read as a
+    check id `AUTHORITY-CHECK` carrying a title, and the guard failed on data that
+    is not a check at all. With the ABAP engine's rule dicts arriving, those false
+    positives were only going to multiply, and a guard that cries wolf gets
+    deleted.
+
+    An AST walk is still fully static — the point of this guard, since the
+    `BASELINE-011` collision never showed at runtime — but it only ever looks at
+    real calls to something named `finding`, so a table of strings cannot trip it.
+    """
     found: dict = defaultdict(lambda: defaultdict(list))
     for path in sorted(MODULES.glob("*.py")):
         src = path.read_text(encoding="utf-8")
-        for pattern in (_KW, _POS):
-            for m in pattern.finditer(src):
-                cid, title = m.group(1), m.group(2)
-                key = _NORM.sub(" ", title).strip().lower()
-                line = src[:m.start()].count("\n") + 1
-                found[cid][key].append(f"{path.name}:{line}  {title[:64]}")
+        for node in ast.walk(ast.parse(src)):
+            if not isinstance(node, ast.Call):
+                continue
+            name = (node.func.attr if isinstance(node.func, ast.Attribute)
+                    else getattr(node.func, "id", ""))
+            if name != "finding":
+                continue
+
+            kw = {k.arg: k.value for k in node.keywords if k.arg}
+            cid_node = kw.get("check_id") or (node.args[0] if node.args else None)
+            title = (_literal(kw["title"]) if "title" in kw
+                     else (_literal(node.args[1]) if len(node.args) > 1 else None))
+
+            # A check_id built by an f-string (`f"ATC-{family}"`, and three
+            # pre-existing ones in ara/iam/params) cannot be judged statically: at
+            # runtime it is many distinct ids, and rendering it as "ATC-{}" would
+            # collapse them into one and report a collision that does not exist.
+            # Those are covered at RUNTIME instead, by the per-module tests that
+            # assert every emitted id routes to a team. Skipping them here is a
+            # real gap in this guard, and it is a smaller lie than a false alarm.
+            cid = (cid_node.value
+                   if isinstance(cid_node, ast.Constant) and isinstance(cid_node.value, str)
+                   else None)
+            if not cid or not title:
+                continue
+
+            key = _NORM.sub(" ", title).strip().lower()
+            found[cid][key].append(f"{path.name}:{node.lineno}  {title[:64]}")
     return found
 
 
