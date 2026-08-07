@@ -54,14 +54,21 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from modules.abap_sast_extra import CDS_RULES, EXTRA_ABAP_RULES
 from modules.abap_sast_rules import (
-    ALL_ABAP_SAST_RULES,
+    ALL_ABAP_SAST_RULES as _VENDORED_ABAP_RULES,
     ALL_BTP_CONFIG_RULES,
     ALL_JS_RULES,
     TaintAnalyzer,
 )
 from modules.base_auditor import BaseAuditor
 from modules.reachability import ReachabilityIndex, stamp
+
+#: The vendored corpus plus our own. Kept in separate modules because
+#: `tools/build_abap_rules.py` regenerates the vendored one verbatim from the
+#: upstream repository — anything added there would be destroyed on the next
+#: refresh, silently and with no test failing.
+ALL_ABAP_SAST_RULES = _VENDORED_ABAP_RULES + EXTRA_ABAP_RULES
 
 # --------------------------------------------------------------------------- #
 #  What an abapGit export actually contains                                   #
@@ -70,12 +77,24 @@ from modules.reachability import ReachabilityIndex, stamp
 #: Source we analyse. The upstream set stopped at `.ddls.abap`/`.dcls.abap`, which
 #: abapGit does not produce — it writes `.asddls` and `.asdcls`, so CDS coverage
 #: was silently zero on every real export.
-ABAP_SUFFIXES: Tuple[str, ...] = (
-    ".abap", ".abp",
-    ".asddls",      # CDS data definition
-    ".asdcls",      # CDS access control (DCL)
-    ".asbdef",      # RAP behaviour definition
-    ".aclrl",       # authorisation object / role content
+ABAP_SUFFIXES: Tuple[str, ...] = (".abap", ".abp", ".aclrl")
+
+#: CDS / DCL / RAP artefacts. A DIFFERENT LANGUAGE, and it must not be parsed as
+#: ABAP or matched with ABAP rules. Two things went wrong when it was, both caught
+#: by the requirement that a secure fixture produce zero findings:
+#:
+#:   * `@AccessControl.authorizationCheck` was chopped in half, because ABAP ends a
+#:     statement at a period and CDS does not — so no annotation rule could ever
+#:     match one, and CDS coverage was zero while appearing to work.
+#:   * ABAP's dynamic-WHERE rule fired on a DCL grant's
+#:     `where ( lifnr ) = aspect pfcg_auth (...)`, reporting SQL injection in a
+#:     correctly written access-control role.
+CDS_SUFFIXES: Tuple[str, ...] = (
+    ".asddls",          # CDS data definition
+    ".asdcls",          # CDS access control (DCL)
+    ".asbdef",          # RAP behaviour definition
+    ".ddls.abap",       # older ADT export naming
+    ".dcls.abap",
     ".cds",
 )
 JS_SUFFIXES: Tuple[str, ...] = (".js", ".ts", ".xml.js")
@@ -206,6 +225,56 @@ def split_statements(source: str) -> List[Statement]:
     return statements
 
 
+def split_cds_statements(source: str) -> List["Statement"]:
+    """Split a CDS / DCL / RAP artefact.
+
+    CDS is not ABAP. It terminates on `;` and braces, uses `//` for comments, and
+    — the reason this function exists — a period inside `@AccessControl.
+    authorizationCheck` is part of an identifier, not the end of anything.
+
+    Annotations are emitted as whole lines so a rule can match a complete
+    `@Annotation.path: #VALUE` pair, which is the shape every CDS security check
+    takes.
+    """
+    statements: List[Statement] = []
+    buf: List[str] = []
+    raw: List[str] = []
+    start = 1
+
+    for lineno, line in enumerate(source.splitlines(), start=1):
+        code = line.split("//")[0]
+        if not buf:
+            start = lineno
+        raw.append(line)
+
+        stripped = code.strip()
+        if not stripped:
+            continue
+
+        # An annotation is self-contained: emit it on its own so the whole
+        # `@path: #VALUE` is one matchable unit.
+        if stripped.startswith("@"):
+            statements.append(Statement(" ".join(stripped.split()), lineno,
+                                        line.strip(), 0, None))
+            raw, buf, start = [], [], lineno + 1
+            continue
+
+        buf.append(stripped)
+        joined = " ".join(" ".join(buf).split())
+        while ";" in joined:
+            head, joined = joined.split(";", 1)
+            if head.strip():
+                statements.append(Statement(head.strip(), start,
+                                            "\n".join(raw).strip(), 0, None))
+            raw, start = [], lineno
+        buf = [joined] if joined.strip() else []
+
+    tail = " ".join(" ".join(buf).split()).strip()
+    if tail:
+        statements.append(Statement(tail, start, "\n".join(raw).strip(), 0, None))
+    return statements
+
+
 def _strip_comments(line: str) -> str:
     """Remove ABAP comments, respecting string literals."""
     if line[:1] == "*":
@@ -270,6 +339,22 @@ class AbapSourceScanner:
 
     # ------------------------------------------------------------------ #
 
+    @staticmethod
+    def _rules_for(path: Path) -> Optional[List[Dict[str, Any]]]:
+        """The rule set for a file, by type. None when the file is not source."""
+        name = path.name.lower()
+        if name.endswith(METADATA_SUFFIXES):
+            return None
+        if name.endswith(CDS_SUFFIXES):
+            return CDS_RULES
+        if name.endswith(ABAP_SUFFIXES):
+            return ALL_ABAP_SAST_RULES
+        if name.endswith(JS_SUFFIXES):
+            return ALL_JS_RULES
+        if name in DESCRIPTOR_NAMES:
+            return ALL_BTP_CONFIG_RULES
+        return None
+
     def scan_tree(self, root: Path) -> List[Dict[str, Any]]:
         findings: List[Dict[str, Any]] = []
         for path in sorted(p for p in root.rglob("*") if p.is_file()):
@@ -277,13 +362,8 @@ class AbapSourceScanner:
             if name.endswith(METADATA_SUFFIXES):
                 self.metadata_skipped += 1
                 continue
-            if name.endswith(ABAP_SUFFIXES):
-                rules = ALL_ABAP_SAST_RULES
-            elif name.endswith(JS_SUFFIXES):
-                rules = ALL_JS_RULES
-            elif name in DESCRIPTOR_NAMES:
-                rules = ALL_BTP_CONFIG_RULES
-            else:
+            rules = self._rules_for(path)
+            if rules is None:
                 continue
             try:
                 text = path.read_text(encoding="utf-8", errors="replace")
@@ -295,9 +375,22 @@ class AbapSourceScanner:
         return findings
 
     def scan_text(self, source: str, path: Path,
-                  rules: Iterable[Dict[str, Any]] = ALL_ABAP_SAST_RULES
+                  rules: Optional[Iterable[Dict[str, Any]]] = None
                   ) -> List[Dict[str, Any]]:
-        statements = split_statements(source)
+        """Scan one artefact. `rules` defaults to the right set FOR THE FILE TYPE.
+
+        It used to default to the ABAP corpus whatever the path said, so calling
+        this directly on a `.asdcls` ran ABAP rules over DCL and reported SQL
+        injection in a correct access-control role. Only `scan_tree` routed
+        properly, which made the default a trap for every other caller.
+        """
+        if rules is None:
+            rules = self._rules_for(path)
+        # CDS artefacts get the CDS splitter. Handing them to the ABAP one both
+        # loses every annotation and invents SQL-injection findings in DCL.
+        is_cds = str(path).lower().endswith(CDS_SUFFIXES)
+        statements = (split_cds_statements(source) if is_cds
+                      else split_statements(source))
         guarded_blocks = {
             st.block for st in statements if _AUTHORITY_CHECK.search(st.text)}
 

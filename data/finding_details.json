@@ -1733,5 +1733,30 @@
     "risk": "This was reported by SAP's own code analysis (ABAP Test Cockpit / Code Vulnerability Analyzer) running inside the system, not by this product's scanner.\nThe code returns internal detail — a system message, a dump, a technical identifier or a stack trace — to a caller who should not see it.\nIndividually these are not exploitable; collectively they are how an attacker maps the estate, learns which release and which custom objects are present, and chooses the next thing to try.\nDetailed error text is the most valuable of these, because it usually confirms whether an injection attempt reached the layer the attacker was aiming at.",
     "mitigation": "1. Open the object in ADT or SE80 and read the reported statement in context — the line number came from a scan and moves as the code is edited.\n2. Return a generic message to the caller and write the detail to the application log, where it stays available for support without being disclosed.\n3. Ensure the failure path cannot dump: an unhandled exception reaching the caller usually discloses more than the message being fixed.\n4. Re-run the scan or ATC over the changed object and confirm the finding shrinks or resolves; this product tracks it to closure, so partial progress is visible.\n",
     "detailed": ""
+  },
+  "ABAP-AMDP": {
+    "risk": "The finding is inside an AMDP method: SQLScript that executes in HANA rather than in the ABAP runtime.\nThe ABAP compiler does not analyse the body, and SAP's own keyword documentation states that no test tool exists for AMDP, so this code has typically never been checked by anything.\nNeither AUTHORITY-CHECK nor CDS access control applies inside a database procedure, so whatever it selects, it selects in full.",
+    "mitigation": "1. Open the AMDP method and read the SQLScript body; the reported line is inside it.\n2. Replace EXECUTE IMMEDIATE with a static statement and parameters, and build any APPLY_FILTER condition with CL_ABAP_DYN_PRG on the ABAP side rather than by concatenation.\n3. Move the AUTHORITY-CHECK into the calling ABAP method and pass an already-authorised selection down, since no ABAP authorization mechanism runs inside HANA.\n4. Validate any identifier that must vary against an allowlist of column names, never against a denylist of characters.\n5. Re-scan and confirm the finding resolves.",
+    "detailed": ""
+  },
+  "ABAP-NSQL": {
+    "risk": "Native SQL hands a statement straight to the database with no Open SQL layer in between.\nThat means no automatic client handling, no table buffering, no portability — and no parameterisation unless the developer supplied it.\nA statement assembled as a string and executed natively is the most direct injection path in the ABAP stack.",
+    "mitigation": "1. Rewrite the block in Open SQL where possible; it is client-aware and parameterised by construction.\n2. Where native SQL is genuinely required, use ADBC and bind values with SET_PARAM rather than concatenating them into the statement text.\n3. Keep the statement itself a literal, so only the values vary.\n4. Check the client handling explicitly: native SQL does not add the client column, so a statement that looks correct may read across clients.\n5. Re-scan and confirm the finding resolves.",
+    "detailed": ""
+  },
+  "ABAP-CDS": {
+    "risk": "The finding is in a CDS view or its access-control role, which together decide who may read the data the view exposes.\nA view that declares no authorization check is readable in full by anyone who can reach it, regardless of the authorizations protecting the underlying tables.\nA role that grants unconditionally is worse than no role, because a review sees that access control is defined.",
+    "mitigation": "1. Set @AccessControl.authorizationCheck to #CHECK on the view.\n2. Supply a DCL role whose condition is bound to an authorization object through the aspect pfcg_auth, so the grant is evaluated against the user's real authorizations.\n3. Where #NOT_REQUIRED is genuinely correct, record next to the annotation why the data is public within the system — an unexplained exemption will be re-raised at every review.\n4. Re-scan and confirm the finding resolves.",
+    "detailed": ""
+  },
+  "ABAP-XXE": {
+    "risk": "XML is parsed from a source the caller can influence.\nIf the parser resolves external entities, a crafted document makes the application server read files from its own file system, or issue network requests on the attacker's behalf.\nThe server does the work and returns the result, which is what makes this more than a parsing bug.",
+    "mitigation": "1. Disable DTD processing and external entity resolution on the parser before parsing anything untrusted.\n2. Validate the document against a schema rather than trusting its origin, even where it arrives from a known partner.\n3. Re-scan and confirm the finding resolves.",
+    "detailed": ""
+  },
+  "ABAP-SSRF": {
+    "risk": "The destination of an outbound HTTP call is taken from a variable rather than from configuration.\nWhoever controls that value makes the SAP application server issue requests of their choosing, from inside the network, with the server's own network position.\nThat reaches hosts the caller cannot reach directly, which is the entire point of the technique.",
+    "mitigation": "1. Call through an RFC destination maintained in SM59 instead of a URL built at runtime, so the reachable targets are administered rather than computed.\n2. Where a dynamic URL is unavoidable, validate the host against an allowlist — validating the scheme or the path alone does not constrain where the request goes.\n3. Re-scan and confirm the finding resolves.",
+    "detailed": ""
   }
 }

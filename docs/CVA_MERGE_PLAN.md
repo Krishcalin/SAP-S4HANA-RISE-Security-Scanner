@@ -1,6 +1,6 @@
 # Merging the Code Vulnerability Analyzer into MonitorRisk
 
-**Status:** Phases 0-6 SHIPPED · Phase 7 open
+**Status:** ALL PHASES SHIPPED (0-7). Open: report branding, and no real SAP artifact has been scanned yet
 **Date:** 2026-08-07 · **Last built:** 2026-08-07
 
 | Phase | State | Where |
@@ -13,7 +13,7 @@
 | 4b · specify `HANDLER_CLASS` / `IMPL_CLASS` | **done** (specified; awaiting a customer export) | `docs/EXPORT_GUIDE.md` |
 | 5 · trust model | **done** | `abap_sast.py`, `fair_adapter.py` |
 | 6 · server tier + console | **done** | `schema.sql`, `finding_detail.html` |
-| 7 · coverage gaps, AMDP first | open | — |
+| 7 · coverage gaps | **done** (RAP declined, see §6) | `modules/abap_sast_extra.py` |
 **Source repo:** `SAP-Code-Vulnerability-Analyzer` v1.9.0 (`abap_scanner.py`, 3,421 lines)
 **Target:** this repository
 

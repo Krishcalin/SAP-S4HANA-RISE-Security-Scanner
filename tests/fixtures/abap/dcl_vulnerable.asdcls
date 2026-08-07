@@ -1,0 +1,4 @@
+@EndUserText.label: 'Vendor access'
+define role ZI_Vendor_Open {
+  grant select on ZI_Vendor where true;
+}

@@ -1,0 +1,5 @@
+@EndUserText.label: 'Vendor access'
+define role ZI_Vendor_Auth {
+  grant select on ZI_Vendor
+    where ( lifnr ) = aspect pfcg_auth ( F_LFA1_BEK, LIFNR, ACTVT = '03' );
+}
