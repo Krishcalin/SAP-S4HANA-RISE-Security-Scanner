@@ -1,6 +1,6 @@
 # Merging the Code Vulnerability Analyzer into MonitorRisk
 
-**Status:** Phases 0-3 SHIPPED · Phase 5 partly shipped · Phases 4, 6, 7 open
+**Status:** Phases 0-4 SHIPPED · Phase 5 partly shipped · Phases 6, 7 open
 **Date:** 2026-08-07 · **Last built:** 2026-08-07
 
 | Phase | State | Where |
@@ -9,7 +9,8 @@
 | 1 · ATC / Code Inspector / CVA import | **done** | `fea0aea` · `modules/atc_import.py` |
 | 2 · statements not lines; abapGit extensions | **done** | `bf7532a` · `modules/abap_sast.py` |
 | 3 · land as an auditor; drop BTP/grade/reporting | **done** | `bf7532a` |
-| 4 · reachability join (4a buildable, 4b needs export columns) | open | — |
+| 4a · reachability join on `code_inventory` | **done** | `modules/reachability.py` |
+| 4b · specify `HANDLER_CLASS` / `IMPL_CLASS` | **done** (specified; awaiting a customer export) | `docs/EXPORT_GUIDE.md` |
 | 5 · trust model | **mostly done** in `bf7532a` — taint on by default, aggregate scoping, per-finding confidence, `#NOSEC` surfaced. Outstanding: excluding pattern-only findings from CRQ pricing | — |
 | 6 · server tier: `cwe` + `confidence` columns, snippet and taint trace in the console | open | — |
 | 7 · coverage gaps, AMDP first | open | — |

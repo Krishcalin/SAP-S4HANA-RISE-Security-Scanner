@@ -13,7 +13,6 @@
       "SAP BTP connectivity documentation — principal propagation via Cloud Connector"
     ]
   },
-
   "paths": [
     {
       "id": "SAPPATH-01",
@@ -24,20 +23,64 @@
       "severity": "CRITICAL",
       "crosses_tier": true,
       "hops": [
-        {"name": "Route from a lower tier exists", "required": true, "cut": false,
-         "checks": ["TRUST-001", "TRUST-003", "NET-001", "TRUST-004"],
-         "node_types": ["trusted_system", "destination"]},
-        {"name": "Caller can arrive as any user", "required": true, "cut": true,
-         "checks": ["AUTH-002"], "node_types": ["role", "auth_object"],
-         "why_cut": "One wildcarded S_RFCACL grant is what lets the inbound call choose its identity. Remove it and every trust route into this system dies at once, however many destinations exist."},
-        {"name": "Arrival identity is privileged", "required": false, "cut": false,
-         "checks": ["USR-002", "USR-001", "STDUSR-002", "STDUSR-003"],
-         "node_types": ["user", "profile"]},
-        {"name": "Transport is unauthenticated or unencrypted", "required": false, "cut": false,
-         "checks": ["NET-003", "TRUST-002"], "node_types": ["destination", "parameter_name"]}
+        {
+          "name": "Route from a lower tier exists",
+          "required": true,
+          "cut": false,
+          "checks": [
+            "TRUST-001",
+            "TRUST-003",
+            "NET-001",
+            "TRUST-004"
+          ],
+          "node_types": [
+            "trusted_system",
+            "destination"
+          ]
+        },
+        {
+          "name": "Caller can arrive as any user",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "AUTH-002"
+          ],
+          "node_types": [
+            "role",
+            "auth_object"
+          ],
+          "why_cut": "One wildcarded S_RFCACL grant is what lets the inbound call choose its identity. Remove it and every trust route into this system dies at once, however many destinations exist."
+        },
+        {
+          "name": "Arrival identity is privileged",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "USR-002",
+            "USR-001",
+            "STDUSR-002",
+            "STDUSR-003"
+          ],
+          "node_types": [
+            "user",
+            "profile"
+          ]
+        },
+        {
+          "name": "Transport is unauthenticated or unencrypted",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "NET-003",
+            "TRUST-002"
+          ],
+          "node_types": [
+            "destination",
+            "parameter_name"
+          ]
+        }
       ]
     },
-
     {
       "id": "SAPPATH-02",
       "name": "RFC callback inversion",
@@ -47,21 +90,67 @@
       "severity": "HIGH",
       "crosses_tier": true,
       "hops": [
-        {"name": "Outbound route to a less-protected system", "required": true, "cut": false,
-         "checks": ["NET-001", "NET-002"], "node_types": ["destination"]},
-        {"name": "Callback protection not enforced", "required": true, "cut": true,
-         "checks": ["BASELINE-012"], "node_types": ["parameter_name"],
-         "why_cut": "rfc/callback_security_method = 3 plus a per-destination allowlist rejects the callback outright. Until this check existed the path's only cut was unasserted — the graph could show the path but never show it closed."},
-        {"name": "Remote callable surface is unrestricted", "required": false, "cut": true,
-         "checks": ["TRUST-007"], "node_types": ["parameter_name"],
-         "why_cut": "Activating UCON constrains which function modules are remotely callable at all, which severs the path higher up and more broadly than the callback allowlist."},
-        {"name": "Caller's S_RFC is broad", "required": false, "cut": false,
-         "checks": ["AUTH-006"], "node_types": ["role", "auth_object"]},
-        {"name": "RFC authorization check weakened", "required": false, "cut": false,
-         "checks": ["BASELINE-001"], "node_types": ["parameter_name"]}
+        {
+          "name": "Outbound route to a less-protected system",
+          "required": true,
+          "cut": false,
+          "checks": [
+            "NET-001",
+            "NET-002"
+          ],
+          "node_types": [
+            "destination"
+          ]
+        },
+        {
+          "name": "Callback protection not enforced",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "BASELINE-012"
+          ],
+          "node_types": [
+            "parameter_name"
+          ],
+          "why_cut": "rfc/callback_security_method = 3 plus a per-destination allowlist rejects the callback outright. Until this check existed the path's only cut was unasserted — the graph could show the path but never show it closed."
+        },
+        {
+          "name": "Remote callable surface is unrestricted",
+          "required": false,
+          "cut": true,
+          "checks": [
+            "TRUST-007"
+          ],
+          "node_types": [
+            "parameter_name"
+          ],
+          "why_cut": "Activating UCON constrains which function modules are remotely callable at all, which severs the path higher up and more broadly than the callback allowlist."
+        },
+        {
+          "name": "Caller's S_RFC is broad",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "AUTH-006"
+          ],
+          "node_types": [
+            "role",
+            "auth_object"
+          ]
+        },
+        {
+          "name": "RFC authorization check weakened",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "BASELINE-001"
+          ],
+          "node_types": [
+            "parameter_name"
+          ]
+        }
       ]
     },
-
     {
       "id": "SAPPATH-03",
       "name": "Transport-borne code into production",
@@ -71,22 +160,77 @@
       "severity": "HIGH",
       "crosses_tier": true,
       "hops": [
-        {"name": "Route delivers straight to production", "required": true, "cut": true,
-         "checks": ["CODE-TMS-001", "CODE-TMS-005"], "node_types": ["system", "transport_request"],
-         "why_cut": "Removing the direct delivery route forces every change through the intermediate system, which is the cheapest and most auditable single change available."},
-        {"name": "Release and import are not segregated", "required": false, "cut": true,
-         "checks": ["CODE-TMS-003", "CODE-TMS-002"], "node_types": ["user", "transport_request"],
-         "why_cut": "Four-eyes separation on release and import severs the path even where the route remains — a process control acting as a cut edge."},
-        {"name": "Production accepts changes", "required": false, "cut": false,
-         "checks": ["CODE-CLIENT-001", "CODE-SYSCHG-001", "CODE-SYSCHG-002"],
-         "node_types": ["client", "system", "namespace"]},
-        {"name": "Runtime authorization can be bypassed", "required": false, "cut": false,
-         "checks": ["AUTH-001", "AUTH-014", "CODE-DEV-001"], "node_types": ["role", "auth_object"]},
-        {"name": "Change is not attributable", "required": false, "cut": false,
-         "checks": ["CODE-CHG-001", "CODE-CHG-002"], "node_types": ["table"]}
+        {
+          "name": "Route delivers straight to production",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "CODE-TMS-001",
+            "CODE-TMS-005"
+          ],
+          "node_types": [
+            "system",
+            "transport_request"
+          ],
+          "why_cut": "Removing the direct delivery route forces every change through the intermediate system, which is the cheapest and most auditable single change available."
+        },
+        {
+          "name": "Release and import are not segregated",
+          "required": false,
+          "cut": true,
+          "checks": [
+            "CODE-TMS-003",
+            "CODE-TMS-002"
+          ],
+          "node_types": [
+            "user",
+            "transport_request"
+          ],
+          "why_cut": "Four-eyes separation on release and import severs the path even where the route remains — a process control acting as a cut edge."
+        },
+        {
+          "name": "Production accepts changes",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "CODE-CLIENT-001",
+            "CODE-SYSCHG-001",
+            "CODE-SYSCHG-002"
+          ],
+          "node_types": [
+            "client",
+            "system",
+            "namespace"
+          ]
+        },
+        {
+          "name": "Runtime authorization can be bypassed",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "AUTH-001",
+            "AUTH-014",
+            "CODE-DEV-001"
+          ],
+          "node_types": [
+            "role",
+            "auth_object"
+          ]
+        },
+        {
+          "name": "Change is not attributable",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "CODE-CHG-001",
+            "CODE-CHG-002"
+          ],
+          "node_types": [
+            "table"
+          ]
+        }
       ]
     },
-
     {
       "id": "SAPPATH-04",
       "name": "Exposed surface to OS command execution",
@@ -96,25 +240,86 @@
       "severity": "CRITICAL",
       "crosses_tier": false,
       "hops": [
-        {"name": "Unauthenticated entry point exposed", "required": true, "cut": true,
-         "checks": ["INTG-GW-002", "INTG-GW-005", "TRUST-005", "TRUST-010", "TRUST-006",
-                    "TRUST-008", "NET-004", "NET-005", "BASELINE-007"],
-         "node_types": ["gateway", "message_server", "icf_path", "parameter_name"],
-         "why_cut": "A deny-all default in reginfo/secinfo severs the entire gateway branch in one change; deactivating one ICF node severs the web branch."},
-        {"name": "OS command execution reachable", "required": true, "cut": true,
-         "checks": ["AUTH-003", "AUTH-010", "AUTH-011", "JOBCMD-CMD-001", "JOBCMD-CMD-002",
-                    "JOBCMD-CMD-003"],
-         "node_types": ["auth_object", "os_command", "role"],
-         "why_cut": "Withdrawing S_LOG_COM / the external command definition removes the bridge from the application layer to the operating system."},
-        {"name": "Database is reachable and privileged", "required": false, "cut": false,
-         "checks": ["HANADB-USER-001", "HANADB-PRIV-001", "HANADB-PRIV-002", "HANADB-PRIV-004"],
-         "node_types": ["hana_user", "hana_privilege"]},
-        {"name": "Activity would not be recorded", "required": false, "cut": false,
-         "checks": ["HANADB-AUDIT-001", "LOG-AUD-001", "LOG-AUD-002"],
-         "node_types": ["parameter_name"]}
+        {
+          "name": "Unauthenticated entry point exposed",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "INTG-GW-002",
+            "INTG-GW-005",
+            "TRUST-005",
+            "TRUST-010",
+            "TRUST-006",
+            "TRUST-008",
+            "NET-004",
+            "NET-005",
+            "BASELINE-007"
+          ],
+          "node_types": [
+            "gateway",
+            "message_server",
+            "icf_path",
+            "parameter_name"
+          ],
+          "why_cut": "A deny-all default in reginfo/secinfo severs the entire gateway branch in one change; deactivating one ICF node severs the web branch."
+        },
+        {
+          "name": "OS command execution reachable",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "AUTH-003",
+            "AUTH-010",
+            "AUTH-011",
+            "JOBCMD-CMD-001",
+            "JOBCMD-CMD-002",
+            "JOBCMD-CMD-003",
+            "ABAP-CMDI-001",
+            "ABAP-CMDI-002",
+            "ABAP-CMDI-003",
+            "ABAP-CMDI-004",
+            "ABAP-CMDI-005",
+            "ATC-CMDI"
+          ],
+          "node_types": [
+            "auth_object",
+            "os_command",
+            "role",
+            "program"
+          ],
+          "why_cut": "Withdrawing S_LOG_COM / the external command definition removes the bridge from the application layer to the operating system.",
+          "note": "Custom ABAP that builds an OS command from external input is a way this hop becomes reachable without any gateway or job misconfiguration — the code IS the mechanism. ABAP-CMDI-* comes from our own scanner, ATC-CMDI from SAP's."
+        },
+        {
+          "name": "Database is reachable and privileged",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "HANADB-USER-001",
+            "HANADB-PRIV-001",
+            "HANADB-PRIV-002",
+            "HANADB-PRIV-004"
+          ],
+          "node_types": [
+            "hana_user",
+            "hana_privilege"
+          ]
+        },
+        {
+          "name": "Activity would not be recorded",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "HANADB-AUDIT-001",
+            "LOG-AUD-001",
+            "LOG-AUD-002"
+          ],
+          "node_types": [
+            "parameter_name"
+          ]
+        }
       ]
     },
-
     {
       "id": "SAPPATH-05",
       "name": "Cloud identity into the on-premise backend",
@@ -124,22 +329,67 @@
       "severity": "HIGH",
       "crosses_tier": true,
       "hops": [
-        {"name": "Cloud identity is weakly controlled", "required": true, "cut": false,
-         "checks": ["BTP-IAS-003", "BTP-IAS-005", "BTP-IAS-001", "BTP-IAS-002"],
-         "node_types": ["btp_user", "subaccount"]},
-        {"name": "Credential or binding is exposed", "required": false, "cut": false,
-         "checks": ["BTP-DST-001", "BTP-DST-002", "BTP-SB-001", "BTP-SB-002",
-                    "BTP-CPI-003", "BTP-CPI-004"],
-         "node_types": ["btp_destination", "service_binding", "iflow"]},
-        {"name": "Cloud Connector reaches the backend broadly", "required": true, "cut": true,
-         "checks": ["BTP-CC-001", "BTP-CC-002", "BTP-CC-004"],
-         "node_types": ["cc_backend", "subaccount"],
-         "why_cut": "Narrowing one wildcard resource mapping cuts every path through that backend at once, whatever else is misconfigured upstream."},
-        {"name": "Connector itself is vulnerable", "required": false, "cut": false,
-         "checks": ["BTP-CC-008"], "node_types": ["cc_backend"]}
+        {
+          "name": "Cloud identity is weakly controlled",
+          "required": true,
+          "cut": false,
+          "checks": [
+            "BTP-IAS-003",
+            "BTP-IAS-005",
+            "BTP-IAS-001",
+            "BTP-IAS-002"
+          ],
+          "node_types": [
+            "btp_user",
+            "subaccount"
+          ]
+        },
+        {
+          "name": "Credential or binding is exposed",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "BTP-DST-001",
+            "BTP-DST-002",
+            "BTP-SB-001",
+            "BTP-SB-002",
+            "BTP-CPI-003",
+            "BTP-CPI-004"
+          ],
+          "node_types": [
+            "btp_destination",
+            "service_binding",
+            "iflow"
+          ]
+        },
+        {
+          "name": "Cloud Connector reaches the backend broadly",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "BTP-CC-001",
+            "BTP-CC-002",
+            "BTP-CC-004"
+          ],
+          "node_types": [
+            "cc_backend",
+            "subaccount"
+          ],
+          "why_cut": "Narrowing one wildcard resource mapping cuts every path through that backend at once, whatever else is misconfigured upstream."
+        },
+        {
+          "name": "Connector itself is vulnerable",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "BTP-CC-008"
+          ],
+          "node_types": [
+            "cc_backend"
+          ]
+        }
       ]
     },
-
     {
       "id": "SAPPATH-06",
       "name": "Business-impact path — no exploit required",
@@ -149,24 +399,72 @@
       "severity": "HIGH",
       "crosses_tier": false,
       "hops": [
-        {"name": "A user holds conflicting duties", "required": true, "cut": true,
-         "checks": ["ARA-P2P-01", "ARA-O2C-01", "ARA-R2R-01", "ARA-H2R-01",
-                    "ARA-BASIS-01", "ARA-BASIS-02"],
-         "node_types": ["user", "role"],
-         "why_cut": "Withdrawing one side of the conflict from one role removes the combination. The conflict IS the path."},
-        {"name": "No compensating control is in force", "required": false, "cut": true,
-         "checks": ["GRC-MIT-001", "GRC-MIT-002", "ARA-SCORE-001"],
-         "node_types": ["mitigating_control", "user"],
-         "why_cut": "A valid, unexpired mitigating control severs the business path without changing a single authorization."},
-        {"name": "Financial controls are permissive", "required": false, "cut": false,
-         "checks": ["FIN-PP-001", "FIN-TOL-001", "FIN-DUAL-001", "FIN-CHG-001", "FIN-NR-001"],
-         "node_types": ["posting_period_variant", "tolerance_group", "document_field"]},
-        {"name": "Activity would not be reviewed", "required": false, "cut": false,
-         "checks": ["IAM-REV-001", "IAM-REV-003", "LOG-TBL-001"],
-         "node_types": ["review_campaign", "table"]}
+        {
+          "name": "A user holds conflicting duties",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "ARA-P2P-01",
+            "ARA-O2C-01",
+            "ARA-R2R-01",
+            "ARA-H2R-01",
+            "ARA-BASIS-01",
+            "ARA-BASIS-02"
+          ],
+          "node_types": [
+            "user",
+            "role"
+          ],
+          "why_cut": "Withdrawing one side of the conflict from one role removes the combination. The conflict IS the path."
+        },
+        {
+          "name": "No compensating control is in force",
+          "required": false,
+          "cut": true,
+          "checks": [
+            "GRC-MIT-001",
+            "GRC-MIT-002",
+            "ARA-SCORE-001"
+          ],
+          "node_types": [
+            "mitigating_control",
+            "user"
+          ],
+          "why_cut": "A valid, unexpired mitigating control severs the business path without changing a single authorization."
+        },
+        {
+          "name": "Financial controls are permissive",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "FIN-PP-001",
+            "FIN-TOL-001",
+            "FIN-DUAL-001",
+            "FIN-CHG-001",
+            "FIN-NR-001"
+          ],
+          "node_types": [
+            "posting_period_variant",
+            "tolerance_group",
+            "document_field"
+          ]
+        },
+        {
+          "name": "Activity would not be reviewed",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "IAM-REV-001",
+            "IAM-REV-003",
+            "LOG-TBL-001"
+          ],
+          "node_types": [
+            "review_campaign",
+            "table"
+          ]
+        }
       ]
     },
-
     {
       "id": "SAPPATH-07",
       "name": "ABAP to operating system bridge",
@@ -176,17 +474,54 @@
       "severity": "HIGH",
       "crosses_tier": false,
       "hops": [
-        {"name": "An external OS command is defined", "required": true, "cut": true,
-         "checks": ["JOBCMD-CMD-001", "JOBCMD-CMD-002", "JOBCMD-CMD-003", "JOBCMD-CMD-004",
-                    "JOBCMD-CMD-005"],
-         "node_types": ["os_command"],
-         "why_cut": "Removing or parameter-locking the command definition closes the bridge regardless of who could have invoked it."},
-        {"name": "Something can invoke it", "required": true, "cut": false,
-         "checks": ["JOBCMD-JOB-001", "JOBCMD-JOB-001B", "JOBCMD-JOB-002", "JOBCMD-JOB-003",
-                    "JOBCMD-JOB-004", "JOBCMD-JOB-005", "AUTH-003"],
-         "node_types": ["job", "user", "auth_object"]},
-        {"name": "It runs as a privileged identity", "required": false, "cut": false,
-         "checks": ["USR-002", "STDUSR-002"], "node_types": ["user", "profile"]}
+        {
+          "name": "An external OS command is defined",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "JOBCMD-CMD-001",
+            "JOBCMD-CMD-002",
+            "JOBCMD-CMD-003",
+            "JOBCMD-CMD-004",
+            "JOBCMD-CMD-005"
+          ],
+          "node_types": [
+            "os_command"
+          ],
+          "why_cut": "Removing or parameter-locking the command definition closes the bridge regardless of who could have invoked it."
+        },
+        {
+          "name": "Something can invoke it",
+          "required": true,
+          "cut": false,
+          "checks": [
+            "JOBCMD-JOB-001",
+            "JOBCMD-JOB-001B",
+            "JOBCMD-JOB-002",
+            "JOBCMD-JOB-003",
+            "JOBCMD-JOB-004",
+            "JOBCMD-JOB-005",
+            "AUTH-003"
+          ],
+          "node_types": [
+            "job",
+            "user",
+            "auth_object"
+          ]
+        },
+        {
+          "name": "It runs as a privileged identity",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "USR-002",
+            "STDUSR-002"
+          ],
+          "node_types": [
+            "user",
+            "profile"
+          ]
+        }
       ]
     }
   ]

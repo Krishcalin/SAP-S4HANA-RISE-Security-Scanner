@@ -43,6 +43,7 @@ records the precedence rule.
 from typing import Any, Dict, List, Optional
 
 from modules.base_auditor import BaseAuditor
+from modules.reachability import ReachabilityIndex, stamp
 
 
 class AtcImportAuditor(BaseAuditor):
@@ -111,6 +112,7 @@ class AtcImportAuditor(BaseAuditor):
 
     def run_all_checks(self) -> List[Dict[str, Any]]:
         self.findings = []
+        self._reach = ReachabilityIndex(self.data)
         self.check_atc_findings()
         self.check_atc_is_being_run()
         return self.findings
@@ -269,6 +271,7 @@ class AtcImportAuditor(BaseAuditor):
                     # say so, because it is the difference between "SAP found it" and
                     # "our regex thinks so".
                     "evidence": "sap_atc",
+                    **stamp({}, self._reach, obj_name),
                 },
                 # Identity is the OBJECT, not the line. See the module docstring.
                 affected_objects=[{"type": "program", "name": obj_name}],

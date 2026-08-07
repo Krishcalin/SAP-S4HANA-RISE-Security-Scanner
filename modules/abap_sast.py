@@ -61,6 +61,7 @@ from modules.abap_sast_rules import (
     TaintAnalyzer,
 )
 from modules.base_auditor import BaseAuditor
+from modules.reachability import ReachabilityIndex, stamp
 
 # --------------------------------------------------------------------------- #
 #  What an abapGit export actually contains                                   #
@@ -417,6 +418,9 @@ class AbapSastAuditor(BaseAuditor):
 
         scanner = AbapSourceScanner(data_flow=True)
         raw = scanner.scan_tree(path)
+        # Built once and shared, so this module and the ATC import agree about the
+        # same object rather than reaching two verdicts from the same inventory.
+        self._reach = ReachabilityIndex(self.data)
         self._emit(raw, scanner)
         return self.findings
 
@@ -496,6 +500,7 @@ class AbapSastAuditor(BaseAuditor):
                 "snippet": lead["snippet"],
                 "taint_flow": lead.get("flow"),
                 "suppressed_by_source_marker": lead["suppressed_by_nosec"],
+                **stamp({}, getattr(self, "_reach", None), obj),
             },
             affected_objects=[{"type": "program", "name": obj}],
             # Identity: the object, qualified by the offending statement. Never the

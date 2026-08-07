@@ -44,6 +44,12 @@ TIER_RANK = {"P1": 0, "P2": 1, "P3": 2, "P4": 3}
 
 _SEV_BASE = {"CRITICAL": 65, "HIGH": 42, "MEDIUM": 22, "LOW": 8, "INFO": 0}
 
+#: Code findings take their exposure from the reachability join, never from the
+#: keyword scan over their own description. See `assess()`.
+_CODE_CATEGORY = "Code & Transport Security"
+_REACHABLE = "reachable"
+_UNREACHABLE = "unreachable"
+
 # Categories that put a finding on an attacker-reachable surface.
 _EXPOSURE_CATEGORIES = {
     "Network & Service Exposure", "Network & Integration Layer",
@@ -139,8 +145,28 @@ class RiskPrioritizer:
 
         exploited = bool(cid.startswith("HOTNEWS-003") or _EXPLOIT_KW.search(text))
         hotnews = bool(cid.startswith("HOTNEWS") or "HotNews" in cat or "Security Notes" in cat)
-        exposed = bool(cat in _EXPOSURE_CATEGORIES or _EXPOSURE_KW.search(text))
         privileged = bool(_PRIV_KW.search(text))
+
+        # ── Reachability ────────────────────────────────────────────────────
+        # WHY A CODE FINDING DOES NOT GET `exposed` FROM ITS OWN PROSE
+        # `_EXPOSURE_KW` matches internet|external|publicly|exposed|… across the
+        # title, description and references. That is a fair heuristic for a
+        # configuration finding, whose description describes the thing it found.
+        # It is wrong for a code finding, whose description is a rule's canned
+        # explanation of a vulnerability CLASS — "an attacker can reach this
+        # endpoint", "data from an external source" — written once in exactly that
+        # vocabulary and reused for every occurrence. Left alone it stamps
+        # `exposed` on essentially every ABAP finding on the strength of an English
+        # word, lifts each one a tier, and inflates the FAIR figure the board
+        # reads. For a code finding, exposure comes from the reachability join or
+        # it does not come at all.
+        reach = str((f.get("details") or {}).get("reachability") or "").lower()
+        is_code = cat == _CODE_CATEGORY or reach in (_REACHABLE, _UNREACHABLE)
+
+        if is_code:
+            exposed = reach == _REACHABLE
+        else:
+            exposed = bool(cat in _EXPOSURE_CATEGORIES or _EXPOSURE_KW.search(text))
 
         score = _SEV_BASE.get(sev, 0)
         factors: List[Dict[str, Any]] = [
@@ -158,16 +184,46 @@ class RiskPrioritizer:
             boost(14, "HotNews / Security Note", "fixes a top-severity SAP vulnerability (Priority 1/High)")
         if privileged:
             boost(14, "Known privileged path", "default credentials / critical authorization / trust abuse")
-        if exposed:
+        if exposed and is_code:
+            boost(12, "Reachable code",
+                  "referenced or recently executed — an attacker can get to it: "
+                  + "; ".join((f.get("details") or {}).get("reachability_reasons") or []))
+        elif exposed:
             boost(12, "Exposed surface", "on a network / RISE-BTP surface reachable by an attacker")
         if cvss is not None:
             if cvss >= 9.0:
                 boost(10, f"CVSS {cvss:g}", "critical CVSS base score")
             elif cvss >= 7.0:
                 boost(5, f"CVSS {cvss:g}", "high CVSS base score")
+        # ── The one place a signal LOWERS a tier, and why it is allowed to ──
+        # Every other signal here only ever raises, so that a heuristic can never
+        # hide a real problem. This one is different on purpose.
+        #
+        # "Nothing references this object and it has never run" is not a heuristic
+        # about severity — it is direct evidence about EXPLOITABILITY, which is
+        # what the tier means. A SQL injection in dead code is a real defect and a
+        # fake incident, and a queue that ranks it alongside an injection in a
+        # program that ran this morning is a queue nobody works top-down.
+        #
+        # It is fenced tightly. It needs POSITIVE evidence of disuse from the
+        # inventory (not merely absent data); it never applies to an actively
+        # exploited finding or a HotNews one; it never drops below P3, so the
+        # finding stays on the backlog rather than disappearing; and the reason is
+        # recorded in the factor list so a reviewer sees exactly why it moved.
+        dampened = (is_code and reach == _UNREACHABLE
+                    and not exploited and not hotnews)
+        if dampened:
+            reasons = "; ".join(
+                (f.get("details") or {}).get("reachability_reasons") or [])
+            boost(-18, "Unreachable code",
+                  f"no path to it was found: {reasons}. Still a real defect — "
+                  f"floored at P3, never hidden")
+
         score = max(0, min(100, score))
 
         tier = self._tier(sev, score, exploited, hotnews, exposed, privileged)
+        if dampened:
+            tier = self._dampen(tier)
         rationale = self._rationale(sev, tier, exploited, hotnews, exposed, privileged, cve)
         return PriorityResult(f, tier, score, factors, rationale,
                               exploited, hotnews, exposed, privileged, cve, cvss)
@@ -189,6 +245,17 @@ class RiskPrioritizer:
         if exploited and TIER_RANK[tier] > TIER_RANK["P2"]:
             tier = "P2"
         return tier
+
+    @staticmethod
+    def _dampen(tier: str) -> str:
+        """One tier down for proven-unreachable code, floored at P3.
+
+        Floored rather than dropped to P4 so the finding stays on a worked list.
+        Dead code gets deleted, resurrected and copied; "nobody can reach it
+        today" is a statement about today.
+        """
+        lowered = {"P1": "P2", "P2": "P3", "P3": "P3", "P4": "P4"}
+        return lowered[tier]
 
     @staticmethod
     def _rationale(sev, tier, exploited, hotnews, exposed, privileged, cve) -> str:

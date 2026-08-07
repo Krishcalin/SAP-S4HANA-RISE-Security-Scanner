@@ -39,7 +39,17 @@ Required: RFCDEST, RFCTYPE, RFCHOST, RFCUSER, RFCSNC
 **Transaction:** `SICF`
 ```
 Required: ICF_NAME, ICF_ACTIVE, AUTH_REQUIRED
+Optional: HANDLER_CLASS
 ```
+
+> **`HANDLER_CLASS` is worth the extra column.** It is the ABAP class that serves
+> the node, and it is the one field that connects a *code* finding to the *outside
+> world*. With it, a SQL injection inside a class published on an unauthenticated
+> ICF node is identifiable as internet-reachable and ranks accordingly; without
+> it, the same finding can only be ranked on whether anything in the estate
+> references the object at all. In SICF the value is on the node's *Handler List*
+> tab. Supplying it is what upgrades this product's reachability answer for custom
+> code from "referenced somewhere" to "reachable from outside".
 
 ### Audit Config (`audit_config.csv`)
 **Transaction:** `SM19`
@@ -153,7 +163,34 @@ btp list security/trust --subaccount <id> --format json > btp_trust.json
 ### API Endpoints (`api_endpoints.json`)
 **Source:** OData service catalog or Communication Scenarios app
 
+### OData Authorizations (`odata_auth.csv`)
+```
+Required: SERVICE_NAME, AUTH_CHECK
+Optional: ALIAS, SCOPE, REQUIRED_AUTH_OBJECT, IMPL_CLASS
+```
+
+> **`IMPL_CLASS` is the OData half of the same link as `HANDLER_CLASS` above** —
+> the Data Provider Class behind the service. It is what lets a code finding in a
+> DPC method be identified as sitting behind a published, possibly
+> unauthenticated, OData service. Without it, custom code exposed exclusively
+> through OData looks no different from code nothing calls.
+
 ---
+
+## Making custom-code findings rankable
+
+Three exports decide whether a code finding can be told apart from every other
+code finding. Supply what you can; each one is independently useful.
+
+| Export | Column | What it buys |
+|---|---|---|
+| `code_inventory.csv` | `REFERENCED`, `LAST_USED` | **Available today.** Separates live code from dead code. A CRITICAL injection in a referenced, recently-run program ranks P1; the identical one in a program nothing references and that has never run ranks P3. |
+| `icf_services.csv` | `HANDLER_CLASS` | Upgrades "referenced somewhere" to "reachable from outside" for web-exposed code. |
+| `odata_auth.csv` | `IMPL_CLASS` | The same, for code reached only through OData. |
+
+Without any of them every code finding is ranked on severity alone, which is how a
+custom-code report becomes a list nobody works top-down. The tool says
+`reachability: unknown` in that case rather than guessing in either direction.
 
 ## BTP Administrative Exports — the fully automatable set
 
