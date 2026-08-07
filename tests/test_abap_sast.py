@@ -69,6 +69,41 @@ def test_the_same_statement_on_one_line_is_still_caught():
     assert "ABAP-SQLI-001" in rule_ids(one)
 
 
+@pytest.mark.parametrize("label,source,expected", [
+    ("plain template",        "lv_m = |Total. Done|. WRITE lv_m.\n", 2),
+    ("escaped pipe",          "lv_m = |a\\|b. c|. WRITE lv_m.\n", 2),
+    ("quote inside template", 'lv_m = |say "hi". now|. WRITE lv_m.\n', 2),
+    ("embedded expression",   "lv_m = |Total: { n } items. Done|. WRITE lv_m.\n", 2),
+    ("template over 2 lines", "lv_m = |first. line\n  second. line|.\nWRITE lv_m.\n", 2),
+])
+def test_a_string_template_is_a_literal(label, source, expected):
+    """ABAP string templates `|...|` were not lexed as literals at all, so any
+    statement containing one with a period was chopped into pieces — losing the
+    real statement AND inventing garbage ones that got reported. Templates are
+    pervasive in modern ABAP, so this mis-lexed a large share of real source.
+
+    The two-line case is why the template flag is threaded ACROSS lines rather
+    than recomputed per line, and the quote case is why: a `"` inside an open
+    template is text, and treating it as a comment truncated the statement.
+    """
+    assert len(split_statements(source)) == expected, \
+        [s.text for s in split_statements(source)]
+
+
+def test_an_injection_survives_being_surrounded_by_string_templates():
+    """The realistic shape: modern ABAP logs with templates either side of the
+    statement that actually matters."""
+    src = ("REPORT z_modern.\n"
+           "DATA lv_where TYPE string.\n"
+           "START-OF-SELECTION.\n"
+           "  lv_where = request->get_form_field( 'q' ).\n"
+           "  WRITE |Filtering on: { lv_where }. Please wait|.\n"
+           "  SELECT * FROM lfa1 WHERE (lv_where) INTO TABLE @DATA(lt).\n"
+           "  WRITE |Found { lines( lt ) } rows. Done|.\n")
+    hit = next(f for f in scan(src, data_flow=True) if f["rule_id"] == "ABAP-SQLI-001")
+    assert hit["confidence"] == "confirmed"
+
+
 def test_a_period_inside_a_string_literal_does_not_end_a_statement():
     stmts = split_statements("WRITE 'a. b. c'. WRITE 'x'.\n")
     assert len(stmts) == 2, [s.text for s in stmts]

@@ -177,6 +177,7 @@ def split_statements(source: str) -> List[Statement]:
     block = 0
     pending_nosec: List[str] = []
     have_nosec = False
+    in_template = False
 
     for lineno, line in enumerate(source.splitlines(), start=1):
         if not buf:
@@ -188,7 +189,9 @@ def split_statements(source: str) -> List[Statement]:
                    for i in marker.group("ids").split() if i.strip()]
             pending_nosec, have_nosec = ids, True
 
-        code = _strip_comments(line)
+        # Threaded, not recomputed per line: a string template left open at a line
+        # end means a `"` on the next line is text, not the start of a comment.
+        code, in_template = _strip_comments(line, in_template)
         raw.append(line)
 
         if not code.strip():
@@ -275,47 +278,90 @@ def split_cds_statements(source: str) -> List["Statement"]:
     return statements
 
 
-def _strip_comments(line: str) -> str:
-    """Remove ABAP comments, respecting string literals."""
-    if line[:1] == "*":
-        return ""
+def _strip_comments(line: str, in_template: bool = False) -> Tuple[str, bool]:
+    """Remove ABAP comments, respecting literals AND string templates.
+
+    Returns `(code, still_in_template)`. The template flag has to be threaded
+    across lines by the caller because a template may be left open at a line end,
+    and a `"` on the continuation line is then part of the text rather than the
+    start of a comment. Treating it as a comment silently truncated the statement.
+
+    STRING TEMPLATES `|...|`
+    The upstream engine had no notion of them at all, so a statement containing
+    `|Total. Done|` was chopped into three — the period inside the template read as
+    a statement terminator. Templates are pervasive in modern ABAP, so this
+    mis-lexed a large share of real source: findings lost, and garbage "statements"
+    invented and reported. Inside a template `\\` escapes the next character
+    (`\\|`, `\\{`, `\\}`, `\\\\`), and `{ ... }` embeds an expression.
+    """
+    if line[:1] == "*":                      # full-line comment: column 1 only
+        return "", in_template
     out: List[str] = []
     quote: Optional[str] = None
+    escaped = False
+
     for ch in line:
+        if in_template:
+            out.append(ch)
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == "|":
+                in_template = False
+            continue
         if quote:
             out.append(ch)
             if ch == quote:
                 quote = None
             continue
-        if ch == "'" or ch == "`":
+        if ch in "'`":
             quote = ch
             out.append(ch)
             continue
+        if ch == "|":
+            in_template = True
+            out.append(ch)
+            continue
         if ch == '"':
-            break                      # comment to end of line
+            break                            # comment to end of line
         out.append(ch)
-    return "".join(out)
+    return "".join(out), in_template
 
 
 def _terminator(text: str) -> Optional[int]:
     """Index of the statement-terminating period, or None.
 
-    Skips periods inside string literals and between two digits, so `'a.b'` and
-    a decimal literal do not chop a statement in half.
+    A period does not terminate anything inside a text or string literal, inside a
+    string template (including its embedded `{ }` expressions), or between two
+    digits — so `'a.b'`, `|Total. Done|` and a decimal literal all stay intact.
     """
     quote: Optional[str] = None
+    in_template = False
+    escaped = False
+
     for i, ch in enumerate(text):
+        if in_template:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == "|":
+                in_template = False
+            continue
         if quote:
             if ch == quote:
                 quote = None
             continue
         if ch in "'`":
             quote = ch
+        elif ch == "|":
+            in_template = True
         elif ch == ".":
             before = text[i - 1] if i else ""
             after = text[i + 1] if i + 1 < len(text) else ""
             if before.isdigit() and after.isdigit():
-                continue               # decimal literal
+                continue                     # decimal literal
             return i
     return None
 
