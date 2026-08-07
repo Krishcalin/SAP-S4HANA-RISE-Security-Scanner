@@ -120,11 +120,121 @@ METADATA_SUFFIXES: Tuple[str, ...] = (".xml",)
 #:
 #: Fixed here rather than in the vendored corpus so that re-deriving the corpus
 #: from the upstream repository cannot silently undo the fix.
+#: A quote character in any of ABAP's three spellings.
+_Q = r"['\"`]"
+
+#: ONE dynamic name or ONE literal. Bounding the parenthesis to this is what
+#: separates a dynamic clause from ordinary logical grouping — `[^)]*` cannot.
+_DYN_NAME = r"(?:`[^`]*`|'[^']*'|[A-Za-z_]\w*(?:->\w+|-\w+)*)"
+
+#: Namespace authorities whose `http://` URIs are identifiers, not endpoints. The
+#: W3C and SAP entries are confirmed from SAP-authored material; the rest are OUR
+#: maintained allowlist and are labelled as such rather than claimed as SAP's.
+_NAMESPACE_HOSTS: Tuple[str, ...] = (
+    "www.w3.org", "w3.org",                     # verified
+    "www.sap.com", "sap.com", "xml.sap.com",    # verified
+    "schemas.xmlsoap.org", "schemas.microsoft.com",   # ours
+)
+
 PATTERN_FIXES: Dict[str, str] = {
     # `(?:DES|3DES|TRIPLE.?DES)\b` has no LEADING boundary, so the `des` in
     # `lv_modes` and `lt_codes` matched and reported HIGH "DES encryption".
     "ABAP-CRYP-003": r"\b(?:3DES|TRIPLE.?DES|DES)\b",
+
+    # F1. `(?:CONCATENATE|&&).*(?:WHERE|INTO|FROM)\b` matched EVERY CONCATENATE in
+    # the estate at CRITICAL, because `INTO` is mandatory syntax — and the `&&` arm
+    # matched the English word "from", so `|Deleted { n } rows from the buffer|`
+    # was reported as SQL injection. The danger is an SQL keyword inside a LITERAL
+    # being concatenated, which is what this now says.
+    "ABAP-SQLI-002":
+        r"(?:\bCONCATENATE\b|&&)[^.]*" + _Q +
+        r"\s*(?:WHERE|AND|OR|ORDER\s+BY|GROUP\s+BY|HAVING|FROM)\b",
+
+    # F2. `\bWHERE\s*\(` cannot tell a dynamic clause from logical grouping, so
+    # `WHERE ( comp1 = 'X' AND comp2 > 100 )` — idiomatic, static, safe — reported
+    # CRITICAL. Bounded to one name or one literal, exactly as ABAP-SQLI-011
+    # already does for FROM. Both documented dynamic forms are a single bare name,
+    # so they still match; grouping, tuples and value lists drop out.
+    "ABAP-SQLI-001":
+        r"\b(?:SELECT|UPDATE|DELETE|MODIFY)\b.*?\bWHERE\s*\(\s*" + _DYN_NAME + r"\s*\)",
+
+    # F3. INVERTED. `CALL\s+TRANSFORMATION\s+(?!')[a-zA-Z_]\w*` assumed "static
+    # means quoted", which holds for CALL FUNCTION and CALL TRANSACTION and is
+    # exactly backwards here: a static transformation is named bare, a dynamic one
+    # is parenthesised. It fired CRITICAL on `CALL TRANSFORMATION id` and was
+    # silent on `CALL TRANSFORMATION (lv_dyn)`.
+    "ABAP-CINJ-007": r"\bCALL\s+TRANSFORMATION\s*\(",
+
+    # F6. Unanchored, and the addition-exclusion list is incomplete: a report name
+    # ending in `submit` made the statement match on its own identifier, and
+    # `SUBMIT zdemo_report LINE-SIZE 132` fired while `SUBMIT zdemo_report` did
+    # not. The bare-identifier arm never detected anything real in any case —
+    # a variable program name REQUIRES the parentheses, so a bare name after
+    # SUBMIT is always a literal report name.
+    "ABAP-CINJ-005": r"^\s*SUBMIT\s+\(",
+
+    # F7. Fired on correct code: a partial DUMMY exempts ONE field and the
+    # remaining pairs are still enforced. Only a check with no FIELD pair at all
+    # is the "checks nothing" case the rule is named for.
+    "ABAP-AUTH-002": r"^AUTHORITY-CHECK\s+OBJECT\b(?!.*\bFIELD\b).*\bDUMMY\b",
+
+    # F5. Every object that serialises XML or SOAP carries several `http://`
+    # namespace URIs. They are identifiers, not endpoints — including SAP's own
+    # asXML namespace, which we were reporting as an insecure protocol.
+    "ABAP-CONF-002":
+        _Q + r"http://(?!(?:" + "|".join(h.replace(".", r"\.")
+                                         for h in _NAMESPACE_HOSTS) + r")\b)"
+        r"[^'\"`]+" + _Q,
+
+    # F10. A FALSE NEGATIVE of the same regex-shape family: the pattern requires
+    # whitespace straight after `ACTVT`, but the form real code uses has a closing
+    # apostrophe there. So it was silent on `ID 'ACTVT' FIELD '*'` — a wildcard
+    # activity check — while matching only a spelling nobody writes.
+    "ABAP-CONF-005":
+        r"AUTHORITY-CHECK\b[^.]*\bACTVT\b\W{0,3}FIELD\s+" + _Q + r"\*" + _Q,
 }
+
+#: `PATTERN_FIXES` cannot reach a rule's customer-facing text, and one rule's text
+#: asserts something the source contradicts.
+DESCRIPTION_FIXES: Dict[str, str] = {
+    "ABAP-AUTH-002": (
+        "This AUTHORITY-CHECK specifies DUMMY for every field, so no field value "
+        "is actually compared and the statement checks only that the authorization "
+        "object is assigned at all. Note that DUMMY on SOME fields is legitimate "
+        "and is not this finding: it exempts those fields while the remaining "
+        "ID/FIELD pairs are still enforced, and the check can still fail."),
+}
+
+#: Severity corrections. Separate from `PATTERN_FIXES` for the same reason: the
+#: vendored corpus is regenerated verbatim.
+SEVERITY_FIXES: Dict[str, str] = {
+    # No longer "the check is disabled" — it is "no field value is compared",
+    # which is worth reporting and is not a CRITICAL-adjacent finding.
+    "ABAP-AUTH-002": "MEDIUM",
+}
+
+#: Rules withdrawn rather than narrowed. F9: `cl_http_utility=>(?!escape_html)\w+`
+#: excludes exactly one method name, so every OTHER use of a general HTTP utility
+#: class is reported as missing HTML escaping. Narrowing it means naming the
+#: methods that class actually exposes, and nobody has read that listing —
+#: inventing them is precisely how fabricated identifiers enter this repository
+#: (U4 in docs/CVA_ENGINE_IMPROVEMENT_PLAN.md). ABAP-XSS-001/002/003/005 cover the
+#: real output sinks.
+RETIRED_RULES: Tuple[str, ...] = ("ABAP-XSS-006",)
+
+#: F4. Rules that fire on a dynamically-named token. SAP writes a LITERAL operand
+#: as the normal safe form — measured over ~525 KB of SAP-authored ABAP, the ASSIGN
+#: rule fired 11 times and 10 were hard-coded literals or integers.
+#:
+#: The finding is KEPT: a literal class or report name is a genuine inventory
+#: entry. It is just not a HIGH one, and saying so is the difference between an
+#: inventory and a false positive.
+DYNAMIC_TOKEN_RULES: Tuple[str, ...] = (
+    "ABAP-CINJ-005", "ABAP-CINJ-006", "ABAP-CINJ-009", "ABAP-CINJ-012",
+    "ABAP-SQLI-010", "ABAP-SQLI-011", "ABAP-SQLI-012",
+)
+
+_LITERAL_OPERAND = re.compile(r"\(\s*" + _Q)
 
 #: Rules named "... without AUTHORITY-CHECK" whose pattern cannot express the
 #: "without" half. Only ABAP-AUTH-001 shipped with the metadata to check; the other
@@ -356,6 +466,14 @@ def split_cds_statements(source: str) -> List["Statement"]:
     buf: List[str] = []
     raw: List[str] = []
     start = 1
+
+    # F11. Only `//` was stripped, so a commented-out annotation inside a block
+    # comment was emitted as a statement and raised a HIGH finding — and the stray
+    # `*/` leaked into the next statement's text. Newlines are preserved so every
+    # reported line number still means what it meant.
+    source = re.sub(r"/\*.*?\*/",
+                    lambda m: "\n" * m.group(0).count("\n"),
+                    source, flags=re.S)
 
     for lineno, line in enumerate(source.splitlines(), start=1):
         code = line.split("//")[0]
@@ -699,18 +817,27 @@ class AbapSourceScanner:
             rid = rule["id"]
             suppressed = st.nosec is not None and (
                 not st.nosec or rid.upper() in st.nosec)
+            severity = SEVERITY_FIXES.get(rid, rule["severity"])
+            # F4 — the dynamic name is a compile-time literal. Kept as an
+            # inventory entry, demoted because there is nothing to inject into.
+            literal_operand = (rid in DYNAMIC_TOKEN_RULES
+                               and bool(_LITERAL_OPERAND.search(st.text)))
+            if literal_operand:
+                severity = "LOW"
             out.append({
                 "rule_id": rid,
                 "name": rule["name"],
                 "category": rule.get("category", ""),
-                "severity": rule["severity"],
+                "severity": severity,
+                "literal_operand": literal_operand,
                 "cwe": rule.get("cwe"),
                 "file": str(path),
                 "object": _object_name(path),
                 "line": st.line,
                 "statement": st.text[:400],
                 "snippet": st.raw[:600],
-                "description": rule.get("description", ""),
+                "description": DESCRIPTION_FIXES.get(
+                    rid, rule.get("description", "")),
                 "recommendation": rule.get("recommendation", ""),
                 # `pattern-only` until taint says otherwise. The evidence class
                 # is the single most decision-relevant field a SAST finding has.
@@ -722,7 +849,7 @@ class AbapSourceScanner:
 
         for rule in rules:
             rid = rule["id"]
-            if rid in RULE_HANDLED_IN_ENGINE:
+            if rid in RULE_HANDLED_IN_ENGINE or rid in RETIRED_RULES:
                 continue
             pattern = self._pattern(rule)
             blind = rid in LITERAL_BLIND
@@ -1208,6 +1335,13 @@ class AbapSastAuditor(BaseAuditor):
             "tentative": "the data-flow walk found no evidence either way",
             "pattern-only": "matched by statement pattern; no data-flow evidence",
         }[confidence]
+        # F4. Reported as evidence rather than as a fourth confidence class,
+        # because `finding.taint_confidence` is CHECK-constrained to the three
+        # above and the taint classes are what FAIR prices.
+        if lead.get("literal_operand"):
+            evidence = ("the dynamically-named token is a compile-time literal, "
+                        "so there is no value for a caller to control — recorded "
+                        "as inventory, not as an injection")
 
         self.finding(
             check_id=lead["rule_id"],
@@ -1238,6 +1372,8 @@ class AbapSastAuditor(BaseAuditor):
                 # finding sits in — its boundaries, and therefore its match, are
                 # not trustworthy.
                 "lex_degraded": lead.get("lex_degraded", False),
+                # The dynamically-named token was a compile-time literal.
+                "literal_operand": lead.get("literal_operand", False),
                 **stamp({}, getattr(self, "_reach", None), obj),
             },
             affected_objects=[{"type": "program", "name": obj}],

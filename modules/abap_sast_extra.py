@@ -150,6 +150,12 @@ CDS_RULES: List[Dict[str, Any]] = [
         "category": "Missing Authorization",
         "name": "CDS DCL role grants unconditionally",
         "severity": "HIGH",
+        # UNVERIFIED SYNTAX — do not present this rule as covering anything.
+        # `GRANT SELECT ON x WHERE TRUE` was not found in any fetched SAP-authored
+        # DCL material, so this may be matching a construct that does not exist,
+        # in which case its coverage is silently zero rather than wrong. The
+        # fixture it passes against is our own and proves only self-consistency.
+        # U5 in docs/CVA_ENGINE_IMPROVEMENT_PLAN.md names what would settle it.
         "pattern": r"\bGRANT\s+SELECT\s+ON\s+\w+\s+WHERE\s+TRUE\b",
         "cwe": "CWE-863",
         "description": (

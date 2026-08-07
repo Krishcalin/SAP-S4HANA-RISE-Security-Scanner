@@ -40,6 +40,37 @@ Regression fixtures: `tests/test_abap_tier1.py`. One existing assertion in
 result, and `test_an_authority_check_whose_result_is_discarded_is_not_a_guard` covers
 the case it used to assert backwards.
 
+## STATUS — TIER 2 SHIPPED
+
+All eleven, every one as a side-table entry so `tools/build_abap_rules.py` can keep
+regenerating the vendored corpus. Each was reproduced against the shipped patterns
+before being changed, and each ships with the control proving the true positive
+survived.
+
+| Item | Rule | Effect |
+|---|---|---|
+| F1 | `ABAP-SQLI-002` | fired on **every** `CONCATENATE` (INTO is mandatory) and on the English word "from"; now keyed on an SQL keyword inside the concatenated literal |
+| F2 | `ABAP-SQLI-001` | parenthesised logical grouping read as a dynamic clause; parenthesis bounded to one name or literal |
+| F3 | `ABAP-CINJ-007` | **was inverted** — CRITICAL on static `CALL TRANSFORMATION id`, silent on dynamic `(lv_dyn)` |
+| F4 | 7 dynamic-token rules | literal operand → severity `LOW` + evidence text, finding kept as inventory |
+| F5 | `ABAP-CONF-002` | XML/SOAP namespace URIs (incl. SAP's own asXML) reported as insecure transport |
+| F6 | `ABAP-CINJ-005` | `SUBMIT rep LINE-SIZE 132` fired; anchored to the parenthesised form |
+| F7 | `ABAP-AUTH-002` | partial DUMMY is not a disabled check; + `DESCRIPTION_FIXES`, severity → MEDIUM |
+| F8 | `ABAP-CDS-002` | grant syntax marked **UNVERIFIED SYNTAX** rather than presented as coverage |
+| F9 | `ABAP-XSS-006` | retired via `RETIRED_RULES` rather than narrowed by guessing method names |
+| F10 | `ABAP-CONF-005` | false **negative**: silent on `ID 'ACTVT' FIELD '*'`, the form real code uses |
+| F11 | CDS `/* */` | block comments emitted as statements; newlines preserved so line numbers hold |
+
+Exit criterion: `test_a_correct_method_produces_nothing` — a 24-line correctly
+authorised method that previously produced several findings, two CRITICAL, with no
+dynamic SQL in it.
+
+F4 does **not** introduce the proposed `confidence="literal-operand"`:
+`finding.taint_confidence` is CHECK-constrained to confirmed / tentative /
+pattern-only in `server/schema.sql:564`, and those classes are what
+`modules/fair_adapter.py` prices. The demotion is carried by severity and evidence
+text instead, which needs no schema change.
+
 ### Why T1.11 was declined
 
 Both halves fail this repo's own evidence rule, in different ways.
