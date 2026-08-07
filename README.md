@@ -1,9 +1,10 @@
 <p align="center">
-  <img src="docs/banner.svg" alt="SAP S/4HANA RISE Security Scanner" width="800"/>
+  <img src="assets/monitorrisk-logo.png" alt="MonitorRisk — SAP Threat, Vulnerabilities &amp; GRC" width="620"/>
 </p>
 
 <p align="center">
-  <strong>An offline security audit tool for SAP S/4HANA RISE and BTP environments</strong>
+  <strong>Offline, agentless security auditing for SAP S/4HANA RISE, ECS and BTP</strong><br/>
+  <sub>Nothing installed in the SAP system · no RFC user · no credentials handed over · no open port</sub>
 </p>
 
 <p align="center">
@@ -11,11 +12,57 @@
   <img src="https://img.shields.io/badge/python-3.8%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python 3.8+"/>
   <img src="https://img.shields.io/badge/CLI-stdlib%20only-brightgreen?style=flat-square" alt="CLI: stdlib only"/>
   <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="MIT License"/>
-  <img src="https://img.shields.io/badge/SAP-S%2F4HANA%20RISE-0FAAFF?style=flat-square&logo=sap&logoColor=white" alt="SAP S/4HANA"/>
-  <img src="https://img.shields.io/badge/checks-300%2B-red?style=flat-square" alt="300+ Checks"/>
-  <img src="https://img.shields.io/badge/reports-HTML%20%C2%B7%20PDF%20%C2%B7%20PPTX-8A2BE2?style=flat-square" alt="HTML · PDF · PPTX Reports"/>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/SAP%20Note%203250501-92%2F92%20parameters-0FAAFF?style=flat-square&logo=sap&logoColor=white" alt="SAP Note 3250501: 92/92"/>
+  <img src="https://img.shields.io/badge/checks-300%2B%20across%2030%20modules-red?style=flat-square" alt="300+ checks, 30 modules"/>
+  <img src="https://img.shields.io/badge/custom%20code-118%20ABAP%20rules%20%2B%20taint-8A2BE2?style=flat-square" alt="118 ABAP rules with taint analysis"/>
+  <img src="https://img.shields.io/badge/reports-HTML%20%C2%B7%20PDF%20%C2%B7%20PPTX-555?style=flat-square" alt="HTML · PDF · PPTX Reports"/>
   <img src="https://img.shields.io/badge/server-FastAPI%20%2B%20PostgreSQL%2016-336791?style=flat-square&logo=postgresql&logoColor=white" alt="Server: FastAPI + PostgreSQL 16"/>
 </p>
+
+---
+
+## Contents
+
+**Start here**
+| | |
+|---|---|
+| [Overview](#overview) | What it is, and the two modes that share one scanner core |
+| [Quick Start](#quick-start) | CLI in three commands |
+| [Server mode — quick start](#server-mode--quick-start) | Browser console, PostgreSQL, mitigation journey |
+| [Requirements](#requirements) | Python 3.8+, and the five server dependencies |
+
+**What it checks**
+| | |
+|---|---|
+| [Audit Modules](#audit-modules) | All 30 auditors and the check families they own |
+| [Data Sources](#data-sources) | Which export feeds which module — every one optional |
+| [Custom Baseline](#custom-baseline) | Override thresholds without touching code |
+
+**What you get back**
+| | |
+|---|---|
+| [Reports](#reports) | HTML · PDF · PPTX, risk ranking, compliance mapping, FAIR loss exposure |
+
+**The project**
+| | |
+|---|---|
+| [Project Structure](#project-structure) | Where things live |
+| [Testing](#testing) | 1,480+ tests |
+| [Roadmap](#roadmap) · [Contributing](#contributing) · [Disclaimer](#disclaimer) · [License](#license) | |
+
+**Deeper documentation**
+| Document | What it covers |
+|---|---|
+| [`docs/EXPORT_GUIDE.md`](docs/EXPORT_GUIDE.md) | How to produce the exports this tool reads |
+| [`docs/CHECKS_REFERENCE.md`](docs/CHECKS_REFERENCE.md) | Per-check reference |
+| [`docs/RELEASE_GATE.md`](docs/RELEASE_GATE.md) | Using the scanner as a CI gate — adoption order and policy |
+| [`docs/RISE_SECURITY_MODEL.md`](docs/RISE_SECURITY_MODEL.md) | Who can actually fix what in RISE, and why it decides the finding text |
+| [`docs/CVA_ENGINE_IMPROVEMENT_PLAN.md`](docs/CVA_ENGINE_IMPROVEMENT_PLAN.md) | The ABAP scanner's engine: what shipped, what was declined, what is unverified |
+| [`docs/COMPETITIVE_ANALYSIS.md`](docs/COMPETITIVE_ANALYSIS.md) | Where this sits against Onapsis, SecurityBridge and SAP's own tooling |
+| [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md) · [`docs/BUILD_ROADMAP.md`](docs/BUILD_ROADMAP.md) | Product direction and build history |
 
 ---
 
@@ -112,6 +159,8 @@ product's clearest structural advantage, and a third service would forfeit it.
   `changes since run N` endpoint.
 
 ---
+
+<sub>[↑ Contents](#contents)</sub>
 
 ## Audit Modules
 
@@ -828,6 +877,8 @@ Only *armed* jobs (STATUS scheduled/released/ready/active) are evaluated; finish
 
 ---
 
+<sub>[↑ Contents](#contents)</sub>
+
 ## Quick Start
 
 ```bash
@@ -903,6 +954,8 @@ python sap_scanner.py --data-dir ./exports --modules systrust baseline
 
 ---
 
+<sub>[↑ Contents](#contents)</sub>
+
 ## Reports
 
 Choose the output with `--format html` (default), `pdf`, `pptx`, `both` (html+pdf), or `all` (html+pdf+pptx). The output path's extension is respected; companion files are written alongside it. All three engines are **pure standard library** — no `python-pptx`, no `reportlab`.
@@ -949,6 +1002,8 @@ The Monte-Carlo engine lives in the sibling [Cyber-Risk-Quantification](https://
 | `--crq-engine` | Explicit path to `crq_engine.py` (overrides auto-detect / `CRQ_ENGINE`) |
 
 ---
+
+<sub>[↑ Contents](#contents)</sub>
 
 ## Data Sources
 
@@ -1168,6 +1223,8 @@ Reuses `users.csv` (USR02) and `profiles.csv` (USR04) to resolve whether a job s
 
 ---
 
+<sub>[↑ Contents](#contents)</sub>
+
 ## Custom Baseline
 
 Override default thresholds by creating a JSON config file:
@@ -1204,6 +1261,8 @@ Override default thresholds by creating a JSON config file:
 Access Risk Analysis can also be driven by a **custom SoD ruleset** — drop an `ara_ruleset.json` into your `--data-dir` to extend or override the built-in 27-risk ruleset (entries matching a built-in `risk_id` override it; new ids are added).
 
 ---
+
+<sub>[↑ Contents](#contents)</sub>
 
 ## Project Structure
 
@@ -1296,6 +1355,8 @@ SAP-S4HANA-RISE-Security-Scanner/
 ```
 
 ---
+
+<sub>[↑ Contents](#contents)</sub>
 
 ## Roadmap
 
