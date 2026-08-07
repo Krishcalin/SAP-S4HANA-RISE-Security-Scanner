@@ -64,6 +64,8 @@ RISE_MODULE_SCOPE: Dict[str, str] = {
     "data_protection": "in_scope",
     "code_inventory_report": "in_scope",   # the custom code is the customer's own
     "resilience_posture": "in_scope",      # customer produces the backup/DR evidence
+    "snc_posture": "split",           # SNC profile params are SAP-operated in PCE
+    "ecs_config_items": "split",      # client/table settings split customer vs SAP
     "code_transport": "split",            # SE06/SCC4 are ticket-to-SAP
     "log_monitoring": "in_scope",
     # A retrospective review reads an export the customer produces themselves from

@@ -485,5 +485,41 @@
   "3346659",
   "3480723",
   "3381209"
- ]
+ ],
+ "configuration_detail": {
+  "password_hash_tables_authgroup_SPWD": {
+   "authorization_group": "SPWD",
+   "tables": [
+    "USR02",
+    "USH02",
+    "VUSER001",
+    "USH02_ARC_TMP",
+    "USRPWDHISTORY",
+    "VUSR02_PWD"
+   ],
+   "verify_via": [
+    "SE54",
+    "TDDAT"
+   ]
+  },
+  "ssf_pse_d_authgroup_SPSE": {
+   "authorization_group": "SPSE",
+   "tables": [
+    "SSF_PSE_D"
+   ]
+  },
+  "sal_optional_events_excluded": [
+   "AUW",
+   "AU5",
+   "AUK",
+   "CUV",
+   "DUI",
+   "DUR",
+   "EUE"
+  ],
+  "unused_clients_to_delete": [
+   "001",
+   "066"
+  ]
+ }
 }

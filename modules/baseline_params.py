@@ -21,6 +21,9 @@ from typing import Dict, List, Any, Optional
 from modules.base_auditor import BaseAuditor
 
 
+from modules import ecs_baseline
+
+
 class BaselineParamAuditor(BaseAuditor):
 
     CATEGORY = "Security Baseline Parameters"
@@ -181,7 +184,14 @@ class BaselineParamAuditor(BaseAuditor):
         val = v.strip()
         # 3 = reject callbacks not on the destination's allowlist. 0 disables the
         # mechanism; 1 and 2 only simulate/log it, so an attacker is still served.
-        if val in ("0", "1", "2"):
+        #
+        # SAP Note 3250501 permits 1 on NetWeaver 7.40 to avoid breaking migrations,
+        # with a planned move to 3. So in ECS a system on 1 is following SAP's own
+        # written allowance, and reporting it HIGH is telling a compliant customer
+        # they are not. The genuinely dangerous values (0 and 2) still fire.
+        if (val in ("0", "1", "2")
+                and ecs_baseline.is_compliant("rfc/callback_security_method", val,
+                                              self._deployment_mode()) is not True):
             enforcing = {"0": "no callback protection at all",
                          "1": "simulation only — violations are logged, not blocked",
                          "2": "simulation with logging — still not blocked"}[val]
@@ -229,15 +239,33 @@ class BaselineParamAuditor(BaseAuditor):
                 affected_objects=[self._param_object("auth/no_check_in_some_cases", "N")],
                 scope="object")
 
+    def _deployment_mode(self) -> str:
+        """Which estate we are auditing, using `user_auth_audit`'s vocabulary.
+
+        Defaults to `on_prem` when the caller did not say. Guessing ECS would
+        silently relax genuine on-premise findings, which is the wrong direction
+        to be wrong in.
+        """
+        mode = (self.run_context or {}).get("deployment_mode") or ""
+        return str(mode).strip().lower() or "on_prem"
+
     def check_snc_accept_insecure(self):
         params = ["snc/accept_insecure_rfc", "snc/accept_insecure_gui",
                   "snc/accept_insecure_cpic", "snc/accept_insecure_r3int_rfc"]
+        # `is_compliant` is consulted FIRST. In ECS, snc/accept_insecure_gui,
+        # _rfc and _r3int_rfc are mandated at 1, so the plain "1 means insecure"
+        # reading reported a HIGH finding on every compliant RISE system — against
+        # SAP's own written baseline, in the environment this product specialises
+        # in. `None` means the oracle has no opinion and the original rule stands.
+        mode = self._deployment_mode()
         offenders = [f"{p} = {self._p(p)}" for p in params
-                     if self._p(p) is not None and self._p(p).strip() in ("1", "u")]
+                     if self._p(p) is not None and self._p(p).strip() in ("1", "u")
+                     and ecs_baseline.is_compliant(p, self._p(p), mode) is not True]
         # No qualifier: the trigger accepts "1" OR "u", so the value is not pinned and
         # would split one parameter into two graph nodes.
         objects = [self._param_object(p) for p in params
-                   if self._p(p) is not None and self._p(p).strip() in ("1", "u")]
+                   if self._p(p) is not None and self._p(p).strip() in ("1", "u")
+                   and ecs_baseline.is_compliant(p, self._p(p), mode) is not True]
         if offenders:
             self._flag(
                 "BASELINE-003", "SNC accepts insecure (unencrypted) connections",

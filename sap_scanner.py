@@ -21,6 +21,8 @@ import datetime
 from pathlib import Path
 
 from modules import release_gate
+from modules.snc_posture import SncPostureAuditor
+from modules.ecs_config_items import EcsConfigAuditor
 from modules.code_inventory_report import CodeInventoryAuditor
 from modules.resilience_posture import ResiliencePostureAuditor
 from modules.user_auth_audit import UserAuthAuditor
@@ -120,7 +122,7 @@ def main():
     )
     parser.add_argument(
         "--modules", nargs="+",
-        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "atc", "cva", "logmon", "logreview", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust", "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov", "fincontrols", "codeinv", "resilience", "all"],
+        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "atc", "cva", "logmon", "logreview", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust", "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov", "fincontrols", "codeinv", "resilience", "snc", "ecsconfig", "all"],
         default=["all"],
         help="Which audit modules to run (default: all)"
     )
@@ -157,6 +159,16 @@ def main():
         help="Monte Carlo iterations per scenario (default: 10000).")
 
     # ── Release gate ─────────────────────────────────────────────────────────
+    parser.add_argument(
+        "--deployment-mode", choices=["on_prem", "rise_pce", "rise_tailored"],
+        default="on_prem",
+        help="Which estate this export came from. SAP Note 3250501 is the MANDATORY "
+             "baseline for rise_* (SAP Enterprise Cloud Services) and changes what "
+             "counts as compliant: snc/accept_insecure_gui=1 and "
+             "rfc/callback_security_method=1 are SAP's own mandate there and are not "
+             "findings, and DDIC is not required to be locked. Defaults to on_prem, "
+             "because guessing ECS would silently relax genuine on-premise findings.")
+
     gate = parser.add_argument_group(
         "release gate",
         "Decide whether a change may ship, and exit non-zero when it may not. "
@@ -214,8 +226,12 @@ def main():
     run_modules = args.modules if "all" not in args.modules else [
         "users", "params", "network", "rise", "iam", "btpcloud",
         "intglayer", "dataprot", "codetrans", "atc", "cva", "logmon", "logreview", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust",
-        "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov", "fincontrols", "codeinv", "resilience"
+        "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov", "fincontrols", "codeinv", "resilience", "snc", "ecsconfig"
     ]
+
+    # Every ECS-aware check reads the mode from here. Built once so two auditors
+    # cannot disagree about which estate they are looking at.
+    run_ctx = {"deployment_mode": args.deployment_mode, "modules": set(run_modules)}
 
     all_findings = []
     scan_meta = {
@@ -228,7 +244,7 @@ def main():
     # --- User & Authorization Audit ---
     if "users" in run_modules:
         print("[*] Running User & Authorization Audit...")
-        auditor = UserAuthAuditor(data, baseline_overrides)
+        auditor = UserAuthAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -236,7 +252,7 @@ def main():
     # --- Security Parameters Baseline ---
     if "params" in run_modules:
         print("[*] Running Security Parameters Baseline Check...")
-        auditor = SecurityParamAuditor(data, baseline_overrides)
+        auditor = SecurityParamAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -290,6 +306,22 @@ def main():
     if "dataprot" in run_modules:
         print("[*] Running Data Protection & Privacy Checks...")
         auditor = DataProtectionAuditor(data, baseline_overrides)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- SNC posture (SAP Note 3250501, ECS mandatory) ---
+    if "snc" in run_modules:
+        print("[*] Running SNC Posture Assessment...")
+        auditor = SncPostureAuditor(data, baseline_overrides, run_ctx)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- ECS mandatory configuration items ---
+    if "ecsconfig" in run_modules:
+        print("[*] Running ECS Mandatory Configuration Checks...")
+        auditor = EcsConfigAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -410,7 +442,7 @@ def main():
     # --- Security Baseline Parameters ---
     if "baseline" in run_modules:
         print("[*] Running Security Baseline Parameter Checks (auth engine, SNC, GUI scripting, gateway)...")
-        auditor = BaselineParamAuditor(data, baseline_overrides)
+        auditor = BaselineParamAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
