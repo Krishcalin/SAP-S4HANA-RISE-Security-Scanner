@@ -80,6 +80,17 @@ def _worst(sevs: List[str]) -> str:
     return best
 
 
+def _is_unevidenced(finding: Dict[str, Any]) -> bool:
+    """True for a code finding that rests on a pattern match and nothing else.
+
+    Only ever True when the finding explicitly says so. A finding with no
+    `confidence` key — every configuration check, and everything imported from
+    SAP's ATC — is NOT unevidenced and calibrates normally. Absence of the field
+    means "this is not a SAST finding", never "we could not tell".
+    """
+    return str((finding.get("details") or {}).get("confidence") or "") == "pattern-only"
+
+
 def _is_detection(cid: str, cat: str, catalog: Dict[str, Any]) -> bool:
     det = catalog.get("detection", {})
     if any(cid.startswith(p) for p in det.get("check_prefixes", [])):
@@ -142,11 +153,36 @@ def build_inputs(priorities: List[Any], catalog: Dict[str, Any],
     buckets: Dict[str, List[Any]] = {sc["id"]: [] for sc in scenarios}
     det_sevs: List[str] = []
     unrouted = 0
+    unevidenced = 0
     for r in priorities:
         f = r.finding
         cid = str(f.get("check_id", ""))
         cat = str(f.get("category", ""))
         sev = str(f.get("severity", "INFO")).upper()
+
+        # A pattern-only code finding does not calibrate a loss scenario.
+        #
+        # THIS IS NOT A DISPLAY FILTER, AND IT IS NOT ARITHMETIC ON A SUM.
+        # Calibration here is BAND SELECTION driven by the WORST finding routed to
+        # a scenario, so a single finding is enough to move that scenario's
+        # Resistance Strength — and 89% of what the ABAP engine emits is
+        # `pattern-only`: a regex matched a statement and no data flow was shown to
+        # reach it. One such false positive at CRITICAL would move a dollar figure
+        # a board reads, and nothing in the output would say why.
+        #
+        # `confirmed` and `tentative` still calibrate. Both come from the eight
+        # rules that carry a taint sink, where the analyzer actually ran and
+        # reported. Findings imported from SAP's own ATC carry no `confidence` key
+        # at all and are unaffected — they are the strongest evidence here.
+        #
+        # Excluded from CALIBRATION, not from the report: the finding is still
+        # raised, tiered and tracked to closure. It simply does not get to set the
+        # price of a loss scenario on its own say-so. The count is disclosed beside
+        # the figure, exactly as `unrouted` is.
+        if _is_unevidenced(f):
+            unevidenced += 1
+            continue
+
         if _is_detection(cid, cat, catalog):
             det_sevs.append(sev)
             continue
@@ -232,6 +268,7 @@ def build_inputs(priorities: List[Any], catalog: Dict[str, Any],
         "detection": {"worst_severity": det_worst, "multiplier": det_mult,
                       "count": len(det_sevs)},
         "unrouted": unrouted,
+        "unevidenced": unevidenced,
     }
 
 
@@ -341,6 +378,7 @@ def run(findings: List[Dict[str, Any]], priorities: List[Any],
     out: Dict[str, Any] = {
         "crq_input": built["asis"], "meta": built["meta"],
         "detection": built["detection"], "unrouted": built["unrouted"],
+        "unevidenced": built["unevidenced"],
         "engine_found": False, "summary": None,
         "organization": org,
     }
@@ -374,5 +412,9 @@ def run(findings: List[Dict[str, Any]], priorities: List[Any],
         # findings could not be attributed to a specific loss scenario (they are
         # conservatively folded into SAP-PRIV-03 and may overstate it).
         "unrouted": built["unrouted"],
+        # And the count held OUT of calibration for want of evidence. Disclosed
+        # for the same reason: a number the reader cannot interrogate is a number
+        # they should not trust.
+        "unevidenced": built["unevidenced"],
     }
     return out

@@ -1307,6 +1307,18 @@ window.addEventListener('beforeprint', () => {{
       {unrouted} finding(s) could not be mapped to a specific SAP loss scenario and were conservatively folded into the
       privileged-access scenario (SAP-PRIV-03), which may overstate that scenario&rsquo;s exposure. Add explicit routing in
       <code>data/fair_scenarios.json</code> to attribute them correctly.</p>""" if unrouted else "")
+        # Disclose findings held OUT of the calibration for want of evidence.
+        # Calibration is band selection from the WORST finding routed to a
+        # scenario, so a single unevidenced CRITICAL would move a figure a board
+        # reads on the strength of a regex match. They are excluded from the
+        # pricing and from nothing else.
+        unevidenced = int(fair.get("unevidenced", 0) or 0)
+        unevidenced_html = (
+            f"""<p class="fair-note" style="font-style:normal;">&#9432;
+      {unevidenced} code finding(s) rest on a statement pattern with no data-flow evidence, and did <strong>not</strong>
+      calibrate these figures. They are still reported, ranked and tracked to closure &mdash; they are simply not allowed to
+      set the price of a loss scenario on their own. Findings where the taint analysis ran, and everything imported from
+      SAP&rsquo;s own ATC, are priced normally.</p>""" if unevidenced else "")
         return f"""<div class="fair-section">
     <style>
       .fair-section {{ margin: 2.5rem 0; }}
@@ -1384,6 +1396,7 @@ window.addEventListener('beforeprint', () => {{
       ACFE, Sophos, GDPR enforcement) scaled to the stated revenue/industry; validate against your own loss data before treating any figure as
       your organisation's actual risk. Scenario input exported alongside this report as <code>*.crq.json</code>.</p>
     {unrouted_html}
+    {unevidenced_html}
   </div>"""
 
     def _render_compliance(self) -> str:
