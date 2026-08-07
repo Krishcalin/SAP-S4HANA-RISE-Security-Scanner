@@ -361,7 +361,7 @@ Being crisp about these buys credibility for what we do claim:
 
 - Real-time threat detection and automated incident response
 - Transport gating / any write path into SAP
-- ABAP source SAST (SAP gives PCE customers CVA free via remote ATC on BTP)
+- ~~ABAP source SAST~~ — **moved in scope 2026-08-07** (`docs/CVA_MERGE_PLAN.md`); the "CVA free for PCE" premise was wrong
 - Peer benchmarking (fiction without a customer base — benchmark against the SAP baseline and
   against the customer's own history)
 - BusinessObjects, SuccessFactors

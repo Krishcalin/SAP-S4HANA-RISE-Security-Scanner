@@ -19,10 +19,14 @@ in the wrong direction.
 It says "**DO NOT BUILD ABAP SOURCE SCANNING**" on the grounds that SAP's own Code
 Vulnerability Analyzer is "Free for PCE". That premise does not hold: SAP's CVA is
 fee-free only *inside a purchased BTP ABAP Environment entitlement*, not for RISE
-PCE customers generally. The same line proposes a fallback — "Cloud ALM already
-exposes a CVA status store" — for which no supporting evidence could be found;
-treat it as **[unverified]** until someone with an S-user confirms it. The
-instruction rests on a false premise and should be revised, not obeyed.
+PCE customers generally, so a customer without that entitlement has no CVA at all.
+The instruction rests on a false premise and should be revised, not obeyed.
+
+*The same line's other half stands.* "Cloud ALM already exposes a CVA status store"
+**is** supported: `RISE_SECURITY_MODEL.md:484` lists it among the CSA config stores
+and `:731` records that SAP's own page was read via curl. **[SAP-primary]** So the
+governance check — *is CVA switched on and being run?* — remains worth having, and
+Phase 1 is where it lands. What does not follow is "therefore do not build".
 
 **ABAP source *is* obtainable under RISE PCE.** The customer keeps the ABAP
 application layer and SAP GUI, and abapGit's **offline ZIP export** produces a
@@ -256,11 +260,30 @@ hop-level `min_confidence` predicate — which changes `graph.instantiate()` and
 *not* a pure content change — or accept coarse matching for code hops. Splitting
 confirmed/tentative into separate check_ids would double the catalogue and is worse.
 
-> **Gating question, to settle before Phase 2 ships, not before Phase 4 starts:**
-> is there a reliable **transaction-code → program** signal in what the host
-> already ingests? `role_tcodes` gives tcode → role. If tcode → program is not
-> obtainable, this needs a new logical source and `docs/EXPORT_GUIDE.md` work.
-> The business case rests on this; find out early.
+> **Gating question — SETTLED 2026-08-07, and it splits this phase in two.**
+> Answer: a *full* reachability join is **not** obtainable from today's exports,
+> but a real partial one is. Measured against `sample_data/`: **[measured]**
+>
+> | Source | Columns | Joins to an ABAP object? |
+> |---|---|---|
+> | `icf_services.csv` | `ICF_NAME, ICF_ACTIVE, AUTH_REQUIRED` | **No** — no handler class |
+> | `odata_auth.csv` | `SERVICE_NAME, ALIAS, AUTH_CHECK, SCOPE, REQUIRED_AUTH_OBJECT` | **No** — no implementation class |
+> | `fiori_tiles.csv` | `…, ODATA_SERVICE, ROLE, …` | Only as far as the OData service |
+> | `role_tcodes` (AGR_1251) | role → tcode | **No** — and absent from `sample_data/` |
+> | **`code_inventory.csv`** | `OBJECT_NAME, OBJECT_TYPE, LAST_USED, OWNER, **REFERENCED**, CREATED` | **Yes, by object name** |
+>
+> So Phase 4 splits:
+> - **4a, buildable today.** Join on `OBJECT_NAME` against `code_inventory`, and
+>   use `REFERENCED` plus `LAST_USED` as the reachability signal. An unreferenced,
+>   never-executed program carrying a CRITICAL injection is genuinely lower risk
+>   than a referenced one, and that distinction alone is worth having.
+> - **4b, needs one new export column each.** The true
+>   ICF-node → handler-class and OData-service → DPC-class edges. That is
+>   `docs/EXPORT_GUIDE.md` work plus two extra columns in existing extracts, not a
+>   new logical source. Specify it; do not block 4a on it.
+>
+> The business case survives: 4a ships the *shape* of the argument (reachable
+> versus not) and 4b sharpens it later.
 
 > **Exit:** an `ABAP-CMDI-*` finding in a program reachable from a published ICF
 > node tiers **P1**; the identical finding in an unreferenced program tiers **P4**;

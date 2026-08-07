@@ -524,7 +524,7 @@ Being crisp buys credibility for what we do claim.
 |---|---|
 | Real-time threat detection / incident response | Needs an in-system agent and event-time execution |
 | Transport gating | A write path into SAP |
-| ABAP source SAST | SAP gives PCE customers CVA free via remote ATC on BTP |
+| ABAP source SAST | ~~SAP gives PCE customers CVA free~~ — **wrong; corrected 2026-08-07.** CVA is fee-free only inside a purchased BTP ABAP Environment entitlement. Now in scope: see `docs/CVA_MERGE_PLAN.md` |
 | Peer benchmarking | Fiction without a customer base. Benchmark against the SAP baseline and the customer's own history |
 | BusinessObjects, SuccessFactors | API-only and offline-hostile |
 | **Any ABAP agent or add-on, ever** | Forfeits the entire wedge |

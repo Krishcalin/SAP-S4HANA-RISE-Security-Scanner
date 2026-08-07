@@ -458,7 +458,7 @@ Being crisp about these buys credibility for the claims we can defend:
 - **Real-time threat detection / incident response** — needs an in-system agent and event-time
   execution. Structurally impossible offline.
 - **Transport gating** — a write-path, inline capability.
-- **ABAP source SAST** — SAP gives PCE customers CVA free via remote ATC on BTP, running where
+- **ABAP source SAST** — *superseded 2026-08-07, see `CVA_MERGE_PLAN.md`.* The claim below is wrong: CVA is fee-free only inside a purchased BTP ABAP Environment entitlement. Original note: SAP gives PCE customers CVA via remote ATC on BTP, running where
   the code lives.
 - **Peer benchmarking** — fiction with a handful of customers. Benchmark the customer against
   themselves and against the SAP baseline.

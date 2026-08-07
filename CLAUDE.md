@@ -444,7 +444,7 @@ passes corrected sixteen of them.
 | [`RISE_SECURITY_MODEL.md`](docs/RISE_SECURITY_MODEL.md) | Where SAP's contractual line sits; what a RISE customer can actually export |
 
 **Things that would be a mistake to build** (each is argued in the docs): real-time threat
-detection, transport gating, ABAP source SAST (SAP gives RISE customers CVA free), peer
+detection, transport gating, peer
 benchmarking (fiction without a customer base), BusinessObjects/SuccessFactors, an ABAP agent
 of any kind, and check-count comparisons.
 
