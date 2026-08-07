@@ -71,6 +71,55 @@ pattern-only in `server/schema.sql:564`, and those classes are what
 `modules/fair_adapter.py` prices. The demotion is carried by severity and evidence
 text instead, which needs no schema change.
 
+## STATUS — TIER 3 SHIPPED
+
+Corpus 99 → 118 rules; taint sinks 9 → 12. Every Group A pattern was measured
+against the SAFE form of its own construct before shipping, and that control lives
+beside the positive case in `tests/test_abap_tier3.py`.
+
+**Group A — all 15.** A1 `ABAP-SQLI-013` (dynamic column list) · A2
+`ABAP-SQLI-014/-015/-016` (write-side: table name, SET clause, indicators) · A3
+`ABAP-AUTH-010/-011` (cross-client — we were flagging the spelling SAP calls
+obsolete and missing all three live ones) · A4 `ABAP-AMDP-004` (not read-only) ·
+A5/A7/A12 widenings · A6 `ABAP-RAP-001/-002` (BDEF authorization off-switches —
+`.asbdef` previously produced **zero** findings) · A8 `ABAP-CINJ-013` (qualified
+dynamic method call) · A9 `ABAP-CINJ-014` · A10 `ABAP-DYNT-001/-002` + the engine
+guard that stops `DELETE itab WHERE (c)` being reported CRITICAL CWE-89 · A11
+`ABAP-CINJ-015` · A13 `ABAP-AMDP-005` · A14 `ABAP-RAP-003/-004` · A15
+`ABAP-CINJ-016/-017`.
+
+Two deviations, both taken from the plan's own warnings. Every parenthesised-name
+pattern is bounded to `_NAME`, never `[^)]*`, or it re-introduces Tier 2's F2 defect
+under a new id. And A15's **ASSIGN COMPONENT variant was dropped**, not narrowed:
+index-driven component iteration is the dominant idiom in ALV and generic structure
+walks, so it buys a MEDIUM on correct code in nearly every custom estate.
+
+**Group B — 7 of 9.** B1 shipped in Tier 1. B2/B4 (procedure and handler inbound
+parameters, seeded per scope and never into `_globals`) · B3 (output binding — this
+is what finally lets `gui_upload` fire; it has been in the vendored source list
+since day one and could never trigger) · B5 (`CALL TRANSFORMATION ... SOURCE XML`,
+capturing the right-hand ABAP variable) · B6 (data cluster) · B7 (classic list) ·
+B8 (selection-screen commands, plus `MODULE`/`ENDMODULE` as scopes so taint stops
+leaking between dialog modules).
+
+**B9 is declined.** HTTP response bodies need the released-classes listing to anchor
+on client identity; anchoring on a bare accessor name instead would taint every
+CATCH block in the estate, because that accessor is overwhelmingly the exception
+message getter. Every source added is an ABAP **keyword or system field** — a
+language construct anyone can verify — and `test_the_new_source_families_are_abap_keywords_not_library_names`
+asserts no class-qualified identifier entered `_SOURCE_RE`. U9's shared-memory and
+database cluster media are excluded for the same reason.
+
+Two existing assertions in `tests/test_abap_coverage_gaps.py` were changed, both
+because they tested a *proxy* rather than the intent:
+`test_cds_files_are_not_matched_with_abap_rules` required every rule reaching a CDS
+artefact to be spelled `ABAP-CDS-*`, which RAP behaviour definitions legitimately
+are not — it now asserts the actual guarantee, that no ABAP rule reaches DCL.
+`test_rap_readiness_was_declined_rather_than_half_built` required that no rule id
+contained "RAP"; what was declined is the **released-object currency check**, and
+`ABAP-RAP-001..004` read a BDEF's own source, carry no catalogue and go stale at no
+rate. It now asserts no rule ships a released-object snapshot.
+
 ### Why T1.11 was declined
 
 Both halves fail this repo's own evidence rule, in different ways.

@@ -39,7 +39,10 @@ AMDP_RULES: List[Dict[str, Any]] = [
         "category": "SQL Injection",
         "name": "AMDP EXECUTE IMMEDIATE with a constructed statement",
         "severity": "CRITICAL",
-        "pattern": r"\bEXEC(?:UTE)?\s+IMMEDIATE\b",
+        # A12. The bare call form was missed. `EXEC\s*\(` is restricted to the call
+        # shape so it cannot collide with `EXEC SQL` (ABAP-NSQL-001) and
+        # double-report the same statement.
+        "pattern": r"\b(?:EXEC(?:UTE)?\s+IMMEDIATE\b|EXEC\s*\()",
         "cwe": "CWE-89",
         "description": (
             "An AMDP method executes a SQLScript statement built at runtime. The "
@@ -73,7 +76,10 @@ AMDP_RULES: List[Dict[str, Any]] = [
         "category": "Missing Authorization",
         "name": "AMDP method reads business data with no ABAP-side authorization",
         "severity": "MEDIUM",
-        "pattern": r"\bBY\s+DATABASE\s+PROCEDURE\b",
+        # A5. Matched only PROCEDURE, so every AMDP *function* was missed — and a
+        # table function is consumable by any ABAP SQL SELECT, not only by a
+        # deliberate method call, which makes it the wider exposure of the two.
+        "pattern": r"\bBY\s+DATABASE\s+(?:PROCEDURE|FUNCTION)\b",
         "cwe": "CWE-862",
         "description": (
             "Code pushed down to the database bypasses every ABAP authorization "
@@ -133,17 +139,26 @@ CDS_RULES: List[Dict[str, Any]] = [
         "category": "Missing Authorization",
         "name": "CDS view exposed without access control",
         "severity": "HIGH",
-        "pattern": r"@AccessControl\.authorizationCheck\s*:\s*#NOT_REQUIRED",
+        # A7. #NOT_ALLOWED was missed entirely, and it is the worse of the two: it
+        # does not merely skip the check, it causes an access-control role that
+        # DOES exist for the view to be disregarded.
+        "pattern":
+            r"@AccessControl\.authorizationCheck\s*:\s*#(?:NOT_REQUIRED|NOT_ALLOWED)",
         "cwe": "CWE-862",
         "description": (
-            "The view declares that no authorization check is required. Every user "
+            "The view declares that no authorization check is performed. Every user "
             "who can reach the view reads every row of it, regardless of the "
-            "authorizations that protect the underlying tables."),
+            "authorizations that protect the underlying tables. With #NOT_ALLOWED "
+            "this holds even when a DCL role has been written for the view: the "
+            "role is disregarded, so a reviewer who finds the role has no reason to "
+            "suspect it is inert."),
         "recommendation": (
-            "Set @AccessControl.authorizationCheck to #CHECK and supply a DCL role "
-            "that constrains the rows. #NOT_REQUIRED is defensible only for a view "
-            "over data that is genuinely public within the system, and that "
-            "judgement should be recorded next to the annotation."),
+            "Set @AccessControl.authorizationCheck to #MANDATORY and supply a DCL "
+            "role that constrains the rows. #MANDATORY is the value that FORCES an "
+            "access-control object to exist; #CHECK only warns when one is missing, "
+            "so a view can ship unprotected and still look remediated. Either value "
+            "is defensible only over data that is genuinely public within the "
+            "system, and that judgement belongs in a comment beside the annotation."),
     },
     {
         "id": "ABAP-CDS-002",
@@ -239,8 +254,422 @@ MISC_RULES: List[Dict[str, Any]] = [
     },
 ]
 
+# --------------------------------------------------------------------------- #
+#  Tier 3 — the dynamic-token inventory                                       #
+# --------------------------------------------------------------------------- #
+# 40 of 49 dynamic statements taken verbatim from SAP-authored material matched no
+# rule in the whole 99-rule corpus. The gap is not tuning: the existing rules
+# anchor on "keyword immediately followed by (", and ABAP's dominant dynamic forms
+# put the parenthesis after a selector (`oref->(meth)`), after an addition
+# (`CASTING TYPE (t)`), or in a clause no rule covers at all.
+#
+# NOTHING HERE USES `[^)]*` INSIDE THE PARENTHESIS WHERE A NAME IS EXPECTED.
+# Measured: unbounded, these fire on parenthesised SELECT-list arithmetic and on
+# the parenthesised logical expressions SAP documents as CORRECT in LOOP AT and
+# READ TABLE. That is Tier 2's F2 defect re-introduced under a new id.
+
+#: ONE dynamic name or ONE literal — the same bound Tier 2 applied to WHERE.
+_NAME = r"(?:`[^`]*`|'[^']*'|[A-Za-z_]\w*(?:->\w+|-\w+)*)"
+
+#: A parenthesised operand that is NOT a compile-time literal or a bare integer.
+#: Without this the ASSIGN family fires almost entirely on hard-coded values.
+_NOT_LITERAL = r"\(\s*(?!['\"`0-9])[A-Za-z_]\w*\s*\)"
+
+DYNAMIC_SQL_RULES: List[Dict[str, Any]] = [
+    {
+        "id": "ABAP-SQLI-013",
+        "category": "SQL Injection",
+        "name": "Dynamic SELECT column list",
+        "severity": "HIGH",
+        # A1. Bounded deliberately: with `[^)]*` this fires on parenthesised
+        # arithmetic in a static select list — three HIGH CWE-89 findings on
+        # correct code, measured.
+        "pattern": r"\bSELECT\s+(?:SINGLE\s+|DISTINCT\s+)*\(\s*" + _NAME + r"\s*\)",
+        "cwe": "CWE-89",
+        "description": (
+            "The list of columns a SELECT reads is chosen at runtime. This is the "
+            "exact construct SAP's own security example uses to motivate an "
+            "allowlist check, and nothing in the corpus matched it. A caller who "
+            "controls the column list reads columns the query was never meant to "
+            "return."),
+        "recommendation": (
+            "Validate the column list against an allowlist of names the caller is "
+            "permitted to read — CL_ABAP_DYN_PRG's column-name check does exactly "
+            "this. A quoting function does not help here: a column name is an "
+            "identifier, not a value."),
+        # No `_sink_arg`: the generic extractor already returns the operand
+        # correctly for this shape, and a redundant one is a second thing to keep
+        # in step with the pattern.
+        "_taint_sink": True,
+    },
+    {
+        "id": "ABAP-SQLI-014",
+        "category": "SQL Injection",
+        "name": "Dynamic table name in a write statement",
+        "severity": "HIGH",
+        # A2. ABAP-SQLI-010/-011 both require the literal `FROM` before the
+        # parenthesis, so the write side was invisible. The parenthesis must follow
+        # the keyword directly, so `INSERT REPORT` and
+        # `INSERT dbtab FROM ( SELECT ... )` cannot match.
+        "pattern": r"\b(?:UPDATE|MODIFY|INSERT)\s+\(\s*" + _NAME + r"\s*\)",
+        "cwe": "CWE-89",
+        "description": (
+            "The table a write statement targets is chosen at runtime. Whoever "
+            "controls the name chooses which table is modified."),
+        "recommendation": (
+            "Validate the table name against an allowlist, or against the "
+            "table-name check in CL_ABAP_DYN_PRG, before it reaches the statement."),
+        "_taint_sink": True,
+        "_sink_arg": r"(?:UPDATE|MODIFY|INSERT)\s+\(\s*([A-Za-z_]\w*)",
+    },
+    {
+        "id": "ABAP-SQLI-015",
+        "category": "SQL Injection",
+        "name": "Dynamic SET clause in an UPDATE",
+        "severity": "CRITICAL",
+        # A2. `ABAP-AUTH-006`'s `UPDATE\s+\w+\s+SET` cannot match `(table)` either,
+        # so this was doubly invisible.
+        "pattern": r"\bUPDATE\b[^.]*\bSET\s*\(\s*" + _NAME + r"\s*\)",
+        "cwe": "CWE-89",
+        "description": (
+            "The SET clause of an UPDATE is built at runtime. A controlled SET "
+            "clause rewrites arbitrary columns to arbitrary values, which outranks "
+            "a controlled WHERE: a controlled WHERE chooses which rows are "
+            "affected, a controlled SET chooses what they become."),
+        "recommendation": (
+            "Build the SET clause from a fixed set of column names chosen by the "
+            "program, and bind the values as host variables rather than splicing "
+            "them into the clause text."),
+        "_taint_sink": True,
+        "_sink_arg": r"\bSET\s*\(\s*([^)]*)\)",
+    },
+    {
+        "id": "ABAP-SQLI-016",
+        "category": "SQL Injection",
+        "name": "Dynamic null-indicator list",
+        "severity": "MEDIUM",
+        "pattern": r"\bINDICATORS\s*\(\s*" + _NAME + r"\s*\)",
+        "cwe": "CWE-89",
+        "description": (
+            "The indicator structure controlling which fields participate in a "
+            "write is chosen at runtime, so which columns are written is decided "
+            "outside the program text."),
+        "recommendation": (
+            "Choose the indicator structure in the program rather than from input."),
+    },
+]
+
+CROSS_CLIENT_RULES: List[Dict[str, Any]] = [
+    {
+        "id": "ABAP-AUTH-010",
+        "category": "Missing Authorization",
+        "name": "Statement reads across all clients",
+        "severity": "HIGH",
+        # A3. `ABAP-AUTH-009` matches `CLIENT SPECIFIED`, which SAP calls OBSOLETE.
+        # We were flagging the dead spelling and missing all three live ones. Both
+        # patterns are verified silent on `USING zdemo_view` and on
+        # `USING client_dependent_view` — `\bCLIENT\b` cannot match inside
+        # `CLIENTS` or inside an identifier.
+        "pattern": r"\bUSING\s+(?:ALL\s+CLIENTS|CLIENTS\s+IN)\b",
+        "cwe": "CWE-863",
+        "description": (
+            "The statement suspends automatic client handling and reads more than "
+            "the caller's own client. Client separation is the boundary most SAP "
+            "authorization concepts are built on top of, and this steps over it."),
+        "recommendation": (
+            "Remove the addition unless the program is a genuine cross-client "
+            "administrative tool. Where it is, protect it with an authorization "
+            "check that is itself client-independent, and record why."),
+    },
+    {
+        "id": "ABAP-AUTH-011",
+        "category": "Missing Authorization",
+        "name": "Statement reads a single explicit client",
+        "severity": "MEDIUM",
+        # Deliberately a lower severity than -010: reading one named client is a
+        # redirect, reading all of them is a disclosure. Collapsing the two would
+        # make the higher finding unfindable in a large estate.
+        "pattern": r"\bUSING\s+CLIENT\b",
+        "cwe": "CWE-863",
+        "description": (
+            "The statement reads a client chosen by the program rather than the "
+            "caller's own. Where that client comes from input, the caller chooses "
+            "whose data they read."),
+        "recommendation": (
+            "Confirm the client is fixed by the program and not taken from input. "
+            "If it is configurable, check the caller's authorization for the target "
+            "client rather than for their own."),
+    },
+]
+
+AMDP_EXTRA_RULES: List[Dict[str, Any]] = [
+    {
+        "id": "ABAP-AMDP-004",
+        "category": "Missing Authorization",
+        "name": "AMDP method is not declared read-only",
+        "severity": "HIGH",
+        # A4. The negative lookahead is safe because a METHOD header is one
+        # complete statement, so `.*` cannot run into the next one.
+        "pattern":
+            r"\bBY\s+DATABASE\s+(?:PROCEDURE|FUNCTION)\b(?!.*\bOPTIONS\s+READ-ONLY\b)",
+        "cwe": "CWE-862",
+        "description": (
+            "An AMDP method that may write produced the same single finding as a "
+            "read-only one, so a database procedure that MODIFIES business data "
+            "was indistinguishable from one that reports on it — while running "
+            "outside every ABAP authorization mechanism."),
+        "recommendation": (
+            "Declare READ-ONLY on any AMDP method that only reads, so the ones that "
+            "write are visible as the smaller, reviewable set. Where a method must "
+            "write, perform the AUTHORITY-CHECK in the calling ABAP method."),
+    },
+    {
+        "id": "ABAP-AMDP-005",
+        "category": "Missing Authorization",
+        "name": "AMDP declaration is not client-safe",
+        "severity": "MEDIUM",
+        # A13. Anchored on `AMDP OPTIONS` so the lookahead stays inside one
+        # statement.
+        "pattern":
+            r"\bAMDP\s+OPTIONS\b(?!.*\b(?:CDS\s+SESSION\s+CLIENT\s+DEPENDENT"
+            r"|CLIENT\s+INDEPENDENT)\b)",
+        "cwe": "CWE-284",
+        "description": (
+            "AMDP has no implicit client handling: unlike Open SQL, nothing adds a "
+            "client column to the procedure's own statements. A declaration that "
+            "does not state its client behaviour reads every client by default."),
+        "recommendation": (
+            "State the client behaviour explicitly on the declaration. NOTE ON "
+            "ROLLOUT: a classic estate that predates these additions will light up "
+            "broadly. That is a real exposure rather than noise, and aggregate "
+            "scoping already collapses it to one finding per object."),
+    },
+]
+
+#: A6 / A14. RAP. `.asbdef` routed to CDS_RULES, which held only two DDL/DCL shapes
+#: that cannot occur in a behaviour definition — so a BDEF that disables
+#: authorization produced ZERO findings. That is the same silent-zero-coverage
+#: failure this module's docstring records as fixed for CDS.
+#:
+#: `split_cds_statements` already emits matchable units for both, so no lexer work.
+RAP_BDEF_RULES: List[Dict[str, Any]] = [
+    {
+        "id": "ABAP-RAP-001",
+        "category": "Missing Authorization",
+        "name": "RAP behaviour definition disables the authorization master",
+        "severity": "HIGH",
+        "pattern": r"\bauthorization\s+master\s*\(\s*none\s*\)",
+        "cwe": "CWE-862",
+        "description": (
+            "The behaviour definition declares that no authorization master exists, "
+            "so no authorization handler is called for the entity. Every operation "
+            "the behaviour exposes — including over OData — runs unchecked."),
+        "recommendation": (
+            "Name the entity that owns authorization for this behaviour and "
+            "implement the corresponding handler. `none` is defensible only for a "
+            "behaviour reachable exclusively from an already-authorised caller, and "
+            "that reasoning belongs beside the declaration."),
+    },
+    {
+        "id": "ABAP-RAP-002",
+        "category": "Missing Authorization",
+        "name": "RAP behaviour definition declares no authorization",
+        "severity": "MEDIUM",
+        "pattern": r"\bauthorization\s*:\s*none\b",
+        "cwe": "CWE-862",
+        "description": (
+            "An operation in the behaviour definition is declared with no "
+            "authorization, so it is not covered by the entity's authorization "
+            "handler."),
+        "recommendation": (
+            "Remove the declaration so the operation inherits the entity's "
+            "authorization, or state explicitly why this one operation is safe "
+            "without it."),
+    },
+    {
+        "id": "ABAP-RAP-003",
+        "category": "Missing Authorization",
+        "name": "RAP handler runs in local mode",
+        "severity": "MEDIUM",
+        "pattern": r"\bIN\s+LOCAL\s+MODE\b",
+        "cwe": "CWE-862",
+        "description": (
+            "The call is made in local mode, which bypasses the authorization and "
+            "feature-control checks the behaviour would otherwise apply. We were "
+            "reporting the safe construct two lines away and saying nothing about "
+            "this one."),
+        "recommendation": (
+            "This is LEGITIMATE inside a behaviour pool and in auxiliary classes, "
+            "so the action is to CONFIRM the authorization decision was already "
+            "taken upstream — not to remove the addition. Treat it as a question "
+            "for the reviewer rather than a defect to schedule."),
+    },
+    {
+        "id": "ABAP-RAP-004",
+        "category": "Missing Authorization",
+        "name": "RAP privileged access",
+        "severity": "MEDIUM",
+        "pattern": r"\bPRIVILEGED\b",
+        "cwe": "CWE-862",
+        "description": (
+            "The code requests privileged access, which suspends the authorization "
+            "the behaviour would normally enforce."),
+        "recommendation": (
+            "As with local mode, this is legitimate in a behaviour pool: confirm "
+            "the caller was already authorised for what this code goes on to do, "
+            "and that the privileged scope is as narrow as the task requires."),
+    },
+]
+
+DYNAMIC_TOKEN_EXTRA_RULES: List[Dict[str, Any]] = [
+    {
+        "id": "ABAP-CINJ-013",
+        "category": "Code Injection",
+        "name": "Dynamic method call on a qualified reference",
+        "severity": "HIGH",
+        # A8. ABAP-CINJ-010 needs the parenthesis DIRECTLY after CALL METHOD, so
+        # the class- and object-qualified forms — the majority of real calls —
+        # matched no rule in the corpus. Disjoint from CINJ-010, so no
+        # double-reporting.
+        "pattern": r"\bCALL\s+METHOD\s+[\w/]+\s*(?:=>|->)\s*\(\s*" + _NAME + r"\s*\)",
+        "cwe": "CWE-94",
+        "description": (
+            "The method invoked is named at runtime. Whoever controls the name "
+            "chooses which method of that class or object runs."),
+        "recommendation": (
+            "Dispatch through an interface or a CASE over a fixed set of methods, "
+            "so the reachable set is written in the program rather than supplied to "
+            "it."),
+    },
+    {
+        "id": "ABAP-CINJ-014",
+        "category": "Code Injection",
+        "name": "Dynamic compound type in CREATE DATA",
+        "severity": "MEDIUM",
+        # A9. ABAP-CINJ-012 sees only `TYPE (t)`. Bounded length so a mis-split
+        # statement cannot drag the match across unrelated text.
+        "pattern":
+            r"\bCREATE\s+DATA\s+[\w<>/-]+\s+(?:TYPE|LIKE)\b[^.]{0,200}?\(\s*"
+            + _NAME + r"\s*\)",
+        "cwe": "CWE-913",
+        "description": (
+            "The type of a data object created at runtime is itself chosen at "
+            "runtime, in one of the compound forms (TABLE OF, REF TO, LINE OF) that "
+            "no existing rule covers."),
+        "recommendation": (
+            "Constrain the type name to a set the program knows about before "
+            "passing it to CREATE DATA."),
+    },
+    {
+        "id": "ABAP-CINJ-015",
+        "category": "Code Injection",
+        "name": "Dynamic parameter list in EXPORT / IMPORT",
+        "severity": "MEDIUM",
+        # A11. The trailing TO/FROM keeps this off unrelated parenthesised
+        # expressions.
+        "pattern": r"\b(?:EXPORT|IMPORT)\s+\(\s*" + _NAME + r"\s*\)\s+(?:TO|FROM)\b",
+        "cwe": "CWE-913",
+        "description": (
+            "The names moved into or out of a data cluster are chosen at runtime. "
+            "No rule in the corpus mentioned either statement as a dynamic "
+            "construct."),
+        "recommendation": (
+            "Name the parameters statically. MEDIUM rather than HIGH because this "
+            "governs which names move in and out of a cluster, not what code runs."),
+    },
+    {
+        "id": "ABAP-CINJ-016",
+        "category": "Code Injection",
+        "name": "Dynamic component or method selector",
+        "severity": "MEDIUM",
+        # A15. ABAP-CINJ-009 covers only `ASSIGN (`; 16 of 18 enumerated dynamic
+        # forms matched nothing. The literal/integer exclusion is NOT optional —
+        # unbounded, this collapsed 11 distinct hits over SAP-authored source to 1,
+        # and that survivor was the only genuinely dynamic one.
+        "pattern": r"\bASSIGN\b[^.]{0,200}?(?:->|=>|-)" + _NOT_LITERAL,
+        "cwe": "CWE-913",
+        "description": (
+            "A component, attribute or method is selected by a name computed at "
+            "runtime. The parenthesis follows a selector rather than the keyword, "
+            "which is why no existing rule matched it."),
+        "recommendation": (
+            "Validate the name against the component list of the type concerned "
+            "before using it as a selector."),
+    },
+    {
+        "id": "ABAP-CINJ-017",
+        "category": "Code Injection",
+        "name": "Dynamic type in a CASTING addition",
+        "severity": "MEDIUM",
+        "pattern": r"\bCASTING\s+TYPE\s*\(\s*(?!['\"`0-9])[A-Za-z_]",
+        "cwe": "CWE-913",
+        "description": (
+            "A field symbol is cast to a type named at runtime, so the memory it "
+            "exposes is reinterpreted according to a value rather than a "
+            "declaration."),
+        "recommendation": (
+            "Constrain the type name to a set the program knows about."),
+    },
+]
+
+#: A10. Internal-table dynamics. 10 of 11 forms matched nothing; the eleventh
+#: matched ABAP-SQLI-001 and was reported CRITICAL, CWE-89, "Dynamic WHERE clause",
+#: with a host-variable recommendation — on a statement that never touches the
+#: database. That is why these are CWE-913 and not CWE-89.
+INTERNAL_TABLE_RULES: List[Dict[str, Any]] = [
+    {
+        "id": "ABAP-DYNT-001",
+        "category": "Code Injection",
+        "name": "Dynamic WHERE condition on an internal table",
+        "severity": "MEDIUM",
+        # DELETE must be in the alternation, or the engine guard below opens a
+        # blind spot exactly where it suppresses ABAP-SQLI-001. The parenthesis
+        # must stay bounded, or this flags the parenthesised logical expressions
+        # SAP documents as correct in LOOP AT and READ TABLE.
+        "pattern":
+            r"\b(?:READ\s+TABLE|LOOP\s+AT|MODIFY|DELETE)\s+[\w<>/-]+[^.]*"
+            r"\bWHERE\s*\(\s*" + _NAME + r"\s*\)",
+        "cwe": "CWE-913",
+        "description": (
+            "The condition selecting rows from an internal table is built at "
+            "runtime. This is not SQL injection — no database is involved — but the "
+            "rows a caller can reach are chosen by a value rather than by the "
+            "program."),
+        "recommendation": (
+            "Build the condition from a fixed set of component names. Note that a "
+            "host-variable recommendation does not apply here: there is no "
+            "database statement to bind against."),
+    },
+    {
+        "id": "ABAP-DYNT-002",
+        "category": "Code Injection",
+        "name": "Dynamic key, sort or component list on an internal table",
+        "severity": "MEDIUM",
+        # No constructible false positive: every static form puts a bare name where
+        # the dynamic form puts a parenthesis.
+        "pattern":
+            r"\b(?:SORT\s+[\w<>/-]+\s+BY|USING\s+KEY|WITH\s+(?:TABLE\s+)?KEY"
+            r"|COMPONENTS|TRANSPORTING|COMPARING)\s*\(\s*" + _NAME + r"\s*\)",
+        "cwe": "CWE-913",
+        "description": (
+            "The key, sort order or component list is chosen at runtime, so which "
+            "fields are read, compared or transported is decided outside the "
+            "program text."),
+        "recommendation": (
+            "Choose the component list in the program. Where it must vary, "
+            "constrain it to the components of the row type."),
+    },
+]
+
+# The RAP behaviour-definition rules belong to the CDS/BDEF rule set, because that
+# is what `.asbdef` routes to. Extending in place rather than rebinding keeps the
+# `from ... import CDS_RULES` in abap_sast.py pointing at the same list.
+CDS_RULES.extend(RAP_BDEF_RULES[:2])
+
 EXTRA_ABAP_RULES: List[Dict[str, Any]] = (
     AMDP_RULES + NATIVE_SQL_RULES + CDS_RULES + MISC_RULES
+    + DYNAMIC_SQL_RULES + CROSS_CLIENT_RULES + AMDP_EXTRA_RULES
+    + RAP_BDEF_RULES[2:] + DYNAMIC_TOKEN_EXTRA_RULES + INTERNAL_TABLE_RULES
 )
 
 

@@ -236,6 +236,13 @@ DYNAMIC_TOKEN_RULES: Tuple[str, ...] = (
 
 _LITERAL_OPERAND = re.compile(r"\(\s*" + _Q)
 
+#: A10. `DELETE itab WHERE (cond)` touches no database, but it was the one
+#: internal-table dynamic form that DID match a rule — and it was reported CRITICAL,
+#: CWE-89, "Dynamic WHERE clause", with a host-variable recommendation there is no
+#: statement to bind against. `ABAP-DYNT-001` reports it as what it actually is.
+_INTERNAL_TABLE_DELETE = re.compile(
+    r"^\s*DELETE\s+(?!FROM\b)[\w<>/-]+\s", re.IGNORECASE)
+
 #: Rules named "... without AUTHORITY-CHECK" whose pattern cannot express the
 #: "without" half. Only ABAP-AUTH-001 shipped with the metadata to check; the other
 #: five fired on every UPDATE/DELETE/INSERT/RFC/transaction call in the estate,
@@ -859,6 +866,8 @@ class AbapSourceScanner:
                 # Named "... without AUTHORITY-CHECK": honour the "without".
                 if rid in AUTHORITY_GUARDED and st.block in guarded_blocks:
                     continue
+                if rid == "ABAP-SQLI-001" and _INTERNAL_TABLE_DELETE.match(st.text):
+                    continue
                 record(rule, st)
 
         # T1.6 — ABAP-AUTH-003 could not be expressed as a single-statement regex
@@ -1014,6 +1023,16 @@ _INLINE_DECL = re.compile(r"^\s*@?(?:DATA|FINAL)\s*\(\s*([\w/]+)\s*\)\s*=", re.I
 #: `x &&= y` is `x = x && y`. Written the short way it matched no assignment form.
 _CONCAT_ASSIGN = re.compile(r"^\s*([\w/]+)\s*&&=\s*(.+?)\s*$")
 
+#: ABAP words that appear in a parameter list without being parameter names. Only
+#: consulted for the untyped fallback, where there is no `TYPE` to anchor on.
+_PARAM_KEYWORDS: frozenset = frozenset({
+    "type", "ref", "to", "standard", "sorted", "hashed", "table", "of", "like",
+    "value", "optional", "default", "structure", "any", "data", "string",
+    "instance", "authorization", "request", "result", "entity", "update",
+    "create", "delete", "read", "for", "with", "key", "importing", "changing",
+    "using", "tables", "exporting", "returning", "raising", "begin", "end",
+})
+
 
 def _taint_rewrite(text: str) -> str:
     """Normalise the two assignment spellings the analyzer cannot parse."""
@@ -1079,6 +1098,76 @@ class RiseTaintAnalyzer(TaintAnalyzer):
     #: "does this guard WRAP that identifier".
     _SAN_NAMES = r"(?:cl_abap_dyn_prg\s*=>\s*)?(?:%s)"
 
+    # ------------------------------------------------------------------ #
+    #  Group B — the source families the analyzer had no case for         #
+    # ------------------------------------------------------------------ #
+    # Every addition below is an ABAP KEYWORD or a SYSTEM FIELD, both of which are
+    # language constructs. No library class or method name is introduced: those
+    # are the identifiers the repo's no-fabrication rule is about, and U10 in
+    # docs/CVA_ENGINE_IMPROVEMENT_PLAN.md records that the ones originally
+    # proposed for `_SOURCE_RE` were never grep-confirmed in a fetched SAP file.
+    # B9 (HTTP response bodies) is not here for exactly that reason — it needs the
+    # released-classes listing to anchor on client identity, and anchoring on a
+    # bare accessor name instead would taint every CATCH block in the estate.
+    _SOURCE_RE = re.compile(
+        TaintAnalyzer._SOURCE_RE.pattern
+        + r"|\bsy-lisel\b|\bsy-ucomm\b|\bsscrfields-\w+",
+        re.IGNORECASE)
+
+    #: B8. Dialog modules are blocks in `abap_sast.py`'s own model but were not
+    #: scopes here, so taint leaked between them.
+    _SCOPE_START_RE = re.compile(
+        r"^\s*(?:FORM|METHOD|FUNCTION|MODULE)\b", re.IGNORECASE)
+    _SCOPE_END_RE = re.compile(
+        r"^\s*END(?:FORM|METHOD|FUNCTION|MODULE)\b", re.IGNORECASE)
+
+    #: B6. A data cluster read back is external input: whoever wrote the cluster
+    #: chose the values. The `IMPORT (param_table) FROM ...` form binds by a
+    #: RUNTIME name table and is deliberately left alone rather than guessed at.
+    #: UNVERIFIED (U9): shared-memory and database media are not included, because
+    #: no fetched SAP file names them.
+    _IMPORT_CLUSTER = re.compile(
+        r"^\s*IMPORT\b(?P<binds>(?:(?!\().)*?)"
+        r"\bFROM\s+(?:MEMORY\s+ID|DATA\s+BUFFER|INTERNAL\s+TABLE)\b", re.IGNORECASE)
+
+    #: B7. Classic list interaction — the user picks a line and the program reads
+    #: it back.
+    _READ_LINE = re.compile(
+        r"^\s*READ\s+(?:CURRENT\s+)?LINE\b.*?\bINTO\s+(?P<tgt>[\w/]+)", re.IGNORECASE)
+
+    #: B5. Parsed XML. The trap is capturing the LEFT-hand root name instead of the
+    #: ABAP variable it binds to, so the extraction is deliberately `= <name>`.
+    #: Restricted to `SOURCE XML`, because `SOURCE root = ...` is serialising the
+    #: program's own data outward and is not a source at all.
+    _CALL_XSLT = re.compile(
+        r"\bCALL\s+TRANSFORMATION\b.*?\bSOURCE\s+XML\b.*?\bRESULT\b(?P<binds>.+)$",
+        re.IGNORECASE)
+
+    #: B3. Output-parameter binding on a call that is ALREADY a known source.
+    #: This is what makes `gui_upload` — in the vendored source list since day one —
+    #: able to fire at all: the value arrives through CHANGING, not through a
+    #: return value, so there was never an assignment for the analyzer to see.
+    _OUT_BIND = re.compile(
+        r"\b(?:IMPORTING|CHANGING|RECEIVING|TABLES)\b(?P<binds>.+)$", re.IGNORECASE)
+    _BIND_TGT = re.compile(r"=\s*([A-Za-z_][\w/]*)")
+
+    #: B2 / B4. Procedure and handler inbound parameters. Seeded PER SCOPE and
+    #: never into `_globals`: a parameter name shared by two procedures would
+    #: otherwise leak taint from one into the other.
+    _METHODS_DECL = re.compile(
+        r"^\s*(?:CLASS-)?METHODS\s*:?\s*(?P<name>[\w/]+)(?P<rest>.*)$", re.IGNORECASE)
+    _FORM_DECL = re.compile(
+        r"^\s*(?:FORM|METHOD|FUNCTION)\s+(?P<name>[\w/]+)(?P<rest>.*)$", re.IGNORECASE)
+    _IN_SECTION = re.compile(
+        r"\b(?:IMPORTING|CHANGING|USING|TABLES|FOR)\b(?P<params>.*?)"
+        r"(?=\bEXPORTING\b|\bRETURNING\b|\bRAISING\b|$)", re.IGNORECASE)
+    #: `iv_x TYPE string` and `VALUE(iv_x)`, plus the bare `USING p_a` form old
+    #: FORMs use. `%` is admitted because RAP handler parameters carry it and
+    #: `_IDENT_RE` silently drops a leading one.
+    _PARAM_NAME = re.compile(
+        r"\bVALUE\s*\(\s*([A-Za-z_%][\w/]*)\s*\)|\b([A-Za-z_%][\w/]*)\s+TYPE\b"
+        r"|\b(?:USING|CHANGING)\s+([A-Za-z_][\w/]*)", re.IGNORECASE)
+
     def __init__(self, text: str, sanitizers: Iterable[str] = DEFAULT_SANITIZERS):
         names = "|".join(sorted(sanitizers, key=len, reverse=True))
         # Anchored on both sides AND requiring call syntax. Without the `\(` a
@@ -1098,6 +1187,13 @@ class RiseTaintAnalyzer(TaintAnalyzer):
             _code, mask, _term, stack = _scan_line(line, stack)
             code_lines.append(_taint_rewrite(mask.strip()))
         self._code = code_lines
+        # B2/B4 — a METHOD implementation header carries no signature, so the
+        # declarations are indexed once and looked up when the scope opens.
+        self._method_params: Dict[str, str] = {}
+        for line in self._code:
+            decl = self._METHODS_DECL.match(line)
+            if decl:
+                self._method_params[decl.group("name").lower()] = decl.group("rest")
         self._globals = self._collect_globals()
         self._scopes = self._segment_scopes()
 
@@ -1120,7 +1216,69 @@ class RiseTaintAnalyzer(TaintAnalyzer):
 
     # -- propagation ---------------------------------------------------- #
 
+    @staticmethod
+    def _names_in(params: str) -> List[str]:
+        """Parameter names in a declaration fragment.
+
+        Typed parameters are unambiguous (`iv_x TYPE string`, `VALUE(iv_x)`), so
+        they are preferred. The bare fallback is for the untyped `USING p_a p_b`
+        form classic FORMs use, and drops the ABAP words that would otherwise be
+        mistaken for names.
+        """
+        typed = re.findall(
+            r"\bVALUE\s*\(\s*([A-Za-z_%][\w/]*)\s*\)|\b([A-Za-z_%][\w/]*)\s+TYPE\b",
+            params, re.IGNORECASE)
+        names = [a or b for a, b in typed]
+        if names:
+            return names
+        return [t for t in re.findall(r"[A-Za-z_%][\w/]*", params)
+                if t.lower() not in _PARAM_KEYWORDS]
+
+    def _inbound_params(self, name: str, rest: str) -> List[str]:
+        """Inbound parameters of the procedure whose header this is.
+
+        A METHOD implementation header carries no signature — it lives on the
+        METHODS declaration elsewhere in the file — so that is looked up. Without
+        this, every injection reachable over RFC or OData classified UNKNOWN, and
+        since Phase 5 an UNKNOWN never prices into FAIR.
+        """
+        text = self._method_params.get(name.lower()) or rest
+        out: List[str] = []
+        for section in self._IN_SECTION.finditer(text):
+            out.extend(n.lower() for n in self._names_in(section.group("params")))
+        return out
+
+    def _tainted_targets(self, code: str) -> List[str]:
+        """Statements that taint what they WRITE INTO rather than being an RHS."""
+        m = self._IMPORT_CLUSTER.match(code)
+        if m:
+            binds = m.group("binds")
+            return self._BIND_TGT.findall(binds) or [
+                t for t in self._IDENT_RE.findall(binds)
+                if t.lower() not in _ABAP_NOISE_WORDS]
+        m = self._READ_LINE.match(code)
+        if m:
+            return [m.group("tgt")]
+        m = self._CALL_XSLT.search(code)
+        if m:
+            return self._BIND_TGT.findall(m.group("binds"))
+        if self._SOURCE_RE.search(code):
+            m = self._OUT_BIND.search(code)
+            if m:
+                return self._BIND_TGT.findall(m.group("binds"))
+        return []
+
     def _apply(self, code: str, state: dict, origin: dict, line_no: int) -> None:
+        head = self._FORM_DECL.match(code)
+        if head:
+            for name in self._inbound_params(head.group("name"), head.group("rest")):
+                self._set(name, self.TAINTED, None, line_no, state, origin)
+            return
+        targets = self._tainted_targets(code)
+        if targets:
+            for name in targets:
+                self._set(name.lower(), self.TAINTED, None, line_no, state, origin)
+            return
         m = re.search(r"GET\s+PARAMETER\s+ID\s+\S+\s+FIELD\s+([\w/]+)",
                       code, re.IGNORECASE)
         if m:

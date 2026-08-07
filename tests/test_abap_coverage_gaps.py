@@ -115,8 +115,15 @@ def test_cds_files_are_not_matched_with_abap_rules():
     ABAP's dynamic-WHERE injection pattern, and is the correct way to write one."""
     rules = AbapSourceScanner._rules_for(Path("z_role.asdcls"))
     rule_ids = {r["id"] for r in rules}
-    assert rule_ids and all(r.startswith("ABAP-CDS-") for r in rule_ids), \
+    # The guarantee is that no ABAP rule reaches a CDS artefact — NOT that every
+    # rule is spelled ABAP-CDS-*. RAP behaviour definitions route here too and
+    # carry their own family, which is why the prefix alone is the wrong test.
+    assert rule_ids and all(r.startswith(("ABAP-CDS-", "ABAP-RAP-"))
+                            for r in rule_ids), \
         f"CDS artefacts are being scanned with {sorted(rule_ids)[:5]}"
+    assert "ABAP-SQLI-001" not in rule_ids, \
+        "the dynamic-WHERE rule is back on DCL, where a pfcg_auth grant looks " \
+        "exactly like an injection"
 
 
 def test_scan_text_picks_the_rules_for_the_file_it_was_given():
@@ -173,11 +180,22 @@ def test_every_new_rule_compiles():
 
 
 def test_rap_readiness_was_declined_rather_than_half_built():
-    """It is measured against SAP's continuously-updated released-object
-    catalogue, which is the whole check — shipping a snapshot would be a
-    content-currency treadmill. Declining it explicitly is the honest option, and
-    this test exists so a future reader finds the decision instead of the gap."""
+    """RAP READINESS is measured against SAP's continuously-updated released-object
+    catalogue, which IS the check — shipping a snapshot would be a content-currency
+    treadmill. Declining it explicitly is the honest option, and this test exists so
+    a future reader finds the decision instead of the gap.
+
+    WHAT THIS TEST NO LONGER ASSERTS. It used to require that no rule id contained
+    "RAP" at all, which was a proxy, and the wrong one: ABAP-RAP-001..004 read a
+    behaviour definition's OWN source for authorization off-switches. They carry no
+    catalogue and go stale at no rate, so they are not the declined check. Before
+    they existed, a BDEF that disabled authorization produced zero findings.
+    """
     extra = (ROOT / "modules" / "abap_sast_extra.py").read_text(encoding="utf-8")
     assert "WHAT IS DELIBERATELY NOT HERE" in extra
     assert "RAP" in extra
-    assert not [r for r in EXTRA_ABAP_RULES if "RAP" in r["id"]]
+    # The thing that must not appear is a SNAPSHOT of released objects.
+    snapshotted = [r for r in EXTRA_ABAP_RULES
+                   if "released" in (r.get("description", "") + r["pattern"]).lower()]
+    assert not snapshotted, \
+        f"{[r['id'] for r in snapshotted]} looks like a released-object snapshot"
