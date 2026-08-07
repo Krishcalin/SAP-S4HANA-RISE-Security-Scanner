@@ -54,6 +54,7 @@ _NOT_AN_AUDITOR = {
 RISE_MODULE_SCOPE: Dict[str, str] = {
     "user_auth_audit": "in_scope",
     "atc_import": "in_scope",       # custom ABAP is contractually 100% customer
+    "abap_sast": "in_scope",        # ditto; input is an abapGit export
     "security_params": "read_only",       # readable; fixable only by SAP
     "network_services": "split",
     "rise_btp_checks": "in_scope",

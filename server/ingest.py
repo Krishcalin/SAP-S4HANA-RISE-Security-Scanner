@@ -46,6 +46,7 @@ log = logging.getLogger(__name__)
 AUDITORS: List[Tuple[str, str]] = [
     ("user_auth_audit", "UserAuthAuditor"),
     ("atc_import", "AtcImportAuditor"),
+    ("abap_sast", "AbapSastAuditor"),
     ("security_params", "SecurityParamAuditor"),
     ("network_services", "NetworkServiceAuditor"),
     ("rise_btp_checks", "RiseBtpAuditor"),
@@ -78,7 +79,7 @@ AUDITORS: List[Tuple[str, str]] = [
 #: input data was loaded.
 MODULE_KEYS = frozenset({
     "users", "params", "network", "rise", "iam", "btpcloud", "intglayer",
-    "dataprot", "codetrans", "atc", "logmon", "logreview", "fiori", "crypto", "hanadb",
+    "dataprot", "codetrans", "atc", "cva", "logmon", "logreview", "fiori", "crypto", "hanadb",
     "hotnews", "authz", "systrust", "baseline", "s4authz", "ara", "jobcmd",
     "grcac", "rolegov", "fincontrols",
 })

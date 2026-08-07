@@ -38,6 +38,7 @@ log = logging.getLogger(__name__)
 #: override its module's default.
 TEAM_BY_PREFIX: List[Tuple[str, str]] = [
     ("ATC-", "development"),
+    ("ABAP-", "development"),
     ("AUTH-", "authorizations"),
     ("USR-", "identity"),
     ("STDUSR-", "basis"),

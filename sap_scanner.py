@@ -30,6 +30,7 @@ from modules.integration_layer import IntegrationLayerAuditor
 from modules.data_protection import DataProtectionAuditor
 from modules.code_transport import CodeTransportAuditor
 from modules.atc_import import AtcImportAuditor
+from modules.abap_sast import AbapSastAuditor
 from modules.log_monitoring import LogMonitoringAuditor
 from modules.log_review import LogReviewAuditor
 from modules.fiori_ui import FioriUiAuditor
@@ -74,6 +75,12 @@ def main():
         help="Directory containing exported SAP configuration files (CSV/JSON)"
     )
     parser.add_argument(
+        "--abap-src", default=None, metavar="DIR",
+        help="Unpacked abapGit offline export to scan with the `cva` module. "
+             "abapGit's offline ZIP is the one route by which ABAP source leaves a "
+             "RISE system without OS access or an SAP ticket."
+    )
+    parser.add_argument(
         "--output", default="sap_security_report.html",
         help="Output HTML report filename (default: sap_security_report.html)"
     )
@@ -84,7 +91,7 @@ def main():
     )
     parser.add_argument(
         "--modules", nargs="+",
-        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "atc", "logmon", "logreview", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust", "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov", "fincontrols", "all"],
+        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "atc", "cva", "logmon", "logreview", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust", "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov", "fincontrols", "all"],
         default=["all"],
         help="Which audit modules to run (default: all)"
     )
@@ -134,6 +141,10 @@ def main():
     print("[*] Loading exported configuration data...")
     loader = DataLoader(data_dir)
     data = loader.load_all()
+    # Source is a DIRECTORY, not one of the tabular exports, so it is handed to the
+    # auditor through the same dict rather than through DataLoader's FILE_MAP.
+    if getattr(args, "abap_src", None):
+        data["abap_source_dir"] = args.abap_src
 
     # Load custom baseline if provided
     baseline_overrides = {}
@@ -144,7 +155,7 @@ def main():
 
     run_modules = args.modules if "all" not in args.modules else [
         "users", "params", "network", "rise", "iam", "btpcloud",
-        "intglayer", "dataprot", "codetrans", "atc", "logmon", "logreview", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust",
+        "intglayer", "dataprot", "codetrans", "atc", "cva", "logmon", "logreview", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust",
         "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov", "fincontrols"
     ]
 
@@ -240,6 +251,17 @@ def main():
         print("[*] Importing ABAP Test Cockpit / Code Inspector results...")
         auditor = AtcImportAuditor(data, baseline_overrides,
                                    run_context={"modules": set(run_modules)})
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- ABAP / UI5 source scanning (our own engine) ---
+    # Only runs when --abap-src points at an unpacked abapGit export. Where the
+    # customer has SAP's own CVA, prefer the `atc` module: those findings are SAP's.
+    if "cva" in run_modules:
+        print("[*] Running ABAP / UI5 source scan...")
+        auditor = AbapSastAuditor(data, baseline_overrides,
+                                  run_context={"modules": set(run_modules)})
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
