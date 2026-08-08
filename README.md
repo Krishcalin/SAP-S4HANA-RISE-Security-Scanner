@@ -26,34 +26,51 @@
 
 ## Contents
 
-**Start here**
-| | |
-|---|---|
-| [Overview](#overview) | What it is, and the two modes that share one scanner core |
-| [Quick Start](#quick-start) | CLI in three commands |
-| [Server mode — quick start](#server-mode--quick-start) | Browser console, PostgreSQL, mitigation journey |
-| [Requirements](#requirements) | Python 3.8+, and the five server dependencies |
+- **[Overview](#overview)**
+- **[Server mode — quick start](#server-mode--quick-start)**
+  - [What the server adds over the CLI](#what-the-server-adds-over-the-cli)
+- **[Audit Modules](#audit-modules)** &nbsp;<sub>73 check families</sub>
+  <details><summary><sub>expand by family</sub></summary>
 
-**What it checks**
-| | |
-|---|---|
-| [Audit Modules](#audit-modules) | All 30 auditors and the check families they own |
-| [Data Sources](#data-sources) | Which export feeds which module — every one optional |
-| [Custom Baseline](#custom-baseline) | Override thresholds without touching code |
+  - **Identity & Access** &nbsp; [Segregation of Duties](#segregation-of-duties-iam-sod-) · [Firefighter / Emergency Access](#firefighter--emergency-access-iam-ff-) · [Role Expiry & Validity](#role-expiry--validity-iam-exp-) · [Cross-System Identity](#cross-system-identity-iam-xid-) · [Access Review Compliance](#access-review-compliance-iam-rev-) · [Role Design Quality](#role-design-quality-iam-role-)
+  - **Identity & Access (cont.)** &nbsp; [Other IAM Checks](#other-iam-checks) · [Critical access + risk profile](#critical-access--risk-profile)
+  - **BTP / Cloud** &nbsp; [Cloud Connector](#cloud-connector-btp-cc-) · [Service Bindings](#service-bindings-btp-sb-) · [Destination Service](#destination-service-btp-dst-) · [Identity Authentication Service](#identity-authentication-service-btp-ias-) · [Entitlement Governance](#entitlement-governance-btp-ent-) · [Event Mesh](#event-mesh-btp-em-) · [Cloud Integration / CPI](#cloud-integration--cpi-btp-cpi-) · [Network Isolation](#network-isolation-btp-net-) · [Subaccount Governance](#subaccount-governance-btp-gov-) · [XSUAA Migration](#xsuaa-migration-btp-mig-)
+  - **Integration Layer** &nbsp; [API Management](#api-management-intg-apim-) · [IDOC Port & Partner Security](#idoc-port--partner-security-intg-idoc-) · [Web Services / SOAMANAGER](#web-services--soamanager-intg-ws-) · [Webhook & Callback Security](#webhook--callback-security-intg-wh-) · [Gateway ACL Deep Analysis](#gateway-acl-deep-analysis-intg-gw-) · [Integration Monitoring](#integration-monitoring-intg-mon-) · [CPI Data Stores](#cpi-data-stores-intg-cpi-ds-) · [OAuth Client Governance](#oauth-client-governance-intg-oauth-) · [Integration Topology](#integration-topology-intg-topo-)
+  - **Data Protection & Privacy** &nbsp; [Read Access Logging](#read-access-logging-dpp-ral-) · [Information Lifecycle Management](#information-lifecycle-management-dpp-ilm-) · [Data Masking — Non-Production](#data-masking--non-production-dpp-mask-) · [DPP Toolkit](#dpp-toolkit-dpp-toolkit-) · [Purpose of Processing](#purpose-of-processing-dpp-pop-) · [Sensitive Field Inventory](#sensitive-field-inventory-dpp-field-) · [Data Residency & Cross-Border](#data-residency--cross-border-dpp-res-) · [Data Subject Requests](#data-subject-requests-dpp-del-) · [System Landscape](#system-landscape-dpp-land-)
+  - **Code & Transport** &nbsp; [Code Injection / SQL Injection](#code-injection--sql-injection-code-inj-) · [Dangerous Statements](#dangerous-statements-code-stmt-) · [ATC / Code Inspector](#atc--code-inspector-code-atc-) · [Transport Management](#transport-management-code-tms-) · [Client Configuration](#client-configuration-code-client-) · [Change Documents](#change-documents-code-chg-) · [Development Access](#development-access-code-dev-) · [SAP Modifications](#sap-modifications-code-mod-) · [Dead Code](#dead-code-code-dead-)
+  - **Logging & Monitoring** &nbsp; [Security Audit Log](#security-audit-log-log-aud-) · [SIEM Integration](#siem-integration-log-siem-) · [Log Retention](#log-retention-log-ret-) · [Table Logging](#table-logging-log-tbl-) · [Logon Analysis](#logon-analysis-log-logon-) · [Incident Response](#incident-response-log-ir-)
+  - **Fiori / UI** &nbsp; [Catalog Access](#catalog-access-fiori-cat-) · [App Exposure](#app-exposure-fiori-app-) · [OData Authorization](#odata-authorization-fiori-odata-) · [Spaces & Pages](#spaces--pages-fiori-space-) · [Tile-Service Alignment](#tile-service-alignment-fiori-tile-) · [App Usage](#app-usage-fiori-usage-)
+  - **Cryptography** &nbsp; [TLS Configuration](#tls-configuration-crypto-tls-) · [Certificate Management](#certificate-management-crypto-cert-) · [SNC](#snc-crypto-snc-) · [HANA Encryption](#hana-encryption-crypto-hana-) · [Crypto Library](#crypto-library-crypto-lib-) · [PSE Health](#pse-health-crypto-pse-) · [Key Management](#key-management-crypto-key-)
+  - **HANA Database** &nbsp; [Privileged DB Users](#privileged-db-users-hanadb-user-) · [Privilege Grants](#privilege-grants-hanadb-priv-) · [Roles & Auditing](#roles--auditing-hanadb-role---hanadb-audit-) · [Security Parameters](#security-parameters-hanadb-param-)
+  - **Standard Users** &nbsp; [Standard / Default Users](#standard--default-users-stdusr-)
+  - **System Trust** &nbsp; [System Trust](#system-trust-trust-)
+  - **Access Risk Analysis** &nbsp; [Segregation-of-Duties conflicts](#segregation-of-duties-conflicts-25)
+  - **Basis Jobs & OS Commands** &nbsp; [External OS-command definitions (JOBCMD-CMD-*) — from SM69 / SXPGCOSTAB](#external-os-command-definitions-jobcmd-cmd---from-sm69--sxpgcostab) · [Background jobs & step users (JOBCMD-JOB-*) — from TBTCO / TBTCP](#background-jobs--step-users-jobcmd-job---from-tbtco--tbtcp)
 
-**What you get back**
-| | |
-|---|---|
-| [Reports](#reports) | HTML · PDF · PPTX, risk ranking, compliance mapping, FAIR loss exposure |
+  </details>
+- **[Quick Start](#quick-start)**
+  - [Available Modules](#available-modules)
+- **[Reports](#reports)** &nbsp;<sub>4 sections</sub>
+  <details><summary><sub>expand</sub></summary>
 
-**The project**
-| | |
-|---|---|
-| [Project Structure](#project-structure) | Where things live |
-| [Testing](#testing) | 1,480+ tests |
-| [Roadmap](#roadmap) · [Contributing](#contributing) · [Disclaimer](#disclaimer) · [License](#license) | |
+  - [Risk prioritization (P1–P4)](#risk-prioritization-p1p4)
+  - [Compliance mapping](#compliance-mapping)
+  - [Detailed findings — knowledge base](#detailed-findings--knowledge-base)
+  - [Cyber-risk quantification — FAIR *(optional, `--crq`)*](#cyber-risk-quantification--fair-optional---crq)
 
-**Deeper documentation**
+  </details>
+- **[Data Sources](#data-sources)**
+- **[Custom Baseline](#custom-baseline)**
+- **[Project Structure](#project-structure)**
+- **[Roadmap](#roadmap)**
+- **[Requirements](#requirements)**
+- **[Testing](#testing)**
+- **[Contributing](#contributing)**
+- **[Disclaimer](#disclaimer)**
+- **[License](#license)**
+
+### Deeper documentation
+
 | Document | What it covers |
 |---|---|
 | [`docs/EXPORT_GUIDE.md`](docs/EXPORT_GUIDE.md) | How to produce the exports this tool reads |
@@ -65,6 +82,8 @@
 | [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md) · [`docs/BUILD_ROADMAP.md`](docs/BUILD_ROADMAP.md) | Product direction and build history |
 
 ---
+
+<sub>[↑ Contents](#contents)</sub>
 
 ## Overview
 
@@ -97,6 +116,8 @@ It runs in **two modes that share one scanner core**:
 > **A note on dependencies.** The CLI still runs on the Python standard library alone — the HTML, PDF and PPTX engines are all hand-built. The **server tier** deliberately ends that rule: a browser console and a durable finding store cannot be built on the stdlib. The discipline that replaces it is a **single-digit runtime dependency count** (currently 5), no ORM, no graph database and no client-side framework. See [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md).
 
 ---
+
+<sub>[↑ Contents](#contents)</sub>
 
 ## Server mode — quick start
 
@@ -159,6 +180,7 @@ product's clearest structural advantage, and a third service would forfeit it.
   `changes since run N` endpoint.
 
 ---
+
 
 <sub>[↑ Contents](#contents)</sub>
 
@@ -877,6 +899,7 @@ Only *armed* jobs (STATUS scheduled/released/ready/active) are evaluated; finish
 
 ---
 
+
 <sub>[↑ Contents](#contents)</sub>
 
 ## Quick Start
@@ -954,6 +977,7 @@ python sap_scanner.py --data-dir ./exports --modules systrust baseline
 
 ---
 
+
 <sub>[↑ Contents](#contents)</sub>
 
 ## Reports
@@ -1002,6 +1026,7 @@ The Monte-Carlo engine lives in the sibling [Cyber-Risk-Quantification](https://
 | `--crq-engine` | Explicit path to `crq_engine.py` (overrides auto-detect / `CRQ_ENGINE`) |
 
 ---
+
 
 <sub>[↑ Contents](#contents)</sub>
 
@@ -1223,6 +1248,7 @@ Reuses `users.csv` (USR02) and `profiles.csv` (USR04) to resolve whether a job s
 
 ---
 
+
 <sub>[↑ Contents](#contents)</sub>
 
 ## Custom Baseline
@@ -1261,6 +1287,7 @@ Override default thresholds by creating a JSON config file:
 Access Risk Analysis can also be driven by a **custom SoD ruleset** — drop an `ara_ruleset.json` into your `--data-dir` to extend or override the built-in 27-risk ruleset (entries matching a built-in `risk_id` override it; new ids are added).
 
 ---
+
 
 <sub>[↑ Contents](#contents)</sub>
 
@@ -1356,6 +1383,7 @@ SAP-S4HANA-RISE-Security-Scanner/
 
 ---
 
+
 <sub>[↑ Contents](#contents)</sub>
 
 ## Roadmap
@@ -1435,9 +1463,13 @@ SAP-S4HANA-RISE-Security-Scanner/
 
 ---
 
+<sub>[↑ Contents](#contents)</sub>
+
 ## Requirements
 
 **Python 3.8+** — No external packages required to run the scanner.
+
+<sub>[↑ Contents](#contents)</sub>
 
 ## Testing
 
@@ -1456,13 +1488,19 @@ python -m pytest -q
 CI (GitHub Actions, `.github/workflows/tests.yml`) runs the suite on Python
 3.8–3.12 plus a full `sap_scanner.py` smoke run on every push and pull request.
 
+<sub>[↑ Contents](#contents)</sub>
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
+<sub>[↑ Contents](#contents)</sub>
+
 ## Disclaimer
 
 This tool is for **authorized security assessments only**. The scanner performs offline analysis of exported data and does not connect to or modify any SAP system.
+
+<sub>[↑ Contents](#contents)</sub>
 
 ## License
 
