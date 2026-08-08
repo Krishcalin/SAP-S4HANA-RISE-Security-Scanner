@@ -402,7 +402,7 @@ def main():
     # --- Cryptographic Posture ---
     if "crypto" in run_modules:
         print("[*] Running Cryptographic Posture Checks...")
-        auditor = CryptoPostureAuditor(data, baseline_overrides)
+        auditor = CryptoPostureAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")

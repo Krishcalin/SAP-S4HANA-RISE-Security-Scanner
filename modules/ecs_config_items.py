@@ -17,10 +17,12 @@ v47 of the note that adds a nineteenth item must not slide in unnoticed.
 ────────────────────────────────────────────────────────────────────────────────
 WHAT THIS MODULE READS
 ────────────────────────────────────────────────────────────────────────────────
-`table_auth_groups`  — table/view -> authorization group. NEW export; there is no
-                       data_loader key for it yet, so today `self.data.get(...)`
-                       simply returns None and every check that needs it returns
-                       [] cleanly. Wiring is the orchestrator's call.
+`table_auth_groups`  — table/view -> authorization group, TDDAT-shaped. Loaded by
+                       modules/data_loader.py from `table_auth_groups.csv`,
+                       `table_authorization_groups.csv` or `se54.csv`. An absent key
+                       still returns None, and every check that needs it returns []
+                       cleanly — a customer who did not send this extract must not be
+                       told anything about their authorization groups.
 
     Accepted headers (the extract may be produced by an SE16/SE11 download or by
     hand, and the header text differs between the two, so several aliases are
@@ -30,13 +32,34 @@ WHAT THIS MODULE READS
         auth group  : CCLASS | AUTH_GROUP | AUTHGROUP | AUTHORIZATION_GROUP
                       | AUTH_GRP | DICBERCLS | BRGRU
 
+    THIS LIST IS THE ONLY ONE. The loader deliberately keeps no second copy of it:
+    a header only one side knows reads as an empty cell, and an empty cell here
+    means "no authorization group", so a disagreement between the two files would
+    report a compliant system as exposing every password hash it holds. The
+    agreement is enforced end-to-end by tests/test_tddat_export.py, which drives
+    each alias through DataLoader rather than straight into the auditor.
+
     THE EXTRACT MUST BE UNFILTERED. A table that is absent from it is read as
     "no authorization group assigned", because that is what an absent row means
     in a complete extract — and reading it the other way would let the exact
-    defect this module exists to catch pass silently. A namespace-filtered
-    extract (Z* only, say) will therefore over-report; the finding's `details`
-    carry the extract's row count and name the absent tables separately from the
-    mis-assigned ones so a reviewer sees that immediately.
+    defect this module exists to catch pass silently.
+
+    A namespace-filtered extract (Z* only, say) would therefore over-report, so the
+    two directions are answered differently rather than assumed away:
+
+      * PROVABLY filtered — the extract names nothing outside the customer and
+        partner namespaces, so it cannot be a complete picture of the system's
+        assignments whatever it says about SAP's own tables. Absence stops counting
+        as evidence there: only the rows the extract actually carries are judged,
+        and the objects it never mentions are disclosed as a coverage gap
+        (AUTH-ECS-000) instead of reported as unprotected. Absence of evidence is
+        not a finding.
+      * NOT PROVABLE — an extract that does name SAP tables may still have been
+        filtered by object name, and nothing in the rows can settle it. The finding
+        is then raised on the note's own reading of absence and SAYS SO IN ITS OWN
+        TEXT, with `details` carrying the row count and naming the absent objects
+        separately from the mis-assigned ones so a reviewer holding a filtered
+        extract sees it at a glance.
 
 `client_settings`    — existing key. Only the client number is read (CLIENT | MANDT).
 
@@ -129,7 +152,11 @@ from modules.base_auditor import BaseAuditor
 CONFIG_ITEM_DISPOSITION: Dict[str, Tuple[str, str]] = {
     # ── implemented here ──────────────────────────────────────────────────── #
     "password_hash_tables_authgroup_SPWD": (
-        "checked", "AUTH-ECS-001 — no prior coverage anywhere in the repository"),
+        "checked", "AUTH-ECS-001 — no prior coverage anywhere in the repository. "
+                   "AUTH-ECS-000 is its coverage half: it discloses the objects "
+                   "whose group could not be read because the extract proves it was "
+                   "filtered, for this item and for the SPSE one, so a gap in the "
+                   "evidence never reads as a clean result"),
     "ssf_pse_d_authgroup_SPSE": (
         "checked", "CRYPTO-ECS-001 — no prior coverage; CRYPTO-PSE-001 is about "
                    "PSE health (expiry/corruption), not about who may read the table"),
@@ -200,8 +227,9 @@ CONFIG_ITEM_DISPOSITION: Dict[str, Tuple[str, str]] = {
 # --------------------------------------------------------------------------- #
 #  Objects named by the note                                                   #
 # --------------------------------------------------------------------------- #
-#: Logical data-source key for the table -> authorization group extract. Not yet a
-#: data_loader key; see the module docstring.
+#: Logical data-source key for the table -> authorization group extract. A key in
+#: modules/data_loader.py's FILE_MAP; see the module docstring for the filenames and
+#: for why the extract has to be unfiltered.
 TABLE_AUTH_GROUPS = "table_auth_groups"
 
 #: The tables and views required to sit behind authorization group SPWD. They are
@@ -298,12 +326,28 @@ def _normalise_client(raw: str) -> str:
     return value.zfill(3) if value.isdigit() and len(value) <= 3 else value.upper()
 
 
+def _is_sap_standard_name(table: str) -> bool:
+    """Is this the name of an object SAP itself delivers?
+
+    Customer objects take a Z or Y prefix and partner objects sit in a /namespace/.
+    Everything else is SAP's own basic namespace.
+
+    Used for ONE question only — could this extract be complete? — and never to
+    decide anything about an individual table: a table in a namespace is neither
+    more nor less protected than one outside it, and none of the objects the note
+    names is in a namespace anyway.
+    """
+    return bool(table) and not table.startswith(("Z", "Y", "/"))
+
+
 class EcsConfigAuditor(BaseAuditor):
     """The configuration half of SAP Note 3250501."""
 
     def run_all_checks(self) -> List[Dict[str, Any]]:
         self.check_password_hash_tables_protected()
         self.check_pse_table_protected()
+        # After the two checks it speaks for: it reports what they could not reach.
+        self.check_table_extract_not_assessable()
         self.check_obsolete_clients_deleted()
         self.check_audit_filters_cover_all_users()
         return self.findings
@@ -362,6 +406,57 @@ class EcsConfigAuditor(BaseAuditor):
             index[table] = "" if group in _NO_GROUP else group
         return index or None
 
+    def _extract_is_namespace_filtered(self, index: Dict[str, str]) -> bool:
+        """Can this extract be PROVEN to have been taken with a filter?
+
+        A complete table -> authorization group extract names objects SAP itself
+        delivers. One that names nothing but customer- and partner-namespace objects
+        therefore cannot be complete, whatever it does or does not say about SAP's
+        tables — and that is the only direction the rows can prove.
+
+        The other direction is not claimed. An extract that DOES name SAP objects may
+        still have been filtered by object name, and nothing here can settle it, so
+        the findings that rest on absence carry the assumption in their own text
+        rather than this method returning a verdict it has not measured.
+
+        Returning True SUPPRESSES evidence, so the rule is deliberately the strict
+        one: a single SAP-delivered name anywhere in the extract is enough to stop
+        this claiming a filter and silencing a real defect.
+        """
+        return bool(index) and not any(_is_sap_standard_name(t) for t in index)
+
+    def _required_objects(self) -> List[str]:
+        """Every object the note requires to sit behind an authorization group.
+
+        PASSWORD_HASH_TABLES is empty when the note extract has lost its member list
+        (see the module docstring), and the list shrinks accordingly rather than the
+        gap being filled with a guess.
+        """
+        return list(PASSWORD_HASH_TABLES) + [PSE_TABLE]
+
+    @staticmethod
+    def _completeness_note(absence_is_evidence: bool) -> str:
+        """What was assumed about the extract, in one line, for `details`."""
+        return ("read as complete — the rows carry no proof it was filtered"
+                if absence_is_evidence else
+                "namespace-filtered — objects it does not list are not judged here; "
+                "see AUTH-ECS-000")
+
+    #: Appended to a finding whose verdict rests on a table being ABSENT from the
+    #: extract. The reading is the note's own and it is the right one for a complete
+    #: extract, but "complete" is an assumption this scan cannot verify, and a
+    #: reviewer holding a filtered extract has to be told that by the finding itself
+    #: rather than by reading this module.
+    _ABSENCE_CAVEAT = (
+        " This verdict counts {0} object(s) that the extract does not list at all. "
+        "In a COMPLETE table-to-authorization-group extract an absent row means no "
+        "group is assigned, which is the reading applied here — but nothing in the "
+        "extract proves it was taken without a namespace or object filter, and a "
+        "filtered one would over-report exactly these objects. They are named "
+        "separately under 'not_in_extract' in this finding's details; confirm the "
+        "export was unfiltered before acting on them."
+    )
+
     # -------------------------------------------------------------- the checks
     def check_password_hash_tables_protected(self):
         """Password-hash tables behind authorization group SPWD.
@@ -384,12 +479,22 @@ class EcsConfigAuditor(BaseAuditor):
         if index is None:
             return
 
+        # An extract that PROVES it was filtered cannot support the note's reading of
+        # absence, so only the rows it actually carries are judged and the objects it
+        # never mentions become AUTH-ECS-000's business. Written per table rather than
+        # as an early return because the two are only equivalent today: every object
+        # the note names is an SAP-standard name, so a provably-filtered extract
+        # cannot currently carry one. A future detector that recognises another filter
+        # shape must still report the mis-assignments it CAN see.
+        absence_is_evidence = not self._extract_is_namespace_filtered(index)
+
         wrong: List[Tuple[str, str]] = []
         blank: List[str] = []
         absent: List[str] = []
         for table in PASSWORD_HASH_TABLES:
             if table not in index:
-                absent.append(table)
+                if absence_is_evidence:
+                    absent.append(table)
                 continue
             group = index[table]
             if group == PASSWORD_HASH_AUTH_GROUP:
@@ -423,7 +528,8 @@ class EcsConfigAuditor(BaseAuditor):
                 "audit log to review. The ECS hardening baseline requires all {1} "
                 "objects to sit behind {2}."
             ).format(len(offenders), len(PASSWORD_HASH_TABLES),
-                     PASSWORD_HASH_AUTH_GROUP, ", ".join(offenders)),
+                     PASSWORD_HASH_AUTH_GROUP, ", ".join(offenders))
+            + (self._ABSENCE_CAVEAT.format(len(absent)) if absent else ""),
             affected_items=items,
             # One defect with one fix: the hashes are not behind SPWD. Assigning
             # the group to one of the six must shrink the member list, not retire
@@ -449,6 +555,7 @@ class EcsConfigAuditor(BaseAuditor):
                 # are different evidence, and a filtered extract shows up here.
                 "not_in_extract": absent,
                 "extract_rows": len(self._rows(TABLE_AUTH_GROUPS)),
+                "extract_completeness": self._completeness_note(absence_is_evidence),
             },
         )
 
@@ -469,7 +576,16 @@ class EcsConfigAuditor(BaseAuditor):
         if group == PSE_AUTH_GROUP:
             return
 
-        if PSE_TABLE not in index:
+        absent = PSE_TABLE not in index
+        absence_is_evidence = not self._extract_is_namespace_filtered(index)
+        # Same rule as the SPWD check: an extract that proves it was filtered says
+        # nothing about a table it does not list, and reporting the system's key
+        # material as exposed on that basis would be a finding built out of absence.
+        # AUTH-ECS-000 discloses the gap instead.
+        if absent and not absence_is_evidence:
+            return
+
+        if absent:
             observed = "not listed in the table authorization group extract"
         elif not group:
             observed = "no authorization group assigned"
@@ -493,7 +609,8 @@ class EcsConfigAuditor(BaseAuditor):
                 "them. Extracted keys let an attacker impersonate the system to its "
                 "peers and mint logon tickets, and no certificate on the system "
                 "would need to change for that to keep working."
-            ).format(PSE_TABLE, observed, PSE_AUTH_GROUP),
+            ).format(PSE_TABLE, observed, PSE_AUTH_GROUP)
+            + (self._ABSENCE_CAVEAT.format(1) if absent else ""),
             affected_items=["{0}: {1}".format(PSE_TABLE, observed)],
             # One named table IS the defect, so it belongs in identity.
             affected_objects=[{"type": "table", "name": PSE_TABLE}],
@@ -511,7 +628,81 @@ class EcsConfigAuditor(BaseAuditor):
                 "observed_group": group if group else None,
                 "in_extract": PSE_TABLE in index,
                 "extract_rows": len(self._rows(TABLE_AUTH_GROUPS)),
+                "extract_completeness": self._completeness_note(absence_is_evidence),
             },
+        )
+
+    def check_table_extract_not_assessable(self):
+        """The objects whose authorization group this extract could not tell us.
+
+        WHY THIS EXISTS
+        Without it, a namespace-filtered extract makes the two checks above drop the
+        objects it never mentioned — correctly, because absence in a filtered extract
+        is not evidence — and the report then says nothing at all about the password
+        hash tables or the database PSE table. A report that says nothing about them
+        reads exactly like a report that found them correctly protected. "Nothing to
+        find" and "could not look" must never look the same, and this is the second
+        of those two, at INFO because it is a gap in the evidence and not a defect in
+        the system.
+
+        IT DOES NOT FIRE WHEN THE EXTRACT IS SIMPLY ABSENT. A customer who never sent
+        this export is not told anything about their authorization groups: the source
+        is reported as missing by the upload coverage manifest, which is where a
+        source nobody supplied belongs. This finding is for the narrower and more
+        misleading case — an extract WAS supplied, and it cannot answer the question
+        it appears to answer.
+        """
+        index = self._table_auth_index()
+        if index is None or not self._extract_is_namespace_filtered(index):
+            return
+        missing = [t for t in self._required_objects() if t not in index]
+        if not missing:
+            # A filtered extract that nonetheless carries every object the note names
+            # answered the question in full. There is no gap to disclose, and an INFO
+            # finding here would be noise on a system we did assess.
+            return
+
+        self.finding(
+            check_id="AUTH-ECS-000",
+            title="Table authorization group assignments could not be assessed from this export",
+            severity=self.SEVERITY_INFO,
+            category="ABAP Authorization & Critical Access",
+            description=(
+                "The table-to-authorization-group extract carries {0} row(s) and "
+                "names no object outside the customer and partner namespaces, so it "
+                "cannot be a complete picture of this system's assignments — it was "
+                "taken with a filter. {1} of the objects SAP Note 3250501 requires to "
+                "sit behind an authorization group are absent from it: {2}. Absence "
+                "from a COMPLETE extract would mean no group is assigned, which is "
+                "the defect AUTH-ECS-001 and CRYPTO-ECS-001 report; absence from a "
+                "filtered one means only that the filter excluded them, so no verdict "
+                "is claimed about these objects. This is a gap in the evidence, not a "
+                "verdict on the system: the assignments may be correct, incorrect or "
+                "missing and this scan cannot tell."
+            ).format(len(self._rows(TABLE_AUTH_GROUPS)), len(missing),
+                     ", ".join(missing)),
+            remediation=(
+                "Re-export the table authorization group assignments without a "
+                "namespace or object filter — one row per table and view that carries "
+                "an authorization group, from TDDAT — and re-run the scan. The "
+                "extract is read as complete, so a filtered one cannot be interpreted: "
+                "an object missing from it is indistinguishable from an object with no "
+                "group assigned."
+            ),
+            references=[_ECS_NOTE],
+            details={
+                "objects_not_assessable": missing,
+                "extract_rows": len(self._rows(TABLE_AUTH_GROUPS)),
+                "tables_in_extract": sorted(index)[:50],
+                "checks_affected": ["AUTH-ECS-001", "CRYPTO-ECS-001"],
+                "why": ("no SAP-delivered object appears in the extract, so it cannot "
+                        "be complete"),
+            },
+            # A coverage gap names no defective object. The objects listed above are
+            # the ones we could NOT judge, and putting them in identity would add
+            # nodes to the attack-path graph that no evidence supports — the same
+            # reasoning as modules/snc_posture.py:check_family_not_assessable.
+            scope="aggregate",
         )
 
     def check_obsolete_clients_deleted(self):

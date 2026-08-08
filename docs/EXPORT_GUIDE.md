@@ -146,6 +146,53 @@ Required: REVIEW_ID, REVIEW_NAME, DUE_DATE, STATUS, COMPLETION_PCT, REVIEWER
 btp list security/trust --subaccount <id> --format json > btp_trust.json
 ```
 
+**Send the WHOLE object — do not trim it to the fields you think are interesting.**
+Two checks depend on attributes that may or may not be present depending on your
+platform version: which users a trust admits, and when its signing certificate
+expires. If neither is in your export, the scanner tells you so explicitly
+(`IAM-FEDCOV-002` / `IAM-FEDCOV-003`) rather than reporting a clean result it did
+not earn — but those two controls then have to be verified by hand with whoever
+owns the identity provider. A trimmed export turns a checkable control into a
+manual one.
+
+### Table Authorization Groups (`table_auth_groups.csv`)
+**Source:** SE54 → Assign Authorization Group, or a download of table `TDDAT`
+
+Also accepted: `table_authorization_groups.csv`, `se54.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `TABNAME` · `TABLE` · `TABLE_NAME` · `OBJECT` · `OBJECT_NAME` · `VIEWNAME` | Table or view |
+| `CCLASS` · `AUTH_GROUP` · `AUTHGROUP` · `AUTHORIZATION_GROUP` · `AUTH_GRP` · `DICBERCLS` · `BRGRU` | Authorization group |
+
+**This extract must be UNFILTERED.** A table that is absent is read as *"no
+authorization group assigned"*, because that is what absence means in a complete
+extract — and that is the entire finding for the password-hash tables SAP Note
+3250501 requires behind group `SPWD`. If you can only supply a namespace-filtered
+extract (Z* only, say), the scanner detects the provable cases and downgrades them
+to a coverage gap rather than an accusation, but it cannot detect every filtering,
+so send everything if you can.
+
+### Backup Catalog (`backup_catalog.csv`)
+**Source:** DB13 / DBACOCKPIT backup history, or your backup tool's own export
+
+Also accepted: `backups.csv`, `db13.csv`, `backup_history.csv`
+
+Feeds the resilience checks (`RES-BCK-*`). Include the run timestamp, the outcome,
+and the backup type where your tool records it — the checks distinguish "no full
+data backup exists" from "backups exist that I could not classify by type", and the
+second is a coverage statement rather than a finding.
+
+### Recovery Tests (`recovery_tests.csv`)
+**Source:** whatever records your DR and restore exercises — a register, a ticket
+export, a spreadsheet
+
+Also accepted: `dr_tests.csv`, `restore_tests.csv`
+
+Feeds `RES-DR-*`. **What this can and cannot tell you:** the scanner reads exported
+configuration, so it verifies that recovery is *evidenced and scheduled*. It never
+verifies that a restore works. No offline tool can.
+
 ### BTP Users (`btp_users.json`)
 **Source:** BTP Cockpit → Subaccount → Users, or BTP CLI
 

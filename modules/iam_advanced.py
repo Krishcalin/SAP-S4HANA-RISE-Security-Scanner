@@ -14,6 +14,7 @@ Extended IAM checks beyond the base user/auth module:
   - Reference user misuse
   - Privilege escalation paths (indirect role chains)
   - Identity federation hygiene and SCIM/provisioning de-provisioning (IAM-FED-*)
+  - Disclosure of the federation checks an export could not support (IAM-FEDCOV-*)
 
 Data sources:
   - sod_ruleset.json     → SoD conflict rule definitions
@@ -48,6 +49,32 @@ The consequence is deliberate and is the conservative direction: a check whose f
 is absent stays SILENT. It never reads "the export did not say" as "the trust is
 unrestricted" or "the certificate has expired", because absence of evidence turning
 into a finding is how a federation report becomes something nobody trusts.
+
+SILENT ON THE FINDING, NOT SILENT ABOUT THE GAP
+-----------------------------------------------
+Silence on the FINDING is right; silence altogether is not, and that was the defect.
+A report carrying no federation-admission and no certificate-expiry finding reads
+exactly like a report that examined both and found them healthy — so two checks that
+cannot fire on any export this product can currently load were being presented as
+two clean results. Nothing to find and could not look must never look the same.
+
+So when trust rows ARE present and none of them answers the attribute a check needs,
+that check says so: `IAM-FEDCOV-002` and `IAM-FEDCOV-003`, INFO, naming the
+attributes it looked for, what it therefore could not conclude, and how to produce an
+export that carries them. This is the pattern
+`snc_posture.check_family_not_assessable` establishes, and `server/enrich.py` carries
+the same idea as its `not_assessable` remediation-owner state.
+
+Two boundaries on that:
+
+  * When `btp_trust` is absent ALTOGETHER these stay silent. A missing export is the
+    coverage manifest's subject (`server/coverage.py`), which reports it once for the
+    whole scan; restating it per check would bury the manifest in duplicates.
+  * The coverage ids sit OUTSIDE the `IAM-FED-*` family on purpose. That prefix means
+    "a defect was found in this customer's federation" and is filtered on as such —
+    by the report, and by this feature's own test suite. "We could not look" is a
+    defect in OUR evidence, not in their landscape, and counting it as a federation
+    finding would inflate exactly the number a reader trusts.
 
 WHAT IS DELIBERATELY NOT REPEATED HERE
 --------------------------------------
@@ -194,6 +221,43 @@ class AdvancedIamAuditor(BaseAuditor):
     #: Values that mean "everyone" where a restriction was expected. An EMPTY value is
     #: included only when the field is PRESENT — see `_logon_restriction`.
     FED_WILDCARDS = {"*", "ANY", "ALL", "ALL_USERS", "*@*", "*.*"}
+
+    #: Where a trust row might state WHICH users of its identity provider may log on.
+    #: Read by `_logon_restriction`, and quoted verbatim by IAM-FEDCOV-002 so that the
+    #: customer is told what we actually looked for rather than a prose paraphrase of
+    #: it that drifts the first time this tuple changes.
+    #:
+    #: UNVERIFIED: every name below. They are plausible/documented shapes; not one has
+    #: been observed in an export this product can load, which is precisely why
+    #: IAM-FEDCOV-002 exists.
+    #:
+    #: REVIEWED 2026-08-08 AND DELIBERATELY NOT WIDENED. No further name could be
+    #: stood behind, and a wrong alias is worse than a short list in both directions at
+    #: once: an attribute that says which email domains are ROUTED to this identity
+    #: provider (home-realm discovery) looks exactly like an admission restriction and
+    #: is not one, so reading it as one would report a properly scoped trust as
+    #: restricted — silencing the check — while a genuinely wide-open trust carrying
+    #: the same attribute would also go unreported. Padding this tuple to look thorough
+    #: would convert a disclosed gap into an undisclosed false negative.
+    FED_RESTRICTION_FIELDS: Tuple[str, ...] = (
+        "userRestriction", "allowedUsers", "allowedUserDomains", "allowedDomains",
+    )
+
+    #: Where a trust row might carry the validity end of the certificate that signs its
+    #: assertions. Read by `_trust_cert_expiry`, quoted by IAM-FEDCOV-003.
+    #:
+    #: UNVERIFIED: every name below, for the same reason as FED_RESTRICTION_FIELDS.
+    #:
+    #: REVIEWED 2026-08-08 AND DELIBERATELY NOT WIDENED. The expiry is a property of
+    #: the certificate rather than of the trust, and the export shapes we have seen
+    #: carry neither the certificate nor any date derived from it — so there is no
+    #: further field name here to be confident about. Reading the validity out of a
+    #: raw base64 X.509 attribute is the only way to answer this without guessing at a
+    #: field name at all, and that is separate work, not an alias.
+    FED_CERT_EXPIRY_FIELDS: Tuple[str, ...] = (
+        "certificateExpiryDate", "certificateValidTo", "signingCertificateExpiry",
+        "certificate_expiry", "certificateExpiry",
+    )
 
     #: Word-level tokens in a communication-arrangement or IAS configuration name that
     #: evidence an identity-PROVISIONING integration rather than a business one.
@@ -1780,38 +1844,62 @@ class AdvancedIamAuditor(BaseAuditor):
         return cls._flag(row.get("createShadowUsers",
                                  row.get("auto_create_shadow_users"))) is True
 
-    @staticmethod
-    def _logon_restriction(row: Dict[str, Any]) -> Tuple[bool, str]:
-        """(field was present, its value) for "which IdP users may log on".
+    @classmethod
+    def _logon_restriction(cls, row: Dict[str, Any]) -> Tuple[str, str]:
+        """(the attribute that answered, its value) for "which IdP users may log on".
 
-        Returns presence separately from value because the two mean different things:
-        an ABSENT field is an export that does not describe the restriction, and an
-        EMPTY one is a trust that admits everybody. Only the second is a finding.
+        The attribute NAME is returned rather than a bare present/absent flag, and ""
+        means no attribute answered at all. Those two states mean different things and
+        drive different outputs: an ABSENT attribute is an export that does not
+        describe the restriction — silence on the finding, IAM-FEDCOV-002 on the gap —
+        while an EMPTY one is a trust that admits everybody, which is IAM-FED-002.
+        Returning the name also lets the coverage finding say what it read instead of
+        what it hoped to read.
+
+        A POPULATED attribute wins over a merely present one. Where an export carries
+        two of these names — one empty, one naming a group — the empty one is the less
+        informative reading and taking it would report a properly scoped trust as wide
+        open. Under-claiming is the correct direction when the field names themselves
+        are unverified.
         """
-        # UNVERIFIED: these four are documented/plausible names for the user-admission
-        # restriction on a BTP trust configuration; none has been observed in an export
-        # in this repository, so this check is dormant until one carries it.
-        for field in ("userRestriction", "allowedUsers",
-                      "allowedUserDomains", "allowedDomains"):
-            if field in row:
-                value = row[field]
-                if isinstance(value, (list, tuple, set)):
-                    return True, ", ".join(str(v) for v in value)
-                return True, "" if value is None else str(value)
-        return False, ""
+        answered = ""
+        for field in cls.FED_RESTRICTION_FIELDS:
+            if field not in row:
+                continue
+            answered = answered or field
+            value = row[field]
+            if isinstance(value, (list, tuple, set)):
+                if value:
+                    return field, ", ".join(str(v) for v in value)
+            elif value not in (None, ""):
+                return field, str(value)
+        # Present but saying nothing: reported against the FIRST name that appeared, so
+        # the finding quotes the attribute the export actually used.
+        return answered, ""
 
-    @staticmethod
-    def _trust_cert_expiry(row: Dict[str, Any]) -> str:
-        """The raw certificate-expiry string a trust row carries, or ""."""
-        # UNVERIFIED: documented/plausible names for the signing-certificate validity
-        # end on a BTP trust configuration. Not observed in any export here.
-        for field in ("certificateExpiryDate", "certificateValidTo",
-                      "signingCertificateExpiry", "certificate_expiry",
-                      "certificateExpiry"):
+    @classmethod
+    def _trust_cert_expiry(cls, row: Dict[str, Any]) -> Tuple[str, str]:
+        """(the attribute that answered, its raw value), or ("", "").
+
+        Same shape and the same populated-wins rule as `_logon_restriction`, and here
+        that rule is load-bearing rather than merely cautious: a row carrying
+        ``certificateExpiryDate: ""`` alongside a populated ``certificateValidTo`` does
+        tell us when the certificate lapses, and preferring the empty one would make
+        IAM-FED-003 go quiet about a real expiry.
+
+        A name that appeared but answered nothing still comes back, because "the export
+        declared this attribute and left it blank" is a coverage gap and not a clean
+        result.
+        """
+        answered = ""
+        for field in cls.FED_CERT_EXPIRY_FIELDS:
+            if field not in row:
+                continue
+            answered = answered or field
             value = row.get(field)
             if value not in (None, ""):
-                return str(value).strip()
-        return ""
+                return field, str(value).strip()
+        return answered, ""
 
     @staticmethod
     def _tokens(*texts: Any) -> Set[str]:
@@ -1989,19 +2077,49 @@ class AdvancedIamAuditor(BaseAuditor):
         auto-creation removes even the step where somebody notices a new account.
 
         Silent unless the export explicitly carries the restriction field and it is
-        empty or a wildcard: see the module docstring on absence-of-evidence.
+        empty or a wildcard: see the module docstring on absence-of-evidence. Silent on
+        the FINDING, that is — the trusts this could not read are collected as it goes
+        and disclosed by IAM-FEDCOV-002 below.
         """
+        # Gathered from the SAME loop that performs the check, deliberately: a coverage
+        # statement assembled separately would drift from what the check actually
+        # examined, and a coverage statement that overstates what was checked is worse
+        # than none at all.
+        #
+        # Tallied per DISTINCT NAMED trust rather than per row, for two reasons that are
+        # both "do not overstate coverage":
+        #   * Exports get concatenated and hand-merged, and a trust that appears twice is
+        #     still ONE trust — IAM-FED-001 de-duplicates for exactly this reason. A
+        #     coverage finding saying "2 trust configurations" about one of them sends
+        #     the owner looking for a second trust that does not exist.
+        #   * A row this scan cannot NAME is neither assessed nor reportable as
+        #     unassessed, so it must not be counted as either. Counting it only in the
+        #     denominator made the finding claim it "did carry the attribute and was
+        #     assessed", which is the precise sentence this check exists to avoid.
+        assessed: List[str] = []
+        unassessed: List[str] = []
+        seen: Set[str] = set()
+
         for row in self._trust_rows(self.data.get("btp_trust")):
             if not self._trust_admits_users(row):
+                # A trust that admits nobody needs no restriction, so this is not a gap
+                # in the evidence — there is genuinely nothing to assess.
                 continue
-            present, value = self._logon_restriction(row)
-            if not present:
+            field, value = self._logon_restriction(row)
+            key = self._trust_key(row)
+            # A row naming no trust is not listed: we cannot report "this trust was
+            # not assessed" about a trust we cannot name, and inventing a label
+            # would put a fictional trust in front of the reader. IAM-FED-001 drops
+            # nameless rows for the same reason.
+            if key and key.upper() not in seen:
+                seen.add(key.upper())
+                (assessed if field else unassessed).append(key)
+            if not field:
                 continue
             cleaned = value.strip()
             if cleaned and cleaned.upper() not in self.FED_WILDCARDS:
                 continue
 
-            key = self._trust_key(row)
             if not key:
                 continue
             idp = row.get("identityProvider", row.get("idp_name", key))
@@ -2046,6 +2164,104 @@ class AdvancedIamAuditor(BaseAuditor):
                 ],
             )
 
+        self.check_trust_restriction_not_assessable(
+            unassessed, len(assessed) + len(unassessed))
+
+    def check_trust_restriction_not_assessable(self, unassessed: List[str],
+                                               considered: int):
+        """IAM-FEDCOV-002 — say that IAM-FED-002 could not run, and why.
+
+        The defect this closes was not a wrong answer, it was no answer presented as a
+        good one: IAM-FED-002 keys on attributes nobody has confirmed appear in a real
+        export, so on every export the product can currently load it contributed
+        nothing and said nothing, and a reader saw a federation section with no
+        admission finding in it.
+
+        Reported at INFO because it is a gap in OUR evidence and not a defect in the
+        customer's landscape, and reported at all because the alternative is the most
+        damaging thing this product can do.
+
+        Called by `check_federation_trust_restriction` and NOT from `run_all_checks` —
+        it reports the tally that check kept while it was looking. Wiring it into the
+        runner as well would emit it twice, on a finding whose whole purpose is to be
+        believed.
+        """
+        if not unassessed:
+            return
+        names = ", ".join(self.FED_RESTRICTION_FIELDS)
+        # Written out singular/plural rather than with "(s)": this finding's whole job
+        # is to be read and believed, and it is usually about one or two trusts.
+        one = len(unassessed) == 1
+        subject = ("One trust configuration" if one
+                   else f"{len(unassessed)} trust configurations")
+        clause = ("carries no attribute stating which users of its identity provider "
+                  "it admits" if one else
+                  "carry no attribute stating which users of their identity provider "
+                  "they admit")
+        self.finding(
+            check_id="IAM-FEDCOV-002",
+            title="Trust user admission could not be assessed from this export",
+            severity=self.SEVERITY_INFO,
+            category="Identity & Access Management",
+            description=(
+                f"{subject} in this subaccount can authenticate users interactively and "
+                f"{clause} — under any of the attribute names this check reads "
+                f"({names}). The question IAM-FED-002 exists to answer was therefore "
+                f"not answered for {'it' if one else 'them'}. "
+                "This is a gap in the evidence and not a verdict: a trust in this state "
+                "may be scoped to a single named group, or may admit every contractor, "
+                "B2B guest and service identity the provider will authenticate, and "
+                "this scan cannot tell which. It is stated explicitly because the "
+                "alternative — a federation section with no admission finding in it — "
+                "reads as 'admission was checked and is fine', which is the one thing "
+                "it does not mean."
+                + (f" {considered - len(unassessed)} other trust configuration(s) in "
+                   "this export did carry the attribute and were assessed."
+                   if considered > len(unassessed) else "")
+            ),
+            affected_items=[f"Trust: {k} — no user-admission attribute in the export"
+                            for k in unassessed],
+            # No affected_objects, for the same reason the SNC family's own coverage
+            # finding names none (`snc_posture.check_family_not_assessable`): the
+            # defect is in the export, not in the trust. The trusts are named in
+            # the display list so the owner knows which ones to go and check, but
+            # hanging an "unassessed" node off them in the attack-path graph would
+            # assert something about the trust that this finding explicitly declines
+            # to assert.
+            scope="aggregate",
+            remediation=(
+                "Two steps, and the second one matters whether or not the first works. "
+                "First, re-export the trust configurations as the full objects the "
+                "platform returns rather than a summarised subset (docs/EXPORT_GUIDE.md, "
+                "btp_trust) and re-run the scan; the attribute names this check reads "
+                "are listed in this finding's details, so if your export names the "
+                "restriction differently that difference is a gap in this scanner and "
+                "can be reported as one. Second — because no export shape we have seen "
+                "carries it — verify the control directly with the identity-provider "
+                "owner: confirm that the application or assertion issued to this "
+                "subaccount is scoped to a named group or directory branch rather than "
+                "to every user the provider will authenticate; in IAS, that is the "
+                "conditional authentication rules on the corresponding application. "
+                "Record that verification with this scan so the gap is closed by "
+                "evidence rather than by silence."
+            ),
+            references=[
+                "SAP BTP Security Guide — Trust Configuration",
+                "SAP Security Baseline — Identity Federation",
+            ],
+            details={
+                "unassessable_check": "IAM-FED-002",
+                "attributes_looked_for": list(self.FED_RESTRICTION_FIELDS),
+                "trusts_not_assessed": list(unassessed),
+                # Distinct NAMED trusts that admit users — the population this check
+                # could actually reach a per-trust conclusion about. Rows the scan
+                # could not name are in neither this count nor `trusts_not_assessed`,
+                # because a coverage figure that quietly absorbs them reports them as
+                # assessed.
+                "trusts_admitting_users": considered,
+            },
+        )
+
     def check_federation_certificate_expiry(self):
         """IAM-FED-003 — the certificate that holds the federation up.
 
@@ -2057,7 +2273,8 @@ class AdvancedIamAuditor(BaseAuditor):
         is why this belongs in an identity report and not only in a monitoring alert.
 
         Silent unless the export carries an expiry date, and silent on a date it cannot
-        parse — guessing a date would be inventing the evidence.
+        parse — guessing a date would be inventing the evidence. Both silences are
+        disclosed by IAM-FEDCOV-003 rather than left to look like a clean result.
         """
         rows = self._trust_rows(self.data.get("btp_trust"))
         if not rows:
@@ -2082,18 +2299,35 @@ class AdvancedIamAuditor(BaseAuditor):
         # precision we are entitled to claim.
         today = datetime.now().date()
 
+        # Two distinct ways to be unassessable, kept apart because they take different
+        # fixes: the export never mentioned an expiry, or it mentioned one and the value
+        # is not a date. Both are "we could not look", and both were silent before.
+        no_attribute: List[str] = []
+        unreadable: List[str] = []
+        seen: Set[str] = set()
+
         for row in rows:
-            raw = self._trust_cert_expiry(row)
-            if not raw:
-                continue
+            field, raw = self._trust_cert_expiry(row)
+            key = self._trust_key(row)
             # ISO timestamps carry a time part the SAP date formats do not; drop it
             # rather than fail to parse and stay silent about a real expiry.
-            parsed = self._parse_date(raw.split("T")[0].split(" ")[0])
-            if not parsed:
-                continue
+            parsed = self._parse_date(raw.split("T")[0].split(" ")[0]) if raw else None
 
-            key = self._trust_key(row)
-            if not key:
+            # Every row the check can NAME, exactly as the check below reads it — the
+            # coverage statement must describe the same population, or it would claim
+            # assessment of a trust the check would have reported on. Counted once per
+            # distinct trust: a concatenated export listing one trust twice is still one
+            # trust, and saying "2 trust configurations" about it sends the owner hunting
+            # for a second one. A row naming no trust is not reported as an unassessed
+            # trust and is not counted as an assessed one either — see IAM-FEDCOV-002.
+            if key and key.upper() not in seen:
+                seen.add(key.upper())
+                if not field:
+                    no_attribute.append(key)
+                elif not parsed:
+                    unreadable.append(f"{key} — {field} = {raw!r}")
+
+            if not key or not field or not parsed:
                 continue
 
             days = (parsed.date() - today).days
@@ -2150,6 +2384,101 @@ class AdvancedIamAuditor(BaseAuditor):
                 ],
                 details={"days_to_expiry": days, "valid_to": raw},
             )
+
+        self.check_certificate_expiry_not_assessable(no_attribute, unreadable,
+                                                     len(seen))
+
+    def check_certificate_expiry_not_assessable(self, no_attribute: List[str],
+                                                unreadable: List[str],
+                                                considered: int):
+        """IAM-FEDCOV-003 — say that IAM-FED-003 could not run, and why.
+
+        The same defect as IAM-FEDCOV-002 and with a sharper edge, because this check
+        is the one a reader is most likely to take on trust: certificate expiry is the
+        kind of thing people expect a scanner to watch, so a report that says nothing
+        about it is read as "nothing is expiring". On every export this product can
+        currently load, it said nothing because it could see nothing.
+
+        The unreadable-value half is worth as much as the missing-attribute half. An
+        export carrying ``certificateExpiryDate: "n/a"`` is a customer who tried to
+        answer; declining to guess a date from it is right, and declining to mention
+        that we declined is not.
+
+        Called by `check_federation_certificate_expiry`, not from `run_all_checks`;
+        see `check_trust_restriction_not_assessable`.
+        """
+        if not (no_attribute or unreadable):
+            return
+
+        clauses = []
+        if no_attribute:
+            clauses.append(
+                f"{len(no_attribute)} carr{'ies' if len(no_attribute) == 1 else 'y'} no "
+                "certificate-expiry attribute at all, under any of the attribute names "
+                f"this check reads ({', '.join(self.FED_CERT_EXPIRY_FIELDS)})")
+        if unreadable:
+            clauses.append(
+                f"{len(unreadable)} carr{'ies' if len(unreadable) == 1 else 'y'} "
+                f"{'a value that is not a date' if len(unreadable) == 1 else 'values that are not dates'} "
+                "this check can read, and a date will not be guessed from "
+                f"{'it' if len(unreadable) == 1 else 'them'}")
+
+        self.finding(
+            check_id="IAM-FEDCOV-003",
+            title="Identity federation certificate expiry could not be assessed "
+                  "from this export",
+            severity=self.SEVERITY_INFO,
+            category="Identity & Access Management",
+            description=(
+                f"Of the {considered} trust configuration"
+                f"{'' if considered == 1 else 's'} this scan could name in this "
+                "export, "
+                + " and ".join(clauses) + ". The expiry of the certificate that signs "
+                "each federation listed below is therefore unknown to this scan. That "
+                "is a gap in the evidence and not a verdict — the certificates may have "
+                "years left, or may already have lapsed. It is stated because a certificate "
+                "lapse takes single sign-on down for every user of the trust at once, "
+                "the standing workaround is to re-enable the default or local identity "
+                "provider under outage pressure, and a report that is silent about "
+                "expiry is read as a report that checked it."
+            ),
+            affected_items=(
+                [f"Trust: {k} — no certificate-expiry attribute in the export"
+                 for k in no_attribute]
+                + [f"Trust: {entry} — not a date this scan can read"
+                   for entry in unreadable]
+            ),
+            # No affected_objects: the gap is in the export, not in the trust. See
+            # `check_trust_restriction_not_assessable` for the reasoning.
+            scope="aggregate",
+            remediation=(
+                "Re-export the trust configurations as the full objects the platform "
+                "returns rather than a summarised subset (docs/EXPORT_GUIDE.md, "
+                "btp_trust) and re-run the scan; this finding's details list the "
+                "attribute names the check reads and the values it could not parse, so "
+                "an export that names the expiry differently can be reported as a gap "
+                "in this scanner. Meanwhile, do not wait for the scan to tell you: ask "
+                "the identity-provider owner for the validity end of each trust's "
+                "signing certificate and put those dates in the change calendar. "
+                "Renewal needs the identity-provider owner and the subaccount owner "
+                "together, so it is scheduled work — a certificate discovered on the day "
+                "it lapses cannot be renewed on that day."
+            ),
+            references=[
+                "SAP BTP Security Guide — Trust Configuration",
+                "SAP Security Baseline — Identity Federation",
+            ],
+            details={
+                "unassessable_check": "IAM-FED-003",
+                "attributes_looked_for": list(self.FED_CERT_EXPIRY_FIELDS),
+                "trusts_without_the_attribute": list(no_attribute),
+                "trusts_with_an_unreadable_value": list(unreadable),
+                # Distinct NAMED trusts examined, not the raw row count: duplicated rows
+                # and rows this scan cannot name are excluded, so this number never
+                # implies coverage of a trust nothing was concluded about.
+                "trusts_in_export": considered,
+            },
+        )
 
     def check_scim_deprovisioning(self):
         """IAM-FED-004 — identities appear automatically; does anything remove them?

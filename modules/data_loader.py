@@ -32,6 +32,22 @@ FILE_MAP always wins, so nothing about the existing convention changes.
 See `docs/EXPORT_GUIDE.md` for how a customer obtains the export, including the
 caveat about whether Cloud ALM's API returns raw store values at all.
 
+TABLE -> AUTHORIZATION GROUP EXTRACT
+------------------------------------
+`table_auth_groups` (TDDAT-shaped: one row per table or view that carries an
+authorization group) is the one source here that is read as COMPLETE. A table
+ABSENT from it is read as "no authorization group assigned", because that is what
+absence means in an unfiltered extract — and it is the defect
+`modules/ecs_config_items.py` exists to catch, so reading it the other way would
+let that defect pass silently on every system.
+
+An extract restricted to a namespace or to an object list therefore over-reports,
+and it must be taken without a filter. Where the rows themselves prove a filter was
+applied the module declines to judge the objects the extract never mentions and
+discloses them as a coverage gap instead; where they cannot prove it, every finding
+that rests on absence says so in its own text. Neither the loader nor the module can
+turn a filtered extract into a complete one.
+
 BTP ADMINISTRATIVE EXPORTS
 --------------------------
 Several BTP logical sources accept EITHER a hand-made file in our own shape or the
@@ -189,6 +205,39 @@ class DataLoader:
         "sap_security_notes":      ["sap_security_notes.json", "hotnews_catalog.json"],
         # ABAP Authorization & Critical Access data sources
         "role_auth_values":        ["role_auth_values.csv", "role_authorizations.csv", "agr1251_values.csv"],
+        # Table/view -> authorization group, TDDAT-shaped. The OBJECT side of
+        # S_TABU_DIS, read by modules/ecs_config_items.py.
+        #
+        # THE COLUMN VOCABULARY LIVES IN THAT MODULE AND NOWHERE ELSE. Its docstring
+        # lists the accepted headers and `_cell` matches them case-insensitively
+        # against whatever `_load_csv` produced. A second list here would be a second
+        # vocabulary, and a header only one side knows reads as an EMPTY CELL — which
+        # turns a correctly grouped table into "no authorization group assigned" and
+        # reports a compliant system as exposing every password hash it holds.
+        #
+        # THE EXTRACT MUST BE UNFILTERED — see the section in this module's docstring.
+        #
+        # `tddat.csv` is deliberately NOT an alias, even though TDDAT is the table the
+        # extract comes from and the convention everywhere else in this map would ask
+        # for it. TDDAT is also a Cloud ALM CSA store name, and `_resolve` withholds a
+        # differently-cased match only for stores we TRANSLATE — TDDAT is in
+        # cloudalm_import.UNMAPPED_STORES, so the alias would let this pass eat a CSA
+        # `TDDAT.csv` raw. That would drop the "recognised, not translated" line which
+        # is currently the only thing said about that store, and claim a store whose
+        # completeness nobody has established — for a source where an object the
+        # extract omits is reported as unprotected. Mapping that store belongs in
+        # modules/cloudalm_import.py, which owns the translation and the reason.
+        "table_auth_groups":       ["table_auth_groups.csv",
+                                    "table_authorization_groups.csv", "se54.csv"],
+        # Resilience & recovery evidence (modules/resilience_posture.py). Without
+        # these keys the module loads nothing and EIGHT of its nine checks are
+        # unreachable — it ships dead, exactly as the two ECS table checks did
+        # before `table_auth_groups` above was added. A module whose input has no
+        # loader key is not "conservative", it is absent.
+        "backup_catalog":          ["backup_catalog.csv", "backups.csv",
+                                    "db13.csv", "backup_history.csv"],
+        "recovery_tests":          ["recovery_tests.csv", "dr_tests.csv",
+                                    "restore_tests.csv"],
         # System Trust & Standard Users data sources
         "rfc_trust":               ["rfc_trust.csv", "rfcsysacl.csv", "trusted_systems.csv"],
         "standard_users":          ["standard_users.csv", "rsusr003.csv", "default_users.csv"],
@@ -374,9 +423,24 @@ class DataLoader:
 
                 reader = csv.DictReader(f, delimiter=delimiter)
                 for row in reader:
-                    # Normalize keys: strip whitespace, uppercase
+                    # Normalize keys: strip whitespace, uppercase.
+                    #
+                    # A SHORT ROW IS A MISSING CELL, NOT A BROKEN FILE. DictReader
+                    # fills an absent trailing field with None, `None.strip()` raised
+                    # out of this loop, and the `except` below then returned the rows
+                    # read SO FAR — a silently TRUNCATED extract with nothing but a
+                    # WARN line on stdout to say so.
+                    #
+                    # Every source paid for that, but `table_auth_groups` pays worst:
+                    # it is the one source read as COMPLETE, so every row lost after
+                    # the truncation point reads as "this table has no authorization
+                    # group" and a correctly configured system is told at HIGH that
+                    # every password hash it holds is readable. One trailing empty
+                    # field dropped by a spreadsheet round-trip was enough.
+                    #
+                    # An absent cell is an empty cell — that is what the file says.
                     normalized = {
-                        k.strip().upper().replace(" ", "_"): v.strip()
+                        k.strip().upper().replace(" ", "_"): (v or "").strip()
                         for k, v in row.items() if k
                     }
                     rows.append(normalized)

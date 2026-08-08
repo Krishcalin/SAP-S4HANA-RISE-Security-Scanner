@@ -27,6 +27,7 @@ Data sources:
 from typing import Dict, List, Any
 from datetime import datetime
 from modules.base_auditor import BaseAuditor
+from modules import snc_posture
 
 
 class CryptoPostureAuditor(BaseAuditor):
@@ -363,14 +364,43 @@ class CryptoPostureAuditor(BaseAuditor):
             )
 
     def check_snc_configuration(self):
-        """Audit SNC (Secure Network Communications) configuration."""
+        """Audit SNC (Secure Network Communications) configuration.
+
+        WE ARE NOT THE OWNER OF THIS FAMILY.
+        `modules/snc_posture.py` reads the same profile parameters as ONE family
+        against SAP Note 3250501's ECS baseline, and its reading is strictly deeper
+        than the two comparisons below: it takes the mandated value from the note
+        rather than from the parameter's name, it collapses the whole family into one
+        finding when the master switch is off instead of raising one finding per
+        dependent setting, and it keeps "off" apart from "never exported". When that
+        module is in the run, these two checks are the same defect said a second
+        time — measured, on one export with ``snc/enable = 0``.
+
+        So we stand down to it, on the evidence that it is RUNNING and can answer.
+        Where it is not in the run, or has no baseline extract to judge against,
+        these checks are the only SNC reading there is and they fire as they always
+        did: dropping the coverage would be a worse defect than the duplicate.
+
+        Nothing is lost by standing down on THESE two parameters in particular. The
+        note mandates ``snc/enable`` at the value this check wants and
+        ``snc/data_protection/min`` above the level this check objects to, so every
+        value that would fire here is also a deviation there.
+        `tests/test_snc_overlap.py` asserts that from the extract, so a revision that
+        changed it would fail rather than quietly widen the deferral.
+        """
+        owner = snc_posture.coverage_in_this_run(self)
         snc = self.data.get("snc_config")
         if not snc:
             # Check security_params for SNC parameters
             params = self.data.get("security_params") or []
             snc_params = {}
             for row in params:
-                name = row.get("NAME", row.get("PARAMETER", "")).lower()
+                # A hand-edited CSV is a normal input here, not an exceptional one:
+                # a row that is not a dict, or that carries no name, used to take
+                # the whole scan down with an AttributeError.
+                if not isinstance(row, dict):
+                    continue
+                name = str(row.get("NAME", row.get("PARAMETER", "")) or "").lower()
                 value = row.get("VALUE", row.get("PARAM_VALUE", ""))
                 if "snc" in name:
                     snc_params[name] = value
@@ -379,8 +409,49 @@ class CryptoPostureAuditor(BaseAuditor):
                 return
 
             # Check key SNC parameters
-            snc_enabled = snc_params.get("snc/enable", "0")
-            if str(snc_enabled) not in ("1", "TRUE", "YES"):
+            exported_enable = snc_params.get("snc/enable")
+            # ABSENT IS NOT OFF. This used to default to "0", so an export that
+            # simply never carried snc/enable was reported as HIGH "SNC is disabled"
+            # — absence of evidence turned into a finding, which is the one thing
+            # this codebase refuses to do. The parameter being missing is a coverage
+            # question (server/coverage.py), not a cryptography one.
+            snc_is_off = (exported_enable is not None
+                          and str(exported_enable) not in ("1", "TRUE", "YES"))
+            # Only ever read under `snc_is_off`, which now requires the parameter to
+            # have been exported — so this can no longer render an invented default
+            # back to the customer as though the system had reported it.
+            snc_enabled = exported_enable
+            qop = snc_params.get("snc/data_protection/min", "")
+            qop_is_auth_only = bool(qop) and str(qop) in ("1", "AUTHENTICATION_ONLY")
+
+            if owner is not None:
+                # Both readings come from `security_params`, which is the export the
+                # owner models in full — including the case this branch gets wrong,
+                # where an ABSENT snc/enable defaults to "0" above and is reported as
+                # "SNC is disabled" on evidence the export never contained.
+                #
+                # The note is announced only when something was actually withheld.
+                # Announcing a stand-down on a system where these checks had nothing
+                # to say would put an INFO note in every clean report, and unlike the
+                # IAM/ARA deferral no analysis goes unperformed here: the owner
+                # examines the very same parameters.
+                withheld = []
+                if snc_is_off and self._owner_speaks_to(owner, "snc/enable"):
+                    # The note must not repeat this branch's invented default.
+                    # Saying "snc/enable = 0" about an export that never carried
+                    # the parameter puts a reading nobody took into the report.
+                    withheld.append(
+                        f"snc/enable = {snc_enabled}" if exported_enable is not None
+                        else "snc/enable is not in this export, and would have "
+                             "been read here as disabled")
+                if qop_is_auth_only and self._owner_speaks_to(
+                        owner, "snc/data_protection/min"):
+                    withheld.append(f"snc/data_protection/min = {qop}")
+                if withheld:
+                    self._snc_deferred_to_the_family_model(withheld)
+                return
+
+            if snc_is_off:
                 self.finding(
                     check_id="CRYPTO-SNC-001",
                     title="SNC (Secure Network Communications) is disabled",
@@ -412,8 +483,7 @@ class CryptoPostureAuditor(BaseAuditor):
                     ],
                 )
 
-            qop = snc_params.get("snc/data_protection/min", "")
-            if qop and str(qop) in ("1", "AUTHENTICATION_ONLY"):
+            if qop_is_auth_only:
                 self.finding(
                     check_id="CRYPTO-SNC-002",
                     title="SNC quality of protection set to authentication only",
@@ -442,10 +512,23 @@ class CryptoPostureAuditor(BaseAuditor):
             return
 
         # Process dedicated SNC config export
+        #
+        # The owner reads `security_params` and CANNOT see this export, so the
+        # stand-down here is per row and on the stronger condition: only where the
+        # owner is actually REPORTING that parameter is this the same defect said
+        # twice. Where it judged the parameter compliant from the other export, the
+        # two exports disagree, and staying quiet would be choosing one of them
+        # without saying so.
+        withheld = []
         for row in snc:
-            name = row.get("PARAMETER", row.get("NAME", ""))
+            if not isinstance(row, dict):
+                continue                     # see the note in the branch above
+            name = str(row.get("PARAMETER", row.get("NAME", "")) or "")
             value = row.get("VALUE", "")
             if "enable" in name.lower() and str(value) not in ("1", "TRUE"):
+                if owner is not None and owner.accounted_for(name):
+                    withheld.append(f"{name} = {value}")
+                    continue
                 self.finding(
                     check_id="CRYPTO-SNC-001",
                     title="SNC is disabled",
@@ -465,6 +548,71 @@ class CryptoPostureAuditor(BaseAuditor):
                     remediation="Enable SNC: set snc/enable = 1.",
                     references=["SAP Security Baseline — Secure Network Communications (SNC)"],
                 )
+        if withheld:
+            self._snc_deferred_to_the_family_model(withheld)
+
+    @staticmethod
+    def _owner_speaks_to(owner, parameter: str) -> bool:
+        """Will the owner say something about `parameter`, or could it not see it?
+
+        Whether this module WOULD have fired is not enough to justify announcing a
+        stand-down, because the reading above is the shallower one in both
+        directions. It compares snc/enable case-sensitively against
+        ``("1", "TRUE", "YES")``, so ``snc/enable = true`` — a spelling the owner's
+        own `_BOOLEAN_SPELLINGS` exists because exports really produce — reads as
+        DISABLED here and as the mandated value there. Announcing on our own reading
+        put an INFO note claiming a withheld verdict, pointing at CRYPTO-SNCECS-*
+        findings that did not exist, into the report of a correctly configured
+        system. Measured; that is a coverage note on a clean system, which is the
+        same false positive as any other.
+
+        ``not assessed`` still counts as speaking. There the owner cannot see the
+        parameter at all — it is absent from the export, or spelled in a way the
+        owner's spec does not carry — and this module genuinely stood a reading
+        down, which is exactly what has to be disclosed.
+        """
+        return owner.accounted_for(parameter) or not owner.assessed(parameter)
+
+    def _snc_deferred_to_the_family_model(self, withheld: List[str]):
+        """Say that we stood down, so silence is never read as a clean result.
+
+        A silent stand-down and a system with no SNC problem look identical in a
+        report, and that is the single most damaging thing this product can do. The
+        same discipline as `IAM-SOD-DEFERRED`: one INFO note, naming what was
+        withheld and where the verdict actually is.
+        """
+        self.finding(
+            check_id="CRYPTO-SNC-DEFERRED",
+            title="SNC parameter checks deferred to the SNC family model",
+            severity=self.SEVERITY_INFO,
+            category="Cryptographic Posture",
+            description=(
+                "The SNC profile parameters were not judged here because the SNC "
+                "posture module is in this run and reads the same export as one "
+                "family against SAP's mandatory ECS hardening baseline. That reading "
+                "is deeper than the checks in this module: it takes each compliant "
+                "value from the baseline rather than from the parameter's name — "
+                "several of the values SAP mandates read as insecure — it reports a "
+                "system with the SNC master switch off as ONE finding instead of one "
+                "per dependent setting, and it distinguishes a switch that is off "
+                "from one that was never exported. The SNC verdict for this run is "
+                "the CRYPTO-SNCECS-* findings, including the case where it reports "
+                "that the export did not allow a verdict at all."
+            ),
+            affected_items=withheld,
+            remediation=(
+                "No action. This records why one module is quiet, so that an empty "
+                "CRYPTO-SNC-* result is not read as an absence of SNC problems. To "
+                "run these coarser checks anyway, exclude the 'snc' module from the "
+                "run."
+            ),
+            references=["SAP Security Baseline — Secure Network Communications (SNC)"],
+            # A note about a check that did not run names no defective object: the
+            # parameters listed above are the readings withheld, not a defect this
+            # finding is asserting, and putting them in the graph would create nodes
+            # for a finding that claims nothing about them.
+            scope="aggregate",
+        )
 
     def check_hana_encryption(self):
         """Check HANA encryption at rest and in transit."""

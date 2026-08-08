@@ -63,15 +63,38 @@ comparing those four parameters literally would flag every system alive. They ar
 matched structurally instead, against the invariant part of the template as read
 from the JSON.
 
-OVERLAP TO RESOLVE WHEN THIS IS WIRED
--------------------------------------
-``modules/crypto_posture.py`` already emits ``CRYPTO-SNC-001`` ("SNC is disabled")
-and ``CRYPTO-SNC-002`` (QoP authentication-only) from the same export. Ours is the
-ECS-baseline reading of the same switch and carries the moot-family reasoning, so
-running both modules would report the same defect twice. Whoever wires this should
-retire the ``check_snc_configuration`` branch in that module or gate one on the
-other; this module deliberately does not silence itself, because dropping the ECS
-verdict is the worse of the two failures.
+THIS MODULE OWNS THE SNC FAMILY
+------------------------------
+Three modules could each report the same SNC defect, and on one export with
+``snc/enable = 0`` all three did: ``CRYPTO-SNCECS-001`` here, ``CRYPTO-SNC-001``
+from ``modules/crypto_posture.py`` and ``BASELINE-003`` from
+``modules/baseline_params.py``. One defect, three findings — priced three times by
+``modules/fair_adapter.py``, worked three times in the remediation queue and read
+three times by whoever gets the report.
+
+Ownership sits HERE because this is the only one of the three that MODELS the
+family instead of comparing parameters one at a time:
+
+  * the mandated values are read from the note extract rather than inferred from
+    the parameter's name, which is what stops ``snc/accept_insecure_gui = 1`` — the
+    ECS STANDARD — being reported as a defect;
+  * the switch is known to make the other seventeen settings moot, so a system with
+    SNC off produces one finding and not ten;
+  * "off", "a value we cannot interpret" and "not in the export" are three
+    different states here, so this module never claims SNC is disabled on the
+    strength of a parameter nobody exported. ``crypto_posture`` does exactly that
+    today: absent ``snc/enable`` defaults to ``"0"`` and raises a HIGH finding.
+
+The two shallower checks stand down through `coverage_in_this_run` at the bottom of
+this file. They stand down on whether THIS MODULE IS RUNNING — never on whether its
+input data happens to be loaded, which is the trap `BaseAuditor.run_context`
+documents — and, while SNC is in force, they keep their own voice on every parameter
+this module judges COMPLIANT, because the ECS note deliberately mandates a lax value
+for some of the ``accept_insecure_*`` family and the stricter on-premise reading of
+those is not ours to delete. (With the switch off or unreadable the family is moot on
+every deployment, so there the compliant ones are covered too — see
+`OwnedSncFamily.accounted_for`.) Losing coverage would be a worse defect than the
+duplicate it was meant to fix.
 
 Data source:
   - security_params.csv -> RSPARAM / RZ11 profile parameter export (NAME, VALUE)
@@ -94,6 +117,12 @@ BASELINE_PATH = Path(__file__).resolve().parent.parent / "data" / "ecs_hardening
 #: adds an snc parameter lands here automatically — the cross-check test then fails
 #: until somebody writes our wording for it, which is the intended conversation.
 SNC_PREFIXES = ("snc/", "igs/snc/")
+
+#: The ``--modules`` key this auditor answers to, in the vocabulary `sap_scanner.py`
+#: and `server/ingest.py` share. The shallower SNC checks defer BY THIS KEY, and it
+#: lives with the module it names so a rename cannot leave them standing down in
+#: favour of a module that no longer runs under that name.
+MODULE_KEY = "snc"
 
 # --------------------------------------------------------------------------- #
 #  How each parameter is judged                                               #
@@ -368,6 +397,19 @@ class SncPostureAuditor(BaseAuditor):
     def _value(self, name: str) -> Optional[str]:
         return self._exported.get(name.lower())
 
+    def verdicts(self) -> Dict[str, Dict[str, Any]]:
+        """Every family parameter's status, computed once.
+
+        Public because the shallower SNC checks have to know what this module is
+        going to report BEFORE they decide whether to stand down; see
+        `coverage_in_this_run`. Asking the module itself, rather than
+        re-implementing its rules in the caller, is what keeps the deferral and the
+        finding it defers to from drifting apart.
+        """
+        if not self._verdicts:
+            self._verdicts = {name: self._evaluate(name) for name in self._spec}
+        return self._verdicts
+
     # ------------------------------------------------------------------ #
     #  Judging one parameter                                             #
     # ------------------------------------------------------------------ #
@@ -593,7 +635,7 @@ class SncPostureAuditor(BaseAuditor):
         if not self._exported:
             return self.findings
 
-        self._verdicts = {name: self._evaluate(name) for name in self._spec}
+        self.verdicts()
         if all(v["status"] == STATUS_ABSENT for v in self._verdicts.values()):
             self.check_family_not_assessable(
                 "The profile-parameter export contains no snc/* or igs/snc/* "
@@ -1056,3 +1098,98 @@ class SncPostureAuditor(BaseAuditor):
                 reasons=reasons,
             ),
         )
+
+
+# --------------------------------------------------------------------------- #
+#  What the shallower SNC checks stand down against                           #
+# --------------------------------------------------------------------------- #
+
+class OwnedSncFamily:
+    """What `SncPostureAuditor` is covering in one particular run.
+
+    Handed to the shallower SNC checks in ``crypto_posture`` and ``baseline_params``
+    so they can stand down on the parameters this module is already reporting and
+    KEEP their own verdict on the ones it judged acceptable. A blanket "defer to
+    snc_posture" would be wrong in both directions: it would delete the on-premise
+    reading of the parameters ECS deliberately mandates at a lax value, and it would
+    say nothing at all when this module is not in the run.
+    """
+
+    def __init__(self, verdicts: Dict[str, Dict[str, Any]], switch_state: str):
+        self._verdicts = {str(name).lower(): verdict
+                          for name, verdict in verdicts.items()}
+        self.switch_state = switch_state
+        #: `off` and `unreadable` are the two states in which `run_all_checks` folds
+        #: the WHOLE family into the single switch finding. Every assessed member is
+        #: then accounted for by it, deviating or not, because none of them can take
+        #: effect while the switch is in that state. This mirrors the branch in
+        #: `run_all_checks` and has to keep mirroring it.
+        self.family_is_moot = switch_state in ("off", "unreadable")
+
+    def assessed(self, parameter: str) -> bool:
+        """Did this module reach a verdict on `parameter` from this export?"""
+        verdict = self._verdicts.get((parameter or "").lower())
+        return bool(verdict) and verdict["status"] != STATUS_ABSENT
+
+    def accounted_for(self, parameter: str) -> bool:
+        """Is `parameter` already covered by something this module will report?
+
+        True when it deviates from the note, and true for every assessed member once
+        the switch makes the family moot — a shallower check firing on a setting that
+        cannot take effect reports a consequence as though it were a cause.
+
+        FALSE when this module judged it acceptable, which is the case that must not
+        be collapsed: that is a verdict about ECS, where SAP mandates
+        ``snc/accept_insecure_gui = 1``, and on classic on-premise ABAP the stricter
+        reading of the same value is still right. Deferring there would delete a
+        genuine on-premise finding to fix a duplicate that does not exist.
+        """
+        if not self.assessed(parameter):
+            return False
+        if self.family_is_moot:
+            return True
+        return self._verdicts[parameter.lower()]["status"] in (STATUS_DEVIATION,
+                                                               STATUS_UNSET)
+
+
+def coverage_in_this_run(auditor: BaseAuditor) -> Optional[OwnedSncFamily]:
+    """What this module covers in `auditor`'s run — ``None`` when it covers nothing.
+
+    ``None`` is the answer that keeps the shallower checks talking, and every branch
+    below that returns it is a case where standing down would take the SNC family
+    out of the report with nothing anywhere saying so.
+    """
+    # Only a genuine YES stands anybody down. `False` means this module was excluded
+    # from the run; `None` means the caller did not say, and a caller that does not
+    # say gets the historical behaviour rather than a guess. Deferring on the
+    # PRESENCE of `security_params` instead would be the `--modules iam` bug again:
+    # the data is loaded, the deeper module never runs, and the capability
+    # disappears silently.
+    if auditor.module_is_running(MODULE_KEY) is not True:
+        return None
+
+    deep = SncPostureAuditor(auditor.data, auditor.overrides, auditor.run_context)
+    # Running is not the same as able to answer. With no note extract there are no
+    # mandated values and this module returns nothing at all; with no
+    # profile-parameter export there is nothing for it to judge. Standing down to a
+    # module that is provably silent loses exactly as much as standing down to one
+    # that is not running.
+    if not deep._spec or not deep._exported:
+        return None
+
+    verdicts = deep.verdicts()
+    if all(v["status"] == STATUS_ABSENT for v in verdicts.values()):
+        # The export carries no member of the family, so this module reports a
+        # coverage gap and no verdict on anything a shallower check might have said.
+        return None
+
+    state = deep._snc_state()
+    if state in ("off", "unreadable") and \
+            (verdicts.get("snc/enable") or {}).get("status") in (STATUS_ECS,
+                                                                 STATUS_EXCEPTION):
+        # The note itself mandates or permits the switch in this state, so
+        # `run_all_checks` returns silently and there is nothing to defer TO.
+        # Unreachable against revision 46, which mandates the switch on — it is here
+        # so that a future revision cannot turn a deferral into a disappearance.
+        return None
+    return OwnedSncFamily(verdicts, state)

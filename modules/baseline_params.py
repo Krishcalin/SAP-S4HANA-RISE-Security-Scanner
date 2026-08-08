@@ -22,6 +22,7 @@ from modules.base_auditor import BaseAuditor
 
 
 from modules import ecs_baseline
+from modules import snc_posture
 
 
 class BaselineParamAuditor(BaseAuditor):
@@ -250,6 +251,27 @@ class BaselineParamAuditor(BaseAuditor):
         return str(mode).strip().lower() or "on_prem"
 
     def check_snc_accept_insecure(self):
+        """The SNC insecure-fallback family — for the parameters nobody deeper owns.
+
+        `modules/snc_posture.py` owns the SNC family: it reads all eighteen ``snc/*``
+        parameters as one model against SAP Note 3250501 and, crucially, knows that
+        with the master switch off every one of these settings is MOOT. On an export
+        with ``snc/enable = 0`` this check was raising the fallback family as a second
+        HIGH finding beside its own cause — measured, and the reason this deferral
+        exists.
+
+        The stand-down is PER PARAMETER and only where that module is genuinely in
+        the run. WHILE SNC IS IN FORCE it never covers a parameter that module judged
+        compliant, because that verdict is about ECS — where SAP mandates
+        ``snc/accept_insecure_gui = 1`` — and on classic on-premise ABAP the stricter
+        reading below is still the right one. Deleting it would be a worse defect than
+        the duplicate.
+
+        The one place a compliant verdict IS covered is when the master switch is off
+        or unreadable. Every one of these settings is then moot on any deployment,
+        on-premise included, so there is no on-premise reading left to lose — and the
+        note below says which of the two reasons applied.
+        """
         params = ["snc/accept_insecure_rfc", "snc/accept_insecure_gui",
                   "snc/accept_insecure_cpic", "snc/accept_insecure_r3int_rfc"]
         # `is_compliant` is consulted FIRST. In ECS, snc/accept_insecure_gui,
@@ -258,21 +280,30 @@ class BaselineParamAuditor(BaseAuditor):
         # SAP's own written baseline, in the environment this product specialises
         # in. `None` means the oracle has no opinion and the original rule stands.
         mode = self._deployment_mode()
-        offenders = [f"{p} = {self._p(p)}" for p in params
+        offending = [p for p in params
                      if self._p(p) is not None and self._p(p).strip() in ("1", "u")
                      and ecs_baseline.is_compliant(p, self._p(p), mode) is not True]
+
+        owner = snc_posture.coverage_in_this_run(self)
+        withheld = [p for p in offending
+                    if owner is not None and owner.accounted_for(p)]
+        offending = [p for p in offending if p not in withheld]
+        if withheld:
+            self._snc_deferred_to_the_family_model(withheld, owner.switch_state)
+
+        offenders = [f"{p} = {self._p(p)}" for p in offending]
         # No qualifier: the trigger accepts "1" OR "u", so the value is not pinned and
         # would split one parameter into two graph nodes.
-        objects = [self._param_object(p) for p in params
-                   if self._p(p) is not None and self._p(p).strip() in ("1", "u")
-                   and ecs_baseline.is_compliant(p, self._p(p), mode) is not True]
+        objects = [self._param_object(p) for p in offending]
         if offenders:
             self._flag(
                 "BASELINE-003", "SNC accepts insecure (unencrypted) connections",
                 self.SEVERITY_HIGH,
                 f"{len(offenders)} snc/accept_insecure_* parameter(s) allow unencrypted "
-                "RFC/GUI/CPIC connections even though SNC is enabled — defeating SNC, since a "
-                "client can simply connect without encryption.",
+                "RFC/GUI/CPIC connections wherever SNC is in force — defeating it, since a "
+                "client can simply connect without encryption. (This check reads the "
+                "fallback parameters only. Whether SNC is switched on at all is "
+                "snc/enable, which the SNC posture module reports on.)",
                 offenders,
                 "Set the snc/accept_insecure_* parameters to 0 so only SNC-protected "
                 "connections are accepted (after all clients/servers support SNC).",
@@ -283,6 +314,41 @@ class BaselineParamAuditor(BaseAuditor):
                 # of identity and ride along as graph nodes only.
                 affected_objects=objects,
                 scope="aggregate")
+
+    def _snc_deferred_to_the_family_model(self, withheld: List[str],
+                                          switch_state: str):
+        """Say which parameters were handed to the deeper module, and why.
+
+        A silent stand-down is indistinguishable from a clean bill of health, which
+        is the failure this codebase treats as the most damaging one available. So
+        the note is emitted whenever anything was withheld — including the case where
+        BASELINE-003 still fires for the remaining parameters, because a reader
+        comparing the two runs otherwise cannot tell why a parameter left the list.
+        """
+        reason = (
+            "the SNC master switch is not in force, so these fallback settings cannot "
+            "take effect and are a consequence of that one defect rather than "
+            "separate ones"
+            if switch_state in ("off", "unreadable") else
+            "the SNC posture module judged them against the mandatory ECS hardening "
+            "baseline and is reporting them there")
+        self._flag(
+            "BASELINE-SNC-DEFERRED",
+            "SNC insecure-fallback parameters deferred to the SNC family model",
+            self.SEVERITY_INFO,
+            f"{len(withheld)} snc/accept_insecure_* parameter(s) were not raised as "
+            f"BASELINE-003 in this run because {reason}. The verdict on them is in "
+            "the CRYPTO-SNCECS-* findings, which read all eighteen snc/* parameters "
+            "as one family. This note exists so that their absence from BASELINE-003 "
+            "is not read as those parameters being correct.",
+            [f"{p} = {self._p(p)}" for p in withheld],
+            "No action. To have this module judge these parameters itself, exclude "
+            "the 'snc' module from the run.",
+            ["SAP Security Baseline — SNC insecure connections"],
+            # A note about a check that stood down asserts no defect, so it names no
+            # object: the parameters are the readings withheld, and giving them graph
+            # nodes here would attach a defect to them that this finding is not making.
+            scope="aggregate")
 
     def check_gui_scripting(self):
         v = self._p("sapgui/user_scripting")
