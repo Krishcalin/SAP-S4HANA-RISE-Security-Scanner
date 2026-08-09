@@ -23,35 +23,58 @@ product became client-server**, deliberately and one-way. It has NOT been relaxe
 
 - **`modules/` and `sap_scanner.py` remain standard library only.** The HTML, PDF and PPTX
   engines are hand-built. Do **not** add `reportlab` / `python-pptx` / `pandas`.
-- **`server/` may use the five pinned runtime dependencies** in `requirements.txt` (FastAPI,
-  uvicorn, Jinja2, psycopg, python-multipart) and nothing else without a decision.
+- **`server/` may use the four pinned runtime dependencies** in `requirements.txt` (FastAPI,
+  uvicorn, psycopg, python-multipart) and nothing else without a decision. It was five;
+  **Jinja2 left on 2026-08-09** with the server-rendered console, and nothing replaced it.
 - The discipline replacing "zero deps" is a **single-digit runtime dependency count**. Also
   deliberately absent, and to stay absent: an **ORM** (SQL is hand-written and reviewed) and a
   **graph database** (recursive CTEs are ample at SAP landscape scale).
-- **The client-side framework ban ended on 2026-08-08, and only it.** The console is migrating
+- **The client-side framework ban ended on 2026-08-08, and only it.** The console migrated
   from 13 Jinja templates to a **React + TypeScript SPA in `frontend/`**, compiled by Vite at
   **build time** into `server/spa/` and served as static files by the **same FastAPI process**
   (`SpaFiles` in `server/app.py`). React, Vite and TypeScript are **build-time** dependencies:
-  the RUNTIME list in `requirements.txt` does not move. The frontend's own budget is equally
+  the RUNTIME list in `requirements.txt` went DOWN. The frontend's own budget is equally
   tight — react, react-dom, react-router, lucide-react, vite, typescript, tailwind. No state
   library, no component library, no data-fetching library, no chart library.
 - The deployment is **one app container + one PostgreSQL**. A third service — a Node server, an
   nginx — is a design failure, not a feature; it forfeits the product's clearest structural
   advantage over competitors that need a console VM plus sensors. The SPA is built inside the
   `Dockerfile`'s first stage and nothing JavaScript survives into the runtime image.
-- **The Jinja console stays until the last screen is migrated.** It still owns `/`, `/findings`,
-  `/paths` and the rest; the SPA is mounted at `/ui` so a half-finished migration cannot strand
-  the product. See `frontend/README.md` and `tests/test_spa_mount.py`.
+- **The Jinja console is retired (2026-08-09).** It owned `/`, `/findings`, `/paths` and the
+  rest while the SPA sat at `/ui`, so a half-finished migration could not strand the product.
+  Every screen landed, so `server/templates/` and its 13 page routes were deleted and the SPA
+  took the root: `SPA_MOUNT_PATH` and vite's `base` are both `/`, and a test asserts they agree.
+  Three things that read like part of that console stayed, because none of them was one —
+  `/static` (brand assets the compiled `index.html` names by absolute path), `/health`
+  (operational), and `/v/{slug}`, which is now a **console** route because the SPA declares the
+  same path. `/ui/*` answers **301** to the same path without the prefix, because those URLs
+  are in bookmarks and tickets. See `frontend/README.md` and `tests/test_spa_mount.py`.
+- **The SPA mount is registered LAST in `server/app.py`, and that is load-bearing.** A Mount at
+  `/` matches every path and Starlette takes the first match, so anything declared after it is
+  dead — silently, with a 200 and a page of HTML. New routes go **above** it.
 
 Background and the full plan: [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md),
 [`docs/BUILD_ROADMAP.md`](docs/BUILD_ROADMAP.md).
-- **~300+ checks across 23 audit modules** (keep the README badge/count and
-  `docs/CHECKS_REFERENCE.md` in sync when you add checks).
+- **~600 checks across 30 audit modules.** Measure, never estimate — and know which number you
+  are quoting. `modules/` holds 50 files, of which **30 emit findings**; the other 20 are rule
+  tables, loaders, importers and report writers. Those 30 are exactly `sap_scanner.py`'s
+  `--modules` choices. Check IDs: **359** are written as literals, and **617** exist once the
+  five runtime-generated families resolve against their shipped rulesets — `PARAM-<param>` (78),
+  the SAST rule ids (133), `ARA-<risk>` (27), `IAM-<sod_rule>` (10) and `ATC-<family>` (10),
+  which do not overlap the static set at all.
+  ⚠️ **Counting `self.finding(` alone undercounts by 29** and silently misses every `AUTH-*`
+  and `BASELINE-*` id: `abap_authorizations._emit` and `baseline_params._flag` forward
+  `check_id` positionally into `finding()`. Include both wrappers or your number is wrong.
+  Keep the README badge and `docs/CHECKS_REFERENCE.md` in sync when you add checks —
+  ⚠️ `docs/CHECKS_REFERENCE.md` documents ~161 of the 359 and has not been touched since the
+  initial commit. It is the most out-of-date file in the repo.
 - CIS SAP / DSAG-aligned; findings cite real SAP Notes / SAP Security Baseline / CIS.
-- **Flow** (illustrated by `docs/banner.svg`): `sap_scanner.py` **LOADs** the exports
-  (`DataLoader`) → runs the 23 auditor **MODULES** → each emits severity-ranked findings
-  (**CHECKS** → **RANK**) → a **REPORT** is written. When you add a module, refresh
-  `docs/banner.svg`'s module/check counts too.
+- **Flow**: `sap_scanner.py` **LOADs** the exports (`DataLoader`) → runs the 30 auditor
+  **MODULES** → each emits severity-ranked findings (**CHECKS** → **RANK**) → a **REPORT** is
+  written.
+  ⚠️ **`docs/banner.svg` is stale and nothing checks it** — it still reads *v2.0, 19 MODULES ·
+  278+ CHECKS*. It is referenced by this file only; the README's banner is
+  `assets/monitorrisk-logo.png`. Refresh it or retire it; do not cite its numbers.
 - **Reports** (`--format html|pdf|pptx|both|all`, `--pptx-mode full|summary`):
   `report_generator.py` (light-themed HTML dashboard, MonitorRisk + SAP branding),
   `pdf_report.py` (multi-page hand-over PDF on the stdlib `pdf_writer.py` engine), and
@@ -59,8 +82,9 @@ Background and the full plan: [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md),
   per finding in `full` mode). **All three engines are pure standard library** — do not add
   `reportlab` / `python-pptx`. The HTML and PDF are ordered *priority queue → categories →
   compliance mapping → fix-first findings*; `risk_prioritizer.py` computes the P1–P4 order and
-  `compliance_mapping.py` maps categories to ISO 27001:2022 / NIST CSF 2.0 / CIS v8 / TISAX /
-  SOC 2 / GDPR controls. Each finding renders its detailed **Security Risk** narrative +
+  `compliance_mapping.py` maps categories to **eight** frameworks — ISO/IEC 27001:2022,
+  NIST CSF 2.0, **NIST SP 800-53 Rev 5**, **DORA (EU 2022/2554)**, CIS Controls v8,
+  TISAX/VDA ISA, SOC 2 and EU GDPR. Each finding renders its detailed **Security Risk** narrative +
   step-by-step **Remediation** from the findings knowledge base (`finding_kb.py` loading
   `data/finding_details.json`, keyed by check-id with family-prefix fallback), falling back
   to the finding's own `description`/`remediation` when no KB entry exists. When you add
@@ -78,11 +102,21 @@ python sap_scanner.py --data-dir ./sample_data --output report.pptx --format ppt
 python sap_scanner.py --data-dir ./sample_data --output report.html --format all   # HTML + PDF + PPTX
 python sap_scanner.py --data-dir ./sample_data --output report.html --format both --crq \
     --crq-revenue 2000000000 --crq-industry manufacturing --crq-org-name "Acme Mfg"   # + FAIR $ loss exposure
+python sap_scanner.py --data-dir ./exports --abap-src ./abapgit_export --modules cva   # ABAP source scan
+python sap_scanner.py --data-dir ./exports --deployment-mode rise_pce                  # ECS rules apply
+python sap_scanner.py --data-dir ./exports --gate --gate-baseline gate-baseline.json   # decide: exit 0/1/2
 ```
 
-⚠️ **Windows console gotcha:** `banner()` prints box-drawing characters (`╔═╗`) that crash
-on the default cp1252 console. Always run with `PYTHONIOENCODING=utf-8` on Windows
-(`PYTHONIOENCODING=utf-8 python sap_scanner.py …`). (Pre-existing; fine on UTF-8 terminals.)
+**The Windows redirection crash is fixed — do not re-introduce it, and do not delete the
+guard.** `banner()` prints box-drawing characters (`╔═╗`). An interactive Windows console
+negotiates UTF-8, but the moment stdout is a pipe or a file Python falls back to the ANSI code
+page and those characters raised `UnicodeEncodeError` before any work started — with a
+traceback naming an encodings module, so it read like a broken install. `_make_output_encoding_safe()`
+now reconfigures stdout/stderr at import (`sap_scanner.py`), so `PYTHONIOENCODING=utf-8` is no
+longer needed. This is load-bearing for the **release gate** specifically: CI always redirects
+stdout, so on a Windows agent the scanner used to die before it reached the gate, and a control
+that cannot run under redirection is not a control.
+`tests/test_release_gate.py::test_the_scanner_survives_having_its_output_redirected` pins it.
 
 ### Server mode
 
@@ -107,9 +141,15 @@ at startup rather than silently run on a value published in this repo.
 ### Branding
 
 The web console is **MonitorRisk**. `tests/test_branding.py` asserts the retired names
-(`SAPSec`, `SAP Security Platform`) appear in no template and that every page template
-carries the brand in its `{% block title %}` — checked against the template tree, so a
-NEW page that ships with an old name fails too.
+(`SAPSec`, `SAP Security Platform`) appear nowhere in `frontend/src`, so a NEW screen that
+ships with an old name fails too.
+
+The tab-title assertion got **stronger** when the templates went, and the reason is worth
+keeping. Thirteen Jinja templates each declared their own `{% block title %}`; a SPA has one
+`index.html` and therefore one `<title>`, so without deliberate work the whole console renders
+as thirteen identical tabs — invisible in a screenshot, and ruinous for the tab strip, the
+history menu and every bookmark. The brand is appended in one place (`frontend/src/lib/title.ts`)
+and the test asserts both that it brands the tab **and that every screen calls it**.
 
 Brand assets are **derived, not drawn**. `docs/brand/monitorrisk-master.png` is the
 supplied artwork; `server/static/*` is generated from it:
@@ -121,7 +161,7 @@ python tools/build_brand_assets.py --check    # fail if the committed assets dri
 
 That tool needs Pillow. It is a build-time dependency and is deliberately NOT in
 `requirements.txt` — the container never runs it, and the derived PNGs are committed so
-a deployment needs nothing but the repo. The runtime dependency count stays at five;
+a deployment needs nothing but the repo. The runtime dependency count stays at four;
 `StaticFiles` ships inside Starlette, which FastAPI already pulls in.
 
 Why the master is not served directly: it sits on a textured cream field, so on the dark
@@ -135,9 +175,15 @@ Two places consume it differently, and the difference is forced by contrast:
 - **Sign-in** uses the full lockup on a cream panel. The wordmark is navy `#0b246a`;
   navy on `#0f1419` is unreadable, so the panel keeps the tone the artwork was drawn for.
 - **The header** uses the shield mark alone, which does survive a dark background, in
-  two variants swapped by `<picture>`. That `<picture>` is written "backwards" on
-  purpose — see the comment in `base.html`; it mirrors the stylesheet, where `:root` is
-  dark and only `prefers-color-scheme: light` overrides.
+  two variants swapped by `<picture>` in `frontend/src/components/Sidebar.tsx`. That
+  `<picture>` is written "backwards" on purpose — it mirrors the stylesheet, where `:root`
+  is dark and only `prefers-color-scheme: light` overrides.
+
+`/static` is why the brand mount outlived `server/templates/`: the compiled `index.html` and
+the sign-in screen name `/static/...` by **absolute path**, and the mount is deliberately
+unauthenticated because a gated one shows a broken logo to everyone not yet signed in.
+`tests/test_branding.py::test_the_console_asks_for_the_brand_assets_by_absolute_path` records
+that reasoning so the mount is not "tidied away" later.
 
 **One brand everywhere, since 2026-08-07.** The CLI's HTML/PDF/PPTX reports used to
 carry a different vendor brand (`PhalanxCyber`) while the console said MonitorRisk —
@@ -150,9 +196,12 @@ backdrop and the new art does not, so the frame would have framed nothing.
 `--password` does not exist and must not be added. `_read_password` takes a TTY prompt, a pipe,
 or `--generate`. `--generate` also sets `must_change_password`: it printed the secret to a
 terminal, so it now lives in scrollback and in `docker compose logs`, which makes it a handover
-credential rather than a chosen one. `current_user` then routes that account to `/account` and
-refuses every other page; `/api/*` returns 403 rather than a redirect, so the gate cannot be
-scripted around. Changing a password drops every session for that user **except the caller's
+credential rather than a chosen one. `current_user` (now in `server/api_auth.py`) then raises
+303 for such an account, and `app.py`'s `@app.exception_handler(303)` turns that into a **403**
+carrying `{"detail": "password change required", "change_at": "/account"}` — for every caller,
+not just `/api/*`, so the gate cannot be scripted around. There is no redirect branch left: in
+a SPA the shell is static, so the gate is enforced on the **data**. Changing a password drops
+every session for that user **except the caller's
 own** (`set_password(..., keep_token=)`); an admin reset drops all of them, including the
 target's current one. The audit log records the event and never the value.
 
@@ -256,24 +305,27 @@ target's current one. The audit log records the event and never the value.
 | `schema.sql` | 20 tables. Single-tenant (no `tenant_id`); `landscape` preserves the option. Idempotent — re-running it upgrades an existing deployment. |
 | `db.py` | psycopg pool, `scope_clause` (**the one place** row scoping is expressed), `audit`. |
 | `auth.py` | PBKDF2 passwords, sessions, ranked roles, per-system scope, password change/reset and the forced-change flag. |
-| `prose.py` | Jinja filters `steps` and `paragraphs`. The findings KB authors remediation as a numbered list and risk as prose, both separated by a single `\n`; HTML collapses those to spaces, so a `<p>` turns a ten-step procedure into a wall. `steps` returns None unless the text is a clean 1..N run — an `<ol>` renumbers, so an excerpt starting at 3 must NOT become one — and the caller falls back to paragraphs. |
-| `static/` | Brand assets, mounted at `/static` and deliberately UNAUTHENTICATED — the sign-in page carries the logo, so a gated mount shows a broken image to everyone not yet signed in. Derived, not hand-made: see below. |
-| `queries.py` | Every read of findings/runs/systems, plus assignment, bulk actions and saved views. HTML pages and the JSON API call the same functions — that is what keeps "everything the console shows is in the API" structural. |
+| `api_auth.py` | The **only** sign-in surface: `APIRouter(prefix="/api")` serving `/auth/me`, `/auth/login`, `/auth/logout`, `/account`, `/account/password`, `/account/reset/{user_id}`. Also owns both auth dependencies — `current_user` and `require(role)` — and `SESSION_COOKIE`. Unlike the rest of the write API these take **JSON bodies, not forms**, as a CSRF control. |
+| `sapcontent.py` | SAP's **own** Security Baseline vocabulary, adopted rather than reinvented: parses SAP-samples' `frun-csa-policies-best-practices` (Apache-2.0) into `data/sap_baseline_requirements.json`. We take the requirement IDs, titles, tiers and config stores; we do **not** execute SAP's SQL predicates — they run against Focused Run's CCDB, which we do not have, so claiming to run SAP's policies would be false. Rebuilt by `server.cli rebuild-sap-catalogue`; the `sap-content` CI job re-derives and fails on drift. ⚠️ Do not publish a percentage against the widely-quoted "214 control points" — parsing v2.4 yields 351 check items across 38 families, different units that do not reconcile. |
+| `prose.py` | `steps` and `paragraphs`. Were Jinja filters; now the **reference implementation** that `frontend/src/routes/FindingDetail.tsx` ports line for line, with `tests/test_prose.py` as its executable spec. Change this and the TypeScript together. The findings KB authors remediation as a numbered list and risk as prose, both separated by a single `\n`; HTML collapses those to spaces, so a `<p>` turns a ten-step procedure into a wall. `steps` returns None unless the text is a clean 1..N run — an `<ol>` renumbers, so an excerpt starting at 3 must NOT become one — and the caller falls back to paragraphs. |
+| `static/` | Brand assets, mounted at `/static` and deliberately UNAUTHENTICATED — the sign-in screen carries the logo, so a gated mount shows a broken image to everyone not yet signed in. The compiled `index.html` names `/static/favicon.ico` by absolute path, which is why this mount outlived `templates/`. Derived, not hand-made: see below. |
+| `queries.py` | Every read of findings/runs/systems, plus assignment, bulk actions and saved views. The JSON API is now its only caller, so "everything the console shows is in the API" has stopped being a discipline — it is the only way anything renders. |
 | `enrich.py` | Priority tier, owning team, **remediation owner** and SLA window. The team map is a prefix table; the ownership map is deployment-mode dependent. |
 | `analytics.py` | The mitigation journey: MTTR, burndown, aging, backlog trajectory, team and domain scorecards. |
 | `graph.py` | Attack paths: template instantiation, cuts, choke points, closure over time. |
 | `crq.py` | FAIR quantification per run — portfolio ALE, the 5 scoped scenarios, the unrouted count, and system criticality as a calibration input. |
 | `coverage.py` | The per-upload manifest. Module→source mapping is **derived from source at import**, never hand-maintained, so it cannot drift. |
 | `ingest.py` | upload → parse → scan → enrich → store → diff → notify. Holds `store_run` (the journey), `_rebase` and `queue_notifications`. |
-| `app.py` | FastAPI. Uploads, cancellable background scans, saved-view redirects, `/health`. |
-| `cli.py` | Admin + the air-gapped `scan` path. |
-| `templates/` | Jinja2, server-rendered, one stylesheet, no client framework. |
+| `app.py` | FastAPI. The JSON API, uploads, cancellable background scans, `/health`, the `/ui` — `/` redirect, and the `SpaFiles` mount that serves the console. **The mount is registered last on purpose** — see the charter note above. |
+| `cli.py` | Admin + the air-gapped `scan` path. Subcommands: `init-db`, `create-user`, `set-password`, `add-landscape`, `add-system`, `scan`, `rebuild-sap-catalogue`, `runs`. |
+| `config.py` | Env-only settings. `DB_DSN` and `SESSION_SECRET` have **no defaults** and `validate()` runs at startup, so a deployment that forgets them fails loudly rather than running on a value published in this repo. |
+| `spa/` | The compiled console. Build output, gitignored, produced by the `Dockerfile`'s first stage — never edited, never committed. |
 
 **Invariants to preserve in the server tier:**
 - *A finding row is never deleted.* "Resolved" is the **absence of an observation in the latest
   run**. That is what lets a regression re-open the same row with its age and assignee intact.
 - *Degrade, never drop.* A module that raises is recorded with its traceback and the run
-  continues. Losing 22 modules because the 23rd hit a bad row is far worse than an incomplete
+  continues. Losing 29 modules because the 30th hit a bad row is far worse than an incomplete
   run that says it is incomplete.
 - *An empty explicit row scope means NOTHING, not everything.* `scope_clause([])` returns
   `FALSE`. Returning `TRUE` would hand a deliberately-restricted user the whole estate.
@@ -316,14 +368,26 @@ target's current one. The audit log records the event and never the value.
 - *A saved view stores FILTERS, never rows*, and the filter keys are an allowlist. Opening a
   shared link re-runs the query under the caller's own row scope, so it can never widen access.
 
-**Two traps this tier has already fallen into — do not re-introduce them:**
+**Traps this tier has already fallen into — do not re-introduce them:**
 - *`CREATE OR REPLACE VIEW` over `SELECT f.*` breaks the upgrade path.* A view's column list
   cannot change, so the first `ALTER TABLE` that adds a column makes re-running `schema.sql`
   fail. If a view is ever wanted, enumerate its columns and `DROP` before recreating.
-- *`TemplateResponse` takes `request` FIRST* in current Starlette. The legacy
-  `(name, context)` form passes the context dict as the template name and breaks every page —
-  while imports succeed and templates parse. `tests/test_http_console.py` exists because that
-  is only catchable over HTTP.
+- *A `Mount` at `/` swallows everything declared after it.* Starlette dispatches to the first
+  matching route and a root mount matches every path, so a route registered below it is dead —
+  silently, answering 200 with a page of HTML instead of JSON. The SPA mount is therefore the
+  **last** statement in `app.py`; new routes go above it. This replaced the `TemplateResponse`
+  trap, which is now historical: `TemplateResponse` takes `request` FIRST in current Starlette
+  and the legacy `(name, context)` form broke every page while imports still succeeded. Nothing
+  in `server/` renders a template any more, so that one cannot recur — but the shape of the bug
+  (breaks everything, passes import) is worth remembering, because the mount-order trap has it.
+- *Two definitions of one predicate will disagree.* `expired_acceptance` and `is_overdue` were
+  computed in SQL for the finding **list** and in Python for the finding **detail**, so the queue
+  could show an expiry banner the detail page denied. Both are SQL now, using the same
+  expression. Any derived flag a user can see in two places belongs in one.
+- *`scope_clause` is the one place row scoping is expressed — with one exception that should not
+  grow.* `server/graph.py` has its own `_scoped()` for the attack-path predicate (same
+  `None → TRUE` / `[] → FALSE` semantics, different join). Two implementations of the access
+  boundary is one more than is safe; do not add a third.
 
 ### The 30 modules (module key → class → focus)
 
@@ -352,7 +416,7 @@ target's current one. The audit log records the event and never the value.
 | `grcac` | grc_access_control | **GRC Access Control**: EAM/Firefighter usage+ownership, ARM access-request workflow, GRC-native SoD violations, mitigating controls, SoD ruleset governance |
 | `rolegov` | role_governance | **role design**: SU24 proposal hygiene for custom tcodes, ungenerated profiles (AGR_1016), derived-role authorization-value drift vs parent |
 | `atc` | atc_import | SAP's own ATC/CVA results, ingested rather than re-derived |
-| `cva` | abap_sast | **our** ABAP/CDS/BDEF scanner — 118 rules, statement lexer, intra-procedural taint |
+| `cva` | abap_sast | **our** ABAP/CDS/BDEF scanner — **133 rules dispatched by file type** (118 ABAP/CDS/RAP, 7 JS/UI5, 8 BTP descriptor), statement lexer, intra-procedural taint. `ABAP-XSS-006` is retired and `ABAP-AUTH-003` is handled in the engine, so 116 of the 118 fire from the rule table |
 | `logreview` | log_review | retrospective SM20 review: what the audit log actually recorded |
 | `codeinv` | code_inventory_report | custom-code estate: size by type, unreachable, dormant, unknown-kept-separate |
 | `resilience` | resilience_posture | backup recency/failure posture, DR test evidence, recovery objectives (RES-*) |
@@ -362,16 +426,31 @@ target's current one. The audit log records the event and never the value.
 
 ### Deployment mode decides what "compliant" means
 
-`--deployment-mode {on_prem,rise_pce,rise_tailored}` reaches every auditor through
-one `run_ctx` built once in `sap_scanner.py`. It is not cosmetic:
+`--deployment-mode {on_prem,rise_pce,rise_tailored}` is built once as `run_ctx` in
+`sap_scanner.py`. It is not cosmetic:
 
     snc/accept_insecure_gui = 1        <- SAP MANDATES this in ECS
-    rfc/callback_security_method = 1   <- explicitly permitted in ECS
+    rfc/callback_security_method = 1   <- a permitted EXCEPTION in ECS (the standard is 3)
     DDIC unlocked                      <- explicitly NOT required to be locked
 
-All three are findings on classic on-premise ABAP and compliance in ECS. Three
-checks reported HIGH on fully compliant RISE systems before this existed, because
+All three are findings on classic on-premise ABAP and are compliant — or tolerated — in ECS.
+Three checks reported HIGH on fully compliant RISE systems before this existed, because
 they reasoned from what a parameter is NAMED rather than from what SAP wrote.
+
+Note the second line precisely, and do not "simplify" it: the note records
+`rfc/callback_security_method` as standard value **3** with **1** allowed as a documented
+exception (NetWeaver 7.40, with a planned move to 3). Calling 1 "SAP's mandate" overstates
+what the note says, which is the same class of error as inventing a note number.
+
+**`run_ctx` does NOT reach every auditor, and the docs used to claim it did.** Six auditors
+receive it — `users`, `params`, `snc`, `ecsconfig`, `crypto`, `baseline` — and five of those
+six actually branch on it; `crypto_posture` takes it and never reads it. Three more
+(`iam`, `atc`, `cva`) get a **modules-only** `run_context`, which is the "is my sibling
+running" signal and carries no deployment mode. The remaining 21 are constructed
+`Cls(data, baseline_overrides)` and cannot know the mode at all. **Before writing an
+ECS-conditional check, confirm your module is actually handed `run_ctx`** — if it is not,
+wiring it in `sap_scanner.py` is part of your change. A mode-blind module that assumes it is
+mode-aware silently applies on-premise rules to a RISE system.
 
 Default is `on_prem`. Guessing ECS would silently relax genuine on-premise
 findings, which is the wrong direction to be wrong in.
@@ -405,6 +484,20 @@ off: judge the delta not the backlog; judge only what the transport touches; nev
 block on what the customer cannot fix (`remediation_owner`); and **never fail
 open** — degraded coverage is exit 2, never 0.
 
+It is **CLI-only**. `server/` never imports `release_gate` and exposes no gate route, so
+`docs/RELEASE_GATE.md`'s suggestion to "run the gate against the server" describes something
+that does not exist. Either build it or drop the line.
+
+Two edges worth knowing before you trust an exit code:
+- **`evaluate([])` returns pass/0.** "Could not assess" is currently raised by a degraded ABAP
+  lex (`ABAP-LEX-001`) or an unreadable policy — *not* by an empty finding set, even though the
+  module docstring lists "no findings were supplied" among its exit-2 triggers. A run that
+  collapses to zero findings for an unrelated reason therefore reads as a pass. The docstring
+  is ahead of the code; treat it as intent, not behaviour.
+- **`--gate-write-baseline` runs the whole scan and writes a report first**, then writes the
+  baseline and exits 0 — and it is evaluated *before* `--gate`, so passing both silently skips
+  gate evaluation.
+
 ## Adding a new module (the recipe)
 
 1. **`modules/<name>.py`** — `class <Name>Auditor(BaseAuditor)`, with a `run_all_checks()`
@@ -419,11 +512,25 @@ open** — degraded coverage is exit 2, never 0.
    `self.data.get("…")`, so the coverage manifest picks the module up automatically.
 2. **`sap_scanner.py`** — add the import, add the module key to the `--modules` `choices`
    list, add it to the `"all"` expansion list, and add an `if "<key>" in run_modules:` run block.
+   **If any check of yours is deployment-mode dependent, pass `run_ctx` in the constructor** —
+   most auditors are not given it, and a module that reasons about ECS without receiving the
+   mode silently applies on-premise rules to a RISE system.
 3. **`modules/data_loader.py`** — add the new data source(s) to `FILE_MAP`.
+   ⚠️ **A missing `FILE_MAP` key ships the module DEAD.** `self.data.get("your_source")` returns
+   `None`, the guard returns early, and the module reports nothing while looking healthy —
+   `table_auth_groups`, `backup_catalog` and `recovery_tests` were absent, and two modules'
+   checks were unreachable in production for exactly that reason. Prove it fires before you
+   claim it works.
 4. **`sample_data/`** — add crafted-bad sample files so the module produces findings on the
-   bundled `sample_data` run (and verify a benign row does NOT fire).
-5. **Docs** — bump the README badge + "N+ checks across M modules" line, add a README module-
-   table row, and add a section to `docs/CHECKS_REFERENCE.md`.
+   bundled `sample_data` run (and verify a benign row does NOT fire). Registering the loader key
+   is not enough: with no fixture the module still emits nothing on the bundled run, which is
+   the state `resilience` and `ecsconfig` are in today.
+5. **Docs** — bump the README badge + "N checks across M modules" line, add a README module-
+   table row (and a row to the module table in this file), and add a section to
+   `docs/CHECKS_REFERENCE.md`.
+   ⚠️ If your test file touches `server/`, add it to the `cli` job's `--ignore` list in
+   `.github/workflows/tests.yml` — that job installs pytest and nothing else, so a module-level
+   `import psycopg` aborts collection for the entire matrix.
 6. **Reports** — add a `data/finding_details.json` KB entry per new check (detailed risk +
    step-by-step remediation) so the PDF/PPTX hand-over stays detailed, and if the module
    introduces a **new category** string, add it to `compliance_mapping.CATEGORY_THEMES` so its
@@ -440,8 +547,14 @@ open** — degraded coverage is exit 2, never 0.
 - **Run the FULL scanner, not just `run_all_checks()`.** A direct `run_all_checks()` smoke
   test does not exercise `report_generator`. A trailing comma in `description=( "…", )` makes
   the value a **tuple**, which passes the findings test but crashes `html.escape` in the HTML
-  report. Always finish with a full `PYTHONIOENCODING=utf-8 python sap_scanner.py --data-dir
-  ./sample_data …` run.
+  report. Always finish with a full `python sap_scanner.py --data-dir ./sample_data …` run.
+  **And exercise the report OPTIONS, not just the default.** `--crq` reached
+  `report_generator._svg_lec` with the engine's dict-shaped loss-exceedance points while that
+  function unpacked `for t, p in points`, so every `--crq` run wrote its `.crq.json`, ran the
+  Monte-Carlo, and then died before producing any HTML at all. Both sides had tests and both
+  passed: the engine test checked the curve in isolation, the report test passed
+  `"loss_exceedance": []` and returned before the unpacking. A contract between two components
+  needs a test that spans both, or each side stays internally consistent while the seam rots.
 - **String false-positive/negative traps.** Substring tests bite: `"lock" in "unlocked"` is
   `True`; `"default" in "No default"` is `True`. Use `startswith` / exact tokens and guard
   negations.
@@ -458,37 +571,63 @@ open** — degraded coverage is exit 2, never 0.
   than guessing.
 - **CSV header normalization:** the loader upper-cases headers and replaces spaces with `_`,
   so match `row.get("USER_NAME")` etc. Values are stripped but keep their case.
-- **Tests + CI exist** (`tests/`, `.github/workflows/tests.yml`, `requirements-dev.txt`). Run
-  `python -m pytest -q` (no SAP system needed). The suite runs every module over `sample_data`
+- **Tests + CI exist** (`tests/`, `.github/workflows/tests.yml`, `requirements-dev.txt`). About
+  **1,975** tests; no SAP system needed. ⚠️ **`requirements-dev.txt` alone is not enough to run
+  the whole suite** — it is only `pytest`, and the server-tier suites import psycopg/starlette
+  at module level, which aborts collection rather than skipping. Install both:
+  ```bash
+  python -m pip install -r requirements.txt -r requirements-dev.txt httpx
+  python -m pytest -q          # DB-gated suites still skip without DB_DSN
+  ```
+  `httpx` is not in either file but Starlette's `TestClient` refuses to construct without it.
+  To reproduce the **scanner-core** guarantee instead — that `modules/` and `sap_scanner.py`
+  need nothing third-party — install *only* pytest and use the CI `cli` job's `--ignore` list.
+  The suite runs every module over `sample_data`
   and validates the finding contract, cross-module id collisions, the report render, and a CLI
   end-to-end run. **When you add a module:** it is picked up automatically by the parametrized
   tests via the `MODULES` list in `tests/test_scanner.py` — add your class there, and add a set
   of key check ids to `EXPECTED_CHECKS` so a regression that stops your checks firing is caught.
   Module tests stay stdlib + `pytest`-only; type hints stay `typing`-based (`List`/`Dict`/
   `Optional`, not `list[...]`/`X | Y`) for the 3.8–3.12 matrix.
-- **Three suites need a real PostgreSQL and SKIP without `DB_DSN`** —
-  `test_integration_ingest.py` (the journey), `test_integration_journey.py` (analytics, saved
-  views, bulk actions) and `test_http_console.py` (every route returns 200). The journey is
-  implemented in SQL, so a mocked database proves the Python is self-consistent and proves
-  nothing about whether it works. Run them:
+- **NINE suites need a real PostgreSQL and SKIP without `DB_DSN`** — `test_integration_ingest.py`
+  (the journey), `test_integration_journey.py` (analytics, saved views, bulk actions),
+  `test_http_console.py`, `test_api_auth.py`, `test_account.py`, `test_api_finding_detail.py`,
+  `test_branding.py`, `test_code_finding_console.py` and `test_graph_paths.py` — together well
+  over a hundred tests, and **all of the RBAC coverage**. The journey is implemented in SQL, so a
+  mocked database proves the Python is self-consistent and proves nothing about whether it works.
+  Run the whole DB-gated set, not the three this file used to name:
   ```bash
   docker run -d --name sapsec-test-db -e POSTGRES_USER=sapsec -e POSTGRES_PASSWORD=sapsec \
       -e POSTGRES_DB=sapsec -p 55433:5432 postgres:16
   DB_DSN=postgresql://sapsec:sapsec@localhost:55433/sapsec \
   SESSION_SECRET=$(python -c "import secrets;print(secrets.token_urlsafe(48))") \
-      python -m pytest tests/test_integration_ingest.py \
-                       tests/test_integration_journey.py \
-                       tests/test_http_console.py -q
+      python -m pytest -q          # the full suite; the nine above now execute
   ```
+  A few of them are **data**-dependent as well as DB-dependent and self-skip with "no findings in
+  this database". Seed a scan first (as CI does) or they will quietly prove nothing.
 - **The Phase-1 exit criterion is a test, and it must stay green:** scan the same bundle twice
   and get `new 0 · persisting N · resolved 0`. If it ever fails, finding identity has broken
   and every re-upload will report the whole estate as newly broken.
-- **CI has three jobs, and the skip guard is load-bearing.** `cli` (3.8–3.12, pytest only, so a
-  third-party import into the scanner core fails the build), `purity` (walks the AST of
-  `modules/` and rejects any non-stdlib import), and `server` (PostgreSQL 16, applies the schema
-  **twice** because idempotency is the upgrade path and it has broken once). The `server` job
+- **CI has FIVE jobs, and the skip guard is load-bearing.**
+  `cli` (3.8–3.12, pytest only, so a third-party import into the scanner core fails the build,
+  plus a full smoke run); `purity` (walks the AST of `modules/` and `sap_scanner.py` and rejects
+  any non-stdlib import); `sap-content` (clones SAP's published policy repo, re-derives
+  `data/sap_baseline_requirements.json` and fails on drift, because the coverage page is measured
+  against that catalogue and a stale copy misreports coverage); `brand-assets` (installs Pillow —
+  **only here** — and runs `tools/build_brand_assets.py --check`, on the rule that anything
+  derived is re-derived by CI); and `server` (PostgreSQL 16, applies the schema **twice** because
+  idempotency is the upgrade path and it has broken once).
+- **The `server` job seeds a scan BEFORE pytest, and that is deliberate.** It inserts a
+  landscape/system/run, ingests `sample_data`, and **asserts findings > 0**. Without it, the
+  data-dependent suites self-skipped and the skip guard counted them as drift. The job
   **fails if more than one test skips** — before that guard, `pytest -q` ran the DB-backed
   suites, they skipped for want of `DB_DSN`, and the job went green having verified nothing.
+  Consequence for contributors: **a new test that self-skips for want of data breaks CI.** Give
+  it the data instead of widening the guard; widening it only moves the goalposts.
+- **The compiled SPA is never built in CI**, so a handful of `tests/test_spa_mount.py` tests
+  skip with "run `npm run build` in frontend/". That is the one class of skip the guard tolerates
+  — but it also means **no CI job exercises the real bundle**. Build it locally before claiming a
+  console change works.
 - **`tests/test_identity.py` runs against the REAL `sample_data`, not fixtures**, and asserts
   the `check_id` collisions still exist before asserting they resolve. If the sample data ever
   stops colliding, the test fails loudly rather than silently proving less.
@@ -509,9 +648,15 @@ passes corrected sixteen of them.
 | [`RISE_SECURITY_MODEL.md`](docs/RISE_SECURITY_MODEL.md) | Where SAP's contractual line sits; what a RISE customer can actually export |
 
 **Things that would be a mistake to build** (each is argued in the docs): real-time threat
-detection, transport gating, peer
-benchmarking (fiction without a customer base), BusinessObjects/SuccessFactors, an ABAP agent
-of any kind, and check-count comparisons.
+detection, peer benchmarking (fiction without a customer base),
+BusinessObjects/SuccessFactors, an ABAP agent of any kind, and check-count comparisons.
+
+**"Transport gating" was on that list and has been deliberately removed** — do not add it back
+by copying an older revision. What was rejected was gating *inside SAP*: an agent or exit that
+intercepts a transport release, which needs the ABAP-resident footprint this product exists to
+avoid. What shipped instead is `--gate`, a **pipeline** control that judges an export outside
+the SAP system and returns an exit code. Same goal, opposite architecture, and only one of them
+contradicts the charter. If you find the two conflated anywhere, the CLI gate is the survivor.
 
 **Do not repeat these overclaims:** the mitigation journey is *table stakes*, not a
 differentiator — both incumbents ship it. The genuinely open lane is monetary risk

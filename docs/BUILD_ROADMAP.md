@@ -9,7 +9,7 @@ proved done.
 | Decision | Choice |
 |---|---|
 | Charter | Stdlib-only rule **ends**. One-way. Replaced by a single-digit runtime dependency count |
-| Stack | FastAPI · Jinja2 · psycopg · PostgreSQL 16 · one `docker compose` |
+| Stack | FastAPI · Jinja2 · psycopg · PostgreSQL 16 · one `docker compose` <br>*(Jinja2 superseded 2026-08-09: the console is a React + TypeScript SPA compiled at build time and served by the same FastAPI process. Still one `docker compose`; the runtime dependency count went 5 → 4.)* |
 | Tenancy | **Single-tenant per deployment.** No `tenant_id`; the `landscape` level preserves the option |
 
 **Rules that apply to every phase:**
@@ -36,7 +36,7 @@ meant migrating twice.
 | Coverage manifest | `server/coverage.py` | ✅ |
 | Ingest + run-over-run diff + rebase | `server/ingest.py` | ✅ |
 | FastAPI app, upload, cancellable jobs | `server/app.py` | ✅ |
-| Console templates | `server/templates/` | ✅ |
+| Console templates | `server/templates/` | ✅ *(retired 2026-08-09 → `frontend/`)* |
 | Admin/air-gapped CLI | `server/cli.py` | ✅ |
 | Deployment | `Dockerfile`, `docker-compose.yml` | ✅ |
 | Module conversion to structured objects | 8 graph-relevant modules | 🔄 in progress |
@@ -89,7 +89,7 @@ our niche claims it.
 |---|---|---|
 | Priority, team, RISE ownership, SLA windows | `server/enrich.py` | ✅ |
 | MTTR · burndown · aging · trajectory · scorecards | `server/analytics.py` | ✅ |
-| Trend screen | `server/templates/trend.html` | ✅ |
+| Trend screen | `server/templates/trend.html` | ✅ *(now `frontend/src/routes/Trend.tsx`)* |
 | Saved views + permission-scoped durable URLs | `queries.py`, `/v/{slug}` | ✅ |
 | Assignment, due dates, bulk transitions | `queries.py`, `app.py` | ✅ |
 | Notifications on new CRITICAL + regressions | `ingest.queue_notifications` | ✅ |
@@ -169,8 +169,8 @@ check the scanner emits routes to a team, because a prefix table mis-matches qui
 |---|---|---|
 | FAIR run per scan, persisted to `crq_result` | `server/crq.py` | ✅ |
 | **The Monte-Carlo engine itself** | `modules/crq_engine.py` | ✅ (see below) |
-| `/risk` board view — portfolio, scenarios, exposure over time | `templates/risk.html` | ✅ |
-| ALE tile on the landing dashboard | `templates/dashboard.html` | ✅ |
+| `/risk` board view — portfolio, scenarios, exposure over time | `frontend/src/routes/Risk.tsx` | ✅ |
+| ALE tile on the landing dashboard | `frontend/src/routes/Dashboard.tsx` | ✅ |
 | Unrouted count carried into the UI | both views | ✅ |
 | System criticality as a calibration input | `crq.landscape_exposure_weight` | ✅ |
 | `/api/risk` | `server/app.py` | ✅ |
@@ -256,8 +256,8 @@ console* reached main. Exactly one skip is expected and accounted for; more fail
 |---|---|---|
 | Path templates as **content, not code** | `data/attack_paths.json` (7 paths) | ✅ |
 | Instantiation, cuts, chokepoints, closure | `server/graph.py` | ✅ |
-| `/paths` ranked list + choke-point table | `templates/paths.html` | ✅ |
-| Per-path detail, SVG, mitigate-vs-additional | `templates/path_detail.html` | ✅ |
+| `/paths` ranked list + choke-point table | `frontend/src/routes/Paths.tsx` | ✅ |
+| Per-path detail, SVG, mitigate-vs-additional | `frontend/src/routes/PathDetail.tsx` | ✅ |
 | Ruleset fingerprint + staleness banner | `graph.ruleset_fingerprint` | ✅ |
 | RFC destination ownership classification | `enrich.classify_destination_owner` | ✅ |
 | `rfc/callback_security_method` (path 2's cut) | `BASELINE-011` | ✅ |
@@ -362,7 +362,7 @@ attack-path page.
 | Parser for SAP's Apache-2.0 CSA policies | `server/sapcontent.py` | ✅ |
 | Derived requirement catalogue (vendored) | `data/sap_baseline_requirements.json` | ✅ |
 | Check → SAP requirement mapping | `sapcontent.CHECK_TO_REQUIREMENT` | ✅ |
-| `/coverage` — the published catalogue **and its gaps** | `templates/coverage.html` | ✅ |
+| `/coverage` — the published catalogue **and its gaps** | `frontend/src/routes/Coverage.tsx` | ✅ |
 | CI job re-derives from SAP and fails on drift | `.github/workflows/tests.yml` | ✅ |
 | `rebuild-sap-catalogue` CLI command | `server/cli.py` | ✅ |
 | Static check-id collision guard | `tests/test_check_id_uniqueness.py` | ✅ |

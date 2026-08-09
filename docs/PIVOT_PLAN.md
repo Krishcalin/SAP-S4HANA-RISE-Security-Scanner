@@ -95,7 +95,7 @@ precedent and already runs this exact shape in production:
 | Layer | Choice | Why |
 |---|---|---|
 | Web | **FastAPI** | Already proven in LogOcean (85 routes) |
-| Templates | **Jinja2**, server-rendered, one stylesheet, **no client framework** | Matches Microsoft's and AWS's own attack-path UX (§6.1 of the competitive analysis) — the graph is 6–10 nodes in an SVG, not a canvas |
+| Templates | **Jinja2**, server-rendered, one stylesheet, **no client framework** | Matches Microsoft's and AWS's own attack-path UX (§6.1 of the competitive analysis) — the graph is 6–10 nodes in an SVG, not a canvas.<br>**Superseded 2026-08-09.** The 13 templates were replaced by a React + TypeScript SPA (`frontend/`), compiled by Vite at build time into `server/spa/` and served by the same FastAPI process at `/`. The reasoning above held: what changed is that a triage queue with live filtering, bulk selection and polling wants client state, not that the SVG needed a canvas. Still one container, still no chart library, and the runtime dependency count went **down** when jinja2 left. |
 | DB | **PostgreSQL 16, single instance**, not published to the host | Recursive CTEs are ample for SAP-scale graphs; a graph DB would be an unforced dependency and would break the deployment-simplicity wedge |
 | Driver | **psycopg** | Precedent |
 | Deploy | **One `docker compose`** — app + Postgres | If we need more than one modest container we forfeit our only structural advantage over an 8-core/16 GB/200 GB console + sensor pair |
@@ -390,6 +390,8 @@ Being crisp about these buys credibility for what we do claim:
 1. **Confirm the charter change** — Postgres + web tier ends stdlib-only. One-way.
 2. **Confirm the stack** — FastAPI + Jinja2 + psycopg + PostgreSQL 16, single compose file,
    mirroring LogOcean. (Alternative worth naming only to dismiss it: adding a graph database.)
+   *Answered yes; the Jinja half was later superseded — see the stack table in §3. The graph
+   database was dismissed and stayed dismissed.*
 3. **Confirm the sequencing** — identity contract first, console second, FAIR third, graph
    fourth. The temptation is to build the graph early because it demos well; doing so means
    migrating the schema twice.

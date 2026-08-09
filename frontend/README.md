@@ -1,9 +1,9 @@
 # The MonitorRisk console (React + TypeScript)
 
-The console is migrating from 13 Jinja templates to a React SPA. This directory
-is the SPA. It is compiled by Vite at **build time** into `../server/spa/` and
-served as static files by the **same FastAPI process** that serves the API —
-there is no Node at runtime, no second container and no reverse proxy.
+The console was 13 Jinja templates and is now this directory. It is compiled by
+Vite at **build time** into `../server/spa/` and served as static files by the
+**same FastAPI process** that serves the API — there is no Node at runtime, no
+second container and no reverse proxy.
 
 ```
 npm install
@@ -15,25 +15,40 @@ npm run build        # type-checks, then emits ../server/spa
 `npm run build` is what the Dockerfile's first stage runs, so a type error fails
 the image rather than shipping.
 
-## Where the SPA lives, and why it is not at `/`
+## Where the SPA lives
 
-The bundle is built for and mounted at **`/ui/`**.
-
-The Jinja console still owns `/`, `/findings`, `/paths` and every other bare
-path, and those pages are the only working version of the screens that have not
-been migrated yet. Taking those URLs before the screens exist would strand the
-product the moment one of them was unfinished.
+The bundle is built for and mounted at **`/`**. It sat at `/ui/` for the length
+of the migration, because the Jinja console owned `/`, `/findings`, `/paths` and
+every other bare path and those pages were the only working version of any screen
+not yet ported — taking those URLs early would have stranded the product the
+moment one was unfinished. Every screen landed on 2026-08-09, the templates and
+their routes were deleted, and the console took the root. **Nothing in `src/`
+changed**: route paths are written without a prefix and
+`BrowserRouter basename={import.meta.env.BASE_URL}` supplies it.
 
 Two constants have to agree and are asserted to, in `tests/test_spa_mount.py`:
 
 | | |
 |---|---|
-| `base` in `vite.config.ts` | `'/ui/'` — baked into every asset URL at build time |
-| `SPA_MOUNT_PATH` in `server/app.py` | `'/ui'` |
+| `base` in `vite.config.ts` | `'/'` — baked into every asset URL at build time |
+| `SPA_MOUNT_PATH` in `server/app.py` | `'/'` |
 
-When the last screen lands, both become `/`, the Jinja routes are deleted, and
-**nothing in `src/` changes**: route paths are written without the prefix and
-`BrowserRouter basename={import.meta.env.BASE_URL}` supplies it.
+A bundle built for one prefix and mounted at another is a blank page with four
+404s in the console, so **re-run `npm run build` after changing either**. The
+image always rebuilds; only a stale `../server/spa` on a developer's disk bites.
+
+Three consequences of owning the root, all of them in `server/app.py`:
+
+* **The mount is registered LAST.** A Mount at `/` matches every path and
+  Starlette dispatches to the first match, so anything after it is dead code that
+  answers 200 with `index.html`. `/api`, `/health` and `/static` are declared
+  above it.
+* **`/ui/*` answers 301** to the same path without the prefix, query string
+  included. Those URLs were shared and bookmarked for the whole migration, and
+  without the redirect they would resolve to the catch-all "page not found"
+  screen instead of 404ing honestly.
+* **An unmatched `/api` path 404s** rather than being answered with the console.
+  `SpaFiles._index_or_404` refuses to fall back for anything under `api/`.
 
 ## Adding a screen
 
@@ -98,8 +113,11 @@ bundle. `tests/test_spa_mount.py` fails if `VITE_DATA_SOURCE`, `DATA_MODE` or a
 
 **Writes are form-encoded, reads are JSON.** Not an inconsistency: the write
 endpoints under `/api` take FastAPI `Form(...)` parameters because the Jinja
-pages post to them directly, and those pages stay working for the whole
-migration. `client.ts` handles it; screens should not hand-roll a request.
+pages used to post to them directly. It is a published API that integrators call,
+so the shape stayed when those pages went. `client.ts` handles it; screens should
+not hand-roll a request. `/api/auth/*` and `/api/account/*` are the exception and
+take JSON bodies — that is a CSRF control, not a style choice; see the header
+of `server/api_auth.py`.
 
 **Saving a view reads the REFERER, not a body.** `saveView()` saves what the
 server can see you are looking at, so the filters must be in the address bar —
@@ -108,15 +126,16 @@ an empty view and the failure is silent.
 
 ## Styling
 
-Tailwind v4, over the design tokens in `src/index.css`. Those tokens are copied
-verbatim from `server/templates/base.html` so the two consoles look like one
-product while both are running; `sev-*`, `st-*`, `own-*` and `tier-*` are the
-same class names the templates use, so a template's markup ports across without
-re-deriving the palette.
+Tailwind v4, over the design tokens in `src/index.css`. Those tokens were copied
+verbatim from the retired `server/templates/base.html`, which is why `sev-*`,
+`st-*`, `own-*` and `tier-*` are the class names they are: a template's markup
+ported across without re-deriving the palette, and the console looked like the
+same product on the day it replaced the pages. `src/index.css` is now the only
+definition of any of it.
 
 Dark is `:root` and light is the `prefers-color-scheme` override — the inverse of
-the usual convention, matching `base.html`. There is no theme toggle; the console
-follows the OS, as the Jinja pages always have.
+the usual convention, inherited from the same stylesheet. There is no theme
+toggle; the console follows the OS, as the server-rendered pages always did.
 
 ## Dependency budget
 

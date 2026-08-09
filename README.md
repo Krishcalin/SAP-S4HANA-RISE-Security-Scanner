@@ -16,8 +16,8 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/SAP%20Note%203250501-92%2F92%20parameters-0FAAFF?style=flat-square&logo=sap&logoColor=white" alt="SAP Note 3250501: 92/92"/>
-  <img src="https://img.shields.io/badge/checks-300%2B%20across%2030%20modules-red?style=flat-square" alt="300+ checks, 30 modules"/>
-  <img src="https://img.shields.io/badge/custom%20code-118%20ABAP%20rules%20%2B%20taint-8A2BE2?style=flat-square" alt="118 ABAP rules with taint analysis"/>
+  <img src="https://img.shields.io/badge/checks-600%2B%20across%2030%20modules-red?style=flat-square" alt="600+ checks, 30 modules"/>
+  <img src="https://img.shields.io/badge/custom%20code-133%20ABAP%2FJS%2FBTP%20rules%20%2B%20taint-8A2BE2?style=flat-square" alt="133 static-analysis rules with taint analysis"/>
   <img src="https://img.shields.io/badge/reports-HTML%20%C2%B7%20PDF%20%C2%B7%20PPTX-555?style=flat-square" alt="HTML · PDF · PPTX Reports"/>
   <img src="https://img.shields.io/badge/server-FastAPI%20%2B%20PostgreSQL%2016-336791?style=flat-square&logo=postgresql&logoColor=white" alt="Server: FastAPI + PostgreSQL 16"/>
 </p>
@@ -29,7 +29,7 @@
 - **[Overview](#overview)**
 - **[Server mode — quick start](#server-mode--quick-start)**
   - [What the server adds over the CLI](#what-the-server-adds-over-the-cli)
-- **[Audit Modules](#audit-modules)** &nbsp;<sub>73 check families</sub>
+- **[Audit Modules](#audit-modules)** &nbsp;<sub>30 modules · 73 documented families</sub>
   <details><summary><sub>expand by family</sub></summary>
 
   - **Identity & Access** &nbsp; [Segregation of Duties](#segregation-of-duties-iam-sod-) · [Firefighter / Emergency Access](#firefighter--emergency-access-iam-ff-) · [Role Expiry & Validity](#role-expiry--validity-iam-exp-) · [Cross-System Identity](#cross-system-identity-iam-xid-) · [Access Review Compliance](#access-review-compliance-iam-rev-) · [Role Design Quality](#role-design-quality-iam-role-)
@@ -49,7 +49,8 @@
 
   </details>
 - **[Quick Start](#quick-start)**
-  - [Available Modules](#available-modules)
+  - [Available Modules](#available-modules) &nbsp;<sub>all 30 keys</sub>
+- **[Release Gate](#release-gate)** &nbsp;<sub>exit 0 · 1 · 2</sub>
 - **[Reports](#reports)** &nbsp;<sub>4 sections</sub>
   <details><summary><sub>expand</sub></summary>
 
@@ -99,10 +100,10 @@ It runs in **two modes that share one scanner core**:
 | Use it for | Air-gapped review, one-off assessment | Continuous tracking of the **mitigation journey** |
 
 - **No direct system connection required** — offline & agentless. Nothing is installed in the SAP system, no RFC user, no credentials handed over, no open port. In RISE, third-party ABAP add-ons are an Excluded Task requiring an additional SKU and a multi-week evaluation; an export bundle needs none of that.
-- **300+ security checks across 30 audit modules** — ABAP authorizations, HANA DB, BTP/Cloud, GRC Access Control, SOX financial-config controls, permission-level Segregation of Duties, and a custom-code scanner
+- **~600 security checks across 30 audit modules** — ABAP authorizations, HANA DB, BTP/Cloud, GRC Access Control, SOX financial-config controls, permission-level Segregation of Duties, and a custom-code scanner. Precisely: **359** check IDs are written as literals and **617** exist once the five runtime-generated families (profile parameters, ABAP rules, SoD risks, ATC families) resolve against their shipped rulesets.
 - **Complete against SAP's mandatory ECS baseline** — **92 of 92** profile parameters from **SAP Note 3250501** (the hardening requirements SAP makes mandatory for AS ABAP in Enterprise Cloud Services), plus its configuration half. Every value is read from a recorded extract of the note, never hand-typed, because a transcription typo tells a customer they are compliant when they are not.
-- **Deployment-aware** — `--deployment-mode` decides what *compliant* means. `snc/accept_insecure_gui = 1`, `rfc/callback_security_method = 1` and an unlocked `DDIC` are findings on classic on-premise ABAP and are **SAP's own mandate** in RISE. A RISE-specific scanner that flags SAP's baseline is confidently wrong on every compliant system.
-- **Custom code (CVA)** — 118 ABAP/CDS/BDEF rules over a statement-level lexer with intra-procedural taint analysis, so a finding is graded `confirmed` / `tentative` / `pattern-only` rather than asserted. ABAP statements end at a period and span lines; matching them one line at a time loses real injections and invents false ones.
+- **Deployment-aware** — `--deployment-mode` decides what *compliant* means. `snc/accept_insecure_gui = 1` is **SAP's own mandated value** in ECS, `rfc/callback_security_method = 1` is a **documented exception** SAP permits (the ECS standard is `3`), and an unlocked `DDIC` is explicitly not required to be locked. All three are findings on classic on-premise ABAP. A RISE-specific scanner that flags SAP's own baseline is confidently wrong on every compliant system.
+- **Custom code (CVA)** — **133 rules dispatched by file type** (118 ABAP/CDS/RAP, 7 JavaScript/UI5, 8 BTP descriptor) over a statement-level lexer with intra-procedural taint analysis, so a finding is graded `confirmed` / `tentative` / `pattern-only` rather than asserted. ABAP statements end at a period and span lines; matching them one line at a time loses real injections and invents false ones.
 - **A release gate, not just a report** — `--gate` exits non-zero when a change would make things worse, so the scanner can sit in a pipeline. Judges the *delta* against a baseline, scopes to the objects a transport touches, never blocks on a finding the customer cannot fix, and **never fails open**: degraded coverage is "could not assess", never "pass".
 - **Stable finding identity** — every finding is fingerprinted from the concrete SAP objects it names, so it matches itself across re-uploads. That is what makes remediation tracking, aging and MTTR possible rather than approximate.
 - **Risk-prioritized (P1–P4)** — ranked by severity × exploitability × exposure × privilege, with the contributing factors shown. Works on findings CVSS cannot score at all.
@@ -111,9 +112,9 @@ It runs in **two modes that share one scanner core**:
 - **RISE-aware** — findings carry a remediation owner. In RISE a customer can *see* a bad profile parameter and cannot change it, so those findings render as a pre-drafted service request to SAP, never as "change this".
 - **Standards-aligned** — CIS SAP Benchmark, DSAG best-practice guide, SAP Security Baseline
 
-**Pipeline:** &nbsp;`LOAD` CSV/JSON exports → `MODULES` (30 auditors) → `CHECKS` (300+ rules) → `RANK` by severity & P1–P4 priority → `MAP` to compliance frameworks → *(optional)* `QUANTIFY` FAIR loss exposure ($) → `REPORT` (HTML · PDF · PPTX) **or** `STORE` (PostgreSQL → web console, run-over-run diff, graph nodes).
+**Pipeline:** &nbsp;`LOAD` CSV/JSON exports → `MODULES` (30 auditors) → `CHECKS` (~600 rules) → `RANK` by severity & P1–P4 priority → `MAP` to compliance frameworks → *(optional)* `QUANTIFY` FAIR loss exposure ($) → `REPORT` (HTML · PDF · PPTX) **or** `STORE` (PostgreSQL → web console, run-over-run diff, graph nodes).
 
-> **A note on dependencies.** The CLI still runs on the Python standard library alone — the HTML, PDF and PPTX engines are all hand-built. The **server tier** deliberately ends that rule: a browser console and a durable finding store cannot be built on the stdlib. The discipline that replaces it is a **single-digit runtime dependency count** (currently 5), no ORM and no graph database. The console is a **React + TypeScript SPA** built at build time and served as static files by the same FastAPI process — so it costs build-time tooling, not a runtime dependency and not a second service. The deployment is still one app container plus one PostgreSQL. See [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md).
+> **A note on dependencies.** The CLI still runs on the Python standard library alone — the HTML, PDF and PPTX engines are all hand-built. The **server tier** deliberately ends that rule: a browser console and a durable finding store cannot be built on the stdlib. The discipline that replaces it is a **single-digit runtime dependency count** (currently 4 — Jinja2 left with the server-rendered console on 2026-08-09), no ORM and no graph database. The console is a **React + TypeScript SPA** built at build time and served as static files by the same FastAPI process at `/` — so it costs build-time tooling, not a runtime dependency and not a second service. The deployment is still one app container plus one PostgreSQL. See [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md).
 
 ---
 
@@ -134,8 +135,9 @@ docker compose exec app python -m server.cli add-landscape "Acme Production" --m
 Open <http://127.0.0.1:8000> and sign in — the console is branded **MonitorRisk**.
 `--generate` prints a password to the terminal, so it
 now lives in scrollback and in `docker compose logs` — the console therefore holds that account
-at **Your account** until it is replaced. Every page and every JSON endpoint stays closed until
-then, so the requirement cannot be scripted around.
+at **Your account** until it is replaced. Every JSON endpoint stays closed until then — the
+console shell is a static bundle, so the gate is enforced on the **data**, not on the page, and
+therefore cannot be scripted around.
 
 After that, passwords are managed from inside the console: **Your account** (the role chip, top
 right) changes your own — the current password is required even though you are already signed
@@ -168,7 +170,7 @@ product's clearest structural advantage, and a third service would forfeit it.
 - **Mitigation journey** — re-upload the same exports over time; each finding is classified
   *new · persisting · resolved · regressed*, with age, assignee, due date and MTTR. A finding
   that comes back re-opens the **same row** with its history intact rather than appearing as new.
-- **Coverage manifest** — *"you supplied 105 of 117 sources; 10 modules ran with incomplete
+- **Coverage manifest** — *"you supplied 105 of 122 sources; 10 modules ran with incomplete
   input; 1 source is not obtainable in RISE at all."* Without it a partial upload produces a
   clean-looking report over a fraction of the estate.
 - **Risk acceptance with expiry**, false-positive disputes with a mandatory reason, and a
@@ -188,35 +190,36 @@ product's clearest structural advantage, and a third service would forfeit it.
 
 | Module | Checks | Focus |
 |--------|--------|-------|
-| 🔐 **User & Authorization** | USR-001→008 | Default users, SAP_ALL, dormant accounts, service accounts |
-| 🛡️ **Advanced IAM** | IAM-SOD/FF/EXP/XID/REV/ROLE/PRIV (28) | SoD conflicts, firefighter access, role lifecycle, cross-system identity |
-| ⚙️ **Security Parameters** | PARAM-* (23) | Password policy, login security, RFC, gateway, TLS, audit logging |
+| 🔐 **User & Authorization** | USR-001→010 (10) | Default users, SAP_ALL, dormant accounts, service accounts |
+| 🛡️ **Advanced IAM** | IAM-SOD/FF/EXP/XID/REV/ROLE/FED/PRIV (30) | SoD conflicts, firefighter access, role lifecycle, cross-system identity |
+| ⚙️ **Security Parameters** | PARAM-&lt;parameter&gt; (78 parameters) | Password policy, login security, RFC, gateway, TLS, audit logging |
 | 🌐 **Network & Services** | NET-001→008 | RFC destinations, ICF services, transports, audit config |
 | ☁️ **RISE / BTP Core** | RISE-001→007 | Trust config, comm arrangements, API exposure |
 | 🔥 **BTP Cloud Attack Surface** | BTP-CC/SB/DST/IAS/ENT/EM/CPI/NET/GOV/MIG (35) | Cloud Connector (incl. version/CVE-2024-25642), service bindings, destinations, IAS (incl. password policy & corporate-IdP enforcement), Event Mesh, CPI, network isolation |
-| 🔗 **Network & Integration Layer** | INTG-APIM/IDOC/WS/WH/GW/MON/CPI/OAUTH/TOPO (27) | API Management, IDOC ports, web services, webhooks, gateway ACLs, OAuth, topology |
-| 🔏 **Data Protection & Privacy** | DPP-RAL/ILM/MASK/TOOLKIT/POP/FIELD/RES/DEL/LAND (18) | Read Access Logging, ILM retention, data masking, GDPR/DPDP toolkit, data residency |
+| 🔗 **Network & Integration Layer** | INTG-APIM/IDOC/WS/WH/GW/MON/CPI/OAUTH/TOPO (32) | API Management, IDOC ports, web services, webhooks, gateway ACLs, OAuth, topology |
+| 🔏 **Data Protection & Privacy** | DPP-RAL/ILM/MASK/TOOLKIT/POP/FIELD/RES/DEL/LAND (21) | Read Access Logging, ILM retention, data masking, GDPR/DPDP toolkit, data residency |
 | 💻 **Code & Transport Security** | CODE-INJ/STMT/ATC/TMS/CLIENT/CHG/DEV/MOD/DEAD (21) | SQL injection, hardcoded creds, ATC findings, transport workflow, client config, SAP mods |
-| 📊 **Logging, Monitoring & IR** | LOG-AUD/SIEM/RET/TBL/LOGON/IR (11) | Audit log config, SIEM integration, log retention, table logging, brute-force detection |
+| 📊 **Logging, Monitoring & IR** | LOG-AUD/SIEM/RET/TBL/LOGON/IR (14) | Audit log config, SIEM integration, log retention, table logging, brute-force detection |
 | 🖥️ **Fiori & UI Layer** | FIORI-CAT/APP/ODATA/SPACE/TILE/USAGE (8) | Catalog access, OData backend auth, sensitive app exposure, spaces/pages config |
-| 🔑 **Cryptographic Posture** | CRYPTO-TLS/CERT/SNC/HANA/LIB/PSE/KEY (17) | TLS config, certificate health, SNC, HANA encryption at rest (data/log/**backup**), **system-replication TLS**, crypto library, key management |
+| 🔑 **Cryptographic Posture** | CRYPTO-TLS/CERT/SNC/HANA/LIB/PSE/KEY (18) | TLS config, certificate health, SNC, HANA encryption at rest (data/log/**backup**), **system-replication TLS**, crypto library, key management |
 | 🗄️ **HANA Database Security** | HANADB-USER/PRIV/ROLE/AUDIT/PARAM (19) | Privileged DB users (SYSTEM, password lifetime, dormancy), PUBLIC & system-privilege grants, _SYS_BI_CP_ALL analytic bypass, **DEBUG/ATTACH DEBUGGER** grants, DB auditing, HANA security parameters incl. **log_mode/PITR** and **MDC cross-database access** |
 | 📰 **SAP Security Notes / HotNews** | HOTNEWS-000→004 (5) | Missing HotNews (Priority 1) & High (Priority 2) SAP Security Notes since 2020, actively-exploited (CISA KEV) unpatched CVEs, partially-implemented notes — diffed from your SNOTE export against a curated, verified catalog |
 | 🔓 **ABAP Authorization & Critical Access** | AUTH-001→016 (16) | Role-content analysis from AGR_1251: Debug&Replace (runtime auth bypass), trusted-RFC impersonation (S_RFCACL), OS command/file access (S_LOG_COM/S_DATASET), authorization forging (S_USER_AUT), broad S_RFC, generic table maintenance (S_TABU_*), run-any-report (S_PROGRAM), batch impersonation, unrestricted destination authorization (S_ICF DEST=*), and sensitive Basis transactions — attributed to the users who hold each role |
-| 🔗 **System Trust & Standard Users** | TRUST-001→008, STDUSR-001→003 (11) | Trusted/trusting RFC (inbound trust from a lower tier, self-trust, unmigrated 2020 method, trusted destination with a fixed user), SAProuter wildcard routes, message-server port separation, UCON RFC allowlist, gateway proxy ACL — plus standard users (SAP* kernel auto-logon, default passwords, unlocked SAP*/DDIC/SAPCPIC/EARLYWATCH/TMSADM) |
-| 🧱 **Security Baseline Parameters** | BASELINE-001→011 (11) | SAP Security Baseline / DSAG / CIS profile parameters the other modules don't cover: RFC authorization engine (auth/rfc_authority_check, auth/no_check_in_some_cases), SNC insecure-connection fallback, SAP GUI Scripting, weak legacy password hashes (downwards compatibility) and weak password hash algorithm (login/password_hash_algorithm), sapstartsrv / Host-Agent web methods, gateway ACL mode, SSO ticket & session-cookie transport, ICM security log & error disclosure |
+| 🔗 **System Trust & Standard Users** | TRUST-001→008 + TRUST-010, STDUSR-001→003 (12) | Trusted/trusting RFC (inbound trust from a lower tier, self-trust, unmigrated 2020 method, trusted destination with a fixed user), SAProuter wildcard routes, message-server port separation, UCON RFC allowlist, gateway proxy ACL — plus standard users (SAP* kernel auto-logon, default passwords, unlocked SAP*/DDIC/SAPCPIC/EARLYWATCH/TMSADM) |
+| 🧱 **Security Baseline Parameters** | BASELINE-001→012 + BASELINE-SNC-DEFERRED (13) | SAP Security Baseline / DSAG / CIS profile parameters the other modules don't cover: RFC authorization engine (auth/rfc_authority_check, auth/no_check_in_some_cases), SNC insecure-connection fallback, SAP GUI Scripting, weak legacy password hashes (downwards compatibility) and weak password hash algorithm (login/password_hash_algorithm), sapstartsrv / Host-Agent web methods, gateway ACL mode, SSO ticket & session-cookie transport, ICM security log & error disclosure |
 | 🧩 **S/4HANA & Cloud Authorization** | S4AUTHZ-001→008 (8) | The cloud-era authorization layer: super-admin business-role templates (SAP_BR_ADMINISTRATOR*), business-role restrictions left 'Unrestricted', business-catalog sprawl, CDS views with @AccessControl.authorizationCheck disabled, published OData V4 service groups without S_SERVICE, Cloud Connector system mappings without principal propagation, over-assigned Cloud Foundry Org Manager / Space Developer, and birthright role collections mapped to the Default IdP group |
 | ⚖️ **Access Risk Analysis (SoD)** | ARA-* (27 risks + user score) | GRC-style **offline Segregation-of-Duties** from AGR_1251 + AGR_USERS. Resolves each user's transactions **and** authorization object/field/activity across all roles, then evaluates a verified ruleset at the **permission level** (so display-only access is not a false positive): 25 SoD conflicts across Procure-to-Pay, Order-to-Cash, Record-to-Report, Hire-to-Retire and Basis/Security, plus 2 HR critical accesses. Honours documented **mitigating controls** (with expiry) and produces a **per-user risk profile**. Extensible via a custom ruleset JSON. (Supersedes the coarse transaction-level SoD in Advanced IAM, which now defers to this module when AGR_1251 is available.) |
 | ⚙️ **Basis Jobs & OS Commands** | JOBCMD-CMD/JOB-* (11) | The realised **host-command-execution** surface: external OS-command definitions (SM69 / SXPGCOSTAB) that wrap a shell/interpreter, allow runtime argument injection (ADDPAR), resolve to an unqualified/user-writable path, or wrap a destructive/exfil utility — plus armed background jobs (TBTCO/TBTCP) whose step user (AUTHCKNAM) is SAP*/DDIC/SAP_ALL, that shell out to an OS command/program, that run RSBDCOS0 (SM69-allowlist bypass) or unreviewed custom code, whose step user is deleted/locked/dialog, or differs from the scheduler (identity borrowing). Reuses `users`/`profiles` to resolve privileged step users. Complements the ABAP Authorization module (which covers who *can* act) with what is *actually* defined and scheduled. |
 | 🚨 **GRC Access Control** | GRC-FF/ARM/ARA/MIT/RS (13) | The **SAP GRC Access Control** process layer (not just configuration): Emergency Access Management / Firefighter usage without owner review, self-owned firefighter IDs, uncontrolled Firefighter logon; Access Request Management approvals bypassing SoD risk analysis, auto-provisioned requests, missing risk analysis; GRC-native SoD violations left open past SLA; mitigating controls without a monitor or past validity; and SoD-ruleset governance (blank/critical risk levels, ruleset currency). |
 | 👔 **Role Design & Governance** | RG-SU24/GEN/DRV (3) | Role-build hygiene: custom Z*/Y* transactions with unmaintained SU24 authorization proposals (default-check gaps), roles whose profiles were never generated (AGR_1016) so the authorizations are inert, and derived roles whose authorization values have **drifted** from their parent (org-level fields excepted) — a common source of silent over-entitlement. |
 | 💰 **Financial Controls (SOX)** | FIN-PP/TOL/SF/DOC/NR (6) | SOX ITGC / FI configuration controls: posting-period variants left wide open (T001B), unlimited or unset posting tolerance groups (T043T), payment-relevant fields not under dual-control / four-eyes (T055F), document-change rules allowing post-posting edits to bank/payment fields (TBAER), and FI accounting-document number ranges main-memory buffered (TNRO) — which breaks gap-free, audit-defensible document numbering. |
-
-| 🔒 **SNC Posture** | CRYPTO-SNCECS-* | The **18 SNC / IGS parameters of SAP Note 3250501 as one model, not 18 comparisons.** With `snc/enable = 0` every `accept_insecure_*` setting is moot, so ten independent findings would report ten problems where the truth is one. Also checks the relationships the note itself states: `igs/snc/name` must match `snc/identity/as`, `igs/snc/library` must match `snc/gssapi_lib`, and `data_protection/min` may not exceed `max`. Critically, `snc/accept_insecure_gui = 1` and `snc/only_encrypted_rfc = 0` are the **ECS standard** — flagging them would flag every compliant RISE system. |
-| 📜 **ECS Mandatory Configuration** | AUTH-ECS / CRYPTO-ECS / STDUSR-ECS / LREV-ECS | The **configuration half** of Note 3250501 — the items that are not profile parameters: password-hash tables behind authorization group SPWD, `SSF_PSE_D` behind SPSE, unused clients, and Security Audit Log filter coverage. Every one of the note's 18 items is accounted for in a disposition table naming who owns it, so a future note version that adds a nineteenth breaks the build rather than the report. |
-| 🧬 **Custom Code (CVA)** | ABAP-* (118 rules) | Our own **ABAP / CDS / RAP scanner** over an abapGit offline export — the one route ABAP source leaves a RISE PCE system. Statement-level lexing (ABAP statements end at a period and routinely span five lines; matching line-by-line both loses real injections and invents false ones), a mode-stack that handles string templates and their embedded expressions, SQLScript lexing for AMDP bodies, and intra-procedural taint analysis that grades each finding `confirmed` / `tentative` / `pattern-only`. Where the customer has SAP's own CVA, `atc` ingests those results instead. |
-| 📦 **Custom-Code Inventory** | CODE-INV-* | The estate picture rather than its defects: object counts by type, code nothing references (dead-code removal reduces attack surface), code that has not run in a year, and — kept deliberately separate — code whose reachability is **unknown**. Unknown is not unreachable. |
-| 🔁 **Resilience & Recovery** | RES-BCK/DR/JOB/RET/IR | Ransomware readiness from what an export can actually evidence: backup recency and failure posture, DR-test records, recovery objectives. Scrupulously scoped — this verifies that resilience is **configured**, never that a restore works. |
+| 🧾 **ATC / CVA Import** | ATC-* | SAP's **own** ATC / Code Vulnerability Analyzer results, ingested rather than re-derived. Where the customer already licenses CVA, its findings are authoritative and duplicating them would only disagree with SAP about SAP's own tool. |
+| 🔎 **Security Audit Log Review** | LREV-FLT/PAT/RET/* (15) | Retrospective SM20 review — what the audit log *actually recorded*, as opposed to how it is configured. Configuration says what should be captured; this says what was. |
+| 🔒 **SNC Posture** | CRYPTO-SNCECS-* (7) | The **18 SNC / IGS parameters of SAP Note 3250501 as one model, not 18 comparisons.** With `snc/enable = 0` every `accept_insecure_*` setting is moot, so ten independent findings would report ten problems where the truth is one. Also checks the relationships the note itself states: `igs/snc/name` must match `snc/identity/as`, `igs/snc/library` must match `snc/gssapi_lib`, and `data_protection/min` may not exceed `max`. Critically, `snc/accept_insecure_gui = 1` and `snc/only_encrypted_rfc = 0` are the **ECS standard** — flagging them would flag every compliant RISE system. |
+| 📜 **ECS Mandatory Configuration** | AUTH-ECS / CRYPTO-ECS / STDUSR-ECS / LREV-ECS (5) | The **configuration half** of Note 3250501 — the items that are not profile parameters: password-hash tables behind authorization group SPWD, `SSF_PSE_D` behind SPSE, unused clients, and Security Audit Log filter coverage. Every one of the note's 18 items is accounted for in a disposition table naming who owns it, so a future note version that adds a nineteenth breaks the build rather than the report. |
+| 🧬 **Custom Code (CVA)** | ABAP-* (133 rules) | Our own **ABAP / CDS / RAP scanner** over an abapGit offline export — the one route ABAP source leaves a RISE PCE system. Statement-level lexing (ABAP statements end at a period and routinely span five lines; matching line-by-line both loses real injections and invents false ones), a mode-stack that handles string templates and their embedded expressions, SQLScript lexing for AMDP bodies, and intra-procedural taint analysis that grades each finding `confirmed` / `tentative` / `pattern-only`. Where the customer has SAP's own CVA, `atc` ingests those results instead. |
+| 📦 **Custom-Code Inventory** | CODE-INV-001→005 (5) | The estate picture rather than its defects: object counts by type, code nothing references (dead-code removal reduces attack surface), code that has not run in a year, and — kept deliberately separate — code whose reachability is **unknown**. Unknown is not unreachable. |
+| 🔁 **Resilience & Recovery** | RES-BCK/DR/EVD/JOB (9) | Ransomware readiness from what an export can actually evidence: backup recency and failure posture, DR-test records, recovery objectives. Scrupulously scoped — this verifies that resilience is **configured**, never that a restore works. |
 
 <details>
 <summary><strong>🛡️ Advanced IAM — Full Check List</strong></summary>
@@ -931,6 +934,16 @@ python sap_scanner.py --data-dir ./exports --config baseline.json
 # Cyber-risk quantification (FAIR): embed a dollar-denominated loss exposure in the report
 python sap_scanner.py --data-dir ./exports --output report.html --format both --crq \
     --crq-revenue 2000000000 --crq-industry manufacturing --crq-org-name "Acme Manufacturing"
+
+# Tell the scanner which estate this is — it changes what "compliant" means (see below)
+python sap_scanner.py --data-dir ./exports --deployment-mode rise_pce
+
+# Scan custom ABAP from an abapGit offline export (the `cva` module)
+python sap_scanner.py --data-dir ./exports --abap-src ./abapgit_export --modules cva
+
+# Use it as a release gate in CI — exits 0 pass / 1 blocked / 2 could not assess
+python sap_scanner.py --data-dir ./exports --gate-write-baseline gate-baseline.json   # once
+python sap_scanner.py --data-dir ./exports --gate --gate-baseline gate-baseline.json  # every build
 ```
 
 ### Available Modules
@@ -959,8 +972,17 @@ jobcmd    — Basis Jobs & OS Commands (JOBCMD-*)
 grcac     — GRC Access Control (GRC-*)
 rolegov   — Role Design & Governance (RG-*)
 fincontrols — Financial Controls / SOX (FIN-*)
+atc       — SAP ATC / CVA result import (ATC-*)
+cva       — Custom-code ABAP/CDS/RAP scanner (ABAP-*)   ← needs --abap-src
+logreview — Security Audit Log retrospective review (LREV-*)
+codeinv   — Custom-code inventory & dead code (CODE-INV-*)
+resilience— Backup / DR / recovery posture (RES-*)
+snc       — SNC posture as one model (CRYPTO-SNCECS-*)
+ecsconfig — ECS mandatory configuration, Note 3250501 (…-ECS-*)
 all       — Run everything (default)
 ```
+
+That is the complete list — all 30 keys, matching `--modules` exactly.
 
 Examples with the newer modules:
 
@@ -974,6 +996,42 @@ python sap_scanner.py --data-dir ./exports --modules hanadb hotnews
 # System trust, standard users, and Security Baseline parameters
 python sap_scanner.py --data-dir ./exports --modules systrust baseline
 ```
+
+---
+
+
+<sub>[↑ Contents](#contents)</sub>
+
+## Release Gate
+
+`--gate` turns the scanner from something that *reports* into something that **decides**, so it can sit in a pipeline. Full adoption guidance is in [`docs/RELEASE_GATE.md`](docs/RELEASE_GATE.md).
+
+| Exit | Meaning |
+|:---:|---|
+| **0** | Pass — nothing in scope got worse |
+| **1** | Blocked — the policy was violated |
+| **2** | Could not assess — coverage was degraded, so no verdict is claimed |
+
+```bash
+# 1. Record where you are today. Runs a full scan and writes a report as well.
+python sap_scanner.py --data-dir ./exports --gate-write-baseline gate-baseline.json
+
+# 2. Enforce on every build.
+python sap_scanner.py --data-dir ./exports --gate --gate-baseline gate-baseline.json
+
+# Optional: scope to the objects a transport actually touches, and emit machine-readable output
+python sap_scanner.py --data-dir ./exports --gate --gate-baseline gate-baseline.json \
+    --gate-scope transport-objects.json --gate-policy gate-policy.json --gate-json gate.json
+```
+
+Four rules, each drawn from a specific way gates get switched off in practice:
+
+- **Judge the delta, not the backlog.** A gate that fails on pre-existing findings is disabled in a week.
+- **Judge only what the transport touches.** `--gate-scope` narrows the verdict to the objects under change.
+- **Never block on what the customer cannot fix.** In RISE, a `ticket_to_sap` finding is not the developer's to resolve, and failing their build for it teaches them to bypass the gate.
+- **Never fail open.** Degraded coverage is exit **2**, never a pass — an unassessable build must not look like a clean one.
+
+> Two things worth knowing before you wire it up. `--gate-write-baseline` is evaluated **before** `--gate`, so passing both in one command writes the baseline and skips evaluation. And an empty finding set currently returns **pass**, not "could not assess" — if a run can collapse to zero findings for an unrelated reason, assert on the finding count in your pipeline too.
 
 ---
 
@@ -996,7 +1054,7 @@ Findings are ranked **P1 (fix now) → P4 (backlog)** by combining severity with
 
 ### Compliance mapping
 
-Every category is mapped to control frameworks and rendered as a per-framework panel (flagged controls with severity counts) in the HTML and PDF, and as dedicated slides in the PPTX deck. Frameworks: **ISO/IEC 27001:2022** (Annex A), **NIST CSF 2.0**, **CIS Controls v8**, **TISAX / VDA ISA**, **SOC 2** (Trust Services Criteria), and **EU GDPR**. All control IDs are verified against the published frameworks.
+Every category is mapped to control frameworks and rendered as a per-framework panel (flagged controls with severity counts) in the HTML and PDF, and as dedicated slides in the PPTX deck. **Eight frameworks**: **ISO/IEC 27001:2022** (Annex A), **NIST CSF 2.0**, **NIST SP 800-53 Rev 5**, **DORA** (Regulation (EU) 2022/2554), **CIS Controls v8**, **TISAX / VDA ISA**, **SOC 2** (Trust Services Criteria), and **EU GDPR**. All control IDs are verified against the published frameworks. DORA is mapped to named requirement areas rather than article numbers — an auditor reading a citation expects the sub-paragraph to say what we imply it says.
 
 ### Detailed findings — knowledge base
 
@@ -1014,7 +1072,9 @@ How it stays methodologically honest:
 - **Report filters never move the number.** The quantification always runs on the **complete** finding set, so a display `--severity` filter can't change the dollar figure.
 - **Honest by construction.** Loss magnitudes are **modelled estimates** from public benchmarks (IBM Cost of a Data Breach, Verizon DBIR, ACFE, Sophos, GDPR enforcement) scaled to `--crq-revenue`/`--crq-industry`; the report says so, and the scenario input is exported alongside as `*.crq.json`.
 
-The Monte-Carlo engine lives in the sibling [Cyber-Risk-Quantification](https://github.com/Krishcalin/Cyber-Risk-Quantification) project; the scanner **auto-detects** it (or point `--crq-engine` / the `CRQ_ENGINE` env var at `crq_engine.py`). If the engine can't be found, the scanner still exports the `*.crq.json` scenario input so you can quantify it standalone — the scanner has **no hard dependency** on the sibling repo.
+The Monte-Carlo engine is **bundled** (`modules/crq_engine.py`, standard library only), so `--crq` produces an actual number on a plain checkout. It is deliberately **last** in the lookup order, so `--crq-engine`, the `CRQ_ENGINE` env var and a sibling [Cyber-Risk-Quantification](https://github.com/Krishcalin/Cyber-Risk-Quantification) checkout all still take precedence. If no engine resolves at all, the scanner still exports the `*.crq.json` scenario input so you can quantify it standalone — there is **no hard dependency** on the sibling repo.
+
+> The engine was bundled because the sibling repo is absent from a normal checkout, so `--crq` used to degrade silently to "inputs exported, not simulated" and produce no figure at all.
 
 | Flag | Purpose |
 |------|---------|
@@ -1298,7 +1358,7 @@ SAP-S4HANA-RISE-Security-Scanner/
 ├── sap_scanner.py                  # Main entry point & CLI orchestrator
 ├── modules/
 │   ├── base_auditor.py             # BaseAuditor: finding()/get_config() + severity constants
-│   ├── data_loader.py              # CSV/JSON loader (auto-delimiter, header normalize; 90+ file types)
+│   ├── data_loader.py              # CSV/JSON loader (auto-delimiter, header normalize; 122 logical sources)
 │   ├── report_generator.py         # Interactive HTML dashboard (light theme, XSS-safe, weighted risk score, compliance panel)
 │   ├── pdf_report.py               # Multi-page PDF report (cover → priority → categories → compliance → fix-first findings)
 │   ├── pdf_writer.py               # Dependency-free PDF engine (standard-14 fonts, wrapping, tables)
@@ -1331,48 +1391,79 @@ SAP-S4HANA-RISE-Security-Scanner/
 │   ├── grc_access_control.py       # GRC-*            GRC Access Control (EAM/ARM/SoD governance)
 │   ├── role_governance.py          # RG-*             Role Design & Governance (SU24/profile-gen/derived drift)
 │   ├── financial_controls.py       # FIN-*            Financial Controls (SOX ITGC / FI config)
+│   ├── atc_import.py               # ATC-*            SAP's own ATC/CVA results, ingested not re-derived
+│   ├── log_review.py               # LREV-*           Retrospective SM20 audit-log review
+│   ├── code_inventory_report.py    # CODE-INV-*       Custom-code estate: dead, dormant, unknown
+│   ├── resilience_posture.py       # RES-*            Backup / DR / recovery posture
+│   ├── snc_posture.py              # CRYPTO-SNCECS-*  The SNC family modelled as ONE thing, not 18
+│   ├── ecs_config_items.py         # *-ECS-*          The configuration half of SAP Note 3250501
+│   ├── abap_sast.py                # ABAP-*           The CVA engine: lexer + taint analysis
+│   ├── abap_sast_rules.py          # 89 vendored ABAP rules + 7 JS/UI5 + 8 BTP descriptor
+│   ├── abap_sast_extra.py          # 29 MonitorRisk-authored ABAP rules
+│   ├── reachability.py             # Call-graph reachability for the custom-code inventory
+│   ├── ecs_baseline.py             # The SINGLE ECS oracle — is_compliant() returns True/False/None
+│   ├── release_gate.py             # --gate: the delta verdict and its 0/1/2 exit codes
+│   ├── btp_import.py               # BTP export normalisation
+│   ├── cloudalm_import.py          # SAP Cloud ALM export normalisation
 │   └── crq_engine.py               # FAIR Monte-Carlo engine (stdlib; bundled, overridable)
+│   #   50 files in all: 30 emit findings, 20 are rule tables, loaders and report writers
 ├── server/                         # Client-server tier (FastAPI + PostgreSQL 16)
 │   ├── identity.py                 # Finding fingerprints + AffectedObject — the load-bearing module
 │   ├── schema.sql                  # 20 tables: systems, runs, findings, lifecycle, graph, CRQ, RBAC
 │   ├── db.py                       # psycopg pool, row scoping (one place), audit log
 │   ├── auth.py                     # PBKDF2 passwords, sessions, ranked roles, per-system scope
-│   ├── queries.py                  # The query layer — console and JSON API share it
+│   ├── queries.py                  # The query layer — every read the JSON API serves
 │   ├── enrich.py                   # Priority tier, owning team, RISE remediation owner, SLA
 │   ├── analytics.py                # MTTR, burndown, aging, trajectory, scorecards
 │   ├── graph.py                    # Attack paths: instantiation, cuts, choke points, closure
 │   ├── crq.py                      # FAIR quantification per run (portfolio + 5 scenarios)
 │   ├── coverage.py                 # Per-upload coverage manifest (module→source map is derived)
 │   ├── ingest.py                   # upload → parse → scan → store → run-over-run diff
-│   ├── app.py                      # FastAPI routes, uploads, cancellable background scans
+│   ├── app.py                      # JSON API, uploads, background scans, and the SPA mount (last)
 │   ├── cli.py                      # Admin CLI + the air-gapped `scan` path
 │   ├── config.py                   # Env-only settings; no defaults for secrets
-│   └── templates/                  # Jinja2 console — server-rendered, no client framework
+│   ├── api_auth.py                 # /api/auth/* + /api/account/* — the only sign-in surface
+│   ├── sapcontent.py               # SAP's published Security Baseline policies → our control vocabulary
+│   ├── prose.py                    # steps()/paragraphs() — the reference the TypeScript port matches
+│   ├── static/                     # Brand assets, mounted at /static, deliberately unauthenticated
+│   └── spa/                        # Compiled console (build output, gitignored)
+├── frontend/                       # React + TypeScript console — built by Vite into server/spa/
+│   ├── src/routes/                 # One file per screen (dashboard, findings, paths, risk, …)
+│   ├── src/api/client.ts           # Typed API client — the only place fetch() is called
+│   ├── src/components/             # AppShell, Sidebar, TopBar, AuthGate, Login
+│   └── package.json                # react, react-dom, react-router, lucide-react (+ vite/ts/tailwind)
 ├── assets/                         # MonitorRisk + SAP logos (embedded in reports as data URIs)
-├── sample_data/                    # 90 crafted demo exports (trigger every check)
+├── sample_data/                    # 107 crafted demo exports
+├── sample_data_cloudalm/           # SAP Cloud ALM export fixture (same-fingerprint proof)
+├── tools/                          # build_brand_assets.py, build_abap_rules.py, add_code_kb_entries.py
 ├── data/
-│   ├── finding_details.json        # Knowledge base: detailed risk + step-by-step remediation per check
+│   ├── finding_details.json        # Knowledge base: 352 entries — detailed risk + remediation per check
 │   ├── fair_scenarios.json         # FAIR catalog: 5 SAP loss scenarios + factor/loss ranges (--crq)
-│   └── attack_paths.json           # 7 SAP attack-path templates (content, not code)
-├── tests/
+│   ├── attack_paths.json           # 7 SAP attack-path templates (content, not code)
+│   ├── ecs_hardening_3250501.json  # SAP Note 3250501: 92 parameters + 18 config items, facts only
+│   └── sap_baseline_requirements.json  # Derived from SAP's published CSA policies; CI fails on drift
+├── tests/                          # ~1,975 tests across 50 files
 │   ├── conftest.py                 # pytest fixtures (DataLoader over sample_data)
 │   ├── test_scanner.py             # per-module + full-pipeline + CLI tests
 │   ├── test_identity.py            # fingerprint semantics, against the REAL sample_data
-│   └── test_integration_ingest.py  # end-to-end against a real PostgreSQL (skips without DB_DSN)
+│   ├── test_release_gate.py        # the 0/1/2 verdicts, end to end
+│   ├── test_spa_mount.py           # the SPA mount path and vite `base` cannot drift apart
+│   └── test_integration_*.py       # end-to-end against a real PostgreSQL (skip without DB_DSN)
 ├── docs/
-│   ├── banner.svg                  # README banner
 │   ├── EXPORT_GUIDE.md             # how to export each data file from SAP
-│   ├── CHECKS_REFERENCE.md         # complete per-check reference
+│   ├── CHECKS_REFERENCE.md         # per-check reference (⚠️ incomplete — see Testing)
+│   ├── RELEASE_GATE.md             # using the scanner as a CI gate
+│   ├── CVA_ENGINE_IMPROVEMENT_PLAN.md  # the ABAP engine: shipped / declined / unverified
 │   ├── PIVOT_PLAN.md               # Architecture + 6 phases, with rationale
 │   ├── BUILD_ROADMAP.md            # Execution view: status, dependencies, exit criteria
 │   ├── COMPETITIVE_ANALYSIS.md     # Onapsis, market, attack-path design spec
 │   ├── COMPETITOR_SECURITYBRIDGE.md
 │   └── RISE_SECURITY_MODEL.md      # SAP's contractual line; what a RISE customer can export
-├── Dockerfile                      # Server image (non-root)
+├── Dockerfile                      # Two stages: node:22-alpine builds the SPA → python:3.12-slim
 ├── docker-compose.yml              # app + PostgreSQL 16 — the entire deployment
 ├── .env.example                    # Template; `.env` itself is gitignored
-├── requirements.txt                # 5 server-tier runtime deps (the CLI needs none)
-├── .github/workflows/tests.yml     # CI: pytest matrix (Python 3.8–3.12) + scanner smoke run
+├── requirements.txt                # 4 server-tier runtime deps (the CLI needs none)
+├── .github/workflows/tests.yml     # CI: 5 jobs — cli · purity · sap-content · brand-assets · server
 ├── requirements-dev.txt            # dev-only dependency: pytest
 ├── CLAUDE.md                       # contributor / AI-assistant guidance
 ├── CONTRIBUTING.md
@@ -1458,8 +1549,16 @@ SAP-S4HANA-RISE-Security-Scanner/
 - [x] Compliance mapping (ISO 27001:2022, NIST CSF 2.0, CIS v8, TISAX/VDA ISA, SOC 2, GDPR)
 - [x] PowerPoint (PPTX) deck export — executive summary + one slide per finding
 - [x] Cyber-risk quantification — FAIR loss exposure ($ ALE + loss-exceedance curve, `--crq`)
-- [ ] Scan comparison mode (diff two scans)
-- [ ] CI/CD integration with exit codes
+- [x] Scan comparison mode (diff two scans) — run-over-run diff in the console, `GET /api/runs/{id}/diff` and `GET /api/findings/changes`
+- [x] CI/CD integration with exit codes — `--gate`, exit 0/1/2, see [Release Gate](#release-gate)
+- [x] Client-server tier: PostgreSQL persistence, RBAC with per-system row scoping, audit log
+- [x] Attack-path graph — templates instantiated from co-existing findings, with cuts and choke points
+- [x] SAP Note 3250501 — 92 of 92 mandatory ECS profile parameters, plus the configuration half
+- [x] Custom-code scanner (CVA) — 133 rules, statement lexer, intra-procedural taint analysis
+- [x] React + TypeScript console, compiled at build time and served by the same FastAPI process
+- [x] SAP's published Security Baseline policies adopted as the control vocabulary (CI fails on drift)
+- [ ] Bring `docs/CHECKS_REFERENCE.md` back in line with the catalogue (documents ~161 of 359 IDs)
+- [ ] Sample fixtures for `resilience`, `ecsconfig` and `cva` so they fire on the bundled `sample_data`
 
 ---
 
@@ -1467,13 +1566,20 @@ SAP-S4HANA-RISE-Security-Scanner/
 
 ## Requirements
 
-**Python 3.8+** — No external packages required to run the scanner.
+| | Needs |
+|---|---|
+| **CLI scanner** | **Python 3.8+** and nothing else. No external packages — the HTML, PDF and PPTX engines are all hand-built, and a CI job walks the AST of `modules/` and `sap_scanner.py` to keep it that way. |
+| **Server** | Python 3.12, **PostgreSQL 16**, and the four packages in `requirements.txt` (FastAPI, uvicorn, psycopg, python-multipart). `DB_DSN` and `SESSION_SECRET` have no defaults and must be set. |
+| **Building the console** | **Node 22 + npm**, at build time only. `docker compose up --build` does this for you inside the image's first stage; nothing JavaScript runs at runtime. |
+| **Running the tests** | `pytest`, plus the runtime dependencies and `httpx` — see [Testing](#testing). |
+
+If you check the repo out and start the server **without building the console**, that is a defined state rather than a crash: the API keeps working and every console URL answers **503** with a message telling you to run `npm run build` in `frontend/`.
 
 <sub>[↑ Contents](#contents)</sub>
 
 ## Testing
 
-The scanner has a `pytest` suite that runs every audit module against the bundled
+About **1,975 tests** across 50 files. The suite runs every audit module against the bundled
 `sample_data` (crafted to trigger each check) and validates the full pipeline —
 no SAP system needed. It checks that each module fires, handles empty input
 without crashing, honours the finding contract (field types / severities — this
@@ -1481,12 +1587,45 @@ catches bugs like a description accidentally being a tuple), has no cross-module
 check-id collisions, renders the HTML report, and runs end-to-end via the CLI.
 
 ```bash
-python -m pip install -r requirements-dev.txt   # just pytest
+python -m pip install -r requirements.txt -r requirements-dev.txt httpx
 python -m pytest -q
 ```
 
-CI (GitHub Actions, `.github/workflows/tests.yml`) runs the suite on Python
-3.8–3.12 plus a full `sap_scanner.py` smoke run on every push and pull request.
+`requirements-dev.txt` on its own is **not** enough: it contains only `pytest`, and the
+server-tier suites import `psycopg` / `starlette` at module level, which aborts collection
+rather than skipping. `httpx` is in neither file but Starlette's `TestClient` will not
+construct without it.
+
+**Nine suites need a real PostgreSQL** and skip without `DB_DSN` — the journey, the analytics,
+the HTTP layer and all of the RBAC coverage. The journey is implemented in SQL, so a mocked
+database proves the Python is self-consistent and proves nothing about whether it works:
+
+```bash
+docker run -d --name sapsec-test-db -e POSTGRES_USER=sapsec -e POSTGRES_PASSWORD=sapsec \
+    -e POSTGRES_DB=sapsec -p 55433:5432 postgres:16
+DB_DSN=postgresql://sapsec:sapsec@localhost:55433/sapsec \
+SESSION_SECRET=$(python -c "import secrets;print(secrets.token_urlsafe(48))") \
+    python -m pytest -q
+```
+
+CI (GitHub Actions, `.github/workflows/tests.yml`) runs **five jobs** on every push and pull request:
+
+| Job | What it proves |
+|---|---|
+| `cli` | The suite passes on Python **3.8–3.12** with *only* pytest installed, plus a full `sap_scanner.py` smoke run — so a third-party import into the scanner core fails the build |
+| `purity` | Walks the AST of `modules/` and `sap_scanner.py` and rejects any non-stdlib import — the charter enforced mechanically rather than remembered |
+| `sap-content` | Re-derives `data/sap_baseline_requirements.json` from SAP's published policy repository and fails on drift; the coverage page is measured against that catalogue, so a stale copy misreports coverage |
+| `brand-assets` | Re-derives `server/static/*` from the master artwork and fails if the committed files drift |
+| `server` | The full suite against **PostgreSQL 16**, schema applied **twice** (idempotency is the upgrade path), a scan seeded *before* pytest so data-dependent suites actually execute, and a guard that **fails the build if more than one test skips** |
+
+That last guard is load-bearing. Before it existed, `pytest -q` ran the database-backed suites,
+they skipped for want of `DB_DSN`, and the job went green having verified none of the journey,
+none of the analytics and none of the HTTP layer. A suite that silently skips is worse than one
+that does not exist, because it *looks* verified.
+
+⚠️ [`docs/CHECKS_REFERENCE.md`](docs/CHECKS_REFERENCE.md) is the least current file in the repo —
+it documents roughly 161 of the 359 literal check IDs and has not kept pace with the modules
+added since. Trust the code, and the module tables above, over that document.
 
 <sub>[↑ Contents](#contents)</sub>
 

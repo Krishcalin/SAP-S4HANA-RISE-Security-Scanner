@@ -489,9 +489,10 @@ Microsoft's documented attack-path UX **does not lead with a graph**:
   not query results**
 
 > This answers "how do we avoid a hairball" and **saves us the riskiest engineering in the pivot**.
-> No graph layout engine, no canvas library, no client-side pathfinding. A server-rendered ranked
-> list, a per-path table, and a small SVG of 6–10 nodes matches both documented incumbents and
-> fits a Jinja2 stack.
+> No graph layout engine, no canvas library, no client-side pathfinding. A ranked list, a
+> per-path table, and a small SVG of 6–10 nodes matches both documented incumbents. (Written
+> when the console was server-rendered Jinja; it is a React SPA since 2026-08-09 and every word
+> of this still holds — the SVG is hand-written JSX and no graph library was added.)
 >
 > It also hands us the mitigation-journey UI for free: *"attack paths over time"* + a
 > remediation-status filter **is** the run-over-run diff, expressed as a screen.
