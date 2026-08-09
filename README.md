@@ -113,7 +113,7 @@ It runs in **two modes that share one scanner core**:
 
 **Pipeline:** &nbsp;`LOAD` CSV/JSON exports → `MODULES` (30 auditors) → `CHECKS` (300+ rules) → `RANK` by severity & P1–P4 priority → `MAP` to compliance frameworks → *(optional)* `QUANTIFY` FAIR loss exposure ($) → `REPORT` (HTML · PDF · PPTX) **or** `STORE` (PostgreSQL → web console, run-over-run diff, graph nodes).
 
-> **A note on dependencies.** The CLI still runs on the Python standard library alone — the HTML, PDF and PPTX engines are all hand-built. The **server tier** deliberately ends that rule: a browser console and a durable finding store cannot be built on the stdlib. The discipline that replaces it is a **single-digit runtime dependency count** (currently 5), no ORM, no graph database and no client-side framework. See [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md).
+> **A note on dependencies.** The CLI still runs on the Python standard library alone — the HTML, PDF and PPTX engines are all hand-built. The **server tier** deliberately ends that rule: a browser console and a durable finding store cannot be built on the stdlib. The discipline that replaces it is a **single-digit runtime dependency count** (currently 5), no ORM and no graph database. The console is a **React + TypeScript SPA** built at build time and served as static files by the same FastAPI process — so it costs build-time tooling, not a runtime dependency and not a second service. The deployment is still one app container plus one PostgreSQL. See [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md).
 
 ---
 

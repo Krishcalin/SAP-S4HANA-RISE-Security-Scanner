@@ -1,0 +1,33 @@
+# Keep the build context small and the image reproducible.
+#
+# frontend/node_modules is the big one: it is hundreds of megabytes, it is
+# platform-specific, and the SPA stage installs its own from package-lock.json.
+# Shipping the host's copy would both slow every build and let a developer's
+# stray `npm install` change what the image contains.
+frontend/node_modules/
+
+# The compiled SPA is produced by the builder stage. Excluding a host-built copy
+# means the image can only ever contain a bundle this Dockerfile compiled.
+server/spa/
+
+# Vite reads frontend/.env at BUILD time and inlines what it finds. A file left
+# on a developer's disk therefore rewrites the shipped bundle — VITE_API_BASE
+# pointing the console at a different origin, for instance — with nothing in the
+# image or the test suite to show for it. That is precisely how the sibling
+# product shipped a bundle nobody had built on purpose. The build takes its
+# configuration from this Dockerfile and nowhere else.
+frontend/.env
+frontend/.env.*
+
+.git/
+.github/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.env
+var/
+uploads/
+reports/
+evidence/

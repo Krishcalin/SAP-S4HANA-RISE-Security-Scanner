@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Absolute, not base-relative: the favicon and the sign-in lockup are served
+         by the same FastAPI process from /static, which is mounted at the root and
+         is deliberately unauthenticated. -->
+    <link rel="icon" href="/static/favicon.ico" sizes="any" />
+    <title>MonitorRisk</title>
+    <meta name="color-scheme" content="dark light" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

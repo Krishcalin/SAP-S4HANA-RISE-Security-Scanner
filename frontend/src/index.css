@@ -1,0 +1,140 @@
+@import "tailwindcss";
+
+/* ── MonitorRisk design tokens ────────────────────────────────────────────────
+   Carried across VERBATIM from server/templates/base.html. The SPA and the Jinja
+   console run side by side for the whole migration, and a user who follows a link
+   from one to the other must not see the product change colour. When the last
+   screen lands and base.html goes, these values are the surviving definition.
+
+   DARK IS :root AND LIGHT IS THE OVERRIDE, which is the inverse of the usual
+   convention and is deliberate — it is what base.html does, and inverting it here
+   would flip the console's default appearance for every browser reporting
+   "no-preference". There is no theme toggle: the console follows the OS, exactly
+   as the Jinja pages always have. */
+:root {
+  --bg:#0f1419; --panel:#161c24; --panel-2:#1c242e; --line:#26313d;
+  --ink:#e6edf3; --ink-dim:#8b98a5; --ink-faint:#5c6873;
+  --accent:#3b82f6; --accent-dim:#1e3a5f;
+  --crit:#f43f5e; --high:#fb923c; --med:#eab308; --low:#38bdf8; --ok:#22c55e;
+  --radius:8px;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg:#f6f8fa; --panel:#fff; --panel-2:#f0f3f6; --line:#d7dee6;
+    --ink:#1c2128; --ink-dim:#57606a; --ink-faint:#8c959f; --accent-dim:#dbeafe;
+  }
+}
+
+/* Expose the tokens as Tailwind utilities. `inline` matters: without it Tailwind
+   snapshots the value at build time and the light-mode media query above stops
+   reaching anything written as `bg-panel`. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel2: var(--panel-2);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink2: var(--ink-dim);
+  --color-ink3: var(--ink-faint);
+  --color-accent: var(--accent);
+  --color-accentdim: var(--accent-dim);
+  --color-crit: var(--crit);
+  --color-high: var(--high);
+  --color-med: var(--med);
+  --color-low: var(--low);
+  --color-ok: var(--ok);
+  --font-sans: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.55 var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+* { box-sizing: border-box; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; border: 2px solid var(--bg); }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* ── Severity and state chips ────────────────────────────────────────────────
+   Class names match the Jinja templates' (`sev-CRITICAL`, `st-open`, `own-…`,
+   `tier-P1`) so a screen agent porting a template's markup keeps its appearance
+   without re-deriving the palette. The rgba() literals are copied from base.html
+   rather than expressed in tokens because they are the same in both themes. */
+.pill { display:inline-block; padding:2px 8px; border-radius:99px; font-size:11px;
+  font-weight:600; letter-spacing:.02em; white-space:nowrap; }
+.sev-CRITICAL { background:rgba(244,63,94,.15); color:var(--crit); }
+.sev-HIGH     { background:rgba(251,146,60,.15); color:var(--high); }
+.sev-MEDIUM   { background:rgba(234,179,8,.15);  color:var(--med); }
+.sev-LOW      { background:rgba(56,189,248,.15); color:var(--low); }
+.sev-INFO     { background:var(--panel-2); color:var(--ink-dim); }
+
+.st { background:var(--panel-2); color:var(--ink-dim); border:1px solid var(--line); }
+.st-open                  { background:rgba(244,63,94,.12); color:var(--crit); border-color:transparent; }
+.st-submitted_to_provider { background:rgba(59,130,246,.14); color:var(--accent); border-color:transparent; }
+.st-resolved              { background:rgba(34,197,94,.13); color:var(--ok); border-color:transparent; }
+.st-mitigated             { background:rgba(34,197,94,.13); color:var(--ok); border-color:transparent; }
+.st-accepted              { background:rgba(234,179,8,.13); color:var(--med); border-color:transparent; }
+.st-false_positive        { background:var(--panel-2); color:var(--ink-faint); border-color:var(--line); }
+
+/* Remediation ownership. In RISE a customer can SEE a bad parameter and cannot
+   fix it, so this badge is the difference between an action and unactionable
+   noise — it is not decoration and must survive the port. */
+.own { font-size:11px; padding:2px 8px; border-radius:4px; font-weight:600; white-space:nowrap; }
+.own-customer_fixable { background:rgba(34,197,94,.13); color:var(--ok); }
+.own-ticket_to_sap    { background:rgba(59,130,246,.14); color:var(--accent); }
+.own-provider_owned   { background:var(--panel-2); color:var(--ink-dim); }
+.own-not_assessable   { background:var(--panel-2); color:var(--ink-faint); border:1px dashed var(--line); }
+
+/* Priority tier, ranked above severity in the queue: the tier already folds in
+   exploitability, exposure and privilege, so an unreachable CRITICAL should not
+   outrank an actively-exploited HIGH. */
+.tier { display:inline-block; padding:2px 7px; border-radius:4px; font-size:11px;
+  font-weight:700; letter-spacing:.03em; }
+.tier-P1 { background:var(--crit); color:#fff; }
+.tier-P2 { background:var(--high); color:#1c2128; }
+.tier-P3 { background:var(--panel-2); color:var(--ink-dim); border:1px solid var(--line); }
+.tier-P4 { background:transparent; color:var(--ink-faint); border:1px dashed var(--line); }
+
+/* ── Sign-in ─────────────────────────────────────────────────────────────────
+   Form left, brand right, and the brand panel keeps the artwork's own cream field
+   (#f3f2ee) instead of the page background. Not decoration: the wordmark is navy
+   and navy on the dark console is illegible. base.html carries the same note. */
+.auth { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.05fr); min-height:100vh; }
+.auth-form { display:flex; align-items:center; justify-content:center; padding:32px; }
+.auth-form > div { width:100%; max-width:340px; }
+.auth-brand { background:#f3f2ee; border-left:1px solid var(--line);
+  display:flex; align-items:center; justify-content:center; padding:clamp(28px,5vw,64px); }
+.auth-brand img { width:100%; max-width:500px; height:auto; }
+/* Narrow: one column, brand ABOVE the form. Below the fold it may as well not be
+   there, and a bare username box with no branding over it is what a phishing page
+   looks like. */
+@media (max-width:860px) {
+  .auth { grid-template-columns:1fr; min-height:0; }
+  .auth-brand { order:-1; padding:26px 22px; border-left:0; border-bottom:1px solid var(--line); }
+  .auth-brand img { max-width:300px; }
+  .auth-form { padding:26px 22px 48px; }
+}
+
+.field { width:100%; background:var(--panel); color:var(--ink);
+  border:1px solid var(--line); border-radius:6px; padding:7px 10px; font:inherit; font-size:13px; }
+.field:focus { outline:2px solid var(--accent-dim); border-color:var(--accent); }
+.btn { background:var(--accent); color:#fff; border:0; border-radius:6px;
+  padding:7px 14px; font:inherit; font-size:13px; font-weight:550; cursor:pointer; }
+.btn:hover:not(:disabled) { filter:brightness(1.08); }
+.btn:disabled { opacity:.6; cursor:default; }
+.btn-ghost { background:var(--panel-2); color:var(--ink); border:1px solid var(--line); }
+
+.banner { padding:11px 14px; border-radius:var(--radius); margin-bottom:16px; font-size:13px;
+  border:1px solid var(--line); background:var(--panel); }
+.banner-warn { border-color:rgba(251,146,60,.4); background:rgba(251,146,60,.07); }
+.banner-info { border-color:rgba(59,130,246,.35); background:rgba(59,130,246,.07); }
+.banner-bad  { border-color:rgba(244,63,94,.4);  background:rgba(244,63,94,.07); }
+.banner-ok   { border-color:rgba(34,197,94,.45); background:rgba(34,197,94,.08); }
+
+/* AuthGate's "still checking" frame. Deliberately blank rather than a spinner:
+   the check is one local request, and chrome that appears and vanishes reads
+   worse than a beat of nothing. */
+.auth-checking { min-height:100vh; background:var(--bg); }

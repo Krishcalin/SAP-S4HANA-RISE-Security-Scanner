@@ -6,9 +6,16 @@
 #
 # The discipline that REPLACES it is a single-digit dependency count. Every
 # addition below is load-bearing. Notably absent: an ORM (SQL is written by
-# hand and reviewed), a graph database (recursive CTEs in PostgreSQL are ample
-# at SAP landscape scale), and a client-side framework (pages are server
-# rendered; the attack-path view is a small SVG, not a canvas).
+# hand and reviewed) and a graph database (recursive CTEs in PostgreSQL are
+# ample at SAP landscape scale).
+#
+# THE CONSOLE IS NOW A REACT SPA AND THIS LIST DID NOT MOVE. frontend/ is
+# compiled by Vite at BUILD time into server/spa/ and served as static files by
+# the same FastAPI process — one app container, one PostgreSQL, no Node at
+# runtime. React and its toolchain live in frontend/package.json and never here.
+# If a "runtime" dependency ever appears below because of the frontend, the
+# deployment has quietly grown a second service; see tests/test_spa_mount.py,
+# which asserts this list verbatim.
 #
 # The CLI scanner still runs on the standard library alone.
 fastapi>=0.110

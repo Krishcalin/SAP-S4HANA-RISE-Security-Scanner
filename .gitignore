@@ -27,6 +27,12 @@ env/
 var/
 uploads/
 
+# The compiled SPA. A BUILD ARTEFACT of frontend/, emitted here so FastAPI serves
+# it from beside the templates and the Dockerfile's existing `COPY server/` picks
+# it up. Committing it would mean reviewing minified diffs and would let the
+# shipped bundle drift from the source that produced it.
+server/spa/
+
 # Test caches
 .pytest_cache/
 .coverage
@@ -53,6 +59,9 @@ desktop.ini
 # blanket *.html above silently drops the entire web tier from the repo.
 !server/templates/
 !server/templates/*.html
+# Same trap, second time: the SPA's shell document is source too, and *.html
+# would drop the one file the whole React console is bootstrapped from.
+!frontend/index.html
 *.pdf
 !docs/*.pdf
 sample_report.*

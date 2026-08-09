@@ -26,12 +26,22 @@ product became client-server**, deliberately and one-way. It has NOT been relaxe
 - **`server/` may use the five pinned runtime dependencies** in `requirements.txt` (FastAPI,
   uvicorn, Jinja2, psycopg, python-multipart) and nothing else without a decision.
 - The discipline replacing "zero deps" is a **single-digit runtime dependency count**. Also
-  deliberately absent, and to stay absent: an **ORM** (SQL is hand-written and reviewed), a
-  **graph database** (recursive CTEs are ample at SAP landscape scale), and a **client-side
-  framework** (pages are server-rendered).
-- The deployment is **one app container + one PostgreSQL**. A third service is a design
-  failure, not a feature — it forfeits the product's clearest structural advantage over
-  competitors that need a console VM plus sensors.
+  deliberately absent, and to stay absent: an **ORM** (SQL is hand-written and reviewed) and a
+  **graph database** (recursive CTEs are ample at SAP landscape scale).
+- **The client-side framework ban ended on 2026-08-08, and only it.** The console is migrating
+  from 13 Jinja templates to a **React + TypeScript SPA in `frontend/`**, compiled by Vite at
+  **build time** into `server/spa/` and served as static files by the **same FastAPI process**
+  (`SpaFiles` in `server/app.py`). React, Vite and TypeScript are **build-time** dependencies:
+  the RUNTIME list in `requirements.txt` does not move. The frontend's own budget is equally
+  tight — react, react-dom, react-router, lucide-react, vite, typescript, tailwind. No state
+  library, no component library, no data-fetching library, no chart library.
+- The deployment is **one app container + one PostgreSQL**. A third service — a Node server, an
+  nginx — is a design failure, not a feature; it forfeits the product's clearest structural
+  advantage over competitors that need a console VM plus sensors. The SPA is built inside the
+  `Dockerfile`'s first stage and nothing JavaScript survives into the runtime image.
+- **The Jinja console stays until the last screen is migrated.** It still owns `/`, `/findings`,
+  `/paths` and the rest; the SPA is mounted at `/ui` so a half-finished migration cannot strand
+  the product. See `frontend/README.md` and `tests/test_spa_mount.py`.
 
 Background and the full plan: [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md),
 [`docs/BUILD_ROADMAP.md`](docs/BUILD_ROADMAP.md).

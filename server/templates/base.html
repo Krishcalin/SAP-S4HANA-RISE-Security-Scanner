@@ -40,6 +40,12 @@ nav.main{display:flex;gap:4px;flex:1}
 nav.main a{padding:6px 12px;border-radius:6px;color:var(--ink-dim);font-weight:500}
 nav.main a:hover{background:var(--panel-2);text-decoration:none;color:var(--ink)}
 nav.main a.on{background:var(--accent-dim);color:var(--accent)}
+/* Deliberately not styled like its neighbours: it leads OUT of this console
+   rather than to another of its screens, and a link that looks identical to the
+   six beside it would be read as a seventh screen. It goes when the SPA takes
+   over "/" and this header is deleted. */
+nav.main a.newui{margin-left:auto;border:1px solid var(--line);color:var(--accent);
+  font-size:12px;padding:5px 11px}
 .who{color:var(--ink-dim);font-size:13px;display:flex;align-items:center;gap:10px}
 .who .role{font-size:11px;text-transform:uppercase;letter-spacing:.05em;
   padding:2px 7px;border-radius:99px;background:var(--panel-2);border:1px solid var(--line)}
@@ -191,6 +197,22 @@ dl.kv dd{margin:0}
     {% if user.role in ('analyst','admin') %}
     <a href="/upload" class="{{ 'on' if nav=='upload' }}">Upload</a>
     {% endif %}
+    {# The door into the React console.
+
+       WITHOUT IT THE NEW CONSOLE DOES NOT EXIST. A signed-in user lands here, on
+       the server-rendered dashboard, and nothing in the product mentions that a
+       second console is mounted at {{ spa_mount }} — so it is reachable only by
+       someone who has read the source. That is the same failure as an unlisted
+       route, at the scale of a whole migration: mounting it is not shipping it.
+
+       It points at the SPA's ROOT rather than at this page's counterpart. Screen
+       for screen would be nicer, but it would need every view to pass its own
+       path, and one that forgot would silently land the reader on the SPA's
+       "not migrated yet" placeholder — a worse first impression of the new
+       console than its dashboard. The path comes from server/app.py's
+       SPA_MOUNT_PATH via a Jinja global, so the prefix has one definition and
+       this link cannot be left behind when it changes. #}
+    <a href="{{ spa_mount }}/" class="newui" title="The React console, served by this same process">New console</a>
   </nav>
   <div class="who">
     <span>{{ user.display_name or user.username }}</span>

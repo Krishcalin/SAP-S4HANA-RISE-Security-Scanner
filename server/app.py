@@ -28,17 +28,20 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, quote, urlencode, urlparse
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile, File
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.types import Scope
 
 from server import analytics, auth, crq, db, graph, ingest, prose, queries, sapcontent
+from server.api_auth import SESSION_COOKIE, current_user, require
+from server.api_auth import router as api_auth_router
 from server.config import settings
 
 log = logging.getLogger(__name__)
 
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).with_name("templates")))
-SESSION_COOKIE = "sapsec_session"
 
 
 def _money(value: Any) -> str:
@@ -80,6 +83,142 @@ app.mount("/static",
           StaticFiles(directory=str(Path(__file__).with_name("static"))),
           name="static")
 
+
+# --------------------------------------------------------------------------- #
+#  The SPA                                                                    #
+# --------------------------------------------------------------------------- #
+#  The React console is compiled to static files at IMAGE-BUILD time and served
+#  by this process. There is no Node at runtime and no second container: React,
+#  Vite and TypeScript are build-time dependencies and the pinned runtime list is
+#  unchanged.
+
+#: Where `frontend/npm run build` puts its output. Beside the templates and the
+#: brand assets, so the Dockerfile's existing `COPY server/` carries it and the
+#: path resolves off __file__ rather than off a working directory.
+SPA_DIR = Path(__file__).with_name("spa")
+
+#: The URL prefix the bundle is built for. It is baked into every asset URL at
+#: build time (vite.config.ts `base`), so it CANNOT be configuration — a bundle
+#: built for one prefix and mounted at another loads a blank page with four
+#: 404s in the console. tests/test_spa_mount.py asserts this string and vite's
+#: `base` agree, so the pair cannot be half-changed.
+#:
+#: WHY NOT "/" YET. The Jinja console still owns "/", "/findings", "/paths" and
+#: the rest, and those routes are registered below. Starlette matches in
+#: declaration order, so the SPA cannot be given those paths without taking them
+#: away from pages that are still the only working version of those screens.
+#: When the last screen is migrated, this becomes "/", vite's `base` becomes "/"
+#: with it, and the Jinja routes go in the same commit.
+SPA_MOUNT_PATH = "/ui"
+
+#: base.html renders the door into the React console from this, rather than
+#: writing "/ui" a second time.
+#:
+#: THE DOOR IS THE POINT. A route with no way to click to it is a route nobody
+#: finds — the rule this migration was explicitly told not to break — and while
+#: the Jinja pages own "/", the ENTIRE React console is behind exactly that kind
+#: of route: a signed-in user lands on the server-rendered dashboard and there is
+#: nothing anywhere that mentions the new console exists. Mounting it was not the
+#: same thing as shipping it. When SPA_MOUNT_PATH becomes "/" the link and the
+#: templates go together, so this global disappears with them.
+TEMPLATES.env.globals["spa_mount"] = SPA_MOUNT_PATH
+
+
+class SpaFiles(StaticFiles):
+    """StaticFiles with a history-API fallback that actually fires.
+
+    THE BUG THIS EXISTS TO NOT HAVE. Starlette's StaticFiles does not *return* a
+    404 response for a missing path — it RAISES HTTPException(404). A fallback
+    written as `if response.status_code == 404: serve index.html` therefore never
+    runs, and every deep link 404s. That shipped in a sibling product and went
+    unnoticed for months, because "/" is served by the directory index and only
+    a *shared* URL or a browser reload on an inner screen ever hits the bug.
+    Both paths are handled below, and tests/test_spa_mount.py exercises the
+    raised one specifically.
+
+    A path whose last segment CONTAINS A DOT is refused honestly instead of being
+    answered with index.html. `/ui/assets/index-a1b2c3.js` going missing is a
+    broken build, and answering it with HTML turns a clear 404 into a MIME-type
+    error somewhere inside the module loader — the failure would be reported as
+    "the app is blank", which is a much longer walk to the same cause. No SPA
+    route contains a dot: saved-view slugs are stripped to alphanumerics, hyphen
+    and underscore, and every other route segment is a numeric id.
+    """
+
+    async def check_config(self) -> None:
+        """Deliberately a no-op.
+
+        StaticFiles re-checks its directory on the first request and raises
+        RuntimeError — a 500 with a traceback — when it is absent. "Nobody has
+        run `npm run build` yet" is a normal state of a fresh checkout and not a
+        server fault, and letting it 500 would also drag the Jinja console's
+        error log into it. `_index_or_404` reports that state as a 503 that says
+        what to do about it.
+        """
+        return
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        # StarletteHTTPException, not FastAPI's — FastAPI's subclasses it, so this
+        # catches both, whereas catching only FastAPI's would miss the one
+        # StaticFiles actually raises.
+        try:
+            response = await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code != 404:
+                raise
+            return await self._index_or_404(path, scope)
+        # Belt and braces: a future Starlette that RETURNS the 404 rather than
+        # raising it must not silently reintroduce the bug this class exists for.
+        if response.status_code == 404:
+            return await self._index_or_404(path, scope)
+        # The mount root (html=True) serves index.html directly, bypassing
+        # _index_or_404 — so the no-cache header has to be applied on this path too.
+        if path in ("", ".", "index.html"):
+            return self._no_cache(response)
+        return response
+
+    @staticmethod
+    def _no_cache(response: Response) -> Response:
+        """index.html must never be cached; every hashed asset may be cached forever.
+
+        index.html NAMES the hashed bundles. Served with only ETag/Last-Modified, a
+        browser applies heuristic freshness to it — so after an upgrade a returning
+        client can keep an old index that references asset filenames the new image
+        no longer contains, and the console fails to load with a 404 on a file the
+        user cannot see and cannot clear without a hard refresh. The assets
+        themselves are content-hashed and immutable, so nothing else needs this.
+        """
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return response
+
+    async def _index_or_404(self, path: str, scope: Scope) -> Response:
+        # Path().name rather than a manual rsplit: StaticFiles has already run the
+        # incoming path through os.path.normpath, so the separator is the host's
+        # and the mount root arrives as "." — which a naive "is there a dot in the
+        # last segment" test reads as a file extension and refuses.
+        if "." in Path(path).name:
+            raise StarletteHTTPException(status_code=404)
+        try:
+            return self._no_cache(await super().get_response("index.html", scope))
+        except StarletteHTTPException:
+            # The SPA was never built into this image. Say so loudly rather than
+            # 404ing like a mistyped URL: an image shipped without its frontend
+            # is a build failure, and the one thing that must not happen is for
+            # it to look like an ordinary missing page.
+            return JSONResponse(
+                {"detail": f"the console bundle is missing from {SPA_DIR} — "
+                           "run `npm run build` in frontend/, or rebuild the image"},
+                status_code=503)
+
+
+#: check_dir=False so the server still starts on a checkout where nobody has run
+#: `npm run build`. The Jinja console is unaffected and /ui answers with the 503
+#: above, which is the honest description of that state.
+app.mount(SPA_MOUNT_PATH,
+          SpaFiles(directory=str(SPA_DIR), html=True, check_dir=False),
+          name="spa")
+
+
 #: Scans are CPU-bound Python; they must not run on the event loop or a single
 #: upload would freeze every other user's console.
 _scan_pool = ThreadPoolExecutor(max_workers=max(1, settings.max_concurrent_scans),
@@ -103,31 +242,11 @@ app.router.lifespan_context = _lifespan
 # --------------------------------------------------------------------------- #
 #  Auth plumbing                                                              #
 # --------------------------------------------------------------------------- #
+#  `current_user`, `require` and SESSION_COOKIE now live in server/api_auth.py
+#  and are imported above. They moved so the JSON auth routes could use them
+#  without importing this module back — one definition of "signed in", not two.
 
-#: Reachable while an account is still on a generated password. Everything else
-#: redirects to /account until it is replaced — including the API, so a forced
-#: account cannot simply be scripted around.
-_ALLOWED_WHILE_FORCED = ("/account", "/logout", "/login", "/health")
-
-
-def current_user(request: Request) -> Dict[str, Any]:
-    user = auth.resolve_session(request.cookies.get(SESSION_COOKIE))
-    if user is None:
-        raise HTTPException(status_code=401, detail="not authenticated")
-    if auth.must_change_password(user) and not request.url.path.startswith(
-            _ALLOWED_WHILE_FORCED):
-        # 303 rather than 403: the caller is authenticated and the fix is one
-        # page away, so send them to it instead of refusing with no route out.
-        raise HTTPException(status_code=303, detail="password change required")
-    return user
-
-
-def require(role: str):
-    def dep(user: Dict[str, Any] = Depends(current_user)) -> Dict[str, Any]:
-        if not auth.has_role(user, role):
-            raise HTTPException(status_code=403, detail=f"requires {role}")
-        return user
-    return dep
+app.include_router(api_auth_router)
 
 
 @app.exception_handler(401)
@@ -293,10 +412,19 @@ def path_detail(path_id: int, request: Request,
 @app.get("/api/paths")
 def api_paths(user: Dict[str, Any] = Depends(current_user),
               include_closed: bool = False):
+    """Everything the paths screen renders, in one call.
+
+    `closed` and `template_count` were on the HTML page and not here. The closed
+    list is the mitigation journey's strongest unit — "this path was severed on
+    12 September" — and leaving it out of the API made the best evidence in the
+    product reachable only by scraping a page.
+    """
     scope = auth.scope_for(user)
     return {"summary": graph.path_summary(scope),
             "paths": graph.list_paths(scope, include_closed=include_closed),
-            "chokepoints": graph.chokepoints(scope)}
+            "chokepoints": graph.chokepoints(scope),
+            "closed": graph.recently_closed(scope),
+            "template_count": len(graph.load_templates().get("paths", []))}
 
 
 @app.get("/coverage", response_class=HTMLResponse)
@@ -318,8 +446,19 @@ def coverage_page(request: Request, user: Dict[str, Any] = Depends(current_user)
 
 @app.get("/api/coverage")
 def api_coverage(user: Dict[str, Any] = Depends(current_user)):
+    """Coverage of SAP's own Baseline, plus the catalogue metadata the page shows.
+
+    `meta` and `our_checks` are additive — existing consumers keep the keys they
+    already read. They are here because the HTML page renders the catalogue's
+    provenance (which Baseline version, and the unit warning that comes with it)
+    alongside the numbers, and a coverage percentage without its provenance is a
+    claim an auditor cannot check.
+    """
     check_ids = [r["check_id"] for r in db.query("SELECT check_id FROM check_definition")]
-    return sapcontent.coverage(check_ids)
+    cat = sapcontent.load_catalogue()
+    return {**sapcontent.coverage(check_ids, cat),
+            "meta": cat.get("_meta", {}),
+            "our_checks": len(check_ids)}
 
 
 @app.get("/account", response_class=HTMLResponse)
@@ -632,9 +771,23 @@ def api_run(run_id: int, user: Dict[str, Any] = Depends(current_user)):
 @app.get("/api/findings")
 def api_findings(user: Dict[str, Any] = Depends(current_user),
                  system_id: Optional[int] = None, state: Optional[str] = None,
-                 severity: Optional[str] = None, page: int = 1):
+                 severity: Optional[str] = None, team: Optional[str] = None,
+                 owner: Optional[str] = None, tier: Optional[str] = None,
+                 category: Optional[str] = None, assignee: Optional[str] = None,
+                 overdue: bool = False, page: int = 1):
+    """The triage queue.
+
+    The filter list is now the SAME one `/findings` accepts. It was a strict
+    subset — system, state, severity and page — which quietly made this module's
+    own invariant false: the console could filter by tier, team, owner, assignee
+    and overdue, and an API client could not. Every parameter is passed straight
+    through to the one query function both surfaces call, so they cannot drift.
+    """
     return queries.list_findings(auth.scope_for(user), system_id=system_id,
-                                 state=state, severity=severity, page=page)
+                                 state=state, severity=severity, team=team,
+                                 remediation_owner=owner, tier=tier,
+                                 category=category, assignee=assignee,
+                                 overdue=overdue, page=page)
 
 
 @app.get("/api/findings/changes")
@@ -684,6 +837,124 @@ def api_set_state(finding_id: int, state: str = Form(...), reason: str = Form(""
                                           scope=auth.scope_for(user))
     except queries.TransitionError as exc:
         raise HTTPException(400, str(exc)) from exc
+
+
+# --------------------------------------------------------------------------- #
+#  JSON API — the screens the SPA renders                                     #
+# --------------------------------------------------------------------------- #
+#  These close the gap between this module's stated invariant ("everything the
+#  dashboard shows is available via the API") and what was actually reachable.
+#  Each one calls the SAME query function as the Jinja page beside it and returns
+#  the same context under the same keys, so the two renderings cannot disagree —
+#  and so the Jinja page remains a working fallback for the whole migration.
+#
+#  All of them are READS behind `current_user`, which applies the caller's row
+#  scope through `auth.scope_for`. Nothing here widens what a user can see.
+
+@app.get("/api/dashboard")
+def api_dashboard(user: Dict[str, Any] = Depends(current_user)):
+    """The landing screen's four panels, in one round trip."""
+    scope = auth.scope_for(user)
+    latest_crq = crq.latest(scope)
+    return {
+        "summary": queries.dashboard_summary(scope),
+        "systems": queries.list_systems(scope),
+        "recent_runs": queries.recent_runs(scope, limit=10),
+        "crq": latest_crq,
+        "crq_scenarios": crq.scenarios_for_run(latest_crq["run_id"]) if latest_crq else [],
+    }
+
+
+@app.get("/api/systems")
+def api_systems(user: Dict[str, Any] = Depends(current_user)):
+    """Systems in the caller's scope — the filter vocabulary for every screen."""
+    return {"systems": queries.list_systems(auth.scope_for(user))}
+
+
+@app.get("/api/landscapes")
+def api_landscapes(user: Dict[str, Any] = Depends(current_user)):
+    """Landscapes, for the upload form's required `landscape_id`.
+
+    NOT scoped, matching the upload page it serves: scoping is per SYSTEM, and a
+    landscape carries no findings of its own. Restricting it would leave a scoped
+    analyst with an empty dropdown and no way to upload at all.
+    """
+    return {"landscapes": queries.list_landscapes()}
+
+
+@app.get("/api/paths/{path_id}")
+def api_path(path_id: int, user: Dict[str, Any] = Depends(current_user)):
+    """One path with its evidence, and which findings sit on a CUT hop.
+
+    `cut_ids` drives the mitigate-vs-additional split the page makes: a finding on
+    a cut hop severs the path, one on a non-cut hop only reduces exploitability.
+    Computed here rather than in the client so both renderings make the same call
+    about which findings actually end the attack.
+    """
+    scope = auth.scope_for(user)
+    path = graph.get_path(path_id, scope)
+    if path is None:
+        # 404 whether it does not exist OR is out of scope — distinguishing them
+        # would let a scoped user enumerate ids in landscapes they cannot see.
+        raise HTTPException(404, "not found")
+    cut_ids = sorted({fid for hop in (path["detail"].get("hops") or [])
+                      if hop.get("is_cut") for fid in hop.get("finding_ids", [])})
+    return {"path": path, "findings": graph.path_findings(path_id),
+            "cut_ids": cut_ids}
+
+
+@app.get("/api/runs/{run_id}/diff")
+def api_run_diff(run_id: int, user: Dict[str, Any] = Depends(current_user)):
+    """New / persisting / resolved / regressed for one run.
+
+    Separate from `/api/runs/{id}` on purpose: the run row is cheap and polled
+    while a scan is in flight, and folding four aggregate queries into it would
+    make a progress poll expensive.
+    """
+    scope = auth.scope_for(user)
+    if queries.get_run(run_id, scope) is None:
+        raise HTTPException(404, "not found")
+    return queries.run_diff(run_id, scope)
+
+
+@app.get("/api/findings/{finding_id}/history")
+def api_finding_history(finding_id: int, user: Dict[str, Any] = Depends(current_user)):
+    """The lifecycle trail and the per-run observations for one finding.
+
+    Scope is checked against the FINDING before either is read — neither
+    `finding_history` nor `finding_observations` filters by system, and querying
+    them directly on an id would leak the transition history of a finding the
+    caller cannot see.
+    """
+    if queries.get_finding(finding_id, auth.scope_for(user)) is None:
+        raise HTTPException(404, "not found")
+    return {"history": queries.finding_history(finding_id),
+            "observations": queries.finding_observations(finding_id)}
+
+
+@app.get("/api/views")
+def api_views(user: Dict[str, Any] = Depends(current_user),
+              kind: Optional[str] = None):
+    """Saved views visible to this caller: their own, plus the shared ones."""
+    return {"views": queries.list_views(user["username"], kind)}
+
+
+@app.get("/api/views/{slug}")
+def api_view(slug: str, user: Dict[str, Any] = Depends(current_user)):
+    """Resolve a saved view to the filters a screen should apply.
+
+    The SPA equivalent of `/v/{slug}`, which answers a 303 to a Jinja page. It
+    returns the stored FILTERS rather than rows, which is the property that makes
+    a shared link safe: the receiving screen re-runs the query under its own
+    caller's row scope, so two people following the same URL each see only the
+    systems they are entitled to. A saved view can never widen access.
+    """
+    view = queries.get_view(slug, user["username"])
+    if view is None:
+        raise HTTPException(404, "no such view")
+    return {"view": view,
+            "kind": view["kind"],
+            "filters": view["filters"] or {}}
 
 
 @app.get("/health")

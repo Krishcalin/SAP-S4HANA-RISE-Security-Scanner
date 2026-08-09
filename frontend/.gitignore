@@ -1,0 +1,9 @@
+node_modules/
+# The SPA's compiled output lands in ../server/spa (see vite.config.ts) and is
+# ignored there, not here — it is built by the image, never committed.
+*.local
+# Vite inlines whatever it finds here into the bundle at build time, so a
+# committed .env would silently change what every other developer — and the
+# image — compiles. There is one build configuration and it is the Dockerfile's.
+.env
+.env.*

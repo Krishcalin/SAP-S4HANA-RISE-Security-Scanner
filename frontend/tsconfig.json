@@ -1,0 +1,38 @@
+{
+  // ONE config, not the solution-style split (tsconfig.json -> references) the
+  // sibling product uses. That split is why `tsc --noEmit -p tsconfig.json` there
+  // checks NOTHING: a solution file has `"files": []`, so the documented
+  // type-check command exits 0 without reading a line of src/. A green check that
+  // cannot fail is worse than no check, so the file the command names is the file
+  // that lists the sources.
+  //
+  // vite.config.ts is included too. It imports from node_modules and gets type
+  // errors like everything else; excluding it means the build config is the one
+  // file nobody type-checks.
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "types": ["vite/client", "node"],
+    "skipLibCheck": true,
+
+    /* Bundler mode — Vite resolves and emits; tsc only ever checks. */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "isolatedModules": true,
+
+    /* Strictness. `noUnusedLocals` is deliberate: an import left behind after a
+       screen is rewritten is dead weight that ships in the bundle. */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true
+  },
+  "include": ["src", "vite.config.ts"]
+}
