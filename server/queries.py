@@ -190,7 +190,17 @@ def get_finding(finding_id: int, scope: Optional[Sequence[int]]) -> Optional[Dic
     where, params = ["f.id = %s"], [finding_id]
     _scoped(where, params, scope)
     return db.one(
+        # expired_acceptance and is_overdue are computed HERE, in SQL, with the same
+        # expressions list_findings uses — deliberately not re-derived in Python by
+        # the caller. Two definitions of "this acceptance has expired" can disagree
+        # about the SAME finding: the queue would show the banner and the detail page
+        # would not, or worse the other way round, and whichever the reviewer saw
+        # last is the one they would act on. One rule, one place, both readings.
         f"SELECT f.*, cd.title, cd.category, cd.remediation, cd.risk_narrative, "
+        f"(f.state = 'accepted' AND f.acceptance_due IS NOT NULL "
+        f" AND f.acceptance_due < CURRENT_DATE) AS expired_acceptance, "
+        f"(f.due_date IS NOT NULL AND f.due_date < CURRENT_DATE "
+        f" AND f.state IN ('open','submitted_to_provider')) AS is_overdue, "
         f"cd.references_json, cd.baseline_req_id, cd.responsibility, cd.cwe, "
         f"s.sid, s.client AS system_client, s.tier, l.deployment_mode, "
         # The snippet and the source->sink trace describe what the code looked like

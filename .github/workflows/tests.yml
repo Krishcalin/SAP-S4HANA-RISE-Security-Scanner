@@ -251,6 +251,33 @@ jobs:
           python -m server.cli init-db
           python -m server.cli init-db
 
+      # SEED BEFORE TESTING, not after. Four tests self-skip with "no findings in
+      # this database" — they are DATA-dependent, not DB-dependent, and the
+      # end-to-end step below used to be the only thing that created findings, so
+      # they never ran and the skip guard below counted them as drift. Seeding first
+      # buys real coverage of the finding-detail and code-console surfaces instead of
+      # relaxing the guard, which would only move the goalposts.
+      - name: Seed a scan so data-dependent suites actually execute
+        run: |
+          python - <<'PY'
+          import sys; sys.path.insert(0, ".")
+          from pathlib import Path
+          from server import db, ingest
+          db.init_schema()
+          land = db.one("INSERT INTO landscape (name, deployment_mode) "
+                        "VALUES ('seed','rise_pce') RETURNING id")["id"]
+          sysid = db.one("INSERT INTO sap_system (landscape_id, sid, client, tier) "
+                         "VALUES (%s,'SED','100','prod') RETURNING id", (land,))["id"]
+          run = db.one("INSERT INTO scan_run (landscape_id, system_id, status) "
+                       "VALUES (%s,%s,'pending') RETURNING id", (land, sysid))["id"]
+          ingest.scan_directory(Path("sample_data"), land, sysid, run,
+                                deployment_mode="rise_pce",
+                                default_sid="SED", default_client="100")
+          n = db.one("SELECT count(*) AS n FROM finding")["n"]
+          assert n > 0, "the seed produced no findings — the data-dependent suites would still skip"
+          print(f"seeded {n} findings")
+          PY
+
       - name: Run the full test suite
         run: |
           set -o pipefail
