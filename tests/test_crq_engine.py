@@ -217,3 +217,57 @@ def test_the_engine_is_discoverable_by_the_adapter():
     mod = locate_engine()
     assert mod is not None, "no CRQ engine is discoverable; --crq will produce no number"
     assert hasattr(mod, "FAIREngine")
+
+
+def test_the_curve_the_engine_emits_is_the_curve_the_report_can_draw():
+    """The engine's output shape must be renderable, not merely well-formed.
+
+    THE DEFECT THIS PINS. `_calc_loss_exceedance` returns
+    `[{"probability": p, "loss": x}, ...]`; `ReportGenerator._svg_lec` was written
+    against `[(loss, probability), ...]` and unpacked `for t, p in points`, which
+    over dicts iterates their KEYS. Every `--crq` run raised
+    `ValueError: could not convert string to float: 'probability'` in the final
+    step, so the scan ran, the Monte-Carlo ran, the `.crq.json` was written — and
+    NO HTML report was produced at all.
+
+    Two existing tests both passed throughout: `test_loss_exceedance_curve_is_monotonic`
+    checks the engine in isolation, and the report-side test supplied
+    `"loss_exceedance": []`, which returns early before the unpacking. A contract
+    between two components needs a test that spans BOTH, or each side stays
+    internally consistent while the seam is broken.
+    """
+    from modules.report_generator import ReportGenerator
+
+    res = FAIREngine(simulations=2000, seed=11).simulate_scenario(SCENARIO, [], {})
+    curve = FAIREngine._calc_loss_exceedance(sorted(res.ale_distribution))
+    assert curve, "no curve to render — fixture is wrong"
+
+    svg = ReportGenerator(findings=[], meta={"scan_date": "2026-08-09"})._svg_lec(curve)
+    assert svg, "the engine's own curve rendered to nothing"
+    assert "<polyline" in svg and "<polygon" in svg
+
+
+def test_the_curve_renderer_also_accepts_pair_tuples():
+    """The renderer's original shape stays supported — an external engine supplied
+    via --crq-engine / CRQ_ENGINE need not match the bundled one's container type,
+    and a report must not be lost over that."""
+    from modules.report_generator import ReportGenerator
+
+    gen = ReportGenerator(findings=[], meta={"scan_date": "2026-08-09"})
+    svg = gen._svg_lec([(1_000_000.0, 0.9), (5_000_000.0, 0.5), (9_000_000.0, 0.1)])
+    assert "<polyline" in svg
+
+
+def test_a_malformed_curve_costs_the_chart_and_not_the_report():
+    """Degrade, never drop: an unusable point is skipped rather than raised. Losing
+    a chart is cosmetic; losing the whole hand-over report is not."""
+    from modules.report_generator import ReportGenerator
+
+    gen = ReportGenerator(findings=[], meta={"scan_date": "2026-08-09"})
+    # Nothing usable at all: no chart, and still no exception.
+    assert gen._svg_lec([{"probability": "x", "loss": None}, "nonsense", None]) == ""
+    # One bad point among good ones costs only that point — the curve still draws.
+    svg = gen._svg_lec([{"loss": 10.0, "probability": 0.9},
+                        {"bad": 1},
+                        {"loss": 90.0, "probability": 0.1}])
+    assert "<polyline" in svg

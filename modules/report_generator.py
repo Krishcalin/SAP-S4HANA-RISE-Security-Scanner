@@ -1231,9 +1231,43 @@ window.addEventListener('beforeprint', () => {{
         return f"{sign}${a:.0f}"
 
     def _svg_lec(self, points) -> str:
-        """Render the loss-exceedance curve [(loss, P(loss>=x)), ...] as an SVG."""
-        pts = [(float(t), float(p)) for t, p in (points or [])
-               if t is not None and p is not None]
+        """Render the loss-exceedance curve as an SVG.
+
+        TWO SHAPES ARRIVE HERE, AND ASSUMING ONE OF THEM CRASHED THE REPORT.
+        The engine emits `[{"probability": p, "loss": x}, ...]`
+        (`crq_engine._calc_loss_exceedance`); this renderer was written against
+        `[(loss, probability), ...]`. Unpacking `for t, p in points` over dicts
+        iterates their KEYS, so the first point raised
+        `ValueError: could not convert string to float: 'probability'` — after the
+        scan, after the Monte-Carlo run, in the last step before the file is
+        written. `--crq` therefore produced a `.crq.json` and NO HTML report at all.
+
+        It stayed hidden because bundling `crq_engine.py` is what reached this
+        branch: while the engine lived only in a sibling repo, `locate_engine()`
+        usually failed, `fair` came back without a curve, and the renderer was
+        never asked to draw one. Fixing the "no number at all" defect switched on
+        the path that carried this one.
+
+        Accepting both shapes rather than converting at the boundary is deliberate:
+        the adapter passes the engine's payload through untouched, and a renderer
+        that hard-fails the whole report over a container type is the wrong
+        trade — a missing chart is a cosmetic loss, a missing report is total.
+        """
+        pts = []
+        for point in (points or []):
+            if isinstance(point, dict):
+                t, p = point.get("loss"), point.get("probability")
+            else:
+                try:
+                    t, p = point
+                except (TypeError, ValueError):
+                    continue
+            if t is None or p is None:
+                continue
+            try:
+                pts.append((float(t), float(p)))
+            except (TypeError, ValueError):
+                continue
         pts = [(t, p) for t, p in pts if t >= 0]
         if len(pts) < 2:
             return ""
