@@ -9,17 +9,24 @@
 # hand and reviewed) and a graph database (recursive CTEs in PostgreSQL are
 # ample at SAP landscape scale).
 #
-# THE CONSOLE IS NOW A REACT SPA AND THIS LIST DID NOT MOVE. frontend/ is
-# compiled by Vite at BUILD time into server/spa/ and served as static files by
-# the same FastAPI process — one app container, one PostgreSQL, no Node at
-# runtime. React and its toolchain live in frontend/package.json and never here.
-# If a "runtime" dependency ever appears below because of the frontend, the
-# deployment has quietly grown a second service; see tests/test_spa_mount.py,
-# which asserts this list verbatim.
+# THE CONSOLE IS A REACT SPA AND THIS LIST WENT DOWN. frontend/ is compiled by
+# Vite at BUILD time into server/spa/ and served as static files by the same
+# FastAPI process — one app container, one PostgreSQL, no Node at runtime. React
+# and its toolchain live in frontend/package.json and never here. If a "runtime"
+# dependency ever appears below because of the frontend, the deployment has
+# quietly grown a second service; see tests/test_spa_mount.py, which asserts this
+# list verbatim.
+#
+# JINJA2 LEFT WHEN THE SERVER-RENDERED CONSOLE DID. It was here for thirteen
+# templates in server/templates/, all of which the React screens replaced; the
+# pages and the directory were deleted in the same commit that gave the SPA the
+# root, and nothing imports jinja2 any more — not fastapi.templating, not
+# server/prose.py, which is now a plain library the TypeScript port is checked
+# against. Four is the count, and it is a real reduction rather than a shuffle:
+# nothing took its place.
 #
 # The CLI scanner still runs on the standard library alone.
 fastapi>=0.110
 uvicorn[standard]>=0.27
-jinja2>=3.1
 psycopg[binary,pool]>=3.1
 python-multipart>=0.0.9

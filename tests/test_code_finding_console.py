@@ -5,8 +5,8 @@ WHY THIS IS A SEPARATE FILE FROM test_abap_sast.py
 That one proves the engine finds the right things. This one proves the finding
 survives the journey to a person: the snippet and the source->sink trace are
 written into `finding_observation.details`, the evidence class and reachability
-onto `finding`, and all of it renders. A SAST finding without its code is a line
-number and an adjective.
+onto `finding`, and all of it reaches the screen. A SAST finding without its code
+is a line number and an adjective.
 """
 from __future__ import annotations
 
@@ -145,8 +145,15 @@ def test_the_same_source_twice_resolves_nothing(landscape):
 
 
 # --------------------------------------------------------------------------- #
-#  Rendering                                                                  #
+#  Reaching a person                                                          #
 # --------------------------------------------------------------------------- #
+#  This section read the server-rendered detail page and grepped its HTML. That
+#  page is retired; the console builds the code card in the browser from
+#  /api/findings/{id}. So the journey is asserted in the two halves it now has:
+#  the payload carries every piece, and FindingDetail.tsx reads every piece. Each
+#  half is worthless alone — a field delivered to a screen that ignores it is a
+#  blank card, and a screen reading a field the payload dropped is the same blank
+#  card — which is why neither was left out when the markup assertions went.
 
 @pytest.fixture()
 def client():
@@ -156,13 +163,40 @@ def client():
     username = f"code_{os.urandom(4).hex()}"
     auth.create_user(username, "code-test-password", "admin")
     c = TestClient(appmod.app)
-    assert c.post("/login", data={"username": username, "password": "code-test-password",
-                                  "next": "/"}, follow_redirects=False).status_code == 303
+    assert c.post("/api/auth/login",
+                  json={"username": username, "password": "code-test-password"}
+                  ).status_code == 200
     yield c
     db.execute("DELETE FROM app_user WHERE username = %s", (username,))
 
 
-def test_the_detail_page_renders_the_code_and_the_taint_trace(client, landscape):
+#: The console composes the code card in the browser, so the server-side half of
+#: "does it render" is whether the ONE endpoint that screen reads carries the
+#: pieces. Named here so a rename of a jsonb key fails loudly rather than turning
+#: a card into an empty box, which is the exact failure this file exists for.
+#:
+#: The client-side half is asserted against the source of FindingDetail.tsx. Not
+#: markup — the strings below are the field NAMES it reads and the two headings a
+#: reviewer looks for — because the data being present and the screen not reading
+#: it is a blank card and a green test.
+_CODE_CARD_SOURCE = ROOT / "frontend" / "src" / "routes" / "FindingDetail.tsx"
+
+
+def _detail(client, finding_id):
+    resp = client.get(f"/api/findings/{finding_id}")
+    assert resp.status_code == 200, resp.text[:400]
+    return resp.json()
+
+
+def test_the_detail_screen_is_given_the_code_and_the_taint_trace(client, landscape):
+    """This used to read the server-rendered page and grep it for "Code location".
+
+    That page is deleted. The finding still has to reach a person, and the only
+    route by which it now can is `/api/findings/{id}` — so the assertion moved to
+    the payload, and it is the stronger place for it: the old test could not tell
+    a snippet that reached the browser from one that reached the template and was
+    dropped, and this one names every field the card is built from.
+    """
     from server import db
     _store(landscape, TAINTED,
            inventory=[{"OBJECT_NAME": "Z_TAINT_DEMO", "REFERENCED": "YES",
@@ -171,16 +205,21 @@ def test_the_detail_page_renders_the_code_and_the_taint_trace(client, landscape)
                  "AND check_id LIKE 'ABAP-SQLI%%' LIMIT 1",
                  (landscape["landscape"],))["id"]
 
-    body = client.get(f"/findings/{fid}").text
-    assert "Code location" in body, "the code-location card did not render"
-    assert "z_taint_demo" in body.lower(), "the file the finding is in is not shown"
-    assert "SELECT" in body, "the offending source is not shown"
+    body = _detail(client, fid)
+    details = body["latest_details"] or {}
+
+    assert details.get("source") in ("abap_scan", "atc_export"), (
+        "the card is shown on `details.source`; without it FindingDetail.tsx "
+        "renders no code section at all")
+    assert "z_taint_demo" in str(details.get("file", "")).lower(),         "the file the finding is in did not reach the screen"
+    assert "SELECT" in str(details.get("snippet", "")),         "the offending source did not reach the screen"
     # Reachability from Phase 4a, with its evidence rather than a bare verdict.
-    assert "reachable" in body.lower()
-    assert "executed on" in body or "referenced" in body
+    assert body["reachability"] == "reachable"
+    assert details.get("reachability_reasons"),         "a reachability verdict with no reasons is an assertion the reviewer cannot check"
+    assert body["taint_confidence"] in ("confirmed", "tentative", "pattern-only")
 
 
-def test_a_confirmed_finding_shows_its_source_to_sink_path(client, landscape):
+def test_a_confirmed_finding_carries_its_source_to_sink_path(client, landscape):
     """The best thing the engine produces, and there is nothing else like it in the
     product. If the taint pass confirmed the finding, the path must be visible."""
     from server import db
@@ -193,19 +232,45 @@ def test_a_confirmed_finding_shows_its_source_to_sink_path(client, landscape):
     if row["taint_confidence"] != "confirmed" or not row["details"].get("taint_flow"):
         pytest.skip("taint pass produced no flow for this sample")
 
-    body = client.get(f"/findings/{row['id']}").text
-    assert "How untrusted input reaches it" in body
-    assert "source" in body and "sink" in body
+    flow = (_detail(client, row["id"])["latest_details"] or {}).get("taint_flow")
+    assert flow, "the source->sink trace did not reach the screen"
+    roles = {str(hop.get("role")) for hop in flow}
+    assert "source" in roles and "sink" in roles,         f"the trace has no source and sink to read it by: {roles}"
+    for hop in flow:
+        # The four columns the table renders. A hop missing `code` is a row of
+        # blanks, which reads as a rendering bug rather than as missing data.
+        assert {"line", "role", "var", "code"} <= set(hop), f"incomplete hop: {hop}"
 
 
-def test_a_non_code_finding_shows_no_code_card(client, landscape):
-    """The card must not appear on a parameter or user finding with nothing to put
-    in it."""
+def test_a_non_code_finding_carries_nothing_to_put_in_the_card(client, landscape):
+    """The card must not appear on a parameter or user finding with nothing in it.
+
+    The condition is `details.source`, so the server-side assertion is that a
+    non-code finding does not claim to be one — which is what actually keeps the
+    card off the screen.
+    """
     from server import db
-    fid = db.one(
+    row = db.one(
         "SELECT id FROM finding WHERE check_id NOT LIKE 'ABAP-%%' "
         "AND check_id NOT LIKE 'ATC-%%' LIMIT 1")
-    if not fid:
+    if not row:
         pytest.skip("no non-code finding in this database")
-    body = client.get(f"/findings/{fid['id']}").text
-    assert "Code location" not in body
+    details = _detail(client, row["id"])["latest_details"] or {}
+    assert details.get("source") not in ("abap_scan", "atc_export")
+    assert not details.get("snippet") and not details.get("taint_flow")
+
+
+def test_the_console_actually_reads_every_field_the_payload_carries():
+    """The other half of a client-rendered screen, and the half a JSON assertion
+    cannot see: data delivered to a screen that never looks at it is a blank card
+    and a passing suite.
+
+    Needs no database — it is a claim about one source file — so it holds on a
+    bare checkout, which is where a dropped field is cheapest to catch.
+    """
+    src = _CODE_CARD_SOURCE.read_text(encoding="utf-8")
+    for field in ("'file'", "'snippet'", "'taint_flow'", "'reachability_reasons'",
+                  "'source'", "reachability", "taint_confidence"):
+        assert field in src,             f"FindingDetail.tsx no longer reads {field}; the payload carries it to nobody"
+    for heading in ("Code location", "How untrusted input reaches it"):
+        assert heading in src, f"the {heading!r} section was lost in the port"

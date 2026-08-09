@@ -2,7 +2,7 @@ import { BrowserRouter, Route, Routes } from 'react-router'
 import AuthGate from './components/AuthGate'
 import Login from './components/Login'
 import { AppShell } from './components/AppShell'
-import { Placeholder } from './routes/Placeholder'
+import { NotFound } from './routes/NotFound'
 import { Account } from './routes/Account'
 import { SavedView } from './routes/SavedView'
 import { RunDetail } from './routes/RunDetail'
@@ -24,15 +24,23 @@ import { FindingDetail } from './routes/FindingDetail'
  *   2. an entry in src/lib/nav.ts (or, for a detail screen taking an id, a link
  *      from the list screen above it).
  * A route with no way to reach it is a route nobody finds — the sibling product
- * shipped a whole feature that way. The catch-all Placeholder is what keeps a
- * half-done migration honest: an unmigrated path says so rather than rendering
- * an empty frame that reads as "no data".
+ * shipped a whole feature that way. The catch-all NotFound is what stops an
+ * address with no route from rendering an empty frame that reads as "no data";
+ * it said "not migrated yet" while there was a server-rendered console to fall
+ * back to, and says what it now means instead.
  *
  * BASENAME COMES FROM THE BUILD. `import.meta.env.BASE_URL` is vite.config.ts's
- * `base`, which the SPA is currently built for at /ui/ while the Jinja console
- * still owns the bare paths. Every route path below is written WITHOUT the
- * prefix, so when server/app.py's SPA_MOUNT_PATH and vite's `base` both become
- * "/" nothing in this file changes.
+ * `base`, now "/" — the console owns the root and the Jinja pages it was mounted
+ * beside are deleted. Every route path below is written WITHOUT a prefix, which
+ * is why the move from /ui/ changed nothing in this file: the paths here have
+ * always been the ones people type, and only the basename in front of them moved.
+ *
+ * THESE PATHS ARE THE OLD CONSOLE'S PATHS, DELIBERATELY. /findings/123, /paths/7,
+ * /runs/42 and /v/:slug are in bookmarks and in tickets, and each one is declared
+ * below at the address it already had, so the cutover needed no redirect for any
+ * of them. The one URL that did move — the /ui prefix itself — is redirected by
+ * server/app.py rather than routed here, because a bundle cannot redirect a
+ * request that never reaches it.
  *
  * AuthGate wraps the layout rather than each screen: it resolves the session
  * once and provides it to everything underneath, so no screen has to ask again
@@ -66,7 +74,7 @@ export default function App() {
           <Route path="/trend" element={<Trend />} />
           <Route path="/upload" element={<Upload />} />
           <Route path="/v/:slug" element={<SavedView />} />
-          <Route path="*" element={<Placeholder />} />
+          <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
     </BrowserRouter>

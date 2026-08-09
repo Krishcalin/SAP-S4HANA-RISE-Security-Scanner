@@ -1,13 +1,27 @@
 """
 FastAPI application.
 
-ONE QUERY LAYER, MANY RENDERINGS
---------------------------------
-Every route below reads through the same helpers the JSON API uses. The invariant
-worth copying from the incumbent — "everything the dashboard shows is available
-via the API" — only holds if it is structural rather than remembered, so the HTML
-pages and the JSON endpoints call the same functions and differ only in how they
-render the result.
+ONE QUERY LAYER, ONE RENDERING
+------------------------------
+There used to be two: thirteen server-rendered Jinja pages and the JSON API, both
+calling the same query helpers so they could not disagree. The React console has
+replaced the pages, so this module is now the API plus the static mount that
+serves the compiled bundle, and the invariant worth copying from the incumbent —
+"everything the dashboard shows is available via the API" — has stopped being a
+discipline and become the only way anything is rendered at all. There is no
+second reading of the data left to drift from this one.
+
+WHAT WENT, AND WHAT DELIBERATELY DID NOT
+`server/templates/` and every route that rendered one are gone; jinja2 left
+requirements.txt with them. Three things that LOOKED like part of the Jinja
+console stayed, because none of them was:
+  * `/static` — brand assets, referenced by the SPA's index.html by absolute path
+    and by its sign-in screen. Unauthenticated by necessity.
+  * `/health` — operational, read by a container healthcheck, never by a browser.
+  * `/v/{slug}` — a shareable saved-view link that lives in bookmarks and tickets.
+    It was a 303 to a Jinja page; the SPA declares the SAME path as a route and
+    resolves it through `/api/views/{slug}`, so the URL survives the cutover
+    without a redirect and the server route had to go rather than shadow it.
 
 Reporting is READ ACCESS, not file production. Each audience gets a durable,
 permission-scoped URL rather than a document somebody has to fetch and forward —
@@ -23,62 +37,47 @@ import tempfile
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional
-from urllib.parse import parse_qs, quote, urlencode, urlparse
+from urllib.parse import parse_qs, urlparse
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile, File
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import Scope
 
-from server import analytics, auth, crq, db, graph, ingest, prose, queries, sapcontent
-from server.api_auth import SESSION_COOKIE, current_user, require
+from server import analytics, auth, crq, db, graph, ingest, queries, sapcontent
+#: SESSION_COOKIE is imported but not USED here any more — the routes that set and
+#: cleared it were the Jinja form's sign-in and sign-out, and the SPA uses
+#: /api/auth/login and /api/auth/logout instead. It stays as a deliberate
+#: re-export: one spelling of the cookie name, asserted by tests/test_api_auth.py,
+#: because two modules holding two spellings presents as "signing in works but
+#: nothing is signed in".
+from server.api_auth import SESSION_COOKIE, current_user, require  # noqa: F401
 from server.api_auth import router as api_auth_router
 from server.config import settings
 
 log = logging.getLogger(__name__)
 
-TEMPLATES = Jinja2Templates(directory=str(Path(__file__).with_name("templates")))
-
-
-def _money(value: Any) -> str:
-    """Render a currency figure the way a board reads one.
-
-    Loss exposure spans several orders of magnitude across scenarios, and
-    "$1,240,000" next to "$8,300" is harder to compare at a glance than
-    "$1.24M" next to "$8.3K". `None` renders as an em dash rather than "$0" —
-    "not computed" and "zero risk" are very different claims.
-    """
-    if value is None:
-        return "—"
-    try:
-        n = float(value)
-    except (TypeError, ValueError):
-        return "—"
-    for limit, suffix in ((1e9, "B"), (1e6, "M"), (1e3, "K")):
-        if abs(n) >= limit:
-            return f"${n / limit:,.2f}{suffix}".replace(".00", "")
-    return f"${n:,.0f}"
-
-
-TEMPLATES.env.globals["money"] = _money
-#: Authored text carries its own structure in newlines; HTML throws them away.
-#: See server/prose.py for why remediation becomes a real <ol> rather than
-#: `white-space: pre-line`.
-TEMPLATES.env.filters["steps"] = prose.steps
-TEMPLATES.env.filters["paragraphs"] = prose.paragraphs
-
 app = FastAPI(title="MonitorRisk — SAP Threat, Vulnerabilities & GRC",
               docs_url="/api/docs")
 
-#: Brand assets. Deliberately UNAUTHENTICATED: the sign-in page carries the logo,
-#: so gating this mount would render a broken image to everyone not yet signed in.
-#: Nothing else is served from here, and nothing here is derived from scan data.
-#: StaticFiles ships inside Starlette, which FastAPI already depends on — the
-#: runtime dependency count stays at five.
+#: Brand assets. Deliberately UNAUTHENTICATED: the sign-in screen carries the
+#: logo, so gating this mount would render a broken image to everyone not yet
+#: signed in. Nothing else is served from here, and nothing here is derived from
+#: scan data. StaticFiles ships inside Starlette, which FastAPI already depends on
+#: — the runtime dependency count stays at four.
+#:
+#: IT SURVIVED THE JINJA RETIREMENT ON PURPOSE. It reads like part of the
+#: server-rendered console and is not: the compiled index.html names
+#: /static/favicon.ico by ABSOLUTE path (base-relative would break the moment the
+#: mount moved, which it just did), and the SPA's sign-in screen names
+#: /static/monitorrisk-logo.png the same way. Removing this mount replaces the
+#: brand with two broken images on the one screen every user sees first.
+#:
+#: DECLARED BEFORE THE SPA MOUNT and it must stay there — see the note on route
+#: ordering at the foot of this file.
 app.mount("/static",
           StaticFiles(directory=str(Path(__file__).with_name("static"))),
           name="static")
@@ -89,12 +88,12 @@ app.mount("/static",
 # --------------------------------------------------------------------------- #
 #  The React console is compiled to static files at IMAGE-BUILD time and served
 #  by this process. There is no Node at runtime and no second container: React,
-#  Vite and TypeScript are build-time dependencies and the pinned runtime list is
-#  unchanged.
+#  Vite and TypeScript are build-time dependencies, and the pinned runtime list
+#  went DOWN when this replaced the templates — jinja2 left with them.
 
-#: Where `frontend/npm run build` puts its output. Beside the templates and the
-#: brand assets, so the Dockerfile's existing `COPY server/` carries it and the
-#: path resolves off __file__ rather than off a working directory.
+#: Where `frontend/npm run build` puts its output. Beside the brand assets, so the
+#: Dockerfile's existing `COPY server/` carries it and the path resolves off
+#: __file__ rather than off a working directory.
 SPA_DIR = Path(__file__).with_name("spa")
 
 #: The URL prefix the bundle is built for. It is baked into every asset URL at
@@ -103,25 +102,17 @@ SPA_DIR = Path(__file__).with_name("spa")
 #: 404s in the console. tests/test_spa_mount.py asserts this string and vite's
 #: `base` agree, so the pair cannot be half-changed.
 #:
-#: WHY NOT "/" YET. The Jinja console still owns "/", "/findings", "/paths" and
-#: the rest, and those routes are registered below. Starlette matches in
-#: declaration order, so the SPA cannot be given those paths without taking them
-#: away from pages that are still the only working version of those screens.
-#: When the last screen is migrated, this becomes "/", vite's `base` becomes "/"
-#: with it, and the Jinja routes go in the same commit.
-SPA_MOUNT_PATH = "/ui"
-
-#: base.html renders the door into the React console from this, rather than
-#: writing "/ui" a second time.
+#: IT IS THE ROOT NOW. It was "/ui" for exactly as long as the Jinja console
+#: owned "/", "/findings", "/paths" and the rest — the SPA could not be given
+#: those paths while server-rendered pages were still the only working version of
+#: those screens. Every screen is migrated, so the pages and their templates are
+#: gone and the console has the address people actually type. vite's `base`
+#: became "/" in the same commit, because a half-changed pair is a blank page.
 #:
-#: THE DOOR IS THE POINT. A route with no way to click to it is a route nobody
-#: finds — the rule this migration was explicitly told not to break — and while
-#: the Jinja pages own "/", the ENTIRE React console is behind exactly that kind
-#: of route: a signed-in user lands on the server-rendered dashboard and there is
-#: nothing anywhere that mentions the new console exists. Mounting it was not the
-#: same thing as shipping it. When SPA_MOUNT_PATH becomes "/" the link and the
-#: templates go together, so this global disappears with them.
-TEMPLATES.env.globals["spa_mount"] = SPA_MOUNT_PATH
+#: /ui DID NOT SIMPLY VANISH. It was a live console for the length of the
+#: migration and its URLs are in bookmarks and tickets, so a redirect stands
+#: where it was — see `_retired_ui_prefix` below.
+SPA_MOUNT_PATH = "/"
 
 
 class SpaFiles(StaticFiles):
@@ -137,12 +128,19 @@ class SpaFiles(StaticFiles):
     raised one specifically.
 
     A path whose last segment CONTAINS A DOT is refused honestly instead of being
-    answered with index.html. `/ui/assets/index-a1b2c3.js` going missing is a
-    broken build, and answering it with HTML turns a clear 404 into a MIME-type
-    error somewhere inside the module loader — the failure would be reported as
-    "the app is blank", which is a much longer walk to the same cause. No SPA
-    route contains a dot: saved-view slugs are stripped to alphanumerics, hyphen
-    and underscore, and every other route segment is a numeric id.
+    answered with index.html. `/assets/index-a1b2c3.js` going missing is a broken
+    build, and answering it with HTML turns a clear 404 into a MIME-type error
+    somewhere inside the module loader — the failure would be reported as "the app
+    is blank", which is a much longer walk to the same cause. No SPA route
+    contains a dot: saved-view slugs are stripped to alphanumerics, hyphen and
+    underscore, and every other route segment is a numeric id.
+
+    A path under `api/` is refused for the same reason and a sharper one. Now that
+    this is mounted at the ROOT it is the last route in the table, so a mistyped or
+    retired API path reaches it — and answering `GET /api/findigs` with 200 and a
+    page of HTML is the worst possible reply to an integrator: their JSON parser
+    fails somewhere unrelated and the actual cause (a typo) is invisible. See
+    `_index_or_404`.
     """
 
     async def check_config(self) -> None:
@@ -151,9 +149,9 @@ class SpaFiles(StaticFiles):
         StaticFiles re-checks its directory on the first request and raises
         RuntimeError — a 500 with a traceback — when it is absent. "Nobody has
         run `npm run build` yet" is a normal state of a fresh checkout and not a
-        server fault, and letting it 500 would also drag the Jinja console's
-        error log into it. `_index_or_404` reports that state as a 503 that says
-        what to do about it.
+        server fault. `_index_or_404` reports that state as a 503 that says what
+        to do about it, and the API keeps answering throughout — which is what
+        makes an unbuilt bundle diagnosable rather than a dead server.
         """
         return
 
@@ -198,6 +196,16 @@ class SpaFiles(StaticFiles):
         # last segment" test reads as a file extension and refuses.
         if "." in Path(path).name:
             raise StarletteHTTPException(status_code=404)
+        # An unmatched /api path is a 404, never the console. The mount is at the
+        # root and therefore matches EVERYTHING that no real route claimed, so
+        # without this an integrator's typo comes back as 200 text/html and their
+        # JSON decoder blows up somewhere with no relationship to the mistake.
+        # PurePosixPath, not Path: `path` has been normalised with the HOST's
+        # separator, and on Windows `Path("api/x").parts` and `Path("api\\x").parts`
+        # both start "api" while a plain `startswith("api/")` would miss the
+        # backslash form and reopen the hole on exactly one platform.
+        if PurePosixPath(path.replace("\\", "/")).parts[:1] == ("api",):
+            raise StarletteHTTPException(status_code=404)
         try:
             return self._no_cache(await super().get_response("index.html", scope))
         except StarletteHTTPException:
@@ -211,12 +219,12 @@ class SpaFiles(StaticFiles):
                 status_code=503)
 
 
-#: check_dir=False so the server still starts on a checkout where nobody has run
-#: `npm run build`. The Jinja console is unaffected and /ui answers with the 503
-#: above, which is the honest description of that state.
-app.mount(SPA_MOUNT_PATH,
-          SpaFiles(directory=str(SPA_DIR), html=True, check_dir=False),
-          name="spa")
+#  THE MOUNT ITSELF IS AT THE FOOT OF THIS FILE, NOT HERE. A Mount at "/" matches
+#  every path there is, and Starlette dispatches to the FIRST route that matches,
+#  so registering it at this point would swallow /api, /health and /static whole —
+#  the entire API would answer with index.html and every test would fail at once.
+#  It used to sit here safely only because "/ui" claimed a prefix nothing else
+#  used. See the note above `app.mount(...)` at the end of the module.
 
 
 #: Scans are CPU-bound Python; they must not run on the event loop or a single
@@ -251,109 +259,120 @@ app.include_router(api_auth_router)
 
 @app.exception_handler(401)
 async def _unauth(request: Request, exc: HTTPException):
-    """Browsers get the login page; API clients get JSON."""
-    if request.url.path.startswith("/api/"):
-        return JSONResponse({"detail": "not authenticated"}, status_code=401)
-    return RedirectResponse(f"/login?next={request.url.path}", status_code=303)
+    """Always JSON now, for every caller.
+
+    It used to branch: an API client got this body and a browser got a 303 to the
+    Jinja sign-in page. There is nothing left to redirect. Every route that
+    resolves a user is under /api, and a browser asking for a SCREEN never reaches
+    an exception handler at all — it reaches the static mount, which hands back
+    index.html unconditionally, and the console's own AuthGate reads a 401 from
+    /api/auth/me and renders the sign-in form client-side.
+
+    Keeping the redirect branch would be worse than dead code: it would answer a
+    303 to `/login?next=…` from an endpoint the SPA calls with fetch, which
+    follows redirects silently and would hand the screen a page of HTML where it
+    expected JSON — a 401 that presents as a parse error.
+    """
+    return JSONResponse({"detail": "not authenticated"}, status_code=401)
 
 
 @app.exception_handler(303)
 async def _must_change(request: Request, exc: HTTPException):
-    if request.url.path.startswith("/api/"):
-        return JSONResponse(
-            {"detail": "password change required", "change_at": "/account"},
-            status_code=403)
-    return RedirectResponse("/account", status_code=303)
+    """A forced password change, reported to the caller rather than redirected.
 
+    `change_at` KEPT ITS VALUE, and that is a decision rather than an oversight.
+    It named the Jinja account page; it now names the SPA route at the identical
+    path, because App.tsx declares `/account` and the console navigates there.
+    The string did not have to move, so it did not — a shared client contract that
+    changes for no observable reason is a change every integrator has to read and
+    nobody benefits from. tests/test_account.py asserts the pointer is not
+    dangling by checking it against the SPA's own route table, which is a stronger
+    claim than the literal it replaced.
 
-@app.get("/login", response_class=HTMLResponse)
-def login_form(request: Request, next: str = "/"):
-    return TEMPLATES.TemplateResponse(request, "login.html", {"next": next})
+    It is a CONSOLE path, not an endpoint: a scripted client cannot POST to it.
+    The call that actually clears the condition is POST /api/account/password,
+    named here so a reader of the response is not left guessing.
 
-
-@app.post("/login")
-def login(request: Request, username: str = Form(...), password: str = Form(...),
-          next: str = Form("/")):
-    user = auth.authenticate(username, password)
-    if user is None:
-        return TEMPLATES.TemplateResponse(
-            request, "login.html",
-            {"next": next, "error": "Invalid credentials"},
-            status_code=401)
-    token = auth.create_session(user["id"], request.headers.get("user-agent", ""))
-    # Redirect target is constrained to a local path: an open redirect here would
-    # let a phishing link bounce a freshly-authenticated user off-site.
-    target = next if next.startswith("/") and not next.startswith("//") else "/"
-    resp = RedirectResponse(target, status_code=303)
-    resp.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax",
-                    secure=request.url.scheme == "https",
-                    max_age=settings.session_ttl_hours * 3600)
-    return resp
-
-
-@app.post("/logout")
-def logout(request: Request):
-    token = request.cookies.get(SESSION_COOKIE)
-    if token:
-        auth.destroy_session(token)
-    resp = RedirectResponse("/login", status_code=303)
-    resp.delete_cookie(SESSION_COOKIE)
-    return resp
+    Like the 401 above this no longer branches on the path. `current_user` is the
+    only thing that raises a 303 and it is now reached exclusively from /api.
+    """
+    return JSONResponse(
+        {"detail": "password change required", "change_at": "/account"},
+        status_code=403)
 
 
 # --------------------------------------------------------------------------- #
-#  Console                                                                    #
+#  Retired URLs that are still in the world                                   #
+# --------------------------------------------------------------------------- #
+#  The Jinja console's page paths — "/", "/findings/123", "/paths/7", "/v/{slug}"
+#  and the rest — need nothing here: the SPA declares every one of them at the
+#  SAME path, so the static mount answers them and react-router renders the right
+#  screen. They were checked one by one against src/App.tsx rather than assumed.
+#
+#  "/ui" is the exception, and the only redirect this cutover needs. It was a
+#  real, working console for the whole migration; its URLs were shared, bookmarked
+#  and pasted into tickets, and the test suite named /ui/findings/123 as the
+#  canonical case. Without this, /ui/findings/123 would resolve — the root mount
+#  answers everything — and render the catch-all "page not found" screen, because
+#  react-router's basename is "/" and no route matches "/ui/findings/123". A
+#  silent wrong screen is worse than a 404, and much worse than a redirect.
+
+#: GET and HEAD, spelled out. FastAPI's `@app.get` registers GET *only* — unlike
+#: Starlette's own Route, which quietly adds HEAD alongside it — so a bare
+#: `@app.get` here would leave `HEAD /ui/findings` unmatched, and the mount below
+#: would answer it 200 with the console. A link checker or a proxy probing with
+#: HEAD would then be told the retired prefix is alive while every browser
+#: following it gets a 301: two different answers about the same URL, and the one
+#: that reads as authoritative is the wrong one.
+_UI_REDIRECT_METHODS = ["GET", "HEAD"]
+
+
+@app.api_route("/ui", methods=_UI_REDIRECT_METHODS, include_in_schema=False)
+@app.api_route("/ui/{rest:path}", methods=_UI_REDIRECT_METHODS,
+               include_in_schema=False)
+def _retired_ui_prefix(request: Request, rest: str = ""):
+    """Send the migration-era console prefix to the address it now lives at.
+
+    301 rather than 302: /ui is not coming back, and a permanent redirect lets a
+    browser stop asking. The cost is that it is cached hard — which is the right
+    trade for a prefix being retired in the same commit that gives the console the
+    root, and the wrong one for anything that might return.
+
+    THE QUERY STRING IS CARRIED. Half of what makes these links worth preserving
+    is in it: /ui/findings?team=basis&severity=CRITICAL is somebody's saved triage
+    queue, and dropping the filters would "work" while showing the wrong list.
+
+    `rest` IS ATTACKER-CONTROLLED AND MUST BE NORMALISED TO EXACTLY ONE LEADING
+    SLASH. Written as a bare f"/{rest}", `GET /ui//evil.example.com` gives
+    rest="/evil.example.com" and a `Location: //evil.example.com` — a
+    PROTOCOL-RELATIVE URL, which a browser resolves against the current scheme and
+    follows off-site. That is an open redirect on an unauthenticated path, on the
+    one prefix we are actively telling people is still safe to click, and the 301
+    makes it worse: the browser caches the hop and keeps making it without asking
+    us again. `%2f%2f` is the same attack pre-decoded by Starlette, and a backslash
+    is the same attack again because browsers fold "\\" to "/" while parsing a
+    Location — so both are collapsed before the slashes are stripped.
+
+    The guard that already existed (tests/test_http_console.py's
+    `test_the_open_redirect_is_closed`) covered the retired ?next= parameter and
+    checked this route only with a well-formed path, which is why a redirect added
+    in the same commit could reopen a hole the suite believed was shut.
+
+    Declared BEFORE the mount at the foot of this file, or the mount would take it
+    first and this would never run.
+    """
+    query = request.url.query
+    target = "/" + rest.replace("\\", "/").lstrip("/")
+    return RedirectResponse(f"{target}?{query}" if query else target,
+                            status_code=301)
+
+
+# --------------------------------------------------------------------------- #
+#  JSON API                                                                   #
 # --------------------------------------------------------------------------- #
 
-@app.get("/", response_class=HTMLResponse)
-def dashboard(request: Request, user: Dict[str, Any] = Depends(current_user)):
-    scope = auth.scope_for(user)
-    latest_crq = crq.latest(scope)
-    return TEMPLATES.TemplateResponse(request, "dashboard.html", {
-        "user": user,
-        "summary": queries.dashboard_summary(scope),
-        "systems": queries.list_systems(scope),
-        "recent_runs": queries.recent_runs(scope, limit=10),
-        "crq": latest_crq,
-        "crq_scenarios": crq.scenarios_for_run(latest_crq["run_id"]) if latest_crq else [],
-    })
-
-
-@app.get("/findings", response_class=HTMLResponse)
-def findings_page(request: Request, user: Dict[str, Any] = Depends(current_user),
-                  system_id: Optional[int] = None, state: Optional[str] = None,
-                  severity: Optional[str] = None, team: Optional[str] = None,
-                  owner: Optional[str] = None, tier: Optional[str] = None,
-                  assignee: Optional[str] = None, overdue: bool = False,
-                  page: int = 1):
-    scope = auth.scope_for(user)
-    result = queries.list_findings(scope, system_id=system_id, state=state,
-                                   severity=severity, team=team,
-                                   remediation_owner=owner, tier=tier,
-                                   assignee=assignee, overdue=overdue, page=page)
-    return TEMPLATES.TemplateResponse(request, "findings.html", {
-        "user": user, **result,
-        "filters": {"system_id": system_id, "state": state, "severity": severity,
-                    "team": team, "owner": owner, "tier": tier,
-                    "assignee": assignee, "overdue": overdue},
-        "systems": queries.list_systems(scope),
-        "views": queries.list_views(user["username"], "findings"),
-    })
-
-
-@app.get("/trend", response_class=HTMLResponse)
-def trend_page(request: Request, user: Dict[str, Any] = Depends(current_user),
-               days: int = 180):
-    """The mitigation journey — answers "is it getting better" without an export."""
-    scope = auth.scope_for(user)
-    return TEMPLATES.TemplateResponse(request, "trend.html", {
-        "user": user, "days": days,
-        "j": analytics.journey_summary(scope, days),
-    })
-
-
-@app.get("/risk", response_class=HTMLResponse)
-def risk_page(request: Request, user: Dict[str, Any] = Depends(current_user)):
+@app.get("/api/risk")
+def api_risk(user: Dict[str, Any] = Depends(current_user)):
     """Financial risk exposure — the board view.
 
     Neither incumbent produces a currency figure at all, which makes this the
@@ -361,52 +380,9 @@ def risk_page(request: Request, user: Dict[str, Any] = Depends(current_user)):
     """
     scope = auth.scope_for(user)
     latest = crq.latest(scope)
-    return TEMPLATES.TemplateResponse(request, "risk.html", {
-        "user": user,
-        "crq": latest,
-        "scenarios": crq.scenarios_for_run(latest["run_id"]) if latest else [],
-        "trend": crq.trend(scope),
-    })
-
-
-@app.get("/api/risk")
-def api_risk(user: Dict[str, Any] = Depends(current_user)):
-    scope = auth.scope_for(user)
-    latest = crq.latest(scope)
     return {"portfolio": latest,
             "scenarios": crq.scenarios_for_run(latest["run_id"]) if latest else [],
             "trend": crq.trend(scope)}
-
-
-@app.get("/paths", response_class=HTMLResponse)
-def paths_page(request: Request, user: Dict[str, Any] = Depends(current_user)):
-    """Ranked path list plus choke points. The graph is NOT here — it renders inside
-    one selected path, which is what keeps this legible at landscape scale."""
-    scope = auth.scope_for(user)
-    return TEMPLATES.TemplateResponse(request, "paths.html", {
-        "user": user,
-        "paths": graph.list_paths(scope),
-        "chokes": graph.chokepoints(scope),
-        "summary": graph.path_summary(scope),
-        "closed": graph.recently_closed(scope),
-        "template_count": len(graph.load_templates().get("paths", [])),
-    })
-
-
-@app.get("/paths/{path_id}", response_class=HTMLResponse)
-def path_detail(path_id: int, request: Request,
-                user: Dict[str, Any] = Depends(current_user)):
-    scope = auth.scope_for(user)
-    path = graph.get_path(path_id, scope)
-    if path is None:
-        raise HTTPException(404, "not found")
-    findings = graph.path_findings(path_id)
-    # Cut findings drive the mitigate-vs-additional split on the page.
-    cut_ids = {fid for hop in (path["detail"].get("hops") or []) if hop.get("is_cut")
-               for fid in hop.get("finding_ids", [])}
-    return TEMPLATES.TemplateResponse(request, "path_detail.html", {
-        "user": user, "path": path, "findings": findings, "cut_ids": cut_ids,
-    })
 
 
 @app.get("/api/paths")
@@ -414,10 +390,14 @@ def api_paths(user: Dict[str, Any] = Depends(current_user),
               include_closed: bool = False):
     """Everything the paths screen renders, in one call.
 
-    `closed` and `template_count` were on the HTML page and not here. The closed
-    list is the mitigation journey's strongest unit — "this path was severed on
-    12 September" — and leaving it out of the API made the best evidence in the
-    product reachable only by scraping a page.
+    The ranked path list plus choke points. The graph is NOT part of this — it
+    renders inside one selected path (`/api/paths/{id}`), which is what keeps the
+    screen legible at landscape scale.
+
+    `closed` and `template_count` were on the retired HTML page and not here. The
+    closed list is the mitigation journey's strongest unit — "this path was
+    severed on 12 September" — and leaving it out of the API made the best
+    evidence in the product reachable only by scraping a page.
     """
     scope = auth.scope_for(user)
     return {"summary": graph.path_summary(scope),
@@ -427,29 +407,15 @@ def api_paths(user: Dict[str, Any] = Depends(current_user),
             "template_count": len(graph.load_templates().get("paths", []))}
 
 
-@app.get("/coverage", response_class=HTMLResponse)
-def coverage_page(request: Request, user: Dict[str, Any] = Depends(current_user)):
-    """The published check catalogue and its coverage of SAP's own Baseline.
-
-    Coverage is computed from the check ids actually in the catalogue, so the page
-    cannot drift from what the scanner really does.
-    """
-    check_ids = [r["check_id"] for r in db.query("SELECT check_id FROM check_definition")]
-    cat = sapcontent.load_catalogue()
-    return TEMPLATES.TemplateResponse(request, "coverage.html", {
-        "user": user,
-        "cov": sapcontent.coverage(check_ids, cat),
-        "meta": cat.get("_meta", {}),
-        "our_checks": len(check_ids),
-    })
-
-
 @app.get("/api/coverage")
 def api_coverage(user: Dict[str, Any] = Depends(current_user)):
-    """Coverage of SAP's own Baseline, plus the catalogue metadata the page shows.
+    """The published check catalogue and its coverage of SAP's own Baseline.
+
+    Coverage is computed from the check ids actually in the catalogue, so the
+    screen cannot drift from what the scanner really does.
 
     `meta` and `our_checks` are additive — existing consumers keep the keys they
-    already read. They are here because the HTML page renders the catalogue's
+    already read. They are here because the screen renders the catalogue's
     provenance (which Baseline version, and the unit warning that comes with it)
     alongside the numbers, and a coverage percentage without its provenance is a
     claim an auditor cannot check.
@@ -461,91 +427,6 @@ def api_coverage(user: Dict[str, Any] = Depends(current_user)):
             "our_checks": len(check_ids)}
 
 
-@app.get("/account", response_class=HTMLResponse)
-def account_page(request: Request, user: Dict[str, Any] = Depends(current_user),
-                 changed: bool = False, error: str = None):
-    return TEMPLATES.TemplateResponse(request, "account.html", {
-        "user": user,
-        "forced": auth.must_change_password(user),
-        "changed": changed, "error": error,
-        "sessions": db.one("SELECT count(*) n FROM session WHERE user_id = %s",
-                           (user["id"],))["n"],
-        "users": (db.query("SELECT * FROM app_user ORDER BY username")
-                  if user["role"] == "admin" else []),
-        # A generated password is rendered ONCE, on the response to the reset
-        # that created it. It is never carried in a redirect or a query
-        # string, where it would land in browser history, in a proxy log and
-        # in the referer header.
-        "generated": None,
-    })
-
-
-@app.post("/account/password")
-def change_password(request: Request, current: str = Form(...),
-                    new1: str = Form(...), new2: str = Form(...),
-                    user: Dict[str, Any] = Depends(current_user)):
-    """Change your own password.
-
-    The CURRENT password is required even though the caller is already signed in:
-    a stolen session should not be enough to take an account over permanently.
-    """
-    def back(msg):
-        return RedirectResponse(f"/account?error={quote(msg)}", status_code=303)
-
-    if not auth.verify_password(current, user["password_hash"]):
-        return back("Current password is incorrect.")
-    if new1 != new2:
-        return back("The new passwords do not match.")
-    if new1 == current:
-        return back("The new password must differ from the current one.")
-    try:
-        auth.set_password(user["id"], new1, user["username"],
-                          keep_token=request.cookies.get(SESSION_COOKIE))
-    except auth.AuthError as exc:
-        return back(str(exc))
-    return RedirectResponse("/account?changed=true", status_code=303)
-
-
-@app.post("/account/reset/{user_id}")
-def reset_user_password(user_id: int, request: Request,
-                        admin: Dict[str, Any] = Depends(require("admin"))):
-    """Admin resets someone else's password by GENERATING one.
-
-    Never by choosing it: an admin who can set a known password can impersonate a
-    user and leave nothing that user could distinguish from their own activity.
-    """
-    target = db.one("SELECT username FROM app_user WHERE id = %s", (user_id,))
-    if target is None:
-        raise HTTPException(404, "no such user")
-    if user_id == admin["id"]:
-        raise HTTPException(400, "use the change-password form for your own account")
-    new = auth.reset_password(user_id, admin["username"])
-    return TEMPLATES.TemplateResponse(request, "account.html", {
-        "user": admin, "forced": False, "changed": False, "error": None,
-        "sessions": db.one("SELECT count(*) n FROM session WHERE user_id = %s",
-                           (admin["id"],))["n"],
-        "users": db.query("SELECT * FROM app_user ORDER BY username"),
-        "generated": {"username": target["username"], "password": new},
-    })
-
-
-@app.get("/v/{slug}")
-def open_view(slug: str, user: Dict[str, Any] = Depends(current_user)):
-    """Open a saved view — the durable, permission-scoped URL per audience.
-
-    The stored FILTERS are replayed as query parameters and the query re-runs under
-    THIS caller's row scope, so a shared link can never widen access: two people
-    following the same URL each see the systems they are entitled to.
-    """
-    view = queries.get_view(slug, user["username"])
-    if view is None:
-        raise HTTPException(404, "no such view")
-    qs = urlencode({k: v for k, v in (view["filters"] or {}).items()
-                    if v not in (None, "")})
-    target = {"findings": "/findings", "trend": "/trend"}.get(view["kind"], "/findings")
-    return RedirectResponse(f"{target}?{qs}" if qs else target, status_code=303)
-
-
 @app.post("/api/views")
 def api_save_view(name: str = Form(...), slug: str = Form(...),
                   kind: str = Form("findings"), shared: bool = Form(True),
@@ -553,8 +434,15 @@ def api_save_view(name: str = Form(...), slug: str = Form(...),
                   user: Dict[str, Any] = Depends(require("analyst"))):
     """Save the current filters as a durable URL.
 
-    Filters come from the referring page's query string rather than a body, so
-    "save this view" is literally "save what I am looking at".
+    Filters come from the referring screen's query string rather than a body, so
+    "save this view" is literally "save what I am looking at". The SPA keeps its
+    filters in the address bar for exactly this reason, so the referer carries
+    them unchanged and this did not need to move to a body when the pages went.
+
+    The returned `url` is /v/{slug} — still a real address after the cutover,
+    because the console declares that path as a route of its own. See the module
+    docstring on why the server-side /v/{slug} redirect was retired rather than
+    kept.
     """
     ref = urlparse(request.headers.get("referer", "")) if request else None
     filters = {k: v[0] for k, v in parse_qs(ref.query).items()} if ref else {}
@@ -592,43 +480,8 @@ def api_bulk_state(finding_ids: str = Form(...), state: str = Form(...),
 
 @app.get("/api/trend")
 def api_trend(days: int = 180, user: Dict[str, Any] = Depends(current_user)):
+    """The mitigation journey — answers "is it getting better" without an export."""
     return analytics.journey_summary(auth.scope_for(user), days)
-
-
-@app.get("/findings/{finding_id}", response_class=HTMLResponse)
-def finding_detail(finding_id: int, request: Request,
-                   user: Dict[str, Any] = Depends(current_user)):
-    scope = auth.scope_for(user)
-    finding = queries.get_finding(finding_id, scope)
-    if finding is None:
-        raise HTTPException(404, "not found")
-    return TEMPLATES.TemplateResponse(request, "finding_detail.html", {
-        "user": user, "finding": finding,
-        "history": queries.finding_history(finding_id),
-        "observations": queries.finding_observations(finding_id),
-    })
-
-
-@app.get("/runs/{run_id}", response_class=HTMLResponse)
-def run_detail(run_id: int, request: Request,
-               user: Dict[str, Any] = Depends(current_user)):
-    scope = auth.scope_for(user)
-    run = queries.get_run(run_id, scope)
-    if run is None:
-        raise HTTPException(404, "not found")
-    return TEMPLATES.TemplateResponse(request, "run_detail.html", {
-        "user": user, "run": run,
-        "diff": queries.run_diff(run_id, scope),
-    })
-
-
-@app.get("/upload", response_class=HTMLResponse)
-def upload_form(request: Request, user: Dict[str, Any] = Depends(require("analyst"))):
-    return TEMPLATES.TemplateResponse(request, "upload.html", {
-        "user": user,
-        "systems": queries.list_systems(auth.scope_for(user)),
-        "landscapes": queries.list_landscapes(),
-    })
 
 
 # --------------------------------------------------------------------------- #
@@ -757,7 +610,7 @@ def cancel_run(run_id: int, user: Dict[str, Any] = Depends(require("analyst"))):
 
 
 # --------------------------------------------------------------------------- #
-#  JSON API — the same query layer the pages use                              #
+#  JSON API — findings and runs                                               #
 # --------------------------------------------------------------------------- #
 
 @app.get("/api/runs/{run_id}")
@@ -777,11 +630,13 @@ def api_findings(user: Dict[str, Any] = Depends(current_user),
                  overdue: bool = False, page: int = 1):
     """The triage queue.
 
-    The filter list is now the SAME one `/findings` accepts. It was a strict
-    subset — system, state, severity and page — which quietly made this module's
-    own invariant false: the console could filter by tier, team, owner, assignee
-    and overdue, and an API client could not. Every parameter is passed straight
-    through to the one query function both surfaces call, so they cannot drift.
+    THE FILTER LIST IS THE CONSOLE'S, IN FULL. It was once a strict subset —
+    system, state, severity and page — which quietly made this module's own
+    invariant false: the server-rendered queue could filter by tier, team, owner,
+    assignee and overdue, and an API client could not. The pages are gone and this
+    is now the only reader of `list_findings`, so the subset could not come back
+    by accident; the parameters stay because an integrator wants exactly the
+    filters an analyst has.
     """
     return queries.list_findings(auth.scope_for(user), system_id=system_id,
                                  state=state, severity=severity, team=team,
@@ -813,10 +668,13 @@ def api_finding(finding_id: int, user: Dict[str, Any] = Depends(current_user)):
     dashboard shows is available via the API". It was not — the list endpoints
     never select `cd.remediation` or `cd.risk_narrative`, and there was no
     single-finding route at all, so the two fields a consumer most wants when
-    building a ticket were reachable only by scraping the HTML page.
+    building a ticket were reachable only by scraping the server-rendered page.
 
-    No query change was needed: `queries.get_finding` already selects both, plus
-    the latest observation's details, and applies the caller's system scope.
+    That scrape is no longer even possible, which is the migration's sharpest
+    reminder of why this route had to exist before the pages could go: the code
+    snippet, the source→sink taint trace and the reachability verdict now reach a
+    human ONLY through `latest_details` in this response. `queries.get_finding`
+    already selected all of it, plus the caller's system scope.
     """
     finding = queries.get_finding(finding_id, auth.scope_for(user))
     if finding is None:
@@ -842,11 +700,11 @@ def api_set_state(finding_id: int, state: str = Form(...), reason: str = Form(""
 # --------------------------------------------------------------------------- #
 #  JSON API — the screens the SPA renders                                     #
 # --------------------------------------------------------------------------- #
-#  These close the gap between this module's stated invariant ("everything the
-#  dashboard shows is available via the API") and what was actually reachable.
-#  Each one calls the SAME query function as the Jinja page beside it and returns
-#  the same context under the same keys, so the two renderings cannot disagree —
-#  and so the Jinja page remains a working fallback for the whole migration.
+#  These were added so the React screens had something to read, each returning
+#  the SAME context under the SAME keys as the Jinja page beside it — which is
+#  what made the pages a working fallback for the length of the migration and
+#  what makes retiring them now a deletion rather than a rewrite. Every key the
+#  templates rendered is still produced here; nothing was dropped on the way out.
 #
 #  All of them are READS behind `current_user`, which applies the caller's row
 #  scope through `auth.scope_for`. Nothing here widens what a user can see.
@@ -873,9 +731,9 @@ def api_systems(user: Dict[str, Any] = Depends(current_user)):
 
 @app.get("/api/landscapes")
 def api_landscapes(user: Dict[str, Any] = Depends(current_user)):
-    """Landscapes, for the upload form's required `landscape_id`.
+    """Landscapes, for the upload screen's required `landscape_id`.
 
-    NOT scoped, matching the upload page it serves: scoping is per SYSTEM, and a
+    NOT scoped, matching the upload screen it serves: scoping is per SYSTEM, and a
     landscape carries no findings of its own. Restricting it would leave a scoped
     analyst with an empty dropdown and no way to upload at all.
     """
@@ -886,10 +744,12 @@ def api_landscapes(user: Dict[str, Any] = Depends(current_user)):
 def api_path(path_id: int, user: Dict[str, Any] = Depends(current_user)):
     """One path with its evidence, and which findings sit on a CUT hop.
 
-    `cut_ids` drives the mitigate-vs-additional split the page makes: a finding on
-    a cut hop severs the path, one on a non-cut hop only reduces exploitability.
-    Computed here rather than in the client so both renderings make the same call
-    about which findings actually end the attack.
+    `cut_ids` drives the mitigate-vs-additional split the screen makes: a finding
+    on a cut hop severs the path, one on a non-cut hop only reduces
+    exploitability. Computed HERE rather than in the client, and it stays here
+    now that the client is the only renderer: which findings actually end an
+    attack is a claim about the graph, and it belongs beside the graph rather
+    than re-derived in TypeScript from `hops`.
     """
     scope = auth.scope_for(user)
     path = graph.get_path(path_id, scope)
@@ -943,11 +803,19 @@ def api_views(user: Dict[str, Any] = Depends(current_user),
 def api_view(slug: str, user: Dict[str, Any] = Depends(current_user)):
     """Resolve a saved view to the filters a screen should apply.
 
-    The SPA equivalent of `/v/{slug}`, which answers a 303 to a Jinja page. It
-    returns the stored FILTERS rather than rows, which is the property that makes
-    a shared link safe: the receiving screen re-runs the query under its own
+    WHAT ANSWERS /v/{slug} NOW. There used to be a route of that name here which
+    replied 303 to a Jinja page; the console declares `/v/:slug` as a route of its
+    own, reads this, and replaces its own address with the destination. Keeping
+    the server redirect would have shadowed that route — a Mount cannot outrank an
+    explicit path — leaving a screen nobody could reach and a worse answer for a
+    slug that does not exist: a bare 404 instead of a sentence explaining that a
+    view is visible to its author and, when shared, to everyone.
+
+    It returns the stored FILTERS rather than rows, which is the property that
+    makes a shared link safe: the receiving screen re-runs the query under its own
     caller's row scope, so two people following the same URL each see only the
-    systems they are entitled to. A saved view can never widen access.
+    systems they are entitled to. A saved view can never widen access, and it must
+    not start returning data of its own or that stops being true.
     """
     view = queries.get_view(slug, user["username"])
     if view is None:
@@ -960,7 +828,14 @@ def api_view(slug: str, user: Dict[str, Any] = Depends(current_user)):
 @app.get("/health")
 def health():
     """Degraded components are reported, never hidden — a green light over a
-    broken collector is worse than a red one."""
+    broken collector is worse than a red one.
+
+    NOT a console route and never was, which is why it outlived the templates: it
+    is read by a container healthcheck and by whatever watches the deployment, it
+    takes no session, and it renders nothing. Declared above the SPA mount like
+    every other real route, or it would be answered with index.html and every
+    probe would go green forever.
+    """
     degraded: List[str] = []
     try:
         db.one("SELECT 1 AS ok")
@@ -972,3 +847,33 @@ def health():
     if stuck:
         degraded.append(f"{len(stuck)} scan run(s) appear stalled")
     return {"status": "degraded" if degraded else "ok", "degraded": degraded}
+
+
+# --------------------------------------------------------------------------- #
+#  The SPA mount — LAST, and it has to be                                     #
+# --------------------------------------------------------------------------- #
+#  A Mount at "/" matches every path there is and Starlette dispatches to the
+#  FIRST route that matches, so this line has to come after every real route in
+#  the module. Move it up — even one line, above /health — and that route stops
+#  existing: the request is answered with index.html, 200, and the failure is
+#  silent in exactly the way that takes a day to find. It sat safely near the top
+#  of the file for the whole migration only because "/ui" claimed a prefix nothing
+#  else used; giving the console the root turned its position into a load-bearing
+#  detail.
+#
+#  ANYTHING ADDED BELOW THIS LINE IS UNREACHABLE. New routes go above it.
+#
+#  Three things depend on the ordering and are all declared above:
+#    * /static      — brand assets, and a prefix the SPA's index.html hardcodes.
+#    * /api/*       — including the router from server/api_auth.py. An /api path
+#                     that matches NO route is refused by SpaFiles rather than
+#                     answered with the console; see `_index_or_404`.
+#    * /health, /ui — the operational probe and the retired-prefix redirect.
+#
+#  check_dir=False so the server still starts on a checkout where nobody has run
+#  `npm run build`. The API is unaffected and every screen answers with the 503
+#  from `_index_or_404`, which is the honest description of that state — and the
+#  reason an unbuilt image is diagnosable over HTTP instead of a dead process.
+app.mount(SPA_MOUNT_PATH,
+          SpaFiles(directory=str(SPA_DIR), html=True, check_dir=False),
+          name="spa")

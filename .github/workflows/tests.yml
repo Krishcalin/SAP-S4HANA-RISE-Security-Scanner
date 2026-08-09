@@ -42,12 +42,47 @@ jobs:
       # The DB-backed suites skip without DB_DSN, which is correct here — this
       # job has no database. They are covered by the `server` job below, and
       # that job FAILS if they skip, so the coverage cannot quietly vanish.
+      #
+      # EVERY SERVER-TIER SUITE MUST BE LISTED, AND AN INCOMPLETE LIST MADE THIS JOB RED.
+      # This job installs pytest and NOTHING ELSE — that is its whole point. Two
+      # consequences follow, and only the first was handled before:
+      #
+      #   1. A test file's imports run at COLLECTION, before any skip marker is
+      #      consulted. A module-level `import psycopg` / `starlette` therefore
+      #      aborts the WHOLE run with "Interrupted: N errors during collection",
+      #      taking every scanner test with it. tests/test_graph_paths.py
+      #      (-> server.graph -> psycopg) had done this since the attack-path work
+      #      and tests/test_spa_mount.py (-> starlette) since the SPA migration.
+      #   2. A test that imports the server tier INSIDE the test body fails rather
+      #      than aborting — quieter, equally red. test_api_auth, test_branding,
+      #      test_enrich, test_sapcontent and the two deferral suites all do this.
+      #
+      # Excluding them costs no coverage: the `server` job runs every one of them
+      # with the real dependencies, and its skip guard means they cannot quietly
+      # vanish there. A module-level third-party import in a genuine SCANNER test
+      # still fails this job, which is the boundary it exists to defend — and the
+      # `purity` job enforces that boundary structurally over modules/ regardless.
+      #
+      # WHEN YOU ADD A TEST THAT TOUCHES server/, ADD IT HERE. This list rotted once
+      # already, and the failure mode is the loud one: the matrix job goes red for a
+      # reason that has nothing to do with the change that tripped it.
       - name: Run scanner tests
         run: |
           pytest -q \
             --ignore=tests/test_integration_ingest.py \
             --ignore=tests/test_integration_journey.py \
-            --ignore=tests/test_http_console.py
+            --ignore=tests/test_http_console.py \
+            --ignore=tests/test_graph_paths.py \
+            --ignore=tests/test_spa_mount.py \
+            --ignore=tests/test_api_auth.py \
+            --ignore=tests/test_account.py \
+            --ignore=tests/test_api_finding_detail.py \
+            --ignore=tests/test_code_finding_console.py \
+            --ignore=tests/test_branding.py \
+            --ignore=tests/test_enrich.py \
+            --ignore=tests/test_sapcontent.py \
+            --ignore=tests/test_sod_deferral.py \
+            --ignore=tests/test_snc_overlap.py
 
       - name: Smoke-run the scanner (all modules over sample_data)
         env:
@@ -178,7 +213,7 @@ jobs:
   # catalogue above applies: if it is derived, CI re-derives it.
   #
   # Pillow is installed HERE and nowhere else. It is a build-time tool, not a
-  # runtime dependency, and requirements.txt stays at five packages.
+  # runtime dependency, and requirements.txt stays at four packages.
   brand-assets:
     name: brand assets match the master
     runs-on: ubuntu-22.04
@@ -224,6 +259,30 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: requirements.txt
+
+      # The console is a build artefact and server/spa is gitignored, so without
+      # this step it does not exist in CI: every `built` assertion in
+      # tests/test_spa_mount.py skips, and the skip guard below correctly counts
+      # that as drift. It matters more since the SPA took "/" — an unbuilt bundle
+      # used to mean /ui answered 503 while the server-rendered console carried
+      # on, and now means every screen answers 503.
+      #
+      # Node appears in this job and in the Dockerfile's first stage. It is a
+      # build-time dependency in both; nothing JavaScript reaches the runtime
+      # image or requirements.txt.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build the console (type-checks, then emits server/spa)
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+          test -f ../server/spa/index.html \
+            || { echo "::error::the bundle was not emitted where the server serves it"; exit 1; }
 
       # `httpx` is TEST tooling, not a runtime dependency, which is why it is
       # here and not in requirements.txt: starlette's TestClient refuses to
@@ -305,13 +364,22 @@ jobs:
             fi
           fi
 
-      - name: Prove the console actually renders end to end
+      - name: Prove the console actually answers end to end
         run: |
           python - <<'PY'
           import sys; sys.path.insert(0, ".")
           from pathlib import Path
           from fastapi.testclient import TestClient
           from server import app as appmod, auth, db, ingest
+
+          # WHAT THIS STEP IS FOR, AFTER THE JINJA RETIREMENT.
+          # It existed because a bug broke EVERY page in the console and three
+          # layers of testing said it was fine. The pages are gone; the failure
+          # did not go away, it moved. A screen is now a JSON endpoint plus a
+          # compiled bundle, so both halves are exercised here: every endpoint a
+          # screen reads answers 200 with a real database and a real scan behind
+          # it, and every screen ADDRESS serves the console that was built in the
+          # step above. Either half alone passes while the product is unusable.
 
           db.init_schema()
           auth.create_user("ci", "ci-password-1234", "admin")
@@ -329,21 +397,68 @@ jobs:
           assert res["findings"] > 0, "the CI scan produced no findings"
 
           c = TestClient(appmod.app)
-          r = c.post("/login", data={"username": "ci", "password": "ci-password-1234",
-                                     "next": "/"}, follow_redirects=False)
-          assert r.status_code == 303, r.text[:300]
+          # The JSON sign-in. The form POST that answered 303 was deleted with the
+          # templates it rendered; there is one sign-in surface now.
+          r = c.post("/api/auth/login",
+                     json={"username": "ci", "password": "ci-password-1234"})
+          assert r.status_code == 200, r.text[:300]
+          assert r.json()["username"] == "ci"
 
           failed = []
-          for path in ("/", "/findings", "/trend", "/upload", "/findings?tier=P1",
-                       f"/runs/{run}", "/health", "/api/trend", "/api/findings"):
+
+          def check(path, expect=200, note=""):
               resp = c.get(path)
-              print(f"  {resp.status_code}  {path}")
-              if resp.status_code != 200:
-                  failed.append((path, resp.status_code, resp.text[:300]))
+              print(f"  {resp.status_code}  {path}  {note}")
+              if resp.status_code != expect:
+                  failed.append((path, resp.status_code, expect, resp.text[:300]))
+              return resp
+
+          print("API — what every screen reads:")
+          for path in ("/api/dashboard", "/api/findings", "/api/trend", "/api/risk",
+                       "/api/paths", "/api/coverage", "/api/account", "/api/systems",
+                       "/api/landscapes", "/api/views", "/api/findings?tier=P1",
+                       f"/api/runs/{run}", f"/api/runs/{run}/diff", "/health"):
+              check(path)
+
+          fid = db.one("SELECT id FROM finding LIMIT 1")["id"]
+          detail = check(f"/api/findings/{fid}")
+          if detail.status_code == 200:
+              for key in ("check_id", "remediation", "risk_narrative", "latest_details"):
+                  if key not in detail.json():
+                      failed.append((f"/api/findings/{fid}", f"missing {key}", "present", ""))
+          check(f"/api/findings/{fid}/history")
+
+          print("Console — the addresses people type and bookmark:")
+          for path in ("/", "/findings", f"/findings/{fid}", "/trend", "/risk", "/paths",
+                       "/coverage", "/upload", "/account", "/login", f"/runs/{run}",
+                       "/v/some-slug"):
+              resp = check(path)
+              # 503 is the "bundle was never built" answer. The step above builds
+              # it, so a 503 here means the artefact did not reach the server and
+              # the whole console is down.
+              if resp.status_code == 200 and '<div id="root">' not in resp.text:
+                  failed.append((path, "served something other than the console", "index.html", ""))
+
+          print("Retired URLs — bookmarks from before the cutover:")
+          nofollow = TestClient(appmod.app, follow_redirects=False)
+          nofollow.cookies.update(c.cookies)
+          for old_url, expected in (("/ui", "/"),
+                                    ("/ui/findings", "/findings"),
+                                    (f"/ui/findings/{fid}", f"/findings/{fid}")):
+              resp = nofollow.get(old_url)
+              print(f"  {resp.status_code}  {old_url} -> {resp.headers.get('location')}")
+              if resp.status_code != 301 or resp.headers.get("location") != expected:
+                  failed.append((old_url, resp.status_code, f"301 -> {expected}", ""))
+
+          # A mistyped endpoint must not be answered with the console: the mount is
+          # at the root and is the last route, so this is the guard that keeps an
+          # integrator's typo a 404 instead of a page of HTML.
+          check("/api/findigs", expect=404, note="(a typo must 404, not render)")
+
           if failed:
-              print("::error::console pages did not render")
+              print("::error::the console did not answer end to end")
               for f in failed:
                   print("  ", f)
               raise SystemExit(1)
-          print("console renders")
+          print("console answers")
           PY

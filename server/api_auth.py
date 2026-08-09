@@ -3,14 +3,18 @@ The JSON authentication and account surface.
 
 WHY THIS FILE EXISTS RATHER THAN A SECOND AUTH SYSTEM
 -----------------------------------------------------
-The console is migrating from server-rendered Jinja pages to a React SPA. The
-Jinja pages sign in with a form POST that answers with a 303 and a rendered page;
-a SPA cannot use that — it needs a status code and a body it can branch on. So
-this module adds a JSON *surface*, and nothing else. Every credential decision
-below still goes through `server.auth`: the same PBKDF2 verification, the same
-session table, the same "changing a password drops your other sessions" rule.
-There is exactly one authentication scheme in this product and this file is not
-a second one.
+It was written while the console was migrating from server-rendered Jinja pages
+to a React SPA. Those pages signed in with a form POST that answered with a 303
+and a rendered page; a SPA cannot use that — it needs a status code and a body it
+can branch on. So this module added a JSON *surface*, and nothing else. Every
+credential decision below goes through `server.auth`: the same PBKDF2
+verification, the same session table, the same "changing a password drops your
+other sessions" rule. There is exactly one authentication scheme in this product
+and this file is not a second one.
+
+The Jinja routes are now deleted and this is the ONLY sign-in surface, which
+changes nothing here: it was never a parallel implementation, so retiring the
+other one removed a caller rather than a competitor.
 
 WHY THE DEPENDENCIES LIVE HERE AND NOT IN app.py
 `current_user` and `require` used to sit in app.py, which meant this module could
@@ -18,16 +22,22 @@ not import them without a cycle (app imports the router, the router imports app)
 Rather than duplicate the resolution logic — the surest way to end up with two
 subtly different notions of "signed in" — the dependencies moved down here and
 app.py imports them. They are unchanged: same cookie, same forced-change gate,
-same rank comparison.
+same rank comparison. app.py is the only importer now and they still live here,
+because moving them back would recreate the cycle the day anything else needs
+them.
 
 WHY THE BODIES ARE JSON AND NOT FORMS
 It is a CSRF control, not a style choice. The session cookie is SameSite=Lax, so
 a cross-site GET cannot carry it and a cross-site form POST is the remaining
 worry. A browser will not send `Content-Type: application/json` cross-origin
 without a preflight, and there is no CORS policy here to permit one — so a body
-these routes will parse cannot be forged by a third-party page. The Jinja form
-POSTs keep their form bodies and keep relying on SameSite; do not "harmonise"
-these two by making the JSON routes accept form data.
+these routes will parse cannot be forged by a third-party page.
+
+The rest of the API still takes `Form(...)` bodies, which the Jinja pages posted
+to directly and which integrators now call. Do not "harmonise" the two by making
+these routes accept form data: the asymmetry is the control. Sign-in and password
+change are the two calls where a forged cross-site POST would actually be worth
+something, and they are the two that refuse a form body.
 
 WHAT IS DELIBERATELY NOT RETURNED
 `auth.resolve_session` hands back the whole `app_user` row, `password_hash`
@@ -47,20 +57,28 @@ from pydantic import BaseModel, Field
 from server import auth, db
 from server.config import settings
 
-#: The one session cookie name. app.py re-exports it for the Jinja routes.
+#: The one session cookie name. app.py re-exports it — see the import note
+#: there — so two modules can never hold two spellings of it.
 SESSION_COOKIE = "sapsec_session"
 
-#: Reachable while an account is still on a generated password. Everything else
-#: redirects to /account until it is replaced — including the API, so a forced
+#: Reachable while an account is still on a generated password. Every other API
+#: call is refused with a 403 naming where to go until it is replaced, so a forced
 #: account cannot simply be scripted around.
 #:
-#: The `/api/auth` and `/api/account` prefixes are on this list for the same
-#: reason `/account` is: they are how the SPA discovers it is being held at the
-#: gate and how it changes the password. Omitting them would leave a forced
-#: account facing a console that 403s every request including the one that would
-#: fix it — locked out by the mechanism meant to let them back in.
-_ALLOWED_WHILE_FORCED = ("/account", "/logout", "/login", "/health",
-                         "/api/auth", "/api/account")
+#: These two prefixes are how the console discovers it is being held at the gate
+#: (`/api/auth/me`) and how it gets out (`/api/account/password`). Omitting them
+#: would leave a forced account facing a console that 403s every request including
+#: the one that would fix it — locked out by the mechanism meant to let them back
+#: in.
+#:
+#: IT USED TO LIST "/account", "/logout", "/login" AND "/health" TOO. Those were
+#: server-rendered pages and their form targets; the pages are retired and the
+#: console is a static bundle, which takes no session at all and never reaches
+#: this check — a compiled file cannot be permission-gated and does not need to
+#: be, because it carries no data. /health has never had a session dependency
+#: either. Four strings that could not match anything were removed rather than
+#: left to read as live policy: the only paths this gate can see are /api ones.
+_ALLOWED_WHILE_FORCED = ("/api/auth", "/api/account")
 
 
 # --------------------------------------------------------------------------- #
@@ -73,8 +91,13 @@ def current_user(request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=401, detail="not authenticated")
     if auth.must_change_password(user) and not request.url.path.startswith(
             _ALLOWED_WHILE_FORCED):
-        # 303 rather than 403: the caller is authenticated and the fix is one
-        # page away, so send them to it instead of refusing with no route out.
+        # 303 is an INTERNAL signal, not what the caller sees. app.py's handler
+        # for it answers 403 with `change_at`, naming the screen that fixes this.
+        # It is raised as a 303 because it used to redirect a browser there, and
+        # the code stayed when the redirect went: 403 is already raised by
+        # `require` for "wrong role", and collapsing the two would lose the
+        # distinction between "you may not" and "not until you replace that
+        # password" at the only place the API can still tell them apart.
         raise HTTPException(status_code=303, detail="password change required")
     return user
 
@@ -152,8 +175,9 @@ class PasswordBody(BaseModel):
     current: str
     #: `new1`/`new2` rather than one field: the confirmation exists so a typo in
     #: a password nobody can read back becomes an error message instead of a
-    #: locked account, and dropping it here would delete that protection for
-    #: every SPA user while the Jinja form kept it.
+    #: locked account. It is the only thing standing between a mistyped new
+    #: password and an account nobody can sign into — there is no self-service
+    #: reset, by design.
     new1: str = Field(min_length=1)
     new2: str = Field(min_length=1)
 
@@ -229,12 +253,11 @@ def api_logout(request: Request) -> Response:
 def api_account(user: Dict[str, Any] = Depends(current_user)) -> Dict[str, Any]:
     """Everything the account screen renders, in one call.
 
-    The user list is admin-only and mirrors the Jinja page exactly: a non-admin
-    gets an empty list rather than a 403, because the rest of the screen — their
-    own password form — is theirs by right and must not be collateral damage of
-    a permission they do not have.
+    The user list is admin-only: a non-admin gets an empty list rather than a
+    403, because the rest of the screen — their own password form — is theirs by
+    right and must not be collateral damage of a permission they do not have.
 
-    `password_changed_at` is on the list because account.html's table has a
+    `password_changed_at` is on the list because the account screen's table has a
     "Password set" column and it is not decoration: an account whose password has
     NEVER been chosen is still holding the one that was generated for it and
     printed to a terminal, where it survives in scrollback and in
@@ -268,8 +291,9 @@ def api_change_password(body: PasswordBody, request: Request,
 
     The CURRENT password is required even though the caller is already signed in:
     a stolen session should not be enough to take an account over permanently.
-    Same three rules as the Jinja form, in the same order, so the two surfaces
-    cannot drift into accepting different passwords.
+    Three rules, in this order — they were written to match the Jinja form's so
+    the two surfaces could not drift into accepting different passwords, and they
+    are now simply the rules.
 
     `keep_token` is the caller's own session — every OTHER session for this
     account is dropped, which is the point of changing a password at all.

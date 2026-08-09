@@ -15,10 +15,11 @@ import { useTitle } from '../lib/title'
  * the systems they are entitled to. A saved view can never widen access, and it
  * must not start returning data of its own or that stops being true.
  *
- * IT IS THE SPA HALF OF A 303. server/app.py's `open_view` answers the same URL
- * with a redirect to /findings?… or /trend?…; this does the client-side
- * equivalent so a link works identically in whichever console the reader lands
- * in while both are live.
+ * IT REPLACED A 303. server/app.py used to answer this URL itself, redirecting to
+ * /findings?… or /trend?…; that route was retired with the rest of the Jinja
+ * console, and it had to be — an explicit server route outranks the static mount,
+ * so leaving it would have shadowed this screen and made it unreachable. The URL
+ * is unchanged, so every saved link in a bookmark or a ticket still opens.
  *
  * WHY `replace`. The history entry for /v/:slug must not survive the
  * navigation. Left in place, pressing Back from the findings queue would land on
@@ -30,11 +31,11 @@ import { useTitle } from '../lib/title'
  * and renders a link each, which is how these are reached by clicking.
  */
 
-/** The same map `open_view` uses for its 303, including its treatment of a
- *  `coverage` view — which falls through to /findings there because the coverage
- *  screen takes no filters. Mirrored rather than quietly corrected: the two
- *  consoles are live at once, and the same saved link opening a different screen
- *  depending on which one you are in is worse than a target nobody uses. */
+/** The same map the retired `open_view` used for its 303, including its treatment
+ *  of a `coverage` view — which fell through to /findings there because the
+ *  coverage screen takes no filters. Carried over rather than quietly corrected:
+ *  a saved link that opened the findings queue last week must not open a
+ *  different screen this week because its console was replaced underneath it. */
 const TARGET: Record<string, string> = { findings: '/findings', trend: '/trend' }
 
 function destination(resolved: ResolvedView): string {

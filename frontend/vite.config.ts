@@ -16,21 +16,25 @@ import tailwindcss from '@tailwindcss/vite'
 // SPA_MOUNT_PATH, and tests/test_spa_mount.py asserts the two match so the pair
 // can never be half-changed.
 //
-// WHY '/ui/' RATHER THAN '/'. The Jinja console still owns '/', '/findings',
-// '/paths' and the rest while the screens are being migrated; registering the SPA
-// over them would strand the product the moment a screen was unfinished. When the
-// last screen lands, this string and SPA_MOUNT_PATH become '/' together and the
-// Jinja routes go.
+// IT IS '/' NOW. It was '/ui/' for exactly as long as the Jinja console owned
+// '/', '/findings', '/paths' and the rest — registering the SPA over them would
+// have stranded the product the moment a screen was unfinished. Every screen is
+// migrated, the pages and their templates are deleted, and this and
+// SPA_MOUNT_PATH became '/' in the same commit.
+//
+// REBUILD AFTER CHANGING THIS. The old bundle's index.html names /ui/assets/…;
+// served from the root mount those are four 404s and a blank page. The image
+// always rebuilds, so this only bites a developer serving a stale server/spa.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  base: '/ui/',
+  base: '/',
   build: {
     outDir: '../server/spa',
     emptyOutDir: true,
     // 'hidden' still WRITES the maps (so a crash can be symbolicated from the build
     // artefact) but omits the //# sourceMappingURL comment, so the browser does not
     // fetch them and they are not advertised. `true` published 1.76 MB of readable
-    // TypeScript at /ui/assets/*.js.map to anyone who could reach the console —
+    // TypeScript at /assets/*.js.map to anyone who could reach the console —
     // including, before sign-in, anyone at all.
     sourcemap: 'hidden',
   },

@@ -16,6 +16,17 @@ directly under its own number, so at a glance the numbers stop being a column an
 the steps stop being separable. A real <ol> gives hanging indentation, and it also
 tells a screen reader "list, 10 items" — a run of lines announces nothing.
 
+WHAT THIS IS NOW THAT NOTHING SERVER-SIDE RENDERS HTML
+These two functions were registered as Jinja filters in server/app.py and used by
+finding_detail.html. That template is gone with the rest of the server-rendered
+console, and the console's own `steps()`/`paragraphs()` in
+frontend/src/routes/FindingDetail.tsx are a line-for-line port of what is below,
+comments included. This module was kept rather than deleted because it is the
+REFERENCE the port names and tests/test_prose.py is its executable specification
+— the rules here are about the findings knowledge base's authoring format, not
+about a rendering technology, and losing them would leave the TypeScript with
+nothing to be checked against.
+
 WHY THE ENUMERATION IS VALIDATED RATHER THAN ASSUMED
 An <ol> renumbers from 1 whatever the source said. That is fine when the source is
 already 1..N and actively wrong otherwise: text numbered 3,4,5 (an excerpt) or

@@ -17,10 +17,15 @@
 // no header, and nothing to store.
 //
 // WRITES ARE FORM-ENCODED, READS ARE JSON. Not an inconsistency: the write
-// endpoints under /api take `Form(...)` parameters today because the Jinja pages
-// post to them directly, and those pages stay working for the whole migration.
-// Changing them to JSON bodies would break the fallback console. `form()` below
-// exists so a screen never hand-rolls a URLSearchParams and gets it subtly wrong.
+// endpoints under /api take `Form(...)` parameters because the Jinja pages used
+// to post to them directly. Those pages are now retired, and the shape stays
+// anyway — it is a published API that integrators call, and churning every write
+// body to JSON would break them to buy this file nothing. `form()` below exists
+// so a screen never hand-rolls a URLSearchParams and gets it subtly wrong.
+//
+// /api/auth/* and /api/account/* are the exception and take JSON bodies. That is
+// a CSRF control rather than a style choice — see the header of
+// server/api_auth.py — and it must not be "harmonised" with the above.
 
 import type {
   AccountInfo, AssignResult, BulkTransitionResult, ChangesSince, Coverage,

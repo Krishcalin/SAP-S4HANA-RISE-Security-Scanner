@@ -2,16 +2,38 @@
 Branding and the sign-in layout.
 
 WHY THIS IS TESTED AT ALL
-A rebrand is the kind of change that looks complete and is not: one template keeps
+A rebrand is the kind of change that looks complete and is not: one screen keeps
 the old name in a <title>, and it surfaces months later in a browser tab during a
-customer demo. The name is asserted from the filesystem rather than page-by-page,
-so a NEW template that ships with the old name fails too.
+customer demo. The name is asserted from the filesystem rather than screen by
+screen, so a NEW screen that ships with the old name fails too.
 
-The static mount is tested because it is unauthenticated by necessity — the sign-in
-page carries the logo, and a gated mount renders a broken image to exactly the
-people who have not signed in yet. Unauthenticated is a decision, so it gets a test
-that states it; the traversal case is here so "unauthenticated" never quietly grows
-into "reads any file on disk".
+The static mount is tested because it is unauthenticated by necessity — the
+sign-in screen carries the logo, and a gated mount renders a broken image to
+exactly the people who have not signed in yet. Unauthenticated is a decision, so
+it gets a test that states it; the traversal case is here so "unauthenticated"
+never quietly grows into "reads any file on disk".
+
+WHAT MOVED WHEN THE SERVER-RENDERED CONSOLE WAS RETIRED
+This file used to read server/templates/*.html: the product name in thirteen
+files, a `{% block title %}` in each, and the rendered /login page's markup. Those
+templates are deleted and the console is compiled TypeScript, so every one of
+those assertions was rewritten against the thing that now produces the markup —
+frontend/src — rather than dropped. Two of them got stronger on the way:
+
+  * The title check was per-template and could only see that a block existed.
+    A SPA has ONE index.html and therefore one <title>, so the brand now lives in
+    lib/title.ts and every screen must CALL it. That is what is asserted, plus the
+    branding inside the helper — which is one place instead of thirteen, and a
+    screen that forgets it is now visible rather than merely unbranded.
+
+  * The sign-in DOM-order check needed a database, because the page only rendered
+    for a request. It is a source-level fact now, so it runs on a bare checkout —
+    which is where a layout regression is cheapest to catch.
+
+The brand ASSETS did not move at all. server/static is still mounted, still
+unauthenticated, and the compiled index.html names /static/favicon.ico by
+absolute path — which is why that mount survived a cutover that deleted
+everything around it.
 """
 from __future__ import annotations
 
@@ -26,39 +48,66 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-TEMPLATES = ROOT / "server" / "templates"
+FRONTEND = ROOT / "frontend"
+SRC = FRONTEND / "src"
 STATIC = ROOT / "server" / "static"
 
 BRAND = "MonitorRisk"
-#: Names the product used to ship under. None of them may survive in a template.
+#: Names the product used to ship under. None of them may survive in the console.
 RETIRED = ("SAPSec", "SAP Security Platform")
 
 
+def _console_sources():
+    """Every file that can put text on a screen, plus the shell's index.html."""
+    return sorted(SRC.rglob("*.ts*")) + [FRONTEND / "index.html"]
+
+
 # --------------------------------------------------------------------------- #
-#  Name — checked against the tree, so a new template cannot regress it        #
+#  Name — checked against the tree, so a new screen cannot regress it          #
 # --------------------------------------------------------------------------- #
 
-def test_no_template_carries_a_retired_product_name():
+def test_no_console_source_carries_a_retired_product_name():
     offenders = []
-    for path in sorted(TEMPLATES.glob("*.html")):
+    for path in _console_sources():
         text = path.read_text(encoding="utf-8")
         for old in RETIRED:
             if old in text:
-                offenders.append(f"{path.name}: {old!r}")
+                offenders.append(f"{path.relative_to(ROOT).as_posix()}: {old!r}")
     assert not offenders, "retired product name still rendered: " + "; ".join(offenders)
 
 
-def test_every_page_template_sets_a_branded_title():
-    """A tab reading just "Findings" does not say whose findings they are."""
+def test_the_tab_title_is_branded_in_one_place():
+    """A tab reading just "Findings" does not say whose findings they are.
+
+    Thirteen templates each declared their own `{% block title %}`. There is one
+    document now, so the brand is appended by lib/title.ts and this asserts it
+    there — one definition that cannot be half-applied, where before a new
+    template could ship unbranded and nothing but this test would notice.
+    """
+    title_ts = (SRC / "lib" / "title.ts").read_text(encoding="utf-8")
+    assert re.search(rf"document\.title\s*=.*{BRAND}", title_ts), \
+        f"lib/title.ts no longer brands the tab with {BRAND}"
+
+    index = (FRONTEND / "index.html").read_text(encoding="utf-8")
+    assert f"<title>{BRAND}</title>" in index, \
+        "index.html's fallback title — what shows before React runs — is not branded"
+
+
+def test_every_screen_sets_a_tab_title():
+    """The half a single <title> makes possible to get wrong.
+
+    A server-rendered page could not forget its title; it was in the template. A
+    SPA screen that never calls useTitle leaves the PREVIOUS screen's name in the
+    tab, so an analyst who opens a finding from the queue still reads "Findings —
+    MonitorRisk" — and the tab strip, the history menu and any bookmark they take
+    are all keyed on that string. It looks right in a screenshot, which is exactly
+    the kind of loss a migration makes invisibly.
+    """
     missing = []
-    for path in sorted(TEMPLATES.glob("*.html")):
-        if path.name == "base.html":       # defines the default, does not override
-            continue
-        text = path.read_text(encoding="utf-8")
-        block = re.search(r"{%\s*block title\s*%}(.*?){%\s*endblock\s*%}", text, re.S)
-        if block is None or BRAND not in block.group(1):
-            missing.append(path.name)
-    assert not missing, f"no {BRAND} in the title block of: {', '.join(missing)}"
+    for path in sorted((SRC / "routes").glob("*.tsx")) + [SRC / "components" / "Login.tsx"]:
+        if "useTitle(" not in path.read_text(encoding="utf-8"):
+            missing.append(path.relative_to(ROOT).as_posix())
+    assert not missing, f"no useTitle() call in: {', '.join(missing)}"
 
 
 def test_the_openapi_document_is_branded():
@@ -78,7 +127,7 @@ def test_the_openapi_document_is_branded():
 ])
 def test_the_brand_assets_are_present_and_non_empty(name):
     asset = STATIC / name
-    assert asset.is_file(), f"{name} is referenced by a template but not in server/static"
+    assert asset.is_file(), f"{name} is referenced by the console but not in server/static"
     assert asset.stat().st_size > 512, f"{name} is suspiciously small"
 
 
@@ -94,53 +143,86 @@ def test_the_logo_is_transparent_not_a_cream_rectangle():
     assert colour_type == 6, f"logo has colour type {colour_type}, expected 6 (RGBA)"
 
 
+def test_the_console_asks_for_the_brand_assets_by_absolute_path():
+    """Why /static outlived the templates.
+
+    The shell's <link rel="icon"> and the sign-in lockup are written as
+    /static/… rather than relative to the bundle's base. That is what let the
+    console move from /ui to the root without touching either reference — and it
+    is also why deleting the mount that reads like part of the retired page
+    server would replace the brand with two broken images on the first screen
+    every user sees.
+    """
+    index = (FRONTEND / "index.html").read_text(encoding="utf-8")
+    assert 'href="/static/favicon.ico"' in index, \
+        "the favicon is no longer requested from the unauthenticated brand mount"
+
+    login = (SRC / "components" / "Login.tsx").read_text(encoding="utf-8")
+    assert 'src="/static/monitorrisk-logo.png"' in login, \
+        "the sign-in lockup is no longer requested from /static"
+
+
 # --------------------------------------------------------------------------- #
-#  Sign-in page                                                               #
+#  Sign-in screen                                                             #
+# --------------------------------------------------------------------------- #
+#  Source-level, and deliberately not behind a database marker any more. The
+#  screen used to be a rendered template and could only be inspected over HTTP;
+#  it is a component now, so these run on a bare checkout — which is where a
+#  layout regression is cheapest to catch.
+
+def test_the_sign_in_screen_renders_with_the_logo():
+    login = (SRC / "components" / "Login.tsx").read_text(encoding="utf-8")
+    assert "/static/monitorrisk-logo.png" in login
+    assert '"auth-form"' in login and '"auth-brand"' in login
+    for old in RETIRED:
+        assert old not in login
+
+
+def test_the_form_precedes_the_brand_panel_in_the_document():
+    """Left/right is CSS, but DOM order is what a keyboard and a screen reader
+    follow. The thing you came to do must come before the thing that tells you
+    where you are.
+
+    Asserted on JSX source rather than on rendered HTML — the component IS the
+    document order, and there is no server render left to read.
+    """
+    login = (SRC / "components" / "Login.tsx").read_text(encoding="utf-8")
+    assert login.index('"auth-form"') < login.index('"auth-brand"')
+
+
+def test_the_sign_in_styles_survived_the_port():
+    """The class names above are only meaningful if the stylesheet still defines
+    them. A component referencing `auth-brand` against a stylesheet that dropped
+    it is an unstyled sign-in screen and every assertion above still passes."""
+    css = (SRC / "index.css").read_text(encoding="utf-8")
+    for cls in (".auth", ".auth-form", ".auth-brand"):
+        assert cls in css, f"{cls} is referenced by Login.tsx but not defined in index.css"
+
+
+# --------------------------------------------------------------------------- #
+#  The mount itself — needs a running app                                     #
 # --------------------------------------------------------------------------- #
 
 pg = pytest.mark.skipif(not os.getenv("DB_DSN"),
                         reason="set DB_DSN to a PostgreSQL 16 instance")
 
 
-@pg
-def test_the_sign_in_page_renders_with_the_logo():
-    from fastapi.testclient import TestClient
-    from server import app as appmod
-
-    body = TestClient(appmod.app).get("/login").text
-    assert "/static/monitorrisk-logo.png" in body
-    assert 'class="auth-form"' in body and 'class="auth-brand"' in body
-    for old in RETIRED:
-        assert old not in body
-
-
-@pg
-def test_the_form_precedes_the_brand_panel_in_the_document():
-    """Left/right is CSS, but DOM order is what a keyboard and a screen reader
-    follow. The thing you came to do must come before the thing that tells you
-    where you are."""
-    from fastapi.testclient import TestClient
-    from server import app as appmod
-
-    body = TestClient(appmod.app).get("/login").text
-    assert body.index('class="auth-form"') < body.index('class="auth-brand"')
-
-
-@pg
 @pytest.mark.parametrize("asset", [
     "/static/monitorrisk-logo.png", "/static/monitorrisk-mark.png",
     "/static/monitorrisk-mark-dark.png", "/static/favicon.ico",
 ])
 def test_brand_assets_load_without_authentication(asset):
+    """No database needed: the static mount takes no session, which is the whole
+    point of the test. It was behind the DB marker only because the assertions
+    around it were."""
     from fastapi.testclient import TestClient
     from server import app as appmod
 
     resp = TestClient(appmod.app).get(asset)
-    assert resp.status_code == 200, "the sign-in page would show a broken image"
+    assert resp.status_code == 200, "the sign-in screen would show a broken image"
     assert len(resp.content) > 512
 
 
-@pg
 def test_the_static_mount_does_not_serve_the_rest_of_the_disk():
     from fastapi.testclient import TestClient
     from server import app as appmod
@@ -153,10 +235,32 @@ def test_the_static_mount_does_not_serve_the_rest_of_the_disk():
             f"{probe} escaped the static directory"
 
 
+def test_the_brand_mount_is_declared_above_the_spa_mount():
+    """Ordering, because the SPA now owns "/" and matches everything.
+
+    Registered after it, /static would never run: the request would be answered by
+    the console's own directory, which has no brand assets in it, and every logo
+    would 404 while the mount that serves them sat in the file looking correct.
+    """
+    from starlette.routing import Mount
+    from server import app as appmod
+
+    positions = {r.name: i for i, r in enumerate(appmod.app.routes)
+                 if isinstance(r, Mount)}
+    assert "static" in positions and "spa" in positions
+    assert positions["static"] < positions["spa"], \
+        "the SPA mount was registered before /static and now swallows the brand assets"
+
+
 @pg
 def test_static_stays_reachable_for_an_account_held_at_the_password_gate():
-    """A forced account still renders base.html, which loads the header mark. If the
-    forced-change gate caught /static too, that page would be missing its brand."""
+    """A forced account still loads the console shell, which loads the header mark.
+    If the forced-change gate caught /static too, that screen would be missing its
+    brand at the moment the user is most likely to think something is wrong.
+
+    The gate is asserted on the API, which is where it now lives: the screens are
+    static files and answer everybody the same.
+    """
     from fastapi.testclient import TestClient
     from server import app as appmod, auth, db
 
@@ -165,9 +269,9 @@ def test_static_stays_reachable_for_an_account_held_at_the_password_gate():
     uid = auth.create_user(name, "generated-pass-999", "analyst", must_change=True)
     try:
         c = TestClient(appmod.app, follow_redirects=False)
-        c.post("/login", data={"username": name, "password": "generated-pass-999",
-                               "next": "/"})
-        assert c.get("/").status_code == 303                      # gate is on
+        c.post("/api/auth/login", json={"username": name,
+                                        "password": "generated-pass-999"})
+        assert c.get("/api/dashboard").status_code == 403          # gate is on
         assert c.get("/static/monitorrisk-mark-dark.png").status_code == 200
     finally:
         db.execute("DELETE FROM app_user WHERE id = %s", (uid,))

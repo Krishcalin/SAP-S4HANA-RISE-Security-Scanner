@@ -39,8 +39,11 @@ def client():
     name = f"api_{os.urandom(4).hex()}"
     auth.create_user(name, "api-test-password", "admin")
     c = TestClient(appmod.app)
-    assert c.post("/login", data={"username": name, "password": "api-test-password",
-                                  "next": "/"}, follow_redirects=False).status_code == 303
+    # The JSON sign-in, which is the only one: the form POST that answered 303
+    # was deleted with the Jinja console it rendered pages for.
+    assert c.post("/api/auth/login",
+                  json={"username": name, "password": "api-test-password"}
+                  ).status_code == 200
     yield c
     db.execute("DELETE FROM app_user WHERE username = %s", (name,))
 
@@ -121,8 +124,8 @@ def test_a_finding_outside_the_callers_scope_is_indistinguishable_from_absent(a_
                (uid, other["id"]))
     try:
         c = TestClient(appmod.app)
-        c.post("/login", data={"username": name, "password": "scoped-test-pass",
-                               "next": "/"})
+        c.post("/api/auth/login",
+               json={"username": name, "password": "scoped-test-pass"})
         resp = c.get(f"/api/findings/{a_finding}")
         assert resp.status_code == 404, \
             f"out-of-scope finding returned {resp.status_code}, which discloses it exists"

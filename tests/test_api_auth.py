@@ -3,18 +3,20 @@ The JSON authentication and account surface.
 
 WHAT THIS FILE IS DEFENDING
 ---------------------------
-The SPA needs status codes and bodies where the Jinja console has redirects and
-rendered pages, so `server/api_auth.py` adds a JSON surface over the SAME session
+The SPA needed status codes and bodies where the Jinja console had redirects and
+rendered pages, so `server/api_auth.py` added a JSON surface over the SAME session
 and password machinery. The risk in that shape of change is not that the new
 routes fail — it is that they succeed while quietly relaxing something: an error
 message that distinguishes an unknown user from a wrong password, a response that
 serialises the user row and takes the password hash with it, a forced-password
 gate that the new endpoints happen to sit outside of.
 
-So the tests below are mostly PARITY assertions against the form-POST console
-that already works, plus the two properties that are only interesting because the
-surface is new: an unauthenticated call fails closed, and a JSON route will not
-accept a cross-site form body.
+The tests below were written as PARITY assertions against the form-POST console
+that already worked. That console is retired, so they are no longer comparisons —
+they are the specification, and they get MORE important rather than less: there
+is nothing left to notice a regression by contrast with. Two of them exist only
+because the surface is JSON at all: an unauthenticated call fails closed, and a
+JSON route will not accept a cross-site form body.
 
 The first block needs no database on purpose. An unauthenticated request is
 refused before anything touches the connection pool, and "fails closed" is
@@ -97,15 +99,34 @@ def test_a_malformed_login_body_is_a_422_not_a_500(anon):
     assert anon.post("/api/auth/login", json={}).status_code == 422
 
 
-def test_the_jinja_login_still_works_alongside_the_json_one():
-    """The migration stays reversible. Both surfaces exist until every screen is
-    migrated, and the form POST is what the fallback console signs in with."""
+def test_the_json_login_is_the_only_one_left():
+    """This used to assert the opposite half: that the Jinja form login still
+    worked beside the JSON one, because the migration stayed reversible until
+    every screen was done.
+
+    Every screen is done, the templates are deleted, and the form's routes went
+    with them — so the claim worth making now is that nothing is left behind that
+    would let a form POST set a session by a second code path. `GET /login` is a
+    console address served by the static mount, and `POST /login` is not a route
+    at all. server/auth remains the single place a credential is checked, which
+    was true throughout and is the reason this file exists.
+    """
     from fastapi.testclient import TestClient
     from server import app as appmod
 
-    resp = TestClient(appmod.app).get("/login")
-    assert resp.status_code == 200
-    assert 'name="username"' in resp.text
+    paths = {r.path for r in appmod.app.routes if hasattr(r, "path")}
+    assert "/login" not in paths, \
+        "a server-side /login is back; there must be exactly one sign-in path"
+
+    c = TestClient(appmod.app, follow_redirects=False)
+    # The address still resolves, because it is the console's own sign-in screen —
+    # and a 503 is the unbuilt-bundle answer, which is about the build and not
+    # about routing.
+    assert c.get("/login").status_code in (200, 503)
+    # And a form POST to the JSON route is refused rather than quietly parsed;
+    # see the CSRF note in server/api_auth.py.
+    assert c.post("/api/auth/login",
+                  data={"username": "x", "password": "y"}).status_code == 422
 
 
 def test_the_session_cookie_is_named_once_and_shared():
@@ -264,7 +285,7 @@ def test_signing_out_destroys_the_session_server_side(analyst):
 
 
 @pg
-def test_the_account_payload_matches_what_the_jinja_page_renders(analyst):
+def test_the_account_payload_carries_everything_the_account_screen_renders(analyst):
     c = _signed_in(analyst)
     body = c.get("/api/account").json()
     assert body["forced"] is False
@@ -493,7 +514,14 @@ def test_a_viewer_still_cannot_write(analyst):
     try:
         c = TestClient(appmod.app, follow_redirects=False)
         c.post("/api/auth/login", json={"username": name, "password": PASSWORD})
-        assert c.get("/upload").status_code == 403
+        # The upload SCREEN used to 403 here, because it was a server-rendered
+        # page behind `require("analyst")`. It is a static file now and is served
+        # to everybody — a compiled bundle cannot be role-gated, and it never
+        # carried data. The control moved to /api/upload in _SPA_WRITES below,
+        # which is where it was always actually enforced; the nav merely stops
+        # showing a viewer a door they cannot open.
+        assert c.get("/upload").status_code in (200, 503)
+        assert c.post("/api/upload").status_code == 403
 
         allowed = {path: (c.post(path, data=body) if body else c.post(path)).status_code
                    for path, body in _SPA_WRITES}
