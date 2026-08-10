@@ -106,9 +106,11 @@ export default function Login() {
       <div className="auth-brand">
         {/* Intrinsic width/height are the asset's real pixels, so the panel
             reserves its space before the image loads and the form does not jump
-            sideways under a cursor that is already in the username box. */}
-        <img src="/static/monitorrisk-logo.png" width={1100} height={389}
-             alt="MonitorRisk — SAP Threat, Vulnerabilities &amp; GRC" />
+            sideways under a cursor that is already in the username box. Keep
+            these in step with tools/build_brand_assets.py — the lockup is 1100
+            wide by construction and the height follows the master's crop. */}
+        <img src="/static/monitorrisk-logo.png" width={1100} height={401}
+             alt="MonitorRisk — SAP Threat, Vulnerability, Governance &amp; Risk Quantification" />
       </div>
     </div>
   )

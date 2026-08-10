@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/monitorrisk-logo.png" alt="MonitorRisk — SAP Threat, Vulnerabilities &amp; GRC" width="620"/>
+  <img src="assets/monitorrisk-logo.png" alt="MonitorRisk — SAP Threat, Vulnerability, Governance &amp; Risk Quantification" width="620"/>
 </p>
 
 <p align="center">

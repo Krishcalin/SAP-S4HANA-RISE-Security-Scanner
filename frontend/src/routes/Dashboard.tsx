@@ -47,6 +47,17 @@ export function Dashboard() {
 
   return (
     <>
+      {/* The brand, on the screen people land on. It is a band rather than a hero
+          BECAUSE of the note above: the three banners below are the point of this
+          screen, and a full-bleed lockup at this aspect (2.74:1) would be 400px
+          tall and push every one of them under the fold. Height-capped in CSS, so
+          a re-exported master cannot quietly turn a header into a splash page.
+          alt="" — the <h1> immediately after it already names the screen, and the
+          wordmark is decorative once the page has a heading. */}
+      <div className="brand-band">
+        <img src="/static/monitorrisk-logo.png" width={1100} height={401} alt="" />
+      </div>
+
       <h1 className="text-[21px] font-semibold tracking-[-.01em] mb-1">Security posture</h1>
       <p className="text-ink2 mb-5">
         Open findings across {systems.length} system{systems.length === 1 ? '' : 's'}.

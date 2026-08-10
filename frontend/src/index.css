@@ -98,16 +98,44 @@ body {
 .tier-P3 { background:var(--panel-2); color:var(--ink-dim); border:1px solid var(--line); }
 .tier-P4 { background:transparent; color:var(--ink-faint); border:1px dashed var(--line); }
 
-/* ── Sign-in ─────────────────────────────────────────────────────────────────
-   Form left, brand right, and the brand panel keeps the artwork's own cream field
-   (#f3f2ee) instead of the page background. Not decoration: the wordmark is navy
-   and navy on the dark console is illegible. base.html carries the same note. */
+/* ── Brand ───────────────────────────────────────────────────────────────────
+   THE ARTWORK'S OWN FIELD, AND WHY IT IS A CSS COLOUR TOO.
+   The lockup is navy "Monitor" + WHITE "Risk" on blue #6cc2fb. Both inks were
+   chosen against that blue and only read there: on the dark console the navy
+   falls to 1.30:1, on a light panel the white falls to 1.12:1. So the shipped
+   asset keeps its field rather than being keyed to transparency, and any panel it
+   sits in is set to the SAME value — tools/build_brand_assets.py flattens the
+   master's compression noise to exactly this colour, which is what makes the edge
+   between image and panel actually disappear rather than merely nearly.
+   Change one of these and you must change the other. */
+:root { --brand-field:#6cc2fb; }
+
+/* Sign-in: form left, brand right. */
 .auth { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.05fr); min-height:100vh; }
 .auth-form { display:flex; align-items:center; justify-content:center; padding:32px; }
 .auth-form > div { width:100%; max-width:340px; }
-.auth-brand { background:#f3f2ee; border-left:1px solid var(--line);
+.auth-brand { background:var(--brand-field); border-left:1px solid var(--line);
   display:flex; align-items:center; justify-content:center; padding:clamp(28px,5vw,64px); }
 .auth-brand img { width:100%; max-width:500px; height:auto; }
+
+/* The homepage band. A HEADER, not a hero: the dashboard deliberately leads with
+   its three banners (an expired acceptance, a regression, a display-basis match
+   are all things a reader has to be TOLD), so the brand is capped by HEIGHT and
+   must never grow tall enough to push those below the fold.
+
+   80px is measured, not chosen by eye. This lockup is 2.74:1 INCLUDING a two-line
+   tagline that occupies its bottom quarter, so the height that makes the wordmark
+   comfortable is not the height that keeps the tagline legible: at 52px the
+   tagline renders at roughly 4px cap height and is a grey smudge, and past ~110px
+   the band stops reading as a header. Do not shrink this to "tidy up" the top of
+   the screen without re-checking the tagline. */
+.brand-band { background:var(--brand-field); border-radius:var(--radius);
+  padding:18px; margin-bottom:18px; display:flex; align-items:center; }
+.brand-band img { height:80px; width:auto; max-width:100%; }
+@media (max-width:640px) {
+  .brand-band { padding:12px 14px; }
+  .brand-band img { height:60px; }
+}
 /* Narrow: one column, brand ABOVE the form. Below the fold it may as well not be
    there, and a bare username box with no branding over it is what a phishing page
    looks like. */

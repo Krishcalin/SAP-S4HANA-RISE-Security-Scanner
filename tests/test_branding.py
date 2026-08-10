@@ -131,16 +131,142 @@ def test_the_brand_assets_are_present_and_non_empty(name):
     assert asset.stat().st_size > 512, f"{name} is suspiciously small"
 
 
-def test_the_logo_is_transparent_not_a_cream_rectangle():
-    """The supplied artwork sits on a cream field. Pasted as-is it is a bright slab
-    on the dark console, and its cream never quite matches a CSS colour, so there is
-    always a visible rectangle. The shipped asset must have an alpha channel with
-    genuinely transparent corners."""
-    png = (STATIC / "monitorrisk-logo.png").read_bytes()
-    assert png[:8] == b"\x89PNG\r\n\x1a\n"
-    # IHDR: width, height, bit depth, colour type. Type 6 = truecolour + alpha.
-    colour_type = png[25]
-    assert colour_type == 6, f"logo has colour type {colour_type}, expected 6 (RGBA)"
+def _png_pixels(path):
+    """Decode a PNG without Pillow — the suite installs pytest and nothing else.
+
+    Returns (width, height, rows) with rows as lists of (r, g, b, a).
+    """
+    import struct
+    import zlib
+
+    raw = path.read_bytes()
+    assert raw[:8] == b"\x89PNG\r\n\x1a\n", f"{path.name} is not a PNG"
+    pos, idat, width = 8, b"", None
+    while pos < len(raw):
+        length, kind = struct.unpack(">I4s", raw[pos:pos + 8])
+        body = raw[pos + 8:pos + 8 + length]
+        if kind == b"IHDR":
+            width, height, depth, colour = struct.unpack(">IIBB", body[:10])
+            assert (depth, colour) == (8, 6), \
+                f"{path.name} is depth {depth} colour type {colour}, expected 8/6 (RGBA)"
+        elif kind == b"IDAT":
+            idat += body
+        elif kind == b"IEND":
+            break
+        pos += 12 + length
+
+    data = zlib.decompress(idat)
+    stride, rows, prev = width * 4, [], bytearray(width * 4)
+    at = 0
+    for _ in range(height):
+        filt, line = data[at], bytearray(data[at + 1:at + 1 + stride])
+        at += 1 + stride
+        for i in range(stride):                       # PNG per-scanline filters
+            a = line[i - 4] if i >= 4 else 0
+            b = prev[i]
+            c = prev[i - 4] if i >= 4 else 0
+            if filt == 1:
+                line[i] = (line[i] + a) & 0xFF
+            elif filt == 2:
+                line[i] = (line[i] + b) & 0xFF
+            elif filt == 3:
+                line[i] = (line[i] + (a + b) // 2) & 0xFF
+            elif filt == 4:
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                line[i] = (line[i] + (a if pa <= pb and pa <= pc
+                                      else b if pb <= pc else c)) & 0xFF
+        rows.append([tuple(line[i:i + 4]) for i in range(0, stride, 4)])
+        prev = line
+    return width, height, rows
+
+
+def test_the_word_risk_survived_the_asset_pipeline():
+    """The regression the obvious assertion cannot see.
+
+    `key_out` un-mixes each pixel against the ink colours to key the background
+    away. Every target ink is DARKER than the master's blue field, so a WHITE pixel
+    projects to a negative coefficient, clamps to zero and is written fully
+    transparent. "Risk" is white. Run the old cream-era treatment over the current
+    master and the console renders the product as "Monitor" — with a valid RGBA
+    PNG, correct dimensions, a passing colour-type check and a green suite.
+
+    So the test is for the ink, not the container: the shipped lockup must contain
+    a real run of white pixels. Nothing else here would notice half the wordmark
+    going missing.
+    """
+    width, _, rows = _png_pixels(STATIC / "monitorrisk-logo.png")
+    white = sum(1 for row in rows for r, g, b, a in row
+                if a > 250 and r > 245 and g > 245 and b > 245)
+    assert white > 2000, (
+        f"only {white} white pixels in the lockup — the white half of the wordmark "
+        f'("Risk") has been keyed away; see tools/build_brand_assets.py')
+
+    # And the navy half, so a change that loses the OTHER ink fails just as loudly.
+    navy = sum(1 for row in rows for r, g, b, a in row
+               if a > 250 and r < 60 and g < 80 and b < 140)
+    assert navy > 2000, f"only {navy} navy pixels in the lockup"
+
+
+def test_the_lockup_field_matches_the_css_panel_behind_it():
+    """A cross-file contract that only fails when someone edits one side.
+
+    The lockup ships WITH its field because there is no page colour on which a
+    keyed version reads — navy falls to 1.30:1 on the dark console, white to
+    1.12:1 on a light panel. The panels it sits in are therefore painted the same
+    colour, and the master's compression noise is flattened to exactly that value
+    so the edge disappears instead of nearly disappearing.
+
+    Two files have to agree for that to hold, and they are edited by different
+    people for different reasons.
+    """
+    width, height, rows = _png_pixels(STATIC / "monitorrisk-logo.png")
+    corners = [rows[1][1], rows[1][width - 2],
+               rows[height - 2][1], rows[height - 2][width - 2]]
+    assert len({c[:3] for c in corners}) == 1, \
+        f"the lockup's field is not uniform at the corners: {corners}"
+    assert all(c[3] == 255 for c in corners), \
+        "the lockup is transparent at the corners — it is meant to carry its field"
+
+    field = "#%02x%02x%02x" % corners[0][:3]
+    css = (SRC / "index.css").read_text(encoding="utf-8")
+    declared = re.search(r"--brand-field\s*:\s*(#[0-9a-fA-F]{6})", css)
+    assert declared, "--brand-field is no longer declared in index.css"
+    assert declared.group(1).lower() == field, (
+        f"the artwork's field is {field} but index.css paints the panel behind it "
+        f"{declared.group(1).lower()} — the seam is back")
+
+
+def test_the_header_mark_is_transparent_because_it_sits_on_the_page():
+    """The mark is the half that IS keyed, and must stay keyed.
+
+    Unlike the lockup it has no white in it — navy shield, blue pulse — so it can
+    composite onto whatever colour the header is. It is used at 22px directly on
+    the page background; shipped with a field it would be a small opaque tile.
+    """
+    for name in ("monitorrisk-mark.png", "monitorrisk-mark-dark.png"):
+        width, height, rows = _png_pixels(STATIC / name)
+        corners = [rows[0][0], rows[0][width - 1],
+                   rows[height - 1][0], rows[height - 1][width - 1]]
+        assert all(c[3] == 0 for c in corners), \
+            f"{name} has an opaque corner {corners} — it would tile on the header"
+
+
+def test_the_console_and_the_reports_carry_the_same_lockup():
+    """One brand everywhere.
+
+    server/static/ is what the console serves; assets/ is what the CLI's HTML, PDF
+    and PPTX reports embed. They were the same bytes by hand, with nothing
+    enforcing it — and a different brand in the deliverable the customer KEEPS is
+    the exact defect that was fixed on 2026-08-07. Both are derived by
+    tools/build_brand_assets.py now, so this asserts the property that fix wanted.
+    """
+    served = (STATIC / "monitorrisk-logo.png").read_bytes()
+    embedded = (ROOT / "assets" / "monitorrisk-logo.png").read_bytes()
+    assert served == embedded, (
+        "server/static and assets/ hold different lockups — the console and the "
+        "customer's report would carry different brands; run "
+        "python tools/build_brand_assets.py")
 
 
 def test_the_console_asks_for_the_brand_assets_by_absolute_path():

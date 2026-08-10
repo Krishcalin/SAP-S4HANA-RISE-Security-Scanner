@@ -300,14 +300,17 @@ class ReportGenerator:
     display: block;
   }}
 
-  /* MonitorRisk brand logo — top right. Sits directly on the white page: the
-     art is transparent with a navy wordmark, so the rounded tile and shadow
-     the previous logo needed (it carried its own dark backdrop) would now
-     frame nothing. */
+  /* MonitorRisk brand logo — top right, on the white page.
+     The artwork carries its OWN blue field again (the wordmark is half navy and
+     half white, and white needs a ground), so the corner radius is back: it makes
+     the rectangle read as a deliberate brand panel rather than an image that
+     failed to key. No shadow — the field is flat and light, and a shadow under it
+     on white reads as a UI control rather than a logo. */
   .brand-logo {{
     width: 230px;
     max-width: 45vw;
     height: auto;
+    border-radius: 6px;
   }}
 
   /* Copyright / usage notice, directly under the header. */

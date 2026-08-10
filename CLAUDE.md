@@ -152,7 +152,8 @@ history menu and every bookmark. The brand is appended in one place (`frontend/s
 and the test asserts both that it brands the tab **and that every screen calls it**.
 
 Brand assets are **derived, not drawn**. `docs/brand/monitorrisk-master.png` is the
-supplied artwork; `server/static/*` is generated from it:
+supplied artwork; `server/static/*` **and** `assets/monitorrisk-logo.png` are generated
+from it:
 
 ```bash
 python tools/build_brand_assets.py            # rebuild
@@ -164,20 +165,58 @@ That tool needs Pillow. It is a build-time dependency and is deliberately NOT in
 a deployment needs nothing but the repo. The runtime dependency count stays at four;
 `StaticFiles` ships inside Starlette, which FastAPI already pulls in.
 
-Why the master is not served directly: it sits on a textured cream field, so on the dark
-console it is a bright slab whose cream never quite matches a CSS colour — there is
-always a visible rectangle at the seam. The build keys the cream out to transparency by
-un-mixing each pixel against the two brand colours rather than thresholding luminance
-(the brand blue sits midway between the cream and the navy in luma, so a luma key makes
-half the wordmark semi-transparent).
+**Both destinations are derived, since 2026-08-10.** `server/static/` is what the console
+serves and `assets/` is what the CLI reports embed; they were the same bytes *by hand*,
+with nothing enforcing it. `--check` covers both and ignores `assets/sap-logo.png`, which
+is SAP's and is not derived.
 
-Two places consume it differently, and the difference is forced by contrast:
-- **Sign-in** uses the full lockup on a cream panel. The wordmark is navy `#0b246a`;
-  navy on `#0f1419` is unreadable, so the panel keeps the tone the artwork was drawn for.
-- **The header** uses the shield mark alone, which does survive a dark background, in
-  two variants swapped by `<picture>` in `frontend/src/components/Sidebar.tsx`. That
-  `<picture>` is written "backwards" on purpose — it mirrors the stylesheet, where `:root`
-  is dark and only `prefers-color-scheme: light` overrides.
+### ⚠️ The artwork changed on 2026-08-10, and the old treatment would have destroyed it
+
+The previous master was navy-and-blue ink on a flat **cream** field. That cream was
+incidental packaging, so the build keyed it out and shipped transparent ink. **The current
+master is different in kind.** Measure it before touching `tools/build_brand_assets.py`:
+
+    "Monitor", the shield, the tagline   navy   #0b246a
+    "Risk"                               WHITE  #ffffff     <- new
+    field                                blue   #6cc2fb     <- NOT incidental
+
+`key_out` un-mixes each pixel against the target inks, and every target is **darker** than
+the field — so a white pixel projects to a negative coefficient, clamps to zero, and is
+written fully transparent. **Run the old treatment over this master and the console renders
+the product as "Monitor".** With a valid RGBA PNG, correct dimensions and a green suite:
+the previous assertion only checked the PNG colour type, which a half-erased wordmark
+passes. `tests/test_branding.py::test_the_word_risk_survived_the_asset_pipeline` now checks
+the ink instead.
+
+Adding white as a third target restores the glyphs and then meets the real constraint —
+there is no page colour on which a keyed lockup reads:
+
+| | navy | white |
+|---|---|---|
+| on its own blue field | 7.29:1 | 1.95:1 | ✅ both legible |
+| on the dark console `#0f1419` | **1.30:1** | 18.51:1 | "Monitor" invisible |
+| on a cream panel `#f3f2ee` | 12.71:1 | **1.12:1** | "Risk" invisible |
+
+So the **lockup keeps its field** and is a self-contained brand panel, and every panel
+behind it is painted the same value — `--brand-field` in `frontend/src/index.css`. The
+build flattens the master's compression noise (82% of the image, ±13 levels in red) to
+*exactly* that colour, which both fixes the old seam properly and takes the shipped asset
+from 474 KB to 176 KB — this file is base64-**inlined** into every HTML report and embedded
+in every PPTX, so its size is paid on every deliverable. A test asserts the asset and the
+CSS still agree.
+
+The **mark** is still keyed, because it has no white in it — shield outline and pulse only.
+
+Three places consume the brand, and the differences are forced by contrast and by size:
+- **Sign-in** (`Login.tsx`) — the full lockup on a `--brand-field` panel, at its natural size.
+- **The homepage** (`Dashboard.tsx`, `.brand-band`) — the same lockup, height-capped at
+  **80px**. That number is measured: the tagline occupies the bottom quarter of a 2.74:1
+  lockup, so at 52px it renders at ~4px cap height and is a smudge, and past ~110px the band
+  stops reading as a header and starts pushing the dashboard's three banners under the fold.
+- **The header** (`Sidebar.tsx`) — the shield mark alone at 22px, in two variants swapped by
+  `<picture>`. That `<picture>` is written "backwards" on purpose — it mirrors the
+  stylesheet, where `:root` is dark and only `prefers-color-scheme: light` overrides. The
+  dark variant lifts the navy to the page ink because navy on the console is 1.20:1.
 
 `/static` is why the brand mount outlived `server/templates/`: the compiled `index.html` and
 the sign-in screen name `/static/...` by **absolute path**, and the mount is deliberately
@@ -187,10 +226,14 @@ that reasoning so the mount is not "tidied away" later.
 
 **One brand everywhere, since 2026-08-07.** The CLI's HTML/PDF/PPTX reports used to
 carry a different vendor brand (`PhalanxCyber`) while the console said MonitorRisk —
-customer-visible, in the deliverable the customer keeps. They now embed
-`assets/monitorrisk-logo.png`, the same transparent lockup the console serves. The
-rounded tile and drop shadow went with the old logo: that art carried its own dark
-backdrop and the new art does not, so the frame would have framed nothing.
+customer-visible, in the deliverable the customer keeps. They embed
+`assets/monitorrisk-logo.png`, the same lockup the console serves — and as of
+2026-08-10 that is *enforced* rather than maintained by hand: one build writes both,
+and `test_the_console_and_the_reports_carry_the_same_lockup` compares the bytes.
+`.brand-logo` carries a 6px corner radius again, because the artwork carries its own
+field once more and an unrounded rectangle reads as an image that failed to key. Still
+no drop shadow: on the white report page a shadow under a light panel reads as a UI
+control rather than a logo.
 
 **Passwords never come from argv** — an argument is visible in `ps` and in shell history, so
 `--password` does not exist and must not be added. `_read_password` takes a TTY prompt, a pipe,
