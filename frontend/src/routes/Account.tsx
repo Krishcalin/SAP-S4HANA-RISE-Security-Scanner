@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 2026 Krishnendu De. All Rights Reserved.
+ *
+ * Author : Krishnendu De
+ * Coding Assistance : Claude Code
+ * Code Security Assistance : Code QL
+ */
+
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { ApiError, account, changePassword, resetUserPassword } from '../api/client'
 import { useSession } from '../lib/session'

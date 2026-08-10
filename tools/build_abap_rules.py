@@ -1,3 +1,9 @@
+# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
+#
+# Author : Krishnendu De
+# Coding Assistance : Claude Code
+# Code Security Assistance : Code QL
+
 """Assemble modules/abap_sast_rules.py from the standalone CVA repository.
 
 The rule tables and the taint analyzer are CONTENT: ~1,400 lines of regexes,

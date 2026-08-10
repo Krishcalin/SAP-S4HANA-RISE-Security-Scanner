@@ -1,3 +1,9 @@
+# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
+#
+# Author : Krishnendu De
+# Coding Assistance : Claude Code
+# Code Security Assistance : Code QL
+
 """Focused tests for role_governance + the adversarial-review fixes:
 SU24 indicator precedence is order-independent, derived-role drift detects value-level
 changes (not just object/field presence) while ignoring org-value differences, MANDT

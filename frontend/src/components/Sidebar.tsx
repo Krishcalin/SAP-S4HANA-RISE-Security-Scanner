@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 2026 Krishnendu De. All Rights Reserved.
+ *
+ * Author : Krishnendu De
+ * Coding Assistance : Claude Code
+ * Code Security Assistance : Code QL
+ */
+
 import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router'
 import { Bookmark } from 'lucide-react'

@@ -1,3 +1,9 @@
+# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
+#
+# Author : Krishnendu De
+# Coding Assistance : Claude Code
+# Code Security Assistance : Code QL
+
 """Tests for the P1-P4 risk-prioritization engine and its report rendering.
 
 Covers the tier logic (severity x exploitability x exposure), the KEV-analog floor

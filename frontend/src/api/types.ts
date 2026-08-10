@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 2026 Krishnendu De. All Rights Reserved.
+ *
+ * Author : Krishnendu De
+ * Coding Assistance : Claude Code
+ * Code Security Assistance : Code QL
+ */
+
 // The wire shapes, transcribed from server/ rather than guessed.
 //
 // WHERE EACH ONE COMES FROM is named in a comment above it, because that is the

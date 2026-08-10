@@ -1,3 +1,9 @@
+# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
+#
+# Author : Krishnendu De
+# Coding Assistance : Claude Code
+# Code Security Assistance : Code QL
+
 """
 Identity federation and SCIM provisioning — modules/iam_advanced.py IAM-FED-*.
 

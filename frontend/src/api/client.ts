@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 2026 Krishnendu De. All Rights Reserved.
+ *
+ * Author : Krishnendu De
+ * Coding Assistance : Claude Code
+ * Code Security Assistance : Code QL
+ */
+
 // The typed client. One function per /api endpoint, and the ONLY place in the
 // console that calls fetch for data.
 //

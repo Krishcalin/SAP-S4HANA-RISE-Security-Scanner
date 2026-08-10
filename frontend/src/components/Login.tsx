@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 2026 Krishnendu De. All Rights Reserved.
+ *
+ * Author : Krishnendu De
+ * Coding Assistance : Claude Code
+ * Code Security Assistance : Code QL
+ */
+
 import { useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { login } from '../api/client'

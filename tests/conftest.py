@@ -1,3 +1,9 @@
+# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
+#
+# Author : Krishnendu De
+# Coding Assistance : Claude Code
+# Code Security Assistance : Code QL
+
 """Shared pytest fixtures for the SAP scanner test suite.
 
 The tests run every audit module against the bundled ``sample_data`` (which is
