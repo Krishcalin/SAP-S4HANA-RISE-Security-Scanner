@@ -581,6 +581,77 @@ CREATE INDEX IF NOT EXISTS attack_path_closed_idx
     ON attack_path (closed_at DESC) WHERE closed_at IS NOT NULL;
 
 -- ---------------------------------------------------------------------
+--  Second factor (TOTP), recovery codes, and the attempt budget
+-- ---------------------------------------------------------------------
+-- A SEPARATE TABLE, NOT COLUMNS ON app_user, AND THAT IS THE LOAD-BEARING PART.
+-- `auth.resolve_session` selects `u.*` and `api_account` does `SELECT *`, so
+-- anything added to app_user rides into every route handler's `current_user` and
+-- into the account payload -- a secret one column away from being serialised.
+--
+-- The second reason is the one that actually bites. A single `totp_secret` column
+-- cannot hold a PENDING enrolment and a LIVE one at the same time, so `begin`
+-- would have to overwrite the live secret to offer a new QR. Anyone holding a
+-- stolen session could then either replace the factor with one in their own
+-- authenticator -- locking the owner out of their own account -- or clear it and
+-- silently downgrade to password-only, which is the exact outcome a second factor
+-- is bought to prevent. It is not only an attack: a user re-enrolling on a new
+-- phone whose battery dies before they type the code would destroy their working
+-- factor. `secret` and `pending_secret` are therefore distinct columns, `begin`
+-- writes only the pending pair, and `confirm` promotes one to the other.
+--
+-- `last_counter` is NOT NULL DEFAULT -1 rather than nullable: it is compared with
+-- `<` on every sign-in, and a NULL there would be an `int(None)` on the login path
+-- or, worse, a comparison that quietly never matches.
+CREATE TABLE IF NOT EXISTS app_totp (
+    user_id        bigint PRIMARY KEY REFERENCES app_user(id) ON DELETE CASCADE,
+    secret         text,          -- base32; the LIVE factor, only ever set by confirm
+    pending_secret text,          -- base32; an enrolment nobody has proved yet
+    pending_at     timestamptz,   -- when the pending secret was minted (it expires)
+    confirmed_at   timestamptz,   -- NULL => not a live factor, whatever `secret` holds
+    last_counter   bigint NOT NULL DEFAULT -1,   -- replay floor; see server/totp.py
+    created_at     timestamptz NOT NULL DEFAULT now()
+);
+
+-- Single-use fallbacks for a lost or wiped phone. This product deliberately has no
+-- self-service password reset, so without these a lost device is a dead account and
+-- -- for the only administrator -- a dead deployment.
+--
+-- Only the hash is stored: a leaked table must not yield usable codes. UNIQUE on
+-- (user_id, code_hash) is not decoration -- it is what makes "consume exactly once"
+-- expressible as a single conditional UPDATE rather than a read-then-write race.
+CREATE TABLE IF NOT EXISTS recovery_code (
+    id         bigserial PRIMARY KEY,
+    user_id    bigint NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+    code_hash  text NOT NULL,
+    used_at    timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (user_id, code_hash)
+);
+
+-- Partial index: every lookup is for a code that has NOT been spent, and the spent
+-- rows are kept only so a used code cannot be silently re-minted.
+CREATE INDEX IF NOT EXISTS recovery_code_live_idx
+    ON recovery_code (user_id) WHERE used_at IS NULL;
+
+-- The attempt budget. A six-digit code accepted across a +/-1 step window is 10^6
+-- possibilities with a ~90-second life; without a cap, unlimited guesses make the
+-- second factor decorative. There is no Redis and no rate-limit middleware in this
+-- deployment by design, so the budget lives where the rest of the state does --
+-- which also means it survives a restart and is shared by every worker.
+--
+-- `scope` is a prefixed key: 'ip:<addr>', 'pw:<username>', '2fa:<username>'. The
+-- password and second-factor budgets are counted SEPARATELY on purpose: a mistyped
+-- code must not burn the password budget, and someone who knows a password must not
+-- be able to lock the real owner out of it. Blocks self-clear -- an attacker buys a
+-- delay, never a support ticket -- so nothing here ever sets is_active = false.
+CREATE TABLE IF NOT EXISTS auth_attempt (
+    scope         text PRIMARY KEY,
+    failures      integer NOT NULL DEFAULT 0,
+    blocked_until timestamptz,
+    updated_at    timestamptz NOT NULL DEFAULT now()
+);
+
+-- ---------------------------------------------------------------------
 --  Schema version
 -- ---------------------------------------------------------------------
 
@@ -591,3 +662,4 @@ CREATE TABLE IF NOT EXISTS schema_version (
 
 INSERT INTO schema_version (version) VALUES (1) ON CONFLICT DO NOTHING;
 INSERT INTO schema_version (version) VALUES (2) ON CONFLICT DO NOTHING;
+INSERT INTO schema_version (version) VALUES (3) ON CONFLICT DO NOTHING;

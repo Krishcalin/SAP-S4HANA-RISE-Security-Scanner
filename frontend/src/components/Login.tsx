@@ -8,7 +8,7 @@
 
 import { useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router'
-import { login } from '../api/client'
+import { ApiError, login } from '../api/client'
 import { useTitle } from '../lib/title'
 
 /**
@@ -44,6 +44,12 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  // The code field appears only after the SERVER says this account has a factor,
+  // and the server only says so once the password is correct. Rendering it up
+  // front, or deciding locally whether to show it, would leak which accounts have
+  // 2FA to anyone who can type a username.
+  const [needsCode, setNeedsCode] = useState(false)
+  const [code, setCode] = useState('')
 
   // Where AuthGate was sending them before it found no session. Constrained to a
   // local path: an open redirect here would let a crafted link bounce a freshly
@@ -57,13 +63,30 @@ export default function Login() {
     setBusy(true)
     setError('')
     try {
-      const user = await login(username, password)
+      const user = await login(username, password, code)
       // A generated password is a handover credential, not a chosen one — the
       // server gates every other route until it is replaced, so go straight to
       // the screen that replaces it rather than to a console that will 403.
-      navigate(user.must_change_password ? '/account' : next, { replace: true })
-    } catch {
-      setError('Invalid credentials')
+      //
+      // Someone who just spent a recovery code is sent to /account regardless:
+      // they have one fewer way back and no working authenticator, and the
+      // account screen is where both are fixed. Losing that prompt is how a
+      // person ends up with zero codes and a dead phone.
+      const target = user.used_recovery_code ? '/account' : next
+      navigate(user.must_change_password ? '/account' : target, { replace: true })
+    } catch (e) {
+      if (e instanceof ApiError && e.totpRequired) {
+        // Not a failure to show as one: the password was right. Reveal the field
+        // and keep what they typed.
+        setNeedsCode(true)
+        setError('')
+      } else {
+        setError('Invalid credentials')
+        // Clear the code but NOT the password: a wrong six digits should not make
+        // somebody retype a long password, and the server holds a separate budget
+        // for each so this costs them nothing extra.
+        setCode('')
+      }
       setBusy(false)
     }
   }
@@ -96,10 +119,31 @@ export default function Login() {
               value={password} onChange={(e) => setPassword(e.target.value)}
             />
 
+            {needsCode && (
+              <>
+                <label className="block text-[12px] text-ink3 mb-1" htmlFor="totp">
+                  Authentication code
+                </label>
+                <input
+                  id="totp" className="field mb-1" required autoFocus
+                  value={code} onChange={(e) => setCode(e.target.value)}
+                  // `one-time-code` is what lets a phone offer the code from the
+                  // notification. `inputMode` is text, not numeric, because this
+                  // field also takes a recovery code.
+                  autoComplete="one-time-code" inputMode="text"
+                  placeholder="123456"
+                />
+                <p className="mb-4 text-[12px] text-ink3">
+                  From your authenticator app. Lost your phone? Enter one of your
+                  recovery codes here instead.
+                </p>
+              </>
+            )}
+
             {error && <div className="banner banner-bad" role="alert">{error}</div>}
 
             <button type="submit" className="btn w-full" disabled={busy}>
-              {busy ? 'Signing in…' : 'Sign in'}
+              {busy ? 'Signing in…' : needsCode ? 'Verify' : 'Sign in'}
             </button>
           </form>
 

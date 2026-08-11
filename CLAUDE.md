@@ -133,10 +133,97 @@ python -m server.cli runs
 
 # the way back in when nobody can sign in
 docker compose exec app python -m server.cli set-password admin --generate
+
+# second factor: who has one, and is this deployment still recoverable
+docker compose exec app python -m server.cli totp-status
+docker compose exec app python -m server.cli totp-disable admin   # lost phone
 ```
 
 `DB_DSN` and `SESSION_SECRET` have **no defaults** — a deployment that forgets them must fail
 at startup rather than silently run on a value published in this repo.
+
+### Two-factor authentication (TOTP)
+
+Opt-in per user, enrolled from **Your account**. Added 2026-08-11 after an
+adversarial design review that rejected the first design outright — the notes
+below are the parts that review changed, and each one is a defect that was in the
+plan before it was in the code.
+
+**Zero new runtime dependencies.** `server/totp.py` (RFC 6238) and `server/qr.py`
+(byte-mode QR → inline SVG) are standard library only, because `requirements.txt`
+holds four packages and `tests/test_spa_mount.py` asserts that list verbatim.
+`pyotp` and `qrcode` would be a fifth and sixth. Both are ports of the same
+approach in the sibling OverWatch codebase, which reached the same conclusion.
+
+**Correctness is checked against published vectors, never against itself.**
+`tests/test_totp.py` asserts RFC 6238 Appendix B; `tests/test_qr.py` asserts
+ISO/IEC 18004's Reed-Solomon worked example and its level-M format-information
+table. A hand-rolled OTP or QR implementation can be perfectly self-consistent and
+interoperate with nothing — round-tripping proves only that two halves share a
+bug. Both suites are stdlib-only and therefore run in the `cli` CI job too.
+
+⚠️ **SHA-1 is deliberate.** Microsoft and Google Authenticator ignore the
+`algorithm=` parameter and assume it; advertising SHA-256 produces codes that never
+match, which users experience as "the app is broken".
+
+⚠️ **`totp.verify()` must be called from `server/auth.py` and nowhere else.** It
+returns the matched COUNTER, not a bool, so the caller can persist it and refuse a
+replay. A route calling it directly gets a truthy value, a working login, and a
+silently skipped counter advance — leaving a code replayable for up to 90 seconds.
+
+**Storage is `app_totp`, a separate table, never columns on `app_user`.**
+`resolve_session` selects `u.*` and `api_account` does `SELECT *`, so a column
+there rides into every handler's `current_user`. More importantly `secret` and
+`pending_secret` are DISTINCT: with one column, `begin` must overwrite the live
+secret to offer a new QR, so a stolen session could swap the factor into the
+attacker's own authenticator or clear it and downgrade the account to
+password-only.
+
+**Both authorisations are conditional UPDATEs, not read-then-write.**
+`UPDATE app_totp SET last_counter=%s WHERE user_id=%s AND last_counter < %s
+RETURNING` and the equivalent on `recovery_code.used_at`. The returned row IS the
+proof. `tests/test_totp_auth.py` fires eight simultaneous logins with one code and
+asserts exactly one 200 and exactly one session row — a read-then-write
+implementation passes every sequential test and fails that one.
+
+**The attempt budget lives in `auth_attempt`** — three self-clearing counters
+(`ip:` 30, `pw:` 10, `2fa:` 5, per 15 minutes), keyed on the username **as
+submitted** and checked BEFORE any PBKDF2. Never a 429, never "try again in N
+minutes": an over-budget refusal is byte-identical to a wrong password, or it is
+an oracle. Nothing here ever sets `is_active = false` — a lockout an admin must
+lift is how rate limiting gets removed rather than tuned.
+
+**`totp_required` may only appear after the password verifies.** Before that every
+branch answers `{"detail": "Invalid credentials"}`, or the login route hands out a
+map of which accounts are worth phishing.
+
+**Recovery codes are 16 characters** (~2⁷⁹) because `recovery_fingerprint` is a
+single unsalted SHA-256 round — defensible only for genuinely high-entropy input.
+At the original ten they were ~2⁴⁹·⁵ and a leaked table fell to a GPU in minutes.
+They are accepted in the SAME field as a TOTP code on `/api/auth/login`,
+`/totp/disable` and `/totp/recovery`; without that last one, somebody who signed in
+with a recovery code could log in and never fix the state they were in.
+`auth.set_password` deletes unused ones — they are credentials on paper, and a
+password change is what somebody does when they think a credential leaked.
+
+**`_ALLOWED_WHILE_FORCED` is an EXACT-PATH frozenset.** It was a prefix tuple
+matched with `startswith`, which silently exempted every `/api/account/totp/*`
+route the day it was written — letting an account still on a generated password
+bind a second factor to it.
+
+**The lost-device escape hatch is `server.cli totp-disable` / `totp-status`,** and
+it is the counterpart to having no self-service reset. `set-password` now warns
+when the target still has a factor, because it is the command the account screen
+names and it reported success while the user still could not sign in.
+`totp-status` prints `last_counter` as wall-clock: a clock that jumped forward
+leaves the replay floor in the future and refuses every correct code, which is
+otherwise undiagnosable.
+
+**Out of scope, deliberately:** encrypting the seed at rest (the only key material
+is `SESSION_SECRET`, so binding to it converts a free rotation into silent mass
+lockout; the response to a suspected dump is `totp-disable` and re-enrol), any
+mandatory or admin-enforced 2FA policy, an HTTP route for an admin to clear
+someone else's factor, WebAuthn, and SMS or email codes.
 
 ### Branding
 
@@ -360,7 +447,9 @@ target's current one. The audit log records the event and never the value.
 | `coverage.py` | The per-upload manifest. Module→source mapping is **derived from source at import**, never hand-maintained, so it cannot drift. |
 | `ingest.py` | upload → parse → scan → enrich → store → diff → notify. Holds `store_run` (the journey), `_rebase` and `queue_notifications`. |
 | `app.py` | FastAPI. The JSON API, uploads, cancellable background scans, `/health`, the `/ui` — `/` redirect, and the `SpaFiles` mount that serves the console. **The mount is registered last on purpose** — see the charter note above. |
-| `cli.py` | Admin + the air-gapped `scan` path. Subcommands: `init-db`, `create-user`, `set-password`, `add-landscape`, `add-system`, `scan`, `rebuild-sap-catalogue`, `runs`. |
+| `totp.py` | RFC 6238 one-time passwords + recovery codes. **Stdlib only**, and the only file that computes a code. `verify()` returns the matched counter, not a bool — see the 2FA note above. |
+| `qr.py` | Byte-mode QR encoder rendering an `otpauth://` URI as inline SVG. **Stdlib only**; `svg_or_empty` never raises out of a route, because the picture is a convenience and the typed key completes enrolment on its own. |
+| `cli.py` | Admin + the air-gapped `scan` path. Subcommands: `init-db`, `create-user`, `set-password`, `add-landscape`, `add-system`, `scan`, `rebuild-sap-catalogue`, `runs`, **`totp-status`**, **`totp-disable`**. The last two are the lost-device escape hatch — see the second-factor note below. |
 | `config.py` | Env-only settings. `DB_DSN` and `SESSION_SECRET` have **no defaults** and `validate()` runs at startup, so a deployment that forgets them fails loudly rather than running on a value published in this repo. |
 | `spa/` | The compiled console. Build output, gitignored, produced by the `Dockerfile`'s first stage — never edited, never committed. |
 

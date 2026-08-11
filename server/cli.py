@@ -13,6 +13,8 @@ Server administration CLI.
     python -m server.cli add-system    <landscape> <SID> <client> [--tier prod] ...
     python -m server.cli scan          <landscape> <data-dir> [--sid PRD --client 100]
     python -m server.cli runs
+    python -m server.cli totp-status  [username]
+    python -m server.cli totp-disable <username>
 
 Passwords are never taken from argv — an argument is visible in `ps` output and
 in shell history. They come from a TTY prompt, from stdin when piped, or from
@@ -25,10 +27,11 @@ import argparse
 import getpass
 import secrets
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from server import auth, db, ingest
+from server import auth, db, ingest, totp
 
 
 def cmd_init_db(args: argparse.Namespace) -> int:
@@ -116,6 +119,100 @@ def cmd_set_password(args: argparse.Namespace) -> int:
                    (user["id"],))
         print("the user must replace it at next sign-in")
     print(f"password set for {args.username}; all their sessions were signed out")
+    # A NEW PASSWORD IS NOT A NEW PHONE, and this command is the one people reach
+    # for when somebody cannot sign in. Without this line it reports success and
+    # the user still cannot get in, because the second factor is untouched — and
+    # this is the command the account screen tells them to run.
+    if auth.totp_active(user["id"]):
+        print(f"NOTE: {args.username} still has a second factor enabled. If the "
+              f"authenticator is what was lost, also run:\n"
+              f"      python -m server.cli totp-disable {args.username}")
+    return 0
+
+
+def cmd_totp_disable(args: argparse.Namespace) -> int:
+    """Clear somebody's second factor from the host — the lost-phone escape hatch.
+
+    THE COUNTERPART TO HAVING NO SELF-SERVICE RESET. This product refuses an
+    unauthenticated reset because it is a way in; that decision is only survivable
+    because a documented path exists on the other side of it. Without this command
+    a lost authenticator is a permanently dead account, and for a single-admin
+    install a dead deployment recoverable only by hand-editing PostgreSQL — the
+    exact undocumented path `set-password` exists to prevent.
+
+    Not a backdoor, for the same reason as `set-password`: whoever runs this
+    already holds the database. It grants nothing new, it just writes down how.
+
+    Sessions go too. A lost phone may be holding a live one, and the person
+    reaching for this command is usually saying "that device is gone".
+    """
+    user = db.one("SELECT id, username FROM app_user WHERE username = %s",
+                  (args.username,))
+    if user is None:
+        print(f"no such user: {args.username}", file=sys.stderr)
+        return 1
+    was = auth.disable_totp(user["id"], "cli", reason="cli:lost-device")
+    db.execute("DELETE FROM session WHERE user_id = %s", (user["id"],))
+    if was:
+        print(f"second factor cleared for {args.username}; recovery codes "
+              f"invalidated and all their sessions signed out")
+        print("they can enrol a new authenticator from Your account after signing in")
+    else:
+        print(f"{args.username} had no second factor; nothing to clear")
+    return 0
+
+
+def cmd_totp_status(args: argparse.Namespace) -> int:
+    """Who has a second factor, and is this deployment still recoverable.
+
+    THE QUESTION THIS ANSWERS IS "what happens if that person leaves". An estate
+    where every administrator is enrolled and nobody has recovery codes left is one
+    lost phone away from needing a DBA, and nothing else in the product will say so
+    before it happens.
+
+    `last_counter` is printed with its wall-clock equivalent because it is the only
+    diagnostic for the confusing failure: a server or phone clock that jumped
+    forward leaves the replay floor in the future, and every subsequent code is
+    refused as a replay while looking, to the user, like "the app stopped working".
+    """
+    rows = db.query(
+        "SELECT u.username, u.role, t.confirmed_at, t.pending_at, t.last_counter, "
+        "  (SELECT count(*) FROM recovery_code r "
+        "   WHERE r.user_id = u.id AND r.used_at IS NULL) AS codes_left "
+        "FROM app_user u LEFT JOIN app_totp t ON t.user_id = u.id "
+        + ("WHERE u.username = %s " if args.username else "")
+        + "ORDER BY u.username",
+        (args.username,) if args.username else ())
+    if not rows:
+        print("no matching users", file=sys.stderr)
+        return 1
+
+    print(f"{'user':22} {'role':8} {'second factor':28} {'codes':5} drift")
+    exposed = 0
+    for r in rows:
+        if r["confirmed_at"]:
+            state = f"enabled {r['confirmed_at']:%Y-%m-%d}"
+            if r["codes_left"] == 0:
+                exposed += 1
+        elif r["pending_at"]:
+            state = f"pending since {r['pending_at']:%Y-%m-%d}"
+        else:
+            state = "none"
+        drift = ""
+        if r["last_counter"] is not None and r["last_counter"] >= 0:
+            seen = datetime.fromtimestamp(r["last_counter"] * totp.PERIOD,
+                                          tz=timezone.utc)
+            ahead = (seen - datetime.now(timezone.utc)).total_seconds()
+            drift = f"{seen:%Y-%m-%d %H:%M}Z"
+            if ahead > totp.PERIOD:
+                drift += f"  AHEAD by {ahead / 60:.0f} min — codes will be refused"
+        codes = "-" if not r["confirmed_at"] else str(r["codes_left"])
+        print(f"{r['username']:22} {r['role']:8} {state:28} {codes:5} {drift}")
+
+    if exposed:
+        print(f"\nWARNING: {exposed} account(s) have a second factor and NO recovery "
+              f"codes left.\n         A lost device there needs "
+              f"`python -m server.cli totp-disable <user>`.")
     return 0
 
 
@@ -295,6 +392,14 @@ def main(argv=None) -> int:
     rb.set_defaults(fn=cmd_rebuild_sap_catalogue)
 
     sub.add_parser("runs").set_defaults(fn=cmd_runs)
+
+    td = sub.add_parser("totp-disable")
+    td.add_argument("username")
+    td.set_defaults(fn=cmd_totp_disable)
+
+    ts = sub.add_parser("totp-status")
+    ts.add_argument("username", nargs="?", default=None)
+    ts.set_defaults(fn=cmd_totp_status)
 
     args = p.parse_args(argv)
     return args.fn(args)

@@ -60,6 +60,13 @@ export interface Me {
   /** null means unrestricted; a list means the console is showing a SUBSET of the
    *  estate and should say so rather than implying it is the whole thing. */
   scoped_system_ids: number[] | null
+  /** Present only on the sign-in response, never on /auth/me: whether this
+   *  session was opened by spending a RECOVERY code rather than a live one. The
+   *  console routes those people to the account screen, because they now have one
+   *  fewer way back and an authenticator that is presumably gone. */
+  used_recovery_code?: boolean
+  /** How many single-use codes remain, or null when the account has no factor. */
+  recovery_codes_left?: number | null
 }
 
 /** server/api_auth.py `api_account`. `users` is empty for a non-admin — the
@@ -708,4 +715,34 @@ export interface FindingFilters {
   assignee?: string | null
   overdue?: boolean
   page?: number
+}
+
+/** server/api_auth.py `api_totp_status`. */
+export interface TotpStatus {
+  enabled: boolean
+  /** An enrolment started and never confirmed. It cannot satisfy a sign-in and
+   *  expires after fifteen minutes — shown so a half-finished setup is visible
+   *  rather than looking like "off". */
+  pending: boolean
+  confirmed_at: string | null
+  recovery_codes_left: number
+}
+
+/** server/api_auth.py `api_totp_begin`. Nothing here is live yet. */
+export interface TotpEnrolment {
+  secret: string
+  formatted_secret: string
+  uri: string
+  /** Inline SVG, or "" when the encoder could not produce one. The screen renders
+   *  the key and the link regardless — the picture is a convenience and must
+   *  never be the only way through enrolment. */
+  qr_svg: string
+}
+
+/** server/api_auth.py `api_totp_confirm`. `recovery_codes` is the ONLY time these
+ *  are ever readable: the server stores hashes. */
+export interface TotpConfirmed {
+  enabled: boolean
+  recovery_codes: string[]
+  other_sessions_revoked: boolean
 }

@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { ApiError, account, changePassword, resetUserPassword } from '../api/client'
+import { TotpPanel } from '../components/TotpPanel'
 import { useSession } from '../lib/session'
 import { useTitle } from '../lib/title'
 import type { AccountInfo, GeneratedPassword } from '../api/types'
@@ -256,8 +257,23 @@ export function Account() {
             runs the container already has full access anyway:<br />
             <span className="font-mono text-[.92em]">
               docker compose exec app python -m server.cli set-password &lt;user&gt; --generate
+            </span><br />
+            {/* A new password is not a new phone. Naming the second command here
+                matters because this paragraph is where a locked-out person looks,
+                and set-password alone reports success while a lost authenticator
+                still refuses them. */}
+            Lost the authenticator too? That needs a second command:<br />
+            <span className="font-mono text-[.92em]">
+              docker compose exec app python -m server.cli totp-disable &lt;user&gt;
             </span>
           </p>
+        </Card>
+      </div>
+
+      <h2 className="mb-2.5 mt-6 text-[15px] text-ink">Two-factor authentication</h2>
+      <div className="max-w-[560px]">
+        <Card title="Authenticator app">
+          <TotpPanel forced={info.forced} />
         </Card>
       </div>
 

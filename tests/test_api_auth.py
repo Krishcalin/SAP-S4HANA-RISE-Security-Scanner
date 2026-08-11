@@ -149,16 +149,42 @@ def test_the_forced_change_allowlist_lets_a_held_account_reach_the_way_out():
     If the JSON endpoints were not on that list, a SPA user handed a generated
     password would face a console that 403s every request — including the one
     that would fix it. Locked out by the mechanism meant to let them back in."""
-    from server.api_auth import _ALLOWED_WHILE_FORCED
+    from server.api_auth import _ALLOWED_WHILE_FORCED, current_user, router
 
-    for path in ("/api/auth/me", "/api/auth/login", "/api/auth/logout",
-                 "/api/account", "/api/account/password"):
-        assert path.startswith(_ALLOWED_WHILE_FORCED), \
+    # EXACT MEMBERSHIP, NOT A PREFIX. This assertion used to be
+    # `path.startswith(_ALLOWED_WHILE_FORCED)` against the tuple
+    # ("/api/auth", "/api/account"), which was adequate until routes appeared
+    # underneath those prefixes: a prefix allowlist silently exempts every route
+    # anyone adds below it, for ever. `/api/account/totp/begin` inherited the
+    # exemption the day it was written, which would have let an account still
+    # holding a GENERATED password bind a second factor to it.
+    for path in ("/api/auth/me", "/api/account", "/api/account/password"):
+        assert path in _ALLOWED_WHILE_FORCED, \
             f"{path} is gated for a forced account and is how they would escape it"
 
     # ...and the rest of the API is still gated, or the requirement is decorative.
-    for path in ("/api/findings", "/api/dashboard", "/api/paths"):
-        assert not path.startswith(_ALLOWED_WHILE_FORCED)
+    for path in ("/api/findings", "/api/dashboard", "/api/paths",
+                 "/api/account/reset/{user_id}"):
+        assert path not in _ALLOWED_WHILE_FORCED
+
+    # Enrolling a second factor is NOT an escape route. Status and disable are, so
+    # a held account can see what it has and remove one.
+    assert "/api/account/totp" in _ALLOWED_WHILE_FORCED
+    assert "/api/account/totp/disable" in _ALLOWED_WHILE_FORCED
+    for path in ("/api/account/totp/begin", "/api/account/totp/confirm",
+                 "/api/account/totp/recovery"):
+        assert path not in _ALLOWED_WHILE_FORCED, \
+            f"{path} would let a generated password become a 2FA-protected account"
+
+    # /api/auth/login and /api/auth/logout are absent DELIBERATELY: neither depends
+    # on `current_user`, so the gate never runs for them and listing them would be
+    # policy that cannot fire. Asserted rather than assumed, because the old prefix
+    # covered them and their absence now looks like an oversight.
+    ungated = {r.path for r in router.routes
+               if not any(getattr(d.call, "__name__", "") == current_user.__name__
+                          for d in (r.dependant.dependencies or []))}
+    for path in ("/api/auth/login", "/api/auth/logout"):
+        assert path in ungated, f"{path} now takes a session and must be re-examined"
 
 
 # --------------------------------------------------------------------------- #

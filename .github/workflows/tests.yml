@@ -82,7 +82,17 @@ jobs:
             --ignore=tests/test_enrich.py \
             --ignore=tests/test_sapcontent.py \
             --ignore=tests/test_sod_deferral.py \
-            --ignore=tests/test_snc_overlap.py
+            --ignore=tests/test_snc_overlap.py \
+            --ignore=tests/test_totp_auth.py \
+            --ignore=tests/test_cli_totp.py
+        # NOT ignored, deliberately: tests/test_totp.py and tests/test_qr.py.
+        # server/totp.py and server/qr.py import only the standard library, so
+        # both suites run HERE as well as in the server job — 86 tests of the
+        # cryptographic core and the QR encoder against the RFC 6238 and
+        # ISO/IEC 18004 published vectors, on every Python in the matrix. If a
+        # future change makes either module reach for psycopg, this job goes red,
+        # which is the correct outcome: neither has any business touching a
+        # database.
 
       - name: Smoke-run the scanner (all modules over sample_data)
         env:

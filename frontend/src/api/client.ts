@@ -40,7 +40,8 @@ import type {
   Dashboard, FindingDetail, FindingFilters, FindingHistory, FindingPage,
   GeneratedPassword, Health, Journey, Landscape, Me, PathView, PathsOverview,
   ResolvedView, RiskView, RunDiff, SapSystem, SavedView, SaveViewResult,
-  ScanRun, TransitionResult, UploadResult,
+  ScanRun, TotpConfirmed, TotpEnrolment, TotpStatus, TransitionResult,
+  UploadResult,
 } from './types'
 
 /** Same-origin by default: FastAPI serves this bundle and the API. The override
@@ -54,10 +55,19 @@ const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api'
  *  Matching on message text is how that distinction gets lost. */
 export class ApiError extends Error {
   readonly status: number
-  constructor(status: number, message: string) {
+  /** Set when the server refused a sign-in because it wants a second factor.
+   *
+   *  It rides on the ERROR rather than on a success payload because the server
+   *  answers 401 — there is no session yet, and inventing a 200 "half signed in"
+   *  state would be a lie every other screen would have to defend against. It is
+   *  a TOP-LEVEL field in the body, not inside `detail`, because `failure()`
+   *  below deliberately only unwraps a string `detail`. */
+  readonly totpRequired: boolean
+  constructor(status: number, message: string, totpRequired = false) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.totpRequired = totpRequired
   }
 }
 
@@ -69,8 +79,10 @@ async function failure(r: Response): Promise<ApiError> {
   try {
     const body = await r.json()
     const d = body?.detail
-    if (typeof d === 'string') return new ApiError(r.status, d)
+    const totp = body?.totp_required === true
+    if (typeof d === 'string') return new ApiError(r.status, d, totp)
     if (Array.isArray(d) && d.length) return new ApiError(r.status, 'Invalid request')
+    if (totp) return new ApiError(r.status, `${r.status} ${r.statusText}`, true)
   } catch {
     /* a non-JSON error body is still a failure */
   }
@@ -140,14 +152,61 @@ export async function me(): Promise<Me | null> {
 /** Sign in. The rejection message is identical for an unknown username and a
  *  wrong password — do not "improve" it in the UI either, the distinction is a
  *  username oracle. */
-export async function login(username: string, password: string): Promise<Me> {
+export async function login(
+  username: string, password: string, totpCode?: string,
+): Promise<Me> {
   const r = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ username, password }),
+    // `totp_code` carries either six digits or a recovery code — deliberately one
+    // field, so somebody whose phone is gone does not have to find a different box.
+    body: JSON.stringify({ username, password, totp_code: totpCode || undefined }),
   })
   if (!r.ok) throw await failure(r)
   return (await r.json()) as Me
+}
+
+
+// ── Second factor ───────────────────────────────────────────────────────────
+// Every mutation re-sends the current password. That is the SERVER's rule, not a
+// UI choice — a stolen session must not be enough to bind or remove a factor —
+// so a screen cannot opt out of it by forgetting to ask. All four take JSON
+// bodies, which is the CSRF control described in server/api_auth.py's header.
+
+async function accountJson<T>(path: string, body: unknown): Promise<T> {
+  const r = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!r.ok) throw await failure(r)
+  return (await r.json()) as T
+}
+
+export async function totpStatus(): Promise<TotpStatus> {
+  const r = await fetch(`${API_BASE}/account/totp`, {
+    headers: { Accept: 'application/json' },
+  })
+  if (!r.ok) throw await failure(r)
+  return (await r.json()) as TotpStatus
+}
+
+export function totpBegin(current: string): Promise<TotpEnrolment> {
+  return accountJson('/account/totp/begin', { current })
+}
+
+export function totpConfirm(current: string, code: string): Promise<TotpConfirmed> {
+  return accountJson('/account/totp/confirm', { current, code })
+}
+
+export function totpDisable(current: string, code: string): Promise<{ enabled: boolean }> {
+  return accountJson('/account/totp/disable', { current, code })
+}
+
+export function totpRegenerateRecovery(
+  current: string, code: string,
+): Promise<{ recovery_codes: string[] }> {
+  return accountJson('/account/totp/recovery', { current, code })
 }
 
 /** End the session server-side; clearing the cookie is the consequence.
