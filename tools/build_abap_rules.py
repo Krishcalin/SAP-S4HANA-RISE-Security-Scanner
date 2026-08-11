@@ -27,7 +27,34 @@ def seg(first, last):
     return "".join(src[first - 1:last - 1])
 
 
-HEADER = '''"""
+# THE COPYRIGHT HEADER FOR THE GENERATED FILE LIVES HERE, NOT IN THE OUTPUT.
+# The repo-wide header was hand-added to modules/abap_sast_rules.py on 2026-08-10,
+# which is exactly what that file's own docstring forbids: this script writes
+# HEADER + slices from scratch, so a hand-added notice is silently deleted the next
+# time anyone refreshes the corpus, with no test and no CI job to notice. Put it in
+# the generator and regeneration reproduces it.
+#
+# THE WORDING IS NOT THE REPO-WIDE ONE, AND THAT IS DELIBERATE. About 1,400 of the
+# lines below are vendored verbatim from SAP-Code-Vulnerability-Analyzer, whose
+# LICENSE is MIT under a different holder ("Copyright (c) 2026 KRISH"). MIT keeps
+# its grant only while the notice travels with the copy, so stamping a bare
+# "All Rights Reserved" over it would both misstate the terms and drop the
+# attribution the licence requires. The assembled file is therefore marked as what
+# it is: our assembly, around someone else's MIT-licensed content.
+_COPYRIGHT = '''# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
+#
+# Author : Krishnendu De
+# Coding Assistance : Claude Code
+# Code Security Assistance : Code QL
+#
+# GENERATED FILE — the rights above cover this assembly only.
+# Portions vendored verbatim from SAP-Code-Vulnerability-Analyzer (abap_scanner.py
+# v1.9.0), which is MIT licensed, Copyright (c) 2026 KRISH. That notice is
+# reproduced here because the MIT terms require it to travel with the copy.
+
+'''
+
+HEADER = _COPYRIGHT + '''"""
 ABAP security rule corpus and taint analyzer — VENDORED, DO NOT HAND-EDIT
 =========================================================================
 Derived from the standalone SAP-Code-Vulnerability-Analyzer (abap_scanner.py
@@ -80,8 +107,15 @@ body = (HEADER + MARK_RULES
         + MARK_TAINT
         + seg(1647, 1903))    # noise words + TaintAnalyzer
 
-OUT.write_text(body, encoding="utf-8")
-
+# VALIDATE BEFORE WRITING, NOT AFTER. These slices are ABSOLUTE line offsets into
+# a file in another repository, so anything that shifts its lines — a copyright
+# header, an added import — silently reslices this one mid-expression. With the
+# write first, that lands a syntax-error module on disk and only then raises: the
+# scanner core stops byte-compiling on all five matrix Pythons and pytest aborts
+# collection for every ABAP suite, from a script that "failed". Parsing first makes
+# a bad splice leave the previous good file untouched.
 import ast
+
 ast.parse(body)
+OUT.write_text(body, encoding="utf-8")
 print(f"wrote {OUT}  ({body.count(chr(10))} lines) — parses clean")
