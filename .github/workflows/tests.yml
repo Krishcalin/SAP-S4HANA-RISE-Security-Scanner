@@ -112,7 +112,7 @@ jobs:
   # "modules/ stays stdlib-only" is written in CLAUDE.md, and a rule that
   # lives only in a document is a rule that erodes. This makes it fail a build.
   purity:
-    name: modules/ imports nothing third-party
+    name: modules/ and collect/ import nothing third-party
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -120,16 +120,25 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Check every import in modules/ and sap_scanner.py
+      - name: Check every import in modules/, collect/ and sap_scanner.py
         run: |
           python - <<'PY'
           import ast, sys
           from pathlib import Path
 
-          allowed = set(sys.stdlib_module_names) | {"modules", "server", "data"}
+          # `collect` is here because decision D4 ALLOWS that package its own
+          # requirements and it deliberately spends none: urllib, ssl and
+          # xml.etree cover SOAP, OData, SCIM and REST, so a connector tier with
+          # NO dependencies is a stronger position than one with different ones —
+          # the customer running it against their own SAP system installs nothing.
+          # An allowance that is not taken is only real if something checks.
+          allowed = set(sys.stdlib_module_names) | {"modules", "server", "data",
+                                                    "collect"}
           offenders = []
 
-          for path in sorted(Path("modules").glob("*.py")) + [Path("sap_scanner.py")]:
+          for path in (sorted(Path("modules").glob("*.py"))
+                       + sorted(Path("collect").glob("*.py"))
+                       + [Path("sap_scanner.py")]):
               tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
               for node in ast.walk(tree):
                   if isinstance(node, ast.Import):

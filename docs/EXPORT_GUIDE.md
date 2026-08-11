@@ -565,6 +565,79 @@ the filesystem itself cannot tell them apart.
 
 ---
 
+## Connected mode — letting MonitorRisk produce part of the export for you
+
+Decision D2/D3/D4, `docs/DECISIONS.md`. Everything above assumes **you** produce
+the files. On an estate where you can reach the system over the network — ECC and
+on-premise NetWeaver typically, RISE typically not — MonitorRisk can produce some
+of them itself.
+
+**The scanner still does not connect to anything.** `collect/` is a separate,
+optional program, run by you, that writes the same files this guide describes. The
+scanner reads a directory; it cannot tell whether you filled it or a connector
+did. That is the whole design, and it is why connected mode inherits every test
+the offline path already has.
+
+```bash
+# 1. Collect. Read-only, out of process, no SDK, no dependencies.
+python -m collect sapcontrol --host ecc-prod.example.com --instance 00 \
+                             --user SAPADM --out ./extract
+
+# 2. Scan what it wrote, exactly as if you had exported it by hand.
+python sap_scanner.py --data-dir ./extract
+```
+
+### What it collects, and what it cannot
+
+It speaks to **sapstartsrv**, the SAP start service, over its SOAP interface on
+port `5<NN>14` (HTTPS) or `5<NN>13` (HTTP) — so instance `00` is `50014`/`50013`.
+No SAP SDK is involved and no ABAP-side component is installed.
+
+| | |
+|---|---|
+| **Collects** | `security_params.csv` — the instance's profile parameters, which is the input for the Security Parameters and Baseline modules. Plus instance topology and the process list as reference data. |
+| **Cannot collect** | Users, roles, profiles, authorisations, change documents, table authorisation groups, RFC destinations, ICF services, gateway ACLs, background jobs, audit configuration — **14 logical sources in total.** |
+
+The second row is not a backlog. Those sources live inside the ABAP stack and are
+reachable over RFC or by an interactive export; this product declines RFC
+(decision D3, and the reasoning is in `docs/DECISIONS.md`), so on your estate they
+stay export-only. **A connected collection is partial by construction.**
+
+Every run writes `collection_manifest.json` next to the data, listing exactly what
+it obtained, what failed, and what is not reachable at all. Read it. A directory
+with four files in it and no statement about the fortieth is indistinguishable
+from a complete export, and that ambiguity is the failure this product exists to
+refuse — treat any check depending on an uncollected source as **unknown**, never
+as clean.
+
+### Credentials, TLS, and what it will refuse to do
+
+- **There is no `--password` flag and there will not be.** An argument is visible
+  in `ps` output and in shell history on a shared administrative host. The
+  password is prompted on a TTY, read from a pipe, or taken from
+  `SAPCONTROL_PASSWORD`.
+- **TLS is verified by default.** `--insecure` exists because many instances
+  present a self-signed certificate, but it is recorded in the manifest — an
+  unverified connection is a caveat on the evidence, not a detail of the plumbing.
+  `--ca-file` is the better answer for a self-signed estate.
+- **It is read-only, and that is enforced rather than promised.** The same service
+  and the same port also offer `Start`, `Stop`, `Restart` and OS command
+  execution. The collector carries an allowlist of read operations that the
+  transport checks *before any byte reaches the network*, so no typo and no future
+  caller can stop a production instance.
+
+### Try it without connecting to anything
+
+```bash
+python -m collect sapcontrol --host <host> --instance 00 --probe-only
+```
+
+Reports what the endpoint advertises and whether it answers **without
+credentials**, collects nothing and writes nothing. Worth running first: an
+instance that answers an unauthenticated caller is exposing an interface that can
+also stop it, which is governed by the profile parameter
+`service/protectedwebmethods` (see SAP Note 927637 and SAP Note 1439348).
+
 ## Tips
 
 - **Export from production** — always scan production configuration

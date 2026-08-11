@@ -102,6 +102,11 @@ and must say so.
 unchanged — **needed** stays exactly true, and that is the property worth
 keeping.
 
+> **Built.** `collect/` exists, is stdlib-only, is covered by the `purity` CI job,
+> and `tests/test_collect.py` asserts that nothing in `server/` or `modules/`
+> imports it and that `sap_scanner.py` has grown no `--connect` flag. The first
+> connector speaks sapstartsrv over SOAP; see D3 for what that reaches.
+
 ## D3 — Is RFC declined permanently?
 
 **Decided: RFC is declined. Connected mode is delivered over HTTPS instead.**
@@ -133,6 +138,26 @@ connected mode will not reach them. Those stay export-only, and the export guide
 must say which they are. "Connected mode" must never be allowed to imply
 "complete without an export" — that is the same silent-coverage failure the
 release gate now refuses.
+
+> **Built, for the first row of that table.** `python -m collect sapcontrol`
+> reaches an ABAP instance's profile parameters over the sapstartsrv SOAP
+> interface — no SDK, no ABAP component, no dependency — and writes
+> `security_params.csv` in the shape the offline loader already reads. Verified
+> end to end: collect → load → scan → findings, with the scanner unable to tell
+> the result from a hand-made export.
+>
+> **The RFC-only remainder is now written down**, which D3 required before
+> connected mode could be called documentable: 14 logical sources, listed in
+> `collect/extract.py` as `SAPCONTROL_CANNOT_REACH`, restated in every run's
+> `collection_manifest.json`, and tabulated in the export guide. `partial` is
+> hard-coded `true` in that manifest and is not a field any caller can set,
+> because a connected collection is partial by construction rather than by
+> circumstance.
+>
+> The endpoint is also *itself* a security observation: `--probe-only` reports
+> whether the instance answers a read with no credentials at all, which is
+> governed by `service/protectedwebmethods` (SAP Note 927637, SAP Note 1439348 —
+> cited as pointers, not quoted).
 
 ## D4 — Does the four-dependency rule extend to `collect/`?
 

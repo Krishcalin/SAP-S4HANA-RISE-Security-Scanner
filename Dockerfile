@@ -33,6 +33,18 @@ COPY server/ ./server/
 COPY data/ ./data/
 COPY sap_scanner.py ./
 
+# Connected mode (decision D2). Carried so an operator can run
+#   docker compose exec app python -m collect sapcontrol --host ... --out /tmp/x
+# from a container that already sits inside the customer's network, which is
+# usually the only thing on the right side of the firewall.
+#
+# IT ADDS NOTHING TO THE IMAGE'S DEPENDENCIES. `collect/` is stdlib-only and the
+# `purity` CI job enforces that, so this line cannot quietly grow the runtime
+# requirement list — which is the property the whole one-container design rests
+# on. Nothing under server/ or modules/ imports it, and tests/test_collect.py
+# asserts that too: it is present, not wired in.
+COPY collect/ ./collect/
+
 # The compiled console. Copied AFTER server/ so it cannot be shadowed by a stale
 # server/spa that happened to exist in the build context.
 COPY --from=spa /build/server/spa ./server/spa
