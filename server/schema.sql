@@ -37,8 +37,12 @@ CREATE TABLE IF NOT EXISTS landscape (
     -- negotiated per customer. See docs/RISE_SECURITY_MODEL.md section 0 —
     -- the category VOCABULARY differs between PCE and the tailored option, so
     -- a hard-coded matrix would be wrong for half of all customers.
+    -- Mirrors modules/deployment_modes.py DEPLOYMENT_MODES, which SQL cannot
+    -- import; tests/test_deployment_modes.py asserts the two agree. Widen HERE
+    -- and in the migration block below — this line alone is a no-op on every
+    -- database that already exists.
     deployment_mode text        NOT NULL DEFAULT 'on_prem'
-                    CHECK (deployment_mode IN ('on_prem', 'rise_pce', 'rise_tailored')),
+                    CHECK (deployment_mode IN ('on_prem', 'rise_pce', 'rise_tailored', 'rise_ecc')),
     rr_version      text,
     created_at      timestamptz NOT NULL DEFAULT now()
 );
@@ -690,9 +694,14 @@ CREATE TABLE IF NOT EXISTS auth_attempt (
 -- constraint actually moved. Without that job this section would be untested
 -- ceremony.
 
+-- Widened for `rise_ecc` (decision D7). The name order is load-bearing: four call
+-- sites decide ECS governance with startswith("rise"), so `ecc_rise` would have
+-- disabled every ECS rule for a system contractually bound by them, silently.
+-- The list mirrors modules/deployment_modes.py; tests/test_deployment_modes.py
+-- asserts they agree.
 ALTER TABLE landscape DROP CONSTRAINT IF EXISTS landscape_deployment_mode_check;
 ALTER TABLE landscape ADD CONSTRAINT landscape_deployment_mode_check
-    CHECK (deployment_mode IN ('on_prem', 'rise_pce', 'rise_tailored'));
+    CHECK (deployment_mode IN ('on_prem', 'rise_pce', 'rise_tailored', 'rise_ecc'));
 
 -- ---------------------------------------------------------------------
 --  Schema version

@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Optional
 
 from server import auth, db, ingest, totp
+from modules.deployment_modes import DEPLOYMENT_MODES, DEFAULT_DEPLOYMENT_MODE
 
 
 def cmd_init_db(args: argparse.Namespace) -> int:
@@ -360,8 +361,8 @@ def main(argv=None) -> int:
 
     al = sub.add_parser("add-landscape")
     al.add_argument("name")
-    al.add_argument("--mode", default="on_prem",
-                    choices=["on_prem", "rise_pce", "rise_tailored"])
+    al.add_argument("--mode", default=DEFAULT_DEPLOYMENT_MODE,
+                    choices=list(DEPLOYMENT_MODES))
     al.add_argument("--rr-version", default=None,
                     help="SAP Roles & Responsibilities version this mapping is read against")
     al.set_defaults(fn=cmd_add_landscape)

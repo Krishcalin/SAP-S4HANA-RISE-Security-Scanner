@@ -68,6 +68,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 from modules.base_auditor import BaseAuditor
+from modules.deployment_modes import normalise, is_rise
 
 
 #: The bundled facts extracted from SAP Note 3250501. READ ONLY here — the file is
@@ -243,11 +244,11 @@ class UserAuthAuditor(BaseAuditor):
         lock check on genuine on-premise systems.
         """
         mode = self.run_context.get("deployment_mode") or ""
-        return str(mode).strip().lower() or "on_prem"
+        return normalise(mode)
 
     def is_ecs(self) -> bool:
         """RISE / SAP Enterprise Cloud Services, by server/enrich.py's own test."""
-        return self.deployment_mode().startswith("rise")
+        return is_rise(self.deployment_mode())
 
     def _ecs_exception_applies(self, user: str) -> bool:
         """Does the ECS baseline carve this standard user out of the generic rule?

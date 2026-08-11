@@ -99,6 +99,7 @@ import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from modules.base_auditor import BaseAuditor
+from modules.deployment_modes import normalise
 
 # --------------------------------------------------------------------------- #
 #  The note itself                                                            #
@@ -1521,7 +1522,7 @@ class SecurityParamAuditor(BaseAuditor):
         relax genuine on-premise findings, which is the wrong way to be wrong.
         """
         mode = (self.run_context or {}).get("deployment_mode") or ""
-        return str(mode).strip().lower() or "on_prem"
+        return normalise(mode)
 
     def check_missing_critical_params(self):
         """Flag critical parameters that are missing from export entirely."""

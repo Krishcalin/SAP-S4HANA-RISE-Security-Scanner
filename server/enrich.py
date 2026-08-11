@@ -37,6 +37,7 @@ from __future__ import annotations
 import logging
 from datetime import date, timedelta
 from typing import Any, Dict, List, Optional, Tuple
+from modules.deployment_modes import is_rise
 
 log = logging.getLogger(__name__)
 
@@ -153,7 +154,7 @@ def classify_destination_owner(name: str, host: str = "",
 
     On premise everything is the customer's, so the question does not arise.
     """
-    if not deployment_mode.startswith("rise"):
+    if not is_rise(deployment_mode):
         return "customer"
     n = (name or "").strip().upper()
     if not n:
@@ -191,7 +192,7 @@ def remediation_owner_for(check_id: str, deployment_mode: str,
     went to the trouble of providing.
     """
     cid = (check_id or "").upper()
-    if not deployment_mode.startswith("rise"):
+    if not is_rise(deployment_mode):
         return "customer_fixable"
     if not data_was_supplied and (cid.startswith(RISE_UNREACHABLE_PREFIXES)
                                   or cid in RISE_UNREACHABLE_CHECKS):

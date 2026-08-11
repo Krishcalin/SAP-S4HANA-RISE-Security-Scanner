@@ -36,6 +36,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set
+from modules.deployment_modes import is_rise
 
 MODULES_DIR = Path(__file__).resolve().parents[1] / "modules"
 
@@ -138,7 +139,7 @@ def build_manifest(data: Dict[str, Any],
     empty = sorted(k for k in known if data.get(k) is not None and not data.get(k))
     absent = sorted(k for k in known if data.get(k) is None)
 
-    rise = deployment_mode.startswith("rise")
+    rise = is_rise(deployment_mode)
     unreachable = sorted(RISE_UNREACHABLE_SOURCES & set(absent)) if rise else []
     missing = [k for k in absent if k not in set(unreachable)]
 

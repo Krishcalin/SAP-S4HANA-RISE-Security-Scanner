@@ -41,7 +41,9 @@ export type RunStatus =
   | 'pending' | 'parsing' | 'scanning' | 'deriving'
   | 'complete' | 'failed' | 'cancelled'
 
-export type DeploymentMode = 'on_prem' | 'rise_pce' | 'rise_tailored'
+// Mirrors modules/deployment_modes.py DEPLOYMENT_MODES, which TypeScript cannot
+// import; tests/test_deployment_modes.py asserts the two agree.
+export type DeploymentMode = 'on_prem' | 'rise_pce' | 'rise_tailored' | 'rise_ecc'
 
 // ── identity ────────────────────────────────────────────────────────────────
 /** server/api_auth.py `user_payload` — an explicit allowlist, NOT the app_user

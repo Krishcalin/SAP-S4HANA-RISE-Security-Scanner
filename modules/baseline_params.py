@@ -29,6 +29,7 @@ from modules.base_auditor import BaseAuditor
 
 from modules import ecs_baseline
 from modules import snc_posture
+from modules.deployment_modes import normalise
 
 
 class BaselineParamAuditor(BaseAuditor):
@@ -254,7 +255,7 @@ class BaselineParamAuditor(BaseAuditor):
         to be wrong in.
         """
         mode = (self.run_context or {}).get("deployment_mode") or ""
-        return str(mode).strip().lower() or "on_prem"
+        return normalise(mode)
 
     def check_snc_accept_insecure(self):
         """The SNC insecure-fallback family — for the parameters nobody deeper owns.

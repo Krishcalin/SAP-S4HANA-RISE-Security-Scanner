@@ -64,6 +64,7 @@ from modules.finding_kb import FindingKB
 from modules.risk_prioritizer import RiskPrioritizer
 from modules import fair_adapter
 from modules.data_loader import DataLoader
+from modules.deployment_modes import DEPLOYMENT_MODES, DEFAULT_DEPLOYMENT_MODE
 
 
 def _make_output_encoding_safe() -> None:
@@ -166,8 +167,8 @@ def main():
 
     # ── Release gate ─────────────────────────────────────────────────────────
     parser.add_argument(
-        "--deployment-mode", choices=["on_prem", "rise_pce", "rise_tailored"],
-        default="on_prem",
+        "--deployment-mode", choices=list(DEPLOYMENT_MODES),
+        default=DEFAULT_DEPLOYMENT_MODE,
         help="Which estate this export came from. SAP Note 3250501 is the MANDATORY "
              "baseline for rise_* (SAP Enterprise Cloud Services) and changes what "
              "counts as compliant: snc/accept_insecure_gui=1 and "
