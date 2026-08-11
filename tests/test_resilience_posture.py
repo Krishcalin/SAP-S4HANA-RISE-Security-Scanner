@@ -691,9 +691,21 @@ def test_the_module_states_what_it_cannot_check():
     assert "immutability" in src
 
 
+@pytest.mark.skipif(not hasattr(sys, "stdlib_module_names"),
+                    reason="sys.stdlib_module_names is 3.10+; the purity CI job "
+                           "enforces this repository-wide on 3.12")
 def test_the_module_imports_nothing_third_party():
     """modules/ is stdlib-only by charter. CI enforces it repository-wide; this
-    catches it in one second instead of after a push."""
+    catches it in one second instead of after a push.
+
+    ⚠️ `sys.stdlib_module_names` DID NOT EXIST BEFORE PYTHON 3.10, and the `cli`
+    job runs the 3.8-3.12 matrix — so this line failed that job on 3.8 and 3.9 for
+    months while passing on the three newer interpreters, which is exactly the
+    shape of failure that gets ignored as "CI is just red". Skipping below 3.10 is
+    honest rather than a workaround: the `purity` job walks the same AST over all
+    of modules/ on 3.12, so the guarantee is enforced either way and this test is
+    only the fast local copy of it.
+    """
     allowed = set(sys.stdlib_module_names) | {"modules"}
     tree = ast.parse(MODULE_PATH.read_text(encoding="utf-8"), str(MODULE_PATH))
     for node in ast.walk(tree):

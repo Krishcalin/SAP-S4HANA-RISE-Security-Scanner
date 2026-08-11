@@ -301,13 +301,39 @@ def build(static_dir: Path, assets_dir: Path) -> None:
 
 
 def digest(directory: Path, names):
-    """SHA-256 of the DERIVED files only, so a co-located asset we do not own
-    (assets/sap-logo.png) can never fail the drift check."""
+    """A fingerprint of the DERIVED IMAGES — their pixels, not their file bytes.
+
+    ⚠️ THIS USED TO HASH THE FILE BYTES, AND THAT KEPT CI RED.
+    The `brand-assets` job installs an unpinned Pillow on Linux; this repository is
+    developed on Windows. Two PNG encoders that disagree by one zlib setting emit
+    different bytes for pixel-identical images, so a byte digest reported drift
+    that did not exist — and it reported it on every commit, which is how a job
+    becomes background noise and stops being read at all.
+
+    The claim worth enforcing is "the committed asset is the image the master
+    produces". That is a statement about pixels. Encoder output is a statement
+    about Pillow's version, which nothing here should assert.
+
+    Co-located assets we do not own (assets/sap-logo.png) are still excluded by
+    the explicit `names` list rather than by scanning the directory.
+    """
     out = {}
     for name in names:
         path = directory / name
-        out[name] = (hashlib.sha256(path.read_bytes()).hexdigest()
-                     if path.is_file() else None)
+        if not path.is_file():
+            out[name] = None
+            continue
+        with Image.open(path) as im:
+            frames = []
+            # An .ico holds several sizes; comparing only the one Pillow happens to
+            # surface would let the other four drift silently.
+            sizes = sorted(getattr(getattr(im, "ico", None), "sizes", lambda: [])()) \
+                or [im.size]
+            for size in sizes:
+                frame = im.ico.getimage(size) if getattr(im, "ico", None) else im
+                frame = frame.convert("RGBA")
+                frames.append(f"{frame.size}".encode() + frame.tobytes())
+        out[name] = hashlib.sha256(b"".join(frames)).hexdigest()
     return out
 
 
