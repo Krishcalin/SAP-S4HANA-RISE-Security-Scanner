@@ -1,21 +1,67 @@
-MIT License
+Copyright (c) 2026 Krishnendu De. All Rights Reserved.
 
-Copyright (c) 2025 Krishcalin
+PROPRIETARY AND CONFIDENTIAL
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This software and its associated source code, documentation, configuration
+files, and other materials (collectively, the "Software") are the exclusive
+property of the copyright holder.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+NO LICENSE IS GRANTED. No person or entity is granted any right or licence
+to use, copy, reproduce, modify, adapt, merge, publish, distribute,
+sublicense, sell, lease, transmit, host, or create derivative works of the
+Software, in whole or in part, in any form or by any means, without the
+prior express written permission of the copyright holder.
+
+Making the source code publicly viewable does not constitute a grant of any
+licence, waiver of any right, or dedication to the public domain. Viewing
+the Software for evaluation purposes does not confer any right to execute,
+deploy, or reuse it, or any portion of it.
+
+Any unauthorised use, reproduction, or distribution of the Software, or any
+portion of it, may result in civil and criminal liability, and will be
+prosecuted to the maximum extent permitted by law.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL
+THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF,
+OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+For licensing enquiries, contact: krishnendu.de@hotmail.com
+
+
+--------------------------------------------------------------------------
+THIRD-PARTY COMPONENTS
+--------------------------------------------------------------------------
+
+The terms above apply to the Software as authored by the copyright holder.
+They do not, and cannot, alter the terms under which third-party material
+included with or used by the Software is licensed. Those components remain
+subject to their own licences.
+
+Full notices, including the attributions their licences require, are in
+THIRD_PARTY_NOTICES.md. In summary:
+
+  * data/sap_baseline_requirements.json is DERIVED from
+    SAP-samples/frun-csa-policies-best-practices, licensed under the Apache
+    License 2.0, Copyright (c) 2020 SAP SE or an SAP affiliate company. It is
+    the only component here authored by a third party. A copy of that licence
+    is at licenses/Apache-2.0.txt.
+
+  * The Python runtime dependencies pinned in requirements.txt, and the
+    JavaScript packages compiled into the browser console and pinned in
+    frontend/package-lock.json, are each used under their own licences.
+    Note in particular that psycopg is LGPL-3.0-only and is used as an
+    unmodified, separately installed library; it must not be vendored,
+    forked or patched into this repository.
+
+  * SAP, SAP S/4HANA and related marks are trademarks of SAP SE. Their use is
+    nominative — to identify the systems this tool assesses — and implies no
+    affiliation with or endorsement by SAP SE.
+
+modules/abap_sast_rules.py is NOT third-party material, despite carrying a
+provenance note. It is assembled from SAP-Code-Vulnerability-Analyzer, which
+is published by the same author under the same copyright; see section 4 of
+THIRD_PARTY_NOTICES.md for why that distinction matters in both directions.

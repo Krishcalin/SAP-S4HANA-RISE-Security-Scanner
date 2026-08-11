@@ -4,10 +4,10 @@
 # Coding Assistance : Claude Code
 # Code Security Assistance : Code QL
 #
-# GENERATED FILE — the rights above cover this assembly only.
-# Portions vendored verbatim from SAP-Code-Vulnerability-Analyzer (abap_scanner.py
-# v1.9.0), which is MIT licensed, Copyright (c) 2026 KRISH. That notice is
-# reproduced here because the MIT terms require it to travel with the copy.
+# GENERATED FILE — assembled by tools/build_abap_rules.py from the author's own
+# sibling project SAP-Code-Vulnerability-Analyzer (abap_scanner.py v1.9.0). Same
+# copyright holder; see LICENSE and THIRD_PARTY_NOTICES.md. Do not hand-edit:
+# every edit here is discarded by the next regeneration.
 
 """
 ABAP security rule corpus and taint analyzer — VENDORED, DO NOT HAND-EDIT

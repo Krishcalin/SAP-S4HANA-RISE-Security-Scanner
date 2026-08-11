@@ -34,23 +34,30 @@ def seg(first, last):
 # time anyone refreshes the corpus, with no test and no CI job to notice. Put it in
 # the generator and regeneration reproduces it.
 #
-# THE WORDING IS NOT THE REPO-WIDE ONE, AND THAT IS DELIBERATE. About 1,400 of the
-# lines below are vendored verbatim from SAP-Code-Vulnerability-Analyzer, whose
-# LICENSE is MIT under a different holder ("Copyright (c) 2026 KRISH"). MIT keeps
-# its grant only while the notice travels with the copy, so stamping a bare
-# "All Rights Reserved" over it would both misstate the terms and drop the
-# attribution the licence requires. The assembled file is therefore marked as what
-# it is: our assembly, around someone else's MIT-licensed content.
+# THE UPSTREAM IS THE SAME AUTHOR, WHICH SETTLES THE LICENSING QUESTION.
+# About 1,400 of the lines below are vendored verbatim from
+# SAP-Code-Vulnerability-Analyzer, whose LICENSE reads "MIT, Copyright (c) 2026
+# KRISH". That looked like third-party MIT content and was briefly marked as such.
+# It is not: both repositories sit under the same GitHub organisation and share the
+# same two commit identities — `KRISH <krishnendu.de@hotmail.com>` and
+# `Krishnendu De <krishcalin@gmail.com>`. KRISH is the same person, so there is no
+# third-party obligation to carry here; an author cannot infringe their own
+# copyright, and may license the same work differently in two places.
+#
+# The provenance line stays anyway, for a reason that is not legal: this file is
+# regenerated from another repository on disk, and a reader who does not know that
+# will hand-edit it and lose their work. Recording where the content comes from is
+# what makes the DO-NOT-EDIT warning below actionable.
 _COPYRIGHT = '''# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
 #
 # Author : Krishnendu De
 # Coding Assistance : Claude Code
 # Code Security Assistance : Code QL
 #
-# GENERATED FILE — the rights above cover this assembly only.
-# Portions vendored verbatim from SAP-Code-Vulnerability-Analyzer (abap_scanner.py
-# v1.9.0), which is MIT licensed, Copyright (c) 2026 KRISH. That notice is
-# reproduced here because the MIT terms require it to travel with the copy.
+# GENERATED FILE — assembled by tools/build_abap_rules.py from the author's own
+# sibling project SAP-Code-Vulnerability-Analyzer (abap_scanner.py v1.9.0). Same
+# copyright holder; see LICENSE and THIRD_PARTY_NOTICES.md. Do not hand-edit:
+# every edit here is discarded by the next regeneration.
 
 '''
 

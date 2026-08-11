@@ -11,7 +11,7 @@
   <a href="https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner/actions/workflows/tests.yml"><img src="https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner/actions/workflows/tests.yml/badge.svg" alt="tests"/></a>
   <img src="https://img.shields.io/badge/python-3.8%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python 3.8+"/>
   <img src="https://img.shields.io/badge/CLI-stdlib%20only-brightgreen?style=flat-square" alt="CLI: stdlib only"/>
-  <img src="https://img.shields.io/badge/license-MIT-orange?style=flat-square" alt="MIT License"/>
+  <img src="https://img.shields.io/badge/license-Proprietary-red?style=flat-square" alt="Proprietary — All Rights Reserved"/>
 </p>
 
 <p align="center">
@@ -1643,4 +1643,12 @@ This tool is for **authorized security assessments only**. The scanner performs 
 
 ## License
 
-MIT License — see [LICENSE](LICENSE).
+**Proprietary. All rights reserved.** Copyright (c) 2026 Krishnendu De.
+
+No licence is granted to use, copy, modify or distribute this software, in whole
+or in part, without prior express written permission. The repository being
+publicly viewable is not a grant of any licence, and viewing it for evaluation
+confers no right to execute or deploy it. See [LICENSE](LICENSE) for the full
+terms and for the third-party components, which remain under their own licences.
+
+Licensing enquiries: krishnendu.de@hotmail.com

@@ -798,6 +798,52 @@ quantification. And absence of a capability in a competitor's public material is
 ## Git / commits
 
 - Remote: `https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner`.
+## Licensing
+
+**Proprietary, all rights reserved, since 2026-08-11.** The repository was MIT until
+then; it is not any more, and the badge, the README section and `LICENSE` were changed
+together. Do not reintroduce an MIT badge or an OSI licence identifier for this code.
+
+The repository is **publicly viewable and that is not a grant** — `LICENSE` says so
+explicitly, because a public repo with no licence file is widely (and wrongly) read as
+permissive.
+
+⚠️ **A proprietary licence on our code does not touch third-party terms, and cannot.**
+Full notices are in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md); it is part of
+the release, not documentation trivia, because the `Dockerfile` redistributes some of
+what it lists and an attribution obligation is not discharged by a source comment
+nobody ships.
+
+**Exactly one component here is third-party**: `data/sap_baseline_requirements.json`,
+derived from SAP-samples' `frun-csa-policies-best-practices`, **Apache-2.0, Copyright
+(c) 2020 SAP SE**. We take identifiers, titles, tiers and store names; SAP's prose is
+not reproduced and SAP's SQL predicates are neither copied nor executed. The licence
+copy lives at `licenses/Apache-2.0.txt` and the derived file carries source, licence
+and copyright in its own `_meta` block, so the notice travels with the data.
+
+⚠️ **`modules/abap_sast_rules.py` LOOKS third-party and is not.** Its upstream
+`SAP-Code-Vulnerability-Analyzer` says "MIT, Copyright (c) 2026 KRISH", which reads as
+another party — but both repositories are under the same GitHub organisation and share
+the same two commit identities (`KRISH <krishnendu.de@hotmail.com>` and
+`Krishnendu De <krishcalin@gmail.com>`). Same author, so no obligation arises here. Two
+consequences, neither obvious: publishing that code under MIT elsewhere does **not**
+retroactively license this repository, and relicensing here does **not** revoke the MIT
+grant already made upstream — MIT is irrevocable for copies already distributed. If
+that is not the intent, the thing to change is the upstream repository's licence.
+
+⚠️ **`psycopg` is LGPL-3.0-only.** It is fine as an unmodified, separately installed
+library — that is what LGPL permits for a work that merely uses it. **Never vendor,
+fork or patch it into this repository**: that would make this project a derivative of
+an LGPL work and pull copyleft terms onto proprietary code. The same reasoning bans
+vendoring GPL/AGPL source outright.
+
+**Before vendoring anything else, check its licence permits it and record the notice
+where regeneration cannot drop it** — `tools/build_abap_rules.py` puts its header in the
+generator's `_COPYRIGHT` constant precisely because a hand-added notice in the generated
+file is deleted by the next rebuild, silently.
+
+## Git / commits
+
 - **Commit style: plain, descriptive conventional messages with NO co-author trailer** —
   match the existing history (e.g. `Adding <X> module — <summary> (N new checks)`).
 - Flow: branch → commit → `git fetch` → ff-merge to `main` → push. Keep new modules additive.
