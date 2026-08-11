@@ -11,6 +11,7 @@ Server administration CLI.
     python -m server.cli create-user  <username> <role>
     python -m server.cli add-landscape <name> [--mode rise_pce]
     python -m server.cli add-system    <landscape> <SID> <client> [--tier prod] ...
+    python -m server.cli add-tenant    <landscape> <platform> <external-key> ...
     python -m server.cli scan          <landscape> <data-dir> [--sid PRD --client 100]
     python -m server.cli runs
     python -m server.cli totp-status  [username]
@@ -33,6 +34,7 @@ from typing import Optional
 
 from server import auth, db, ingest, totp
 from modules.deployment_modes import DEPLOYMENT_MODES, DEFAULT_DEPLOYMENT_MODE
+from modules.platforms import PLATFORMS, TENANT_PLATFORMS
 
 
 def cmd_init_db(args: argparse.Namespace) -> int:
@@ -247,6 +249,48 @@ def cmd_add_system(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_add_tenant(args: argparse.Namespace) -> int:
+    """Register a SaaS tenant — a system row with no SID. Decision D8.
+
+    SEPARATE FROM add-system RATHER THAN OPTIONAL FLAGS ON IT. `add-system PRD 100`
+    takes its sid and client positionally, so making them optional to accommodate a
+    tenant would make `add-system acme-sf-prod` ambiguous — is that a SID or an
+    external key? — and argparse would accept it either way. Two commands cannot be
+    confused with each other, and each refuses the other's arguments outright.
+    """
+    land = db.one("SELECT id FROM landscape WHERE name = %s", (args.landscape,))
+    if land is None:
+        print(f"no such landscape: {args.landscape}", file=sys.stderr)
+        return 1
+    if not args.external_key.strip():
+        # The schema refuses this too (sap_system_shape_check demands
+        # external_key <> ''), but a constraint violation is a poor way to learn
+        # you typed an empty argument.
+        print("external key cannot be empty: it is what tells two tenants apart, "
+              "and without it their findings collide", file=sys.stderr)
+        return 1
+
+    # THE `WHERE` IS NOT OPTIONAL. sap_system_tenant_key is a PARTIAL unique index,
+    # and PostgreSQL will not infer a partial index as an ON CONFLICT arbiter
+    # unless the statement repeats its predicate — without this, SQLSTATE 42P10.
+    row = db.one(
+        """
+        INSERT INTO sap_system (landscape_id, platform, external_key, tier,
+                                criticality, exposure_zone, owner)
+        VALUES (%s,%s,%s,%s,%s,%s,%s)
+        ON CONFLICT (landscape_id, platform, external_key) WHERE platform <> 'abap'
+        DO UPDATE SET
+            tier = EXCLUDED.tier, criticality = EXCLUDED.criticality,
+            exposure_zone = EXCLUDED.exposure_zone, owner = EXCLUDED.owner
+        RETURNING id
+        """,
+        (land["id"], args.platform, args.external_key.strip(), args.tier,
+         args.criticality, args.exposure, args.owner))
+    print(f"tenant {args.platform}:{args.external_key} "
+          f"(id={row['id']}, tier={args.tier})")
+    return 0
+
+
 def cmd_scan(args: argparse.Namespace) -> int:
     """Scan a directory directly — the air-gapped path, no upload, no browser."""
     land = db.one("SELECT * FROM landscape WHERE name = %s", (args.landscape,))
@@ -379,6 +423,28 @@ def main(argv=None) -> int:
                       choices=["internet", "dmz", "internal", "isolated", "unknown"])
     asys.add_argument("--owner", default=None)
     asys.set_defaults(fn=cmd_add_system)
+
+    aten = sub.add_parser(
+        "add-tenant",
+        help="register a SaaS tenant (SuccessFactors, Concur, IAS, a BTP "
+             "subaccount) — a system with an external key instead of a SID")
+    aten.add_argument("landscape")
+    # PLATFORMS come from the schema's own CHECK list rather than being repeated
+    # here. A choices= list that drifts from the constraint rejects a platform the
+    # database would accept, while naming every other one as valid — which reads
+    # as the feature not existing rather than as a stale list.
+    aten.add_argument("platform", choices=list(TENANT_PLATFORMS))
+    aten.add_argument("external_key",
+                      help="the tenant's own identifier: a SuccessFactors company "
+                           "id, a Concur entity id, a BTP subaccount id")
+    aten.add_argument("--tier", default="unknown",
+                      choices=["prod", "qa", "dev", "sandbox", "unknown"])
+    aten.add_argument("--criticality", default="medium",
+                      choices=["critical", "high", "medium", "low"])
+    aten.add_argument("--exposure", default="unknown",
+                      choices=["internet", "dmz", "internal", "isolated", "unknown"])
+    aten.add_argument("--owner", default=None)
+    aten.set_defaults(fn=cmd_add_tenant)
 
     sc = sub.add_parser("scan")
     sc.add_argument("landscape")

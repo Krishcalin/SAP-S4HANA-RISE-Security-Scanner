@@ -359,7 +359,7 @@ export function RunDetail() {
       </h1>
       <p className="mb-5 text-ink2">
         {r.landscape_name ?? `Landscape ${r.landscape_id}`}
-        {r.sid && <> · <span className="font-mono">{r.sid}/{r.client}</span></>}
+        {r.system_label && <> · <span className="font-mono">{r.system_label}</span></>}
         {' · '}{stamp(r.started_at)}
         {' · '}
         <span className="pill st" style={{ color: STATUS_COLOR[r.status] }}>{r.status}</span>

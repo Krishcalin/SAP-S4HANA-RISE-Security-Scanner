@@ -97,7 +97,7 @@ export function FindingDetail() {
       </h1>
       <p className="text-ink2 mb-5">
         <span className="font-mono">{finding.check_id}</span>
-        {finding.sid && <> · <span className="font-mono">{finding.sid}/{finding.system_client}</span></>}
+        {finding.system_label && <> · <span className="font-mono">{finding.system_label}</span></>}
         {finding.baseline_req_id && (
           <> · SAP Security Baseline <span className="font-mono">{finding.baseline_req_id}</span></>
         )}
@@ -429,7 +429,7 @@ export function FindingDetail() {
           <>
             <h3 className={`${CARD_TITLE} mt-[18px]`}>Service request text</h3>
             <pre className="font-mono text-[12px] whitespace-pre-wrap bg-panel2 p-3 rounded-md m-0">
-{`System: ${finding.sid ?? ''}/${finding.system_client ?? ''}
+{`System: ${finding.system_label ?? '(not recorded)'}
 Check:  ${finding.check_id} — ${finding.title}
 Request: apply the target configuration described below.
 Reference: ${finding.baseline_req_id ?? 'SAP Security Baseline'}

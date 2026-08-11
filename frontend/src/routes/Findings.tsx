@@ -132,7 +132,7 @@ export function Findings() {
         <Select value={params.get('system_id') ?? ''}
                 onChange={(v) => setFilter('system_id', v)} blank="All systems"
                 options={sapSystems.map((s) => [
-                  String(s.id), `${s.sid}/${s.client} (${s.tier})`,
+                  String(s.id), `${s.label} (${s.tier})`,
                 ])} />
         <Select value={params.get('severity') ?? ''}
                 onChange={(v) => setFilter('severity', v)} blank="Any severity"

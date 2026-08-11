@@ -252,7 +252,7 @@ export function Upload() {
                 onChange={(e) => setSystemId(e.target.value)}>
           <option value="">Unassigned</option>
           {systems.map((s) => (
-            <option key={s.id} value={s.id}>{s.sid}/{s.client} — {s.tier}</option>
+            <option key={s.id} value={s.id}>{s.label} — {s.tier}</option>
           ))}
         </select>
 

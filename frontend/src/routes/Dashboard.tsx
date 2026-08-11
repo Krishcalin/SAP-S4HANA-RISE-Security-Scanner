@@ -222,7 +222,7 @@ export function Dashboard() {
         <table className="w-full border-collapse">
           <thead>
             <tr>
-              <th className={TH}>SID</th><th className={TH}>Client</th>
+              <th className={TH}>System</th><th className={TH}>Platform</th>
               <th className={TH}>Tier</th><th className={TH}>Criticality</th>
               <th className={TH}>Exposure</th><th className={TH}>Mode</th>
               <th className={TH}>Owner</th>
@@ -231,12 +231,16 @@ export function Dashboard() {
           <tbody>
             {systems.map((s) => (
               <tr key={s.id} className="hover:bg-panel2">
+                {/* `label`, not `sid`: this cell is the only link into the
+                    system's findings, and for a tenant `sid` is null — React
+                    renders that as an EMPTY anchor, so the row became
+                    unclickable with nothing to say why. */}
                 <td className={TD}>
                   <Link className="font-mono text-accent" to={`/findings?system_id=${s.id}`}>
-                    {s.sid}
+                    {s.label}
                   </Link>
                 </td>
-                <td className={`${TD} font-mono`}>{s.client}</td>
+                <td className={`${TD} text-ink2`}>{s.platform}</td>
                 <td className={TD}>{s.tier}</td>
                 <td className={TD}>{s.criticality}</td>
                 <td className={`${TD} text-ink2`}>{s.exposure_zone}</td>

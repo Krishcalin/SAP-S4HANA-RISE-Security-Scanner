@@ -103,12 +103,33 @@ export interface GeneratedPassword {
 }
 
 // ── reference data ──────────────────────────────────────────────────────────
-/** server/queries.py `list_systems` — sap_system.* plus the landscape join. */
+/**
+ * What kind of thing a system row is. Mirrors modules/platforms.py PLATFORMS,
+ * which TypeScript cannot import; tests/test_platforms.py asserts they agree.
+ */
+export type Platform =
+  | 'abap' | 'ariba' | 'btp' | 'cloud_alm'
+  | 'concur' | 'fieldglass' | 'ias' | 'successfactors'
+
+/**
+ * server/queries.py `list_systems` — sap_system.* plus the landscape join.
+ *
+ * `sid` AND `client` ARE NULLABLE, AND WERE TYPED AS PLAIN `string`. A SaaS
+ * tenant (decision D8) has neither, so under `strict: true` that declaration was
+ * a compiler-enforced promise the backend can no longer keep. Prefer `label` for
+ * anything a person reads: it is computed once in SQL and is correct for both
+ * shapes, whereas `${sid}/${client}` renders "null/null" for a tenant and
+ * `{sid && …}` silently renders nothing at all.
+ */
 export interface SapSystem {
   id: number
   landscape_id: number
-  sid: string
-  client: string
+  platform: Platform
+  external_key: string | null
+  /** "PRD/100" for ABAP, "successfactors:acme-sf-prod" for a tenant. */
+  label: string
+  sid: string | null
+  client: string | null
   tier: 'prod' | 'qa' | 'dev' | 'sandbox' | 'unknown'
   product: string | null
   release: string | null
@@ -189,6 +210,12 @@ export interface FindingRow {
   sid: string | null
   system_client: string | null
   system_tier: string | null
+  platform: Platform | null
+  external_key: string | null
+  /** Computed in SQL (queries.SYSTEM_LABEL_SQL). Null when the run named no
+   *  system at all — which is a real state, not an error. Use this rather than
+   *  concatenating sid and client. */
+  system_label: string | null
   // ── derived in SQL ──
   expired_acceptance: boolean
   is_overdue: boolean
@@ -341,6 +368,12 @@ export interface ScanRun {
   scanner_version: string | null
   sid: string | null
   client: string | null
+  platform: Platform | null
+  external_key: string | null
+  /** Computed in SQL (queries.SYSTEM_LABEL_SQL). Null when the run named no
+   *  system — scan_run LEFT JOINs sap_system, and an unattached upload is a real
+   *  state (see the resolution guard in server/ingest.py), not an error. */
+  system_label: string | null
   landscape_name?: string
   deployment_mode?: DeploymentMode
 }

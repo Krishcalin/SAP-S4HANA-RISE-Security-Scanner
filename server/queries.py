@@ -48,6 +48,32 @@ def _scoped(where: List[str], params: List[Any], scope: Optional[Sequence[int]],
     params.extend(extra)
 
 
+#: How a system is NAMED, in one place, in SQL.
+#:
+#: An ABAP system is "PRD/100". A SaaS tenant (decision D8) has neither a SID nor
+#: a client, and every screen used to build the name by concatenating the two.
+#: That fails in two different ways and the quieter one is worse:
+#:
+#:   * `${s.sid}/${s.client}` renders the literal text "null/null";
+#:   * `{finding.sid && <>…</>}` renders NOTHING — the system identity silently
+#:     disappears from the page, and the reader has no way to know a system was
+#:     ever involved.
+#:
+#: A tenant is named by its platform and its own external key —
+#: "successfactors:acme-sf-prod". Computed here rather than in TypeScript because
+#: six screens need the same answer, one of them is the text a user pastes into an
+#: SAP service request, and a non-browser API consumer needs it too.
+#:
+#: The `s.id IS NULL` arm matters: scan_run LEFT JOINs sap_system, so an upload
+#: filed against no system at all reaches this expression with every column NULL.
+#: That is a real state — see the resolution guard in server/ingest.py — and it
+#: must read as "no system", not as "null:?".
+SYSTEM_LABEL_SQL = (
+    "CASE WHEN s.id IS NULL          THEN NULL "
+    "     WHEN s.sid IS NOT NULL     THEN s.sid || '/' || s.client "
+    "     ELSE s.platform || ':' || coalesce(s.external_key, '?') END")
+
+
 # --------------------------------------------------------------------------- #
 #  Reference data                                                             #
 # --------------------------------------------------------------------------- #
@@ -56,13 +82,74 @@ def list_landscapes() -> List[Dict[str, Any]]:
     return db.query("SELECT * FROM landscape ORDER BY name")
 
 
+def create_system(*, landscape_id: int, platform: str,
+                  sid: Optional[str], client: Optional[str],
+                  external_key: Optional[str], tier: str, criticality: str,
+                  exposure_zone: str, owner: Optional[str],
+                  actor: str) -> Dict[str, Any]:
+    """Register an ABAP system or a SaaS tenant, idempotently. Decision D8.
+
+    TWO ON CONFLICT ARBITERS, BECAUSE THERE ARE TWO IDENTITIES. An ABAP system is
+    unique on (landscape, sid, client) — a table constraint. A tenant is unique on
+    (landscape, platform, external_key) — a PARTIAL index, and PostgreSQL will not
+    infer a partial index as an arbiter unless the statement repeats its predicate.
+    Omitting that `WHERE` is SQLSTATE 42P10 at runtime, which is why it is written
+    out here rather than shared with the ABAP branch.
+
+    Re-registering is an UPDATE of the declared attributes rather than an error:
+    tier, criticality and exposure are the customer's own declarations about a
+    system and they change. Identity does not.
+    """
+    tenant = platform != "abap"
+    with db.connection() as conn:
+        if tenant:
+            row = conn.execute(
+                """
+                INSERT INTO sap_system (landscape_id, platform, external_key, tier,
+                                        criticality, exposure_zone, owner)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (landscape_id, platform, external_key)
+                    WHERE platform <> 'abap'
+                DO UPDATE SET tier = EXCLUDED.tier,
+                              criticality = EXCLUDED.criticality,
+                              exposure_zone = EXCLUDED.exposure_zone,
+                              owner = EXCLUDED.owner
+                RETURNING *
+                """,
+                (landscape_id, platform, external_key, tier, criticality,
+                 exposure_zone, owner)).fetchone()
+        else:
+            row = conn.execute(
+                """
+                INSERT INTO sap_system (landscape_id, platform, sid, client, tier,
+                                        criticality, exposure_zone, owner)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (landscape_id, sid, client)
+                DO UPDATE SET tier = EXCLUDED.tier,
+                              criticality = EXCLUDED.criticality,
+                              exposure_zone = EXCLUDED.exposure_zone,
+                              owner = EXCLUDED.owner
+                RETURNING *
+                """,
+                (landscape_id, platform, sid, client, tier, criticality,
+                 exposure_zone, owner)).fetchone()
+        label = (f"{row['sid']}/{row['client']}" if row["sid"]
+                 else f"{row['platform']}:{row['external_key']}")
+        db.audit(conn, actor, "system.create", "sap_system", str(row["id"]),
+                 {"platform": platform, "label": label,
+                  "landscape_id": landscape_id})
+        conn.commit()
+    return dict(row, label=label)
+
+
 def list_systems(scope: Optional[Sequence[int]]) -> List[Dict[str, Any]]:
     where, params = [], []
     _scoped(where, params, scope, "s.id")
     return db.query(
-        f"SELECT s.*, l.name AS landscape_name, l.deployment_mode "
+        f"SELECT s.*, l.name AS landscape_name, l.deployment_mode, "
+        f"{SYSTEM_LABEL_SQL} AS label "
         f"FROM sap_system s JOIN landscape l ON l.id = s.landscape_id "
-        f"WHERE {' AND '.join(where)} ORDER BY s.sid, s.client", params)
+        f"WHERE {' AND '.join(where)} ORDER BY {SYSTEM_LABEL_SQL}", params)
 
 
 # --------------------------------------------------------------------------- #
@@ -116,7 +203,8 @@ def recent_runs(scope: Optional[Sequence[int]], limit: int = 10) -> List[Dict[st
     _scoped(where, params, scope, "r.system_id")
     params.append(limit)
     return db.query(
-        f"SELECT r.*, s.sid, s.client FROM scan_run r "
+        f"SELECT r.*, s.sid, s.client, s.platform, s.external_key, "
+        f"{SYSTEM_LABEL_SQL} AS system_label FROM scan_run r "
         f"LEFT JOIN sap_system s ON s.id = r.system_id "
         f"WHERE {' AND '.join(where)} ORDER BY r.started_at DESC LIMIT %s", params)
 
@@ -166,6 +254,8 @@ def list_findings(scope: Optional[Sequence[int]], system_id: Optional[int] = Non
         f"""
         SELECT f.*, cd.title, cd.category, cd.owning_team AS default_team,
                cd.baseline_req_id, s.sid, s.client AS system_client,
+               s.platform, s.external_key,
+               {SYSTEM_LABEL_SQL} AS system_label,
                s.tier AS system_tier,
                (f.state = 'accepted' AND f.acceptance_due IS NOT NULL
                 AND f.acceptance_due < CURRENT_DATE) AS expired_acceptance,
@@ -208,7 +298,8 @@ def get_finding(finding_id: int, scope: Optional[Sequence[int]]) -> Optional[Dic
         f"(f.due_date IS NOT NULL AND f.due_date < CURRENT_DATE "
         f" AND f.state IN ('open','submitted_to_provider')) AS is_overdue, "
         f"cd.references_json, cd.baseline_req_id, cd.responsibility, cd.cwe, "
-        f"s.sid, s.client AS system_client, s.tier, l.deployment_mode, "
+        f"s.sid, s.client AS system_client, s.platform, s.external_key, "
+        f"{SYSTEM_LABEL_SQL} AS system_label, s.tier, l.deployment_mode, "
         # The snippet and the source->sink trace describe what the code looked like
         # in a PARTICULAR run, so they come from the newest observation rather than
         # from `finding`. Read here so the detail page stays one round trip.
@@ -287,7 +378,9 @@ def get_run(run_id: int, scope: Optional[Sequence[int]]) -> Optional[Dict[str, A
     where, params = ["r.id = %s"], [run_id]
     _scoped(where, params, scope, "r.system_id")
     return db.one(
-        f"SELECT r.*, s.sid, s.client, l.name AS landscape_name, l.deployment_mode "
+        f"SELECT r.*, s.sid, s.client, s.platform, s.external_key, "
+        f"{SYSTEM_LABEL_SQL} AS system_label, "
+        f"l.name AS landscape_name, l.deployment_mode "
         f"FROM scan_run r LEFT JOIN sap_system s ON s.id = r.system_id "
         f"JOIN landscape l ON l.id = r.landscape_id "
         f"WHERE {' AND '.join(where)}", params)

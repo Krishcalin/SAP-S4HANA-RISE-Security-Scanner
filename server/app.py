@@ -54,6 +54,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import Scope
 
 from server import analytics, auth, crq, db, graph, ingest, queries, sapcontent
+from modules import platforms
 #: SESSION_COOKIE is imported but not USED here any more — the routes that set and
 #: cleared it were the Jinja form's sign-in and sign-out, and the SPA uses
 #: /api/auth/login and /api/auth/logout instead. It stays as a deliberate
@@ -752,6 +753,76 @@ def api_dashboard(user: Dict[str, Any] = Depends(current_user)):
 def api_systems(user: Dict[str, Any] = Depends(current_user)):
     """Systems in the caller's scope — the filter vocabulary for every screen."""
     return {"systems": queries.list_systems(auth.scope_for(user))}
+
+
+@app.post("/api/systems")
+def api_create_system(
+    landscape_id: int = Form(...),
+    platform: str = Form(platforms.ABAP),
+    sid: str = Form(""),
+    client: str = Form(""),
+    external_key: str = Form(""),
+    tier: str = Form("unknown"),
+    criticality: str = Form("medium"),
+    exposure_zone: str = Form("unknown"),
+    owner: str = Form(""),
+    user: Dict[str, Any] = Depends(require("admin")),
+):
+    """Register an ABAP system or a SaaS tenant. Decision D8.
+
+    THERE WAS NO WRITE PATH HERE AT ALL. `/api/systems` was GET-only and the sole
+    creator of a system row was `server/cli.py`, which meant a tenant could be
+    stored by the schema and created by nobody using the product. A console that
+    can filter by something it cannot create is a half-built feature.
+
+    ADMIN, NOT ANALYST. Registering a system defines what the estate IS, and
+    scoping is per-system: a non-admin's visible set is a list of system ids, so an
+    analyst creating a system would create something they then could not see. The
+    same reasoning that makes `scope_for` unrestricted for admins applies here.
+
+    ONE ROUTE FOR BOTH SHAPES, unlike the CLI's two commands. The CLI takes its
+    arguments positionally, where `add-system acme-sf-prod` would be ambiguous;
+    a form field is named, so `platform` disambiguates without a second route, and
+    the console's single "add system" dialog maps onto it directly.
+    """
+    if platform not in platforms.PLATFORMS:
+        raise HTTPException(
+            400, f"unknown platform {platform!r}. Known: "
+                 f"{', '.join(platforms.PLATFORMS)}")
+    if db.one("SELECT id FROM landscape WHERE id = %s", (landscape_id,)) is None:
+        raise HTTPException(404, f"no landscape with id {landscape_id}")
+
+    # Validate the SHAPE here as well as in the schema. sap_system_shape_check
+    # refuses these too, but a 500 carrying a constraint name is a poor way to
+    # tell somebody they left a field blank.
+    if platforms.is_tenant(platform):
+        if not external_key.strip():
+            raise HTTPException(
+                400, "a tenant needs an external key — it is what tells two "
+                     "tenants of the same platform apart, and without it their "
+                     "findings would collide into one")
+        if sid.strip() or client.strip():
+            raise HTTPException(
+                400, f"a {platform} tenant has no SID or client; supply "
+                     "external_key instead")
+    else:
+        if not sid.strip() or not client.strip():
+            raise HTTPException(400, "an ABAP system needs both a SID and a client")
+        if external_key.strip():
+            raise HTTPException(
+                400, "an ABAP system is identified by SID and client, not by an "
+                     "external key")
+
+    try:
+        row = queries.create_system(
+            landscape_id=landscape_id, platform=platform,
+            sid=sid.strip().upper() or None, client=client.strip() or None,
+            external_key=external_key.strip() or None, tier=tier,
+            criticality=criticality, exposure_zone=exposure_zone,
+            owner=owner.strip() or None, actor=user["username"])
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"system": row}
 
 
 @app.get("/api/landscapes")
