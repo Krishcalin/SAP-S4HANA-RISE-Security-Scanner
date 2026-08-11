@@ -1,0 +1,7 @@
+OBJECT,TYPE,REGISTERED,MOD_DATE,MODIFIED_BY,REASON
+SAPLSU01,PROG,,20210315,LWANG,Custom password validation logic
+SAPMSSY1,PROG,SAP Note 2345678,20230801,ADMIN,Patch for SSO integration
+SAPMHTTP,PROG,,20190601,FORMER_DEV,Custom HTTP handler modification
+SAPLAUTH,PROG,,20220115,LWANG,Modified authority check for custom object
+Z_EXIT_SAPMM06E_001,PROG,Enhancement,20240901,AGARCIA,MM enhancement for PO approval
+SAPLSTMS,PROG,,20200301,ADMIN,Transport route customization

@@ -32,6 +32,7 @@ the failure this file exists to prevent.
 """
 from __future__ import annotations
 
+import ast
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -102,9 +103,78 @@ RISE_UNREACHABLE_SOURCES: Set[str] = {
 }
 
 
+def _sources_via_helper(src: str) -> Set[str]:
+    """Logical sources reached through an accessor rather than read directly.
+
+    WHY THIS EXISTS. The regex above only sees `self.data.get("literal")`. Four
+    real auditors do not write it that way:
+
+        user_auth_audit    self.data.get(key)          # a helper's parameter
+        ecs_config_items   self.data.get(key)          # likewise
+        code_inventory_report  (self.data or {}).get("code_inventory")
+        abap_sast          self.data.get(self.SOURCE_KEY)   # a class constant
+
+    All four therefore had NO entry in the manifest at all — not "unknown", not
+    "skipped", simply absent — so a coverage report that exists to say what was
+    and was not covered said nothing whatsoever about the module that audits
+    users, profiles and roles. Found by the Phase 1 ECC measurement.
+
+    The approach: find methods whose body reads `self.data.get(<own parameter>)`,
+    then collect the string literals passed to those methods. That is precise —
+    it will not absorb an unrelated literal that merely happens to match a source
+    name, which would over-report requirements and make clean modules look
+    degraded.
+    """
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return set()
+
+    accessors: Set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        params = {a.arg for a in node.args.args[1:]}
+        if not params:
+            continue
+        for inner in ast.walk(node):
+            if (isinstance(inner, ast.Call)
+                    and isinstance(inner.func, ast.Attribute)
+                    and inner.func.attr == "get"
+                    and inner.args
+                    and isinstance(inner.args[0], ast.Name)
+                    and inner.args[0].id in params):
+                accessors.add(node.name)
+                break
+
+    found: Set[str] = set()
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in accessors
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)):
+            found.add(node.args[0].value)
+
+    # `(self.data or {}).get("literal")` and `self.data.get(self.CONST)`.
+    found |= set(re.findall(r'self\.data\s*or\s*\{\}\)\.get\(\s*["\']([a-z0-9_]+)["\']',
+                            src))
+    for const in re.findall(r'self\.data\.get\(\s*self\.([A-Z_][A-Z0-9_]*)\s*\)', src):
+        m = re.search(rf'^\s*{const}\s*[:=][^=]*?["\']([a-z0-9_]+)["\']', src, re.M)
+        if m:
+            found.add(m.group(1))
+    return found
+
+
 @lru_cache(maxsize=1)
 def module_sources() -> Dict[str, List[str]]:
-    """Map auditor module name -> the logical data sources it reads."""
+    """Map auditor module name -> the logical data sources it reads.
+
+    A module that reads NOTHING is reported with an empty list rather than being
+    left out of the mapping. Omission and "reads nothing" are different facts,
+    and `build_manifest` needs to be able to tell them apart in order to say so.
+    """
     out: Dict[str, List[str]] = {}
     for path in sorted(MODULES_DIR.glob("*.py")):
         if path.stem in _NOT_AN_AUDITOR:
@@ -113,9 +183,19 @@ def module_sources() -> Dict[str, List[str]]:
             src = path.read_text(encoding="utf-8")
         except OSError:
             continue
-        keys = sorted(set(_DATA_GET.findall(src)))
-        if keys:
-            out[path.stem] = keys
+        if "BaseAuditor" not in src:
+            continue                      # a helper module, not an auditor
+        keys = set(_DATA_GET.findall(src)) | _sources_via_helper(src)
+        # FILTERED AGAINST WHAT THE LOADER ACTUALLY KNOWS, and this is not
+        # belt-and-braces. The accessor analysis collects literals passed to a
+        # data-reading helper, and `user_auth_audit` passes "DDIC" — a standard
+        # SAP user name — to one of them. Unfiltered, that became a required
+        # "source" the customer could never supply, so the module would have read
+        # as permanently degraded. Over-reporting requirements is the more
+        # dangerous direction of error: it manufactures coverage gaps that are not
+        # real, and a manifest that cries wolf gets ignored.
+        keys &= set(all_logical_sources())
+        out[path.stem] = sorted(keys)
     return out
 
 
@@ -148,7 +228,15 @@ def build_manifest(data: Dict[str, Any],
     for mod, needs in module_sources().items():
         have = [s for s in needs if s in supplied_set]
         lack = [s for s in needs if s not in supplied_set]
-        if not have:
+        if not needs:
+            # NOT "skipped". A module with no file inputs did not fail to receive
+            # anything — `abap_sast` reads an unpacked abapGit directory supplied
+            # with --abap-src, which is not one of the loader's logical sources.
+            # Reporting it as skipped would tell a customer they had forgotten an
+            # export that does not exist, and would understate coverage by a
+            # module that may have run perfectly well.
+            status = "no_file_inputs"
+        elif not have:
             status = "skipped"
         elif lack:
             status = "degraded"

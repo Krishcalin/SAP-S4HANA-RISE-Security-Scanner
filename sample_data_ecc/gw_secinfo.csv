@@ -1,0 +1,6 @@
+RULE
+P TP=sapxpg HOST=* USER=*
+P TP=* HOST=10.0.1.50 USER=*
+P TP=* HOST=* USER=*
+P TP=SAPXPG HOST=internal.corp USER=ADMIN
+D TP=* HOST=external.* USER=*

@@ -1,0 +1,3 @@
+HOST,LINE
+*,HOST=* SERVICE=* 
+appsrv01.corp.example,HOST=appsrv01.corp.example

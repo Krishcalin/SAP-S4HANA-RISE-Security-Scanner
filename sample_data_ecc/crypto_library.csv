@@ -1,0 +1,3 @@
+LIBRARY,VERSION,PATCH_LEVEL,PATH
+CommonCryptoLib,8.5.48,300,/usr/sap/PRD/SYS/exe/uc/linuxx86_64/
+sapcryptolib,5.5.5c,,/usr/sap/PRD/SYS/exe/run/

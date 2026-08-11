@@ -1,0 +1,14 @@
+ICF_NAME,ICF_ACTIVE,AUTH_REQUIRED
+/sap/public/icman/ping,X,NO
+/sap/public/info,X,NO
+/sap/bc/soap/rfc,X,YES
+/sap/bc/srt/rfc/sap,X,YES
+/sap/bc/gui/sap/its/webgui,X,YES
+/sap/bc/webrfc,X,NO
+/sap/bc/bsp/sap/it00,X,YES
+/sap/opu/odata/sap/API_BUSINESS_PARTNER,X,YES
+/sap/opu/odata/sap/API_SALES_ORDER,X,YES
+/sap/bc/soap/wsdl,X,NO
+/sap/bc/webdynpro,X,YES
+/sap/public/icf_info/icr_groups,X,NO
+/default_host/sap/bc/ping,X,NO
