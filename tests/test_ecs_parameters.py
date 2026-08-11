@@ -578,8 +578,19 @@ def test_a_row_with_no_value_column_is_not_read_as_an_empty_value():
                   {"NAME": "rsau/enable", "PVALUE": "1"},
                   {"NAME": "service/admin_users", "PVALUE": "daaadm"}]
     findings = SecurityParamAuditor({"security_params": unreadable}, {}).run_all_checks()
-    assert ids(findings) == ["PARAM-MISSING"], \
-        "accused a parameter of being empty on the strength of a column we cannot read"
+    # The claim is "no ACCUSATION", not "exactly one finding". This asserted the
+    # literal list `["PARAM-MISSING"]` and so failed when PARAM-MISSING-OTHER was
+    # added — the roll-up that reports the 48 MEDIUM/LOW rules nobody mentioned
+    # when absent. That finding is a disclosure about the export, and its arrival
+    # is the fix working, not a regression. Pinning a whole result list makes a
+    # test fail on additions it does not care about, and tempts the next person to
+    # weaken the assertion rather than read it.
+    ROLLUPS = {"PARAM-000", "PARAM-MISSING", "PARAM-MISSING-OTHER"}
+    accusations = [i for i in ids(findings) if i not in ROLLUPS]
+    assert not accusations, \
+        f"accused a parameter on the strength of a column we cannot read: {accusations}"
+    assert "PARAM-MISSING" in ids(findings), \
+        "the unreadable export was not disclosed as a coverage gap either"
 
 
 def test_but_a_value_column_that_is_present_and_empty_is_still_an_answer():

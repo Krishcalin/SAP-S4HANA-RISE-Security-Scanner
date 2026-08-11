@@ -43,6 +43,78 @@ class BaseAuditor:
         self.findings: List[Dict[str, Any]] = []
 
     # ---------------------------------------------------------------- #
+    #  Reading a profile-parameter export                               #
+    # ---------------------------------------------------------------- #
+    #  ONE VOCABULARY, BECAUSE TWO PRODUCED A FALSE POSITIVE ON A COMPLIANT
+    #  SYSTEM.
+    #
+    #  `security_params` read VALUE / PARAM_VALUE / CURRENT_VALUE; its sibling
+    #  `baseline_params` read VALUE / PARAM_VALUE / VAL. An export spelling the
+    #  column CURRENT_VALUE — which the first module documents as a supported
+    #  spelling — was therefore fully readable by one and invisible to the other.
+    #
+    #  Worse, the second defaulted an unreadable value to "" instead of treating
+    #  the row as absent, and `check_protected_webmethods` reads empty as
+    #  non-compliant. Measured before the fix:
+    #
+    #      BaselineParamAuditor({'security_params':
+    #          [{'NAME': 'service/protectedwebmethods',
+    #            'CURRENT_VALUE': 'SDEFAULT'}]}).run_all_checks()
+    #      -> BASELINE-006 HIGH  'service/protectedwebmethods = '
+    #
+    #  SDEFAULT is the hardened value. That is a HIGH finding raised against a
+    #  correctly configured system, built entirely out of a column-spelling
+    #  mismatch — and CLAUDE.md's criterion is that a compliant system must be
+    #  silent.
+    #
+    #  The lesson was already learned once, in `security_params`, and written
+    #  into its docstring. It simply never crossed the file boundary. So the
+    #  implementation lives here now and both modules call it: a shared rule
+    #  cannot drift from itself.
+
+    #: Column spellings the various exports use for the parameter name.
+    PARAM_NAME_COLUMNS = ("NAME", "PARAMETER", "PARAM_NAME", "PARAM")
+
+    #: …and for its value. CURRENT_VALUE is RSPARAM's running-value spelling.
+    PARAM_VALUE_COLUMNS = ("VALUE", "PARAM_VALUE", "CURRENT_VALUE", "VAL")
+
+    @staticmethod
+    def param_lookup(params: Any) -> Dict[str, str]:
+        """parameter name (lowercased) -> exported value.
+
+        A ROW IS ONLY JUDGED WHEN IT ACTUALLY CARRIES A VALUE COLUMN. Defaulting a
+        missing one to "" reads "this export does not tell us" as "this parameter
+        is empty", and empty is a real finding for `gw/sec_info`, `ms/acl_info`
+        and `service/admin_users` — so an export using an unrecognised
+        value-column spelling would produce a page of confident accusations built
+        from nothing. Skipping instead leaves the parameter unverified, which the
+        coverage findings state honestly.
+
+        An empty value that IS present stays a real answer: `gw/sec_info` with
+        nothing after the comma is the unset ACL, and must keep firing.
+
+        Tolerates a non-list (an int, say): iterating it raised TypeError and took
+        the whole scan down with it.
+        """
+        lookup: Dict[str, str] = {}
+        if not isinstance(params, (list, tuple)):
+            return lookup
+        for row in params:
+            if not isinstance(row, dict):
+                continue
+            name = next((row[c] for c in BaseAuditor.PARAM_NAME_COLUMNS
+                         if row.get(c) is not None), "")
+            name = str(name or "").strip().lower()
+            if not name:
+                continue
+            value = next((row[c] for c in BaseAuditor.PARAM_VALUE_COLUMNS
+                          if row.get(c) is not None), None)
+            if value is None:
+                continue
+            lookup[name] = str(value)
+        return lookup
+
+    # ---------------------------------------------------------------- #
     #  Release gating                                                   #
     # ---------------------------------------------------------------- #
     #  THREE ANSWERS, AND CONFLATING ANY TWO IS THE DEFECT.

@@ -36,10 +36,59 @@ class BaselineParamAuditor(BaseAuditor):
 
     CATEGORY = "Security Baseline Parameters"
 
+    #: The parameters this module judges. Named here so the coverage finding can
+    #: list them: "twelve checks did not run" is not actionable, and a customer
+    #: cannot re-export what nobody names.
+    JUDGED_PARAMETERS = (
+        "auth/rfc_authority_check", "auth/no_check_in_some_cases",
+        "snc/accept_insecure_rfc", "snc/accept_insecure_gui",
+        "snc/accept_insecure_cpic", "snc/accept_insecure_r3int_rfc",
+        "sapgui/user_scripting", "login/password_downwards_compatibility",
+        "service/protectedwebmethods", "gw/acl_mode",
+        "login/ticket_only_by_https", "login/ticket_only_to_host",
+        "icf/set_HTTPonly_flag_on_cookies", "icm/security_log",
+        "is/HTTP/show_detailed_errors", "login/password_hash_algorithm",
+        "rfc/callback_security_method",
+        "login/password_compliance_to_current_policy",
+    )
+
     def run_all_checks(self) -> List[Dict[str, Any]]:
         self._params = self._param_index()
         if not self._params:
-            return self.findings  # no profile-parameter export → self-skip
+            # IT USED TO RETURN HERE IN SILENCE, and that is the failure this
+            # product exists to refuse. Twelve checks over eighteen parameters
+            # simply did not run, and nothing anywhere said so — while the
+            # sibling module reading the SAME file raises PARAM-000 for the same
+            # condition. One report, two doctrines, and the quieter one wins by
+            # producing no evidence of itself.
+            #
+            # Six of these eighteen are not covered by security_params'
+            # PARAM-MISSING roll-up either (four snc/accept_insecure_* are
+            # deliberately excluded from its rule set, and two more are MEDIUM or
+            # LOW so the roll-up skips them), so for those the silence was total.
+            self.finding(
+                check_id="BASELINE-000",
+                title="No profile parameter export — baseline parameters not assessed",
+                severity=self.SEVERITY_INFO,
+                category=self.CATEGORY,
+                description=(
+                    f"No profile parameter export was supplied, so none of the "
+                    f"{len(self.JUDGED_PARAMETERS)} parameters this module judges "
+                    f"could be read and no baseline check ran. This is a gap in "
+                    f"the evidence, not a verdict on the system: these settings "
+                    f"may be correct, incorrect or unset, and this scan cannot "
+                    f"tell. Its silence on them is not a pass."),
+                affected_items=list(self.JUDGED_PARAMETERS),
+                remediation=(
+                    "Run report RSPARAM and export the full parameter list "
+                    "without a name filter, saving it as security_params.csv "
+                    "with NAME and VALUE columns. Re-run the scan; these checks "
+                    "will then produce real verdicts."),
+                details={"degrades_coverage": True,
+                         "parameters_not_assessed": len(self.JUDGED_PARAMETERS)},
+                scope="aggregate",
+            )
+            return self.findings
         self.check_rfc_authority_check()
         self.check_no_check_in_some_cases()
         self.check_snc_accept_insecure()
@@ -56,15 +105,17 @@ class BaselineParamAuditor(BaseAuditor):
 
     # ------------------------------------------------------------------ helpers
     def _param_index(self) -> Dict[str, str]:
-        idx = {}
-        for row in (self.data.get("security_params") or []):
-            if not isinstance(row, dict):
-                continue
-            name = str(row.get("NAME", row.get("PARAMETER", row.get("PARAM", "")))).strip().lower()
-            value = str(row.get("VALUE", row.get("PARAM_VALUE", row.get("VAL", "")))).strip()
-            if name:
-                idx[name] = value
-        return idx
+        """The shared reader on BaseAuditor, deliberately not a local copy.
+
+        THIS METHOD USED TO BE ITS OWN IMPLEMENTATION AND THAT WAS THE BUG. It
+        read VALUE / PARAM_VALUE / VAL while `security_params` read VALUE /
+        PARAM_VALUE / CURRENT_VALUE, so an export spelled CURRENT_VALUE was
+        readable by one module and blank to this one — and because the blank was
+        stored as "" rather than skipped, `check_protected_webmethods` raised a
+        HIGH finding against a system whose value was SDEFAULT. A compliant system
+        must be silent; that one was accused.
+        """
+        return self.param_lookup(self.data.get("security_params"))
 
     def _p(self, name: str) -> Optional[str]:
         return self._params.get(name.lower())

@@ -1542,16 +1542,28 @@ class SecurityParamAuditor(BaseAuditor):
         # the note) were counted as missing. That failed the one criterion this
         # whole exercise is measured against: a compliant system must be silent.
         ecs = self._deployment_mode().startswith(ecs_baseline.ECS_MODE_PREFIX)
+        # The rest of the rule set, which this roll-up used to ignore entirely.
+        # MEASURED: of 78 effective rules, 4 are CRITICAL and 26 HIGH — so 48 were
+        # never mentioned when absent, by anything. On the shipped ECC fixture
+        # that is 34 parameters about which the report said precisely nothing,
+        # which reads exactly like 34 parameters that were checked and passed.
+        other_missing: List[str] = []
+        other_objects: List[Dict[str, Any]] = []
+
         for param_name, rule in self.effective_rules().items():
             if ecs and not ecs_baseline.is_mandated(param_name):
                 continue
+            if param_name.lower() in param_lookup:
+                continue
             if rule["severity"] in ("CRITICAL", "HIGH"):
-                if param_name.lower() not in param_lookup:
-                    critical_missing.append(f"{param_name} ({rule['category']})")
-                    # No qualifier: the parameter is absent, so there is no value to
-                    # pin — and the node must be the same `parameter_name` node the
-                    # PARAM-<name> checks produce once the parameter does appear.
-                    missing_objects.append({"type": "parameter_name", "name": param_name})
+                critical_missing.append(f"{param_name} ({rule['category']})")
+                # No qualifier: the parameter is absent, so there is no value to
+                # pin — and the node must be the same `parameter_name` node the
+                # PARAM-<name> checks produce once the parameter does appear.
+                missing_objects.append({"type": "parameter_name", "name": param_name})
+            else:
+                other_missing.append(f"{param_name} ({rule['category']})")
+                other_objects.append({"type": "parameter_name", "name": param_name})
 
         if critical_missing:
             self.finding(
@@ -1578,6 +1590,44 @@ class SecurityParamAuditor(BaseAuditor):
                 ),
             )
 
+        if other_missing:
+            # SEPARATE, AND AT INFO. Not folded into the roll-up above, because
+            # that one is HIGH and a HIGH finding is a call to action — these are
+            # the medium and low rules, and burying 34 of them inside a HIGH
+            # would either inflate the severity of the lot or bury the four
+            # CRITICAL members among them.
+            #
+            # INFO because this is a statement about the EXPORT, not a verdict on
+            # the system: these parameters may be correct, incorrect or unset and
+            # this scan cannot tell. `degrades_coverage` is what stops --gate
+            # returning green on a scan that could not see them.
+            self.finding(
+                check_id="PARAM-MISSING-OTHER",
+                title="Further security parameters not found in export",
+                severity=self.SEVERITY_INFO,
+                category="Security Parameters",
+                description=(
+                    f"{len(other_missing)} further parameter(s) this scanner "
+                    f"checks were not present in the exported data, so no verdict "
+                    f"was reached on any of them. They may be correctly "
+                    f"configured, misconfigured, or simply not set — the export "
+                    f"does not say, and neither does this report. Their absence "
+                    f"from the findings above is therefore not a pass."),
+                affected_items=other_missing,
+                # Same identity reasoning as the roll-up above: exporting one more
+                # parameter shrinks the list without closing the gap, so members
+                # stay out of identity and the finding keeps its age.
+                affected_objects=other_objects,
+                scope="aggregate",
+                details={"degrades_coverage": True,
+                         "parameters_not_assessed": len(other_missing)},
+                remediation=(
+                    "Run report RSPARAM and export the full parameter list "
+                    "without a name filter — RZ11 returns a single parameter at a "
+                    "time and will always leave gaps. Re-run the scan; these "
+                    "parameters will then be judged rather than listed."),
+            )
+
     # ------------------------------------------------------------------ helpers
 
     #: The column spellings the various exports use, in precedence order.
@@ -1586,40 +1636,11 @@ class SecurityParamAuditor(BaseAuditor):
 
     @staticmethod
     def _param_lookup(params: Any) -> Dict[str, str]:
-        """parameter name (lowercased) → exported value.
-
-        Tolerates the column spellings the various exports use, and rows that
-        carry none of them: a malformed row is skipped, never raised on.
-
-        A row is only judged when it actually CARRIES a value column. Defaulting a
-        missing one to "" reads "this export does not tell us" as "this parameter
-        is empty", and empty is a finding for `gw/sec_info`, `ms/acl_info` and
-        `service/admin_users` — so an export using an unrecognised value-column
-        spelling would produce a page of confident accusations built from nothing.
-        Skipping instead leaves the parameter unverified, where the PARAM-MISSING
-        roll-up says so honestly. An empty value that IS present stays a real
-        answer: `gw/sec_info` with nothing after the comma is the unset ACL, and
-        must keep firing.
-        """
-        lookup: Dict[str, str] = {}
-        # A non-list (an int, say) is not an export we can read. Iterating it
-        # raised TypeError and took down the whole scan with it.
-        if not isinstance(params, (list, tuple)):
-            return lookup
-        for row in params:
-            if not isinstance(row, dict):
-                continue
-            name = next((row[c] for c in SecurityParamAuditor._NAME_COLUMNS
-                         if row.get(c) is not None), "")
-            name = str(name or "").strip().lower()
-            if not name:
-                continue
-            value = next((row[c] for c in SecurityParamAuditor._VALUE_COLUMNS
-                          if row.get(c) is not None), None)
-            if value is None:
-                continue
-            lookup[name] = str(value)
-        return lookup
+        """Delegates to BaseAuditor.param_lookup, which is where this logic now
+        lives. It was correct here and absent from `baseline_params`, which read
+        the same file with a different column vocabulary and accused a compliant
+        system. A rule that must hold for two modules belongs to neither."""
+        return BaseAuditor.param_lookup(params)
 
     @staticmethod
     def _rule_passes(rule: Dict[str, Any], actual: str) -> bool:
@@ -1683,9 +1704,58 @@ class SecurityParamAuditor(BaseAuditor):
                 details["verification_caveat"] = rule["caveat"]
         return details
 
+    #: Every operator this evaluator understands. Anything else is a programming
+    #: error, and it must not be answered with a verdict.
+    _KNOWN_OPS = ("==", "!=", ">=", "<=", "contains", "in", "not_in")
+
     @staticmethod
     def _evaluate_rule(actual: str, expected: str, op: str) -> bool:
-        """Evaluate a parameter value against a rule."""
+        """Evaluate a parameter value against a rule.
+
+        ⚠️ IT USED TO END `return False`, AND FALSE MEANS "ACCUSE".
+
+        An operator this chain does not recognise fell through to `return False`,
+        which line 1495 reads as "does not pass" and turns into a finding. So a
+        rule carrying a typo'd or newly-invented `op` would fire on EVERY system
+        carrying that parameter — confidently, and with a real-looking severity.
+        Reproduced before the fix:
+
+            _rule_passes({"op": "range", "expected": "1 to 9"}, "5")  ->  False
+
+        Five is inside one-to-nine. The verdict came from the operator being
+        unknown, not from the value being wrong.
+
+        That contradicted the doctrine stated fifty lines above in this same file
+        — "`check is None` — No way to evaluate: stay silent rather than accuse",
+        with `except Exception: return True` beside it. The two halves of one
+        evaluator disagreed about which way to fail.
+
+        An unrecognised operator now raises. It is a defect in the rule table, not
+        a property of the customer's system, and it should surface where rules are
+        tested rather than as an accusation in somebody's report. The value-error
+        path keeps returning False deliberately: a non-numeric value under `>=` is
+        a genuine answer about the system — the parameter really is not a number
+        it can satisfy — and that is the one case where the wrong shape IS the
+        finding.
+        """
+        if op not in SecurityParamAuditor._KNOWN_OPS:
+            # SILENT, NOT AN ACCUSATION — and not an exception either.
+            #
+            # Raising was the first fix and it was worse. `_rule_passes` calls
+            # this outside any try/except, and the runner catches a raising module
+            # and skips it — so one typo'd operator would have cost the customer
+            # EVERY parameter finding, quietly. Trading a false positive for a
+            # silent total loss is not an improvement.
+            #
+            # True means "passes", i.e. no finding, which is exactly what this
+            # file already does fifty lines below for `check is None`: "No way to
+            # evaluate: stay silent rather than accuse."
+            #
+            # The programming error is caught where it belongs instead —
+            # tests/test_security_params_absence.py asserts every shipped rule
+            # uses a known operator, so this branch is unreachable in a released
+            # build and a new operator fails CI rather than a customer's report.
+            return True
         try:
             if op == "==":
                 return actual.strip() == expected.strip()
@@ -1702,5 +1772,7 @@ class SecurityParamAuditor(BaseAuditor):
             elif op == "not_in":
                 return actual.strip() not in [v.strip() for v in expected.split(",")]
         except (ValueError, TypeError):
+            # See the docstring: a value that cannot satisfy the comparison is a
+            # real answer about the system, not an evaluator failure.
             return False
         return False
