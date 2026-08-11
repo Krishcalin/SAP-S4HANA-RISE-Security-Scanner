@@ -390,10 +390,26 @@ def test_nothing_in_server_or_modules_imports_collect():
         "these import the connector tier into the product: " + ", ".join(offenders))
 
 
+@pytest.mark.skipif(not hasattr(sys, "stdlib_module_names"),
+                    reason="sys.stdlib_module_names is 3.10+; the purity CI job "
+                           "enforces this repository-wide on 3.12")
 def test_collect_is_stdlib_only():
     """Decision D4 allows this package its own requirements and it spends none.
     A connector tier with NO dependencies is a stronger position than one with
-    different ones — the customer running it installs nothing."""
+    different ones — the customer running it installs nothing.
+
+    ⚠️ THE SKIPIF IS NOT OPTIONAL, AND THIS FILE SHIPPED WITHOUT IT.
+    `sys.stdlib_module_names` did not exist before Python 3.10 and the `cli` job
+    runs a 3.8-3.12 matrix, so the first version of this test turned that job red
+    on 3.8 and 3.9 while passing on the three newer interpreters. That is the
+    identical failure `tests/test_resilience_posture.py` documents having caused
+    for months, reintroduced in a new file by not looking for the established
+    pattern first.
+
+    Skipping below 3.10 is honest rather than a workaround: the `purity` job walks
+    the same AST over all of collect/ on 3.12, so the guarantee holds either way
+    and this is only the fast local copy of it.
+    """
     import ast
     allowed = set(sys.stdlib_module_names) | {"collect"}
     for path in sorted((ROOT / "collect").glob("*.py")):
