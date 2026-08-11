@@ -652,6 +652,49 @@ CREATE TABLE IF NOT EXISTS auth_attempt (
 );
 
 -- ---------------------------------------------------------------------
+--  Constraint migrations
+-- ---------------------------------------------------------------------
+-- ⚠️ READ THIS BEFORE EDITING ANY `CHECK` LIST ABOVE. IT WILL NOT DO WHAT YOU
+-- THINK.
+--
+-- `CREATE TABLE IF NOT EXISTS` is a NO-OP on a table that already exists. It
+-- reports success and changes nothing. So editing a CHECK inside one of the
+-- CREATE statements above alters the constraint on a FRESH database and leaves
+-- every DEPLOYED database on the old rule — while CI, which builds from empty,
+-- goes green. Demonstrated on PostgreSQL 16:
+--
+--     CREATE TABLE IF NOT EXISTS demo (m text CHECK (m IN ('a','b')));
+--     CREATE TABLE IF NOT EXISTS demo (m text CHECK (m IN ('a','b','c')));
+--       NOTICE:  relation "demo" already exists, skipping
+--       CREATE TABLE                       <- reports success
+--     INSERT INTO demo VALUES ('c');
+--       ERROR:  violates check constraint "demo_m_check"   <- old rule still live
+--
+-- That matters because the next thing this schema needs is a wider vocabulary:
+-- new deployment modes for ECC, and a platform column for non-ABAP tenants. Both
+-- are CHECK-list changes, and both would have shipped as no-ops.
+--
+-- THE IDIOM. Any constraint whose value list is expected to grow is re-asserted
+-- HERE, by explicit name, as DROP IF EXISTS followed by ADD. That pair is
+-- idempotent, so it survives this file being re-run — which is the documented
+-- upgrade path — and it is the ONLY place such a list may be edited. Editing the
+-- copy inside the CREATE above and not here changes nothing on an upgrade;
+-- editing here and not above changes nothing on a fresh install. Change both.
+--
+-- If an ADD fails, that is the intended behaviour: existing rows violate the new
+-- rule and somebody must decide what happens to them. A migration that silently
+-- widens around bad data is how the data stops meaning anything.
+--
+-- `.github/workflows/tests.yml` has a `schema-upgrade` job that builds a database
+-- from the PREVIOUS commit's schema.sql, applies this one, and asserts the
+-- constraint actually moved. Without that job this section would be untested
+-- ceremony.
+
+ALTER TABLE landscape DROP CONSTRAINT IF EXISTS landscape_deployment_mode_check;
+ALTER TABLE landscape ADD CONSTRAINT landscape_deployment_mode_check
+    CHECK (deployment_mode IN ('on_prem', 'rise_pce', 'rise_tailored'));
+
+-- ---------------------------------------------------------------------
 --  Schema version
 -- ---------------------------------------------------------------------
 

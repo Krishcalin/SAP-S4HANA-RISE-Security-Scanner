@@ -108,6 +108,10 @@ class RunDiff:
     persisting: List[int] = field(default_factory=list)
     resolved: List[int] = field(default_factory=list)
     regressed: List[int] = field(default_factory=list)
+    #: Set when the run carried no system, so nothing could be resolved. STATED
+    #: rather than implied — the same discipline as the coverage manifest, which
+    #: exists because a silently partial result looks exactly like a clean one.
+    resolution_skipped: Optional[str] = None
 
     def as_counts(self) -> Dict[str, int]:
         return {"new": len(self.new), "persisting": len(self.persisting),
@@ -457,6 +461,27 @@ def store_run(conn: psycopg.Connection, run_id: int, landscape_id: int,
     # Anything open before and not observed now is resolved. Note this only
     # closes findings for the system this run covered — a partial upload must
     # never silently "resolve" a system it did not look at.
+    #
+    # ⚠️ AN UNSCOPED RUN CANNOT HONOUR THAT SENTENCE, WHICH IS THE DEFECT THIS
+    # GUARD CLOSES. `system_id` is optional on /api/upload, and the queries above
+    # scope with `system_id IS NOT DISTINCT FROM %s` — which, for NULL, matches
+    # every OTHER system-less finding in the landscape whatever produced it. So a
+    # BTP upload with no system marked an earlier Cloud ALM upload's findings
+    # resolved, and the next Cloud ALM upload reported them as REGRESSIONS: a
+    # remediation that never happened, followed by a re-breakage that never
+    # happened, written into the journey the whole product is sold on.
+    #
+    # There is no column today that says which platform an unscoped run covered,
+    # so the honest answer is to resolve nothing and say so. A missed resolution
+    # is visible — the finding simply stays open — whereas a wrong one destroys
+    # history silently. When runs carry a platform (see the coverage roadmap),
+    # this guard should narrow to that rather than disappear.
+    if system_id is None:
+        diff.resolution_skipped = (
+            "This upload was not attached to a system, so nothing was marked "
+            "resolved. Attach it to a system to track remediation across runs.")
+        return diff
+
     for fp, finding_id in previously_open.items():
         if fp in seen_now:
             continue

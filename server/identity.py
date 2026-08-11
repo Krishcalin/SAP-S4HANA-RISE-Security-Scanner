@@ -414,7 +414,34 @@ def fingerprint_finding(
     if scope not in ("object", "aggregate"):
         scope = "object" if len(objs) == 1 else ("aggregate" if len(objs) > 1 else "object")
 
-    eff_system = finding.get("system") or (objs[0].system if objs else None) or system
+    # THE MIRROR OF extract_nodes' CLOUD-SCOPE RULE — and it must stay a mirror.
+    #
+    # extract_nodes refuses to stamp the run's ABAP SID onto a cloud object; see
+    # _CLOUD_SCOPED_TYPES and the comment there. This function did NOT, so the two
+    # halves of finding identity disagreed with each other: the graph gave a BTP
+    # user one node key across every system, while the fingerprint gave the same
+    # user a different identity per SID. One BTP bundle uploaded against two ABAP
+    # systems therefore churned its entire finding set — new on one, resolved on
+    # the other — which is precisely what the mitigation journey exists to prevent.
+    #
+    # The asymmetry survived a conversion pass that was looking for exactly this,
+    # because the cloud-scope test existed only on the node side. There is now a
+    # fingerprint-side twin of it in tests/test_identity.py.
+    #
+    # THE `scope == "object"` QUALIFIER IS NOT INCIDENTAL. For an aggregate the
+    # subject is deliberately excluded from the fingerprint (see below), so the
+    # system is the ONLY thing distinguishing one system's aggregate from another's.
+    # Dropping it there would merge "23 dormant BTP users" across every system in
+    # the landscape into a single finding. A mixed finding — some cloud objects,
+    # some ABAP — keeps the SID too, because it genuinely is about that system.
+    cloud_only = (
+        scope == "object" and bool(objs)
+        and all(o.system is None and o.type in _CLOUD_SCOPED_TYPES for o in objs)
+    )
+
+    eff_system = finding.get("system") or (objs[0].system if objs else None)
+    if eff_system is None and not cloud_only:
+        eff_system = system
     eff_client = finding.get("client") or (objs[0].client if objs else None) or client
 
     return compute_fingerprint(

@@ -359,3 +359,81 @@ def test_transitions_require_a_reason_where_it_matters(database, landscape, syst
     out = queries.transition_finding(row["id"], "accepted", "tester",
                                      reason="compensating control in place")
     assert out["to"] == "accepted"
+
+
+# --------------------------------------------------------------------------- #
+#  An upload with no system attached                                          #
+# --------------------------------------------------------------------------- #
+
+def _store(database, landscape, findings, system_id=None):
+    """One run through store_run, bypassing the scanner so the findings are
+    exactly what the test says they are."""
+    from server import ingest
+    run = database.one(
+        "INSERT INTO scan_run (landscape_id, system_id, status) "
+        "VALUES (%s,%s,'complete') RETURNING id", (landscape, system_id))
+    with database.connection() as conn:
+        diff = ingest.store_run(conn, run["id"], landscape, system_id, findings)
+        conn.commit()
+    return diff
+
+
+CALM_FINDING = [{"check_id": "CALM-001", "severity": "HIGH", "title": "t",
+                 "scope": "object",
+                 "affected_objects": [{"type": "config_store",
+                                       "name": "ABAP_INSTANCE_PAHI"}]}]
+BTP_FINDING = [{"check_id": "BTP-DST-001", "severity": "HIGH", "title": "t",
+                "scope": "object",
+                "affected_objects": [{"type": "btp_user", "name": "a@b.com"}]}]
+
+
+def test_an_unscoped_upload_cannot_resolve_another_platforms_findings(
+        database, landscape):
+    """The defect: `system_id IS NOT DISTINCT FROM NULL` matches EVERY system-less
+    finding in the landscape, whatever produced it.
+
+    Before the guard, this exact sequence produced a remediation that never
+    happened followed by a re-breakage that never happened: the BTP upload marked
+    the Cloud ALM finding resolved, and the next Cloud ALM upload reported it as a
+    regression. Both are written into the mitigation journey the product is sold
+    on, and both are fiction.
+
+    `system_id` is optional on /api/upload, so this is reachable without doing
+    anything unusual.
+    """
+    first = _store(database, landscape, CALM_FINDING)
+    assert len(first.new) == 1
+    assert first.resolution_skipped, "an unscoped run must say it resolved nothing"
+
+    other_platform = _store(database, landscape, BTP_FINDING)
+    assert len(other_platform.new) == 1
+    assert other_platform.resolved == [], \
+        "a BTP upload resolved another platform's findings"
+
+    again = _store(database, landscape, CALM_FINDING)
+    assert len(again.persisting) == 1
+    assert again.resolved == []
+    assert again.regressed == [], "a finding regressed that was never resolved"
+
+    states = {r["check_id"]: r for r in database.query(
+        "SELECT check_id, state, regression_count FROM finding "
+        "WHERE landscape_id = %s", (landscape,))}
+    assert states["CALM-001"]["state"] == "open"
+    assert states["BTP-DST-001"]["state"] == "open"
+    assert states["CALM-001"]["regression_count"] == 0
+
+
+def test_a_scoped_upload_still_resolves_normally(database, landscape, system):
+    """The guard must not cost the behaviour it protects. With a system attached,
+    a finding that stops being observed is still resolved — that is the whole
+    definition of resolved in this product."""
+    first = _store(database, landscape, CALM_FINDING, system_id=system)
+    assert len(first.new) == 1
+    assert first.resolution_skipped is None
+
+    gone = _store(database, landscape, [], system_id=system)
+    assert len(gone.resolved) == 1, "a scoped run stopped resolving"
+
+    row = database.one("SELECT state FROM finding WHERE landscape_id = %s",
+                       (landscape,))
+    assert row["state"] == "resolved"

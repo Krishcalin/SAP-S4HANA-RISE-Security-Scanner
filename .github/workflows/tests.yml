@@ -1,3 +1,9 @@
+# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
+#
+# Author : Krishnendu De
+# Coding Assistance : Claude Code
+# Code Security Assistance : Code QL
+
 name: tests
 
 on:
@@ -235,6 +241,164 @@ jobs:
       - run: pip install --quiet Pillow
       - name: Re-derive the brand assets and compare
         run: python tools/build_brand_assets.py --check
+
+  # ------------------------------------------------------------------ #
+  #  Schema upgrade — the documented upgrade path, actually exercised   #
+  # ------------------------------------------------------------------ #
+  # The `server` job applies schema.sql TWICE, which proves IDEMPOTENCY and not
+  # UPGRADE. Those are different properties and the gap between them hid a real
+  # defect: `CREATE TABLE IF NOT EXISTS` is a no-op on an existing table, so a
+  # changed CHECK list altered a fresh database, left every deployed one on the
+  # old rule, and passed CI green because CI always built from empty.
+  #
+  # This job builds a database from the PREVIOUS commit's schema.sql — a real
+  # "already deployed" starting point — then applies the current one and asserts
+  # the constraint moved. It is the only job that can fail on a migration that
+  # was written but does nothing.
+  schema-upgrade:
+    name: schema upgrades an existing database
+    runs-on: ubuntu-22.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sapsec
+          POSTGRES_PASSWORD: sapsec
+          POSTGRES_DB: sapsec
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sapsec -d sapsec"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    # Not a secret, and a scanner will say otherwise. This credential belongs to
+    # a service container that exists only for the life of this job, is reachable
+    # only from it, holds nothing but a throwaway schema, and is destroyed with
+    # the runner. It matches the `server` job below deliberately — two spellings
+    # of a disposable CI password is worse than one. A real secret would come
+    # from `secrets.`, and none of this repository's jobs needs one.
+    env:
+      PGPASSWORD: sapsec
+      DSN: postgresql://sapsec:sapsec@localhost:5432/sapsec
+
+    steps:
+      # Depth 2 so HEAD~1 exists. A shallow clone would make the previous
+      # schema unreachable and the job would silently degrade to a fresh install.
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 2 }
+
+      - name: Recover the PREVIOUS schema.sql
+        run: |
+          set -euo pipefail
+          if git rev-parse HEAD~1 >/dev/null 2>&1 \
+             && git cat-file -e HEAD~1:server/schema.sql 2>/dev/null; then
+            git show HEAD~1:server/schema.sql > /tmp/previous.sql
+            echo "using HEAD~1's schema as the deployed starting point"
+          else
+            cp server/schema.sql /tmp/previous.sql
+            echo "::notice::no previous schema reachable; upgrading from the current one"
+          fi
+
+      - name: Build a database from the PREVIOUS schema
+        run: psql "$DSN" -v ON_ERROR_STOP=1 -q -f /tmp/previous.sql
+
+      # Data first: a migration that only works on an empty table is not a
+      # migration. If widening a constraint ever has to rewrite rows, this is
+      # where the job starts failing and asking somebody to decide.
+      - name: Put a row in it
+        run: |
+          psql "$DSN" -v ON_ERROR_STOP=1 -c \
+            "INSERT INTO landscape (name, deployment_mode) VALUES ('upgrade-probe','on_prem');"
+
+      - name: Apply the CURRENT schema over it, then twice more
+        run: |
+          set -euo pipefail
+          for i in 1 2 3; do
+            psql "$DSN" -v ON_ERROR_STOP=1 -q -f server/schema.sql
+            echo "  application $i ok"
+          done
+
+      - name: The row survived
+        run: |
+          psql "$DSN" -v ON_ERROR_STOP=1 -tAc \
+            "SELECT count(*) FROM landscape WHERE name = 'upgrade-probe';" | grep -qx 1 \
+            || { echo "::error::the upgrade destroyed existing data"; exit 1; }
+
+      # THE ASSERTION THAT MAKES THIS JOB WORTH HAVING. Compare the constraint
+      # LIVE IN THE DATABASE against the one this commit's schema.sql declares.
+      # A CHECK edited only inside a CREATE TABLE IF NOT EXISTS fails here.
+      # ⚠️ THIS STEP FAILS CLOSED, AND THE FIRST DRAFT DID NOT.
+      # It was two `grep -oP` pipelines compared with `[ "$a" = "$b" ]`. When the
+      # extraction returned nothing — a locale without PCRE, a renamed constraint,
+      # a reworded CHECK — both sides were empty, empty equalled empty, and the
+      # step reported success having compared nothing. That is precisely the
+      # defect this job exists to catch, reproduced inside the job itself. Both
+      # sides are now asserted non-empty before they are compared, and the
+      # extraction is Python rather than a locale-dependent grep.
+      - name: The constraint actually moved
+        run: |
+          python - <<'PY'
+          import os, re, subprocess, sys
+
+          sql = open("server/schema.sql", encoding="utf-8").read()
+          declared = re.findall(
+              r"deployment_mode\s+IN\s*\(([^)]*)\)", sql, re.IGNORECASE)
+          if len(declared) < 2:
+              sys.exit(f"::error::expected the deployment_mode CHECK in BOTH the "
+                       f"CREATE TABLE and the constraint-migrations section, found "
+                       f"{len(declared)}. This assertion has stopped checking.")
+
+          live_raw = subprocess.run(
+              ["psql", os.environ["DSN"], "-tAc",
+               "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+               "WHERE conname = 'landscape_deployment_mode_check'"],
+              capture_output=True, text=True, check=True).stdout.strip()
+          if not live_raw:
+              sys.exit("::error::no constraint named landscape_deployment_mode_check "
+                       "exists in the upgraded database - the migration in the "
+                       "constraint-migrations section did not run")
+
+          # PostgreSQL does NOT store `IN (...)`. It normalises it to
+          #   CHECK ((col = ANY (ARRAY['a'::text, 'b'::text])))
+          # so parsing the live side for "IN (" finds nothing and — before the
+          # non-empty assertions below — compared nothing against nothing.
+          # Pull the quoted literals from either shape instead.
+          def values(text):
+              return sorted(re.findall(r"'([^']*)'", text))
+
+          # THREE-WAY, and it has to be. Comparing only the LAST declaration —
+          # the migration block — against the database proves the migration ran
+          # and says nothing about whether it agrees with the CREATE TABLE above
+          # it. Editing only the CREATE is exactly the mistake this job exists to
+          # catch, and a two-way check passes it: the migration and the database
+          # still agree with each other, both on the old list. Every declaration
+          # in the file and the live constraint must be the same set.
+          lists = [values(d) for d in declared]
+          have = values(live_raw)
+
+          for i, v in enumerate(lists):
+              print(f"declared #{i + 1} in schema.sql : {v}")
+          print(f"live in the database        : {have}")
+
+          assert all(lists), "a declared value list parsed as empty"
+          assert have, "the live value list parsed as empty"
+
+          if len({tuple(v) for v in lists}) != 1:
+              print("::error::the deployment_mode CHECK is declared more than one "
+                    "way inside schema.sql. The copy in CREATE TABLE governs fresh "
+                    "installs and the copy in the constraint-migrations section "
+                    "governs upgrades - an installation gets whichever one it was "
+                    "born under. Change both.")
+              sys.exit(1)
+
+          if lists[0] != have:
+              print("::error::the deployment_mode CHECK in the database does not "
+                    "match schema.sql. A CHECK edited inside CREATE TABLE IF NOT "
+                    "EXISTS is a no-op on an existing database - add a DROP/ADD "
+                    "pair to the constraint-migrations section at the end of "
+                    "schema.sql.")
+              sys.exit(1)
+          print("the constraint matches what this commit declares, on both sites")
+          PY
 
   # ------------------------------------------------------------------ #
   #  Server — needs a real PostgreSQL                                  #

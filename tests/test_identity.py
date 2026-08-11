@@ -404,6 +404,124 @@ def test_cloud_objects_are_not_stamped_with_the_abap_sid():
                    for k in keys), "a cloud object was filed under the ABAP SID"
 
 
+# --------------------------------------------------------------------------- #
+#  The fingerprint-side twin of the rule above.                               #
+#                                                                             #
+#  THE ONE ABOVE EXISTED ALONE FOR MONTHS, AND THAT IS WHY THE BUG SURVIVED.  #
+#  The cloud-scope exemption was applied to `extract_nodes` and not to        #
+#  `fingerprint_finding`, so the graph gave a BTP user ONE node key across     #
+#  every system while identity gave the same user a DIFFERENT fingerprint per  #
+#  SID. One bundle uploaded against two ABAP systems churned its whole BTP     #
+#  finding set — new on one, resolved on the other. A conversion pass looking  #
+#  for exactly this class of defect missed it, because only half of the        #
+#  contract was ever asserted. Both halves are asserted now; if you add a rule #
+#  to one side, add its twin here.                                            #
+# --------------------------------------------------------------------------- #
+
+def test_a_cloud_finding_has_one_identity_across_abap_systems():
+    """The defect, stated as the property it broke.
+
+    The same BTP bundle uploaded against PRD and against QAS must describe the
+    SAME finding. Anything else and the mitigation journey reports a resolution
+    and a regression that never happened.
+    """
+    finding = {
+        "check_id": "BTP-DST-001",
+        "scope": "object",
+        "affected_objects": [{"type": "btp_user", "name": "jsmith@company.com"}],
+    }
+    prd, _basis = fingerprint_finding(finding, system="PRD", client="100")
+    qas, _basis2 = fingerprint_finding(finding, system="QAS", client="100")
+    assert prd == qas, "a cloud finding took its identity from the ABAP SID"
+
+    # ...and it agrees with the node side, which is the whole point of the twin.
+    keys_prd = {n["key"] for n in extract_nodes([finding], default_system="PRD")}
+    keys_qas = {n["key"] for n in extract_nodes([finding], default_system="QAS")}
+    assert keys_prd == keys_qas
+
+
+def test_an_abap_finding_still_takes_its_identity_from_the_system():
+    """The exemption must not leak. Two systems with the same defect are two
+    findings, and collapsing them would hide one of them entirely."""
+    finding = {
+        "check_id": "USR-001",
+        "scope": "object",
+        "affected_objects": [{"type": "user", "name": "DDIC"}],
+    }
+    prd, _ = fingerprint_finding(finding, system="PRD", client="100")
+    qas, _ = fingerprint_finding(finding, system="QAS", client="100")
+    assert prd != qas
+
+
+def test_a_mixed_finding_keeps_the_system_it_is_about():
+    """A finding naming both a BTP user and an ABAP user genuinely concerns that
+    ABAP system — the cross-system identity checks are exactly this shape."""
+    finding = {
+        "check_id": "IAM-XID-003",
+        "scope": "object",
+        "affected_objects": [{"type": "btp_user", "name": "a@b.com"},
+                             {"type": "user", "name": "JSMITH"}],
+    }
+    prd, _ = fingerprint_finding(finding, system="PRD", client="100")
+    qas, _ = fingerprint_finding(finding, system="QAS", client="100")
+    assert prd != qas
+
+
+def test_a_cloud_AGGREGATE_stays_system_scoped():
+    """The qualifier that stops the fix going too far.
+
+    An aggregate deliberately excludes its members from the fingerprint, so the
+    system is the ONLY thing separating one system's summary from another's.
+    Exempting aggregates too would merge "N dormant BTP users" across every
+    system in the landscape into one finding, and dismissing it once would
+    dismiss it everywhere.
+    """
+    finding = {
+        "check_id": "BTP-USR-009",
+        "scope": "aggregate",
+        "affected_objects": [{"type": "btp_user", "name": "a@b.com"},
+                             {"type": "btp_user", "name": "c@d.com"}],
+    }
+    prd, _ = fingerprint_finding(finding, system="PRD", client="100")
+    qas, _ = fingerprint_finding(finding, system="QAS", client="100")
+    assert prd != qas
+
+
+def test_a_cloud_object_that_names_its_own_system_keeps_it_in_the_fingerprint():
+    """Mirrors test_a_cloud_object_keeps_a_system_it_names_itself on the node side:
+    the exemption is about not BORROWING the ABAP SID, never about discarding a
+    system the object states for itself."""
+    finding = {
+        "check_id": "BTP-DST-002",
+        "scope": "object",
+        "affected_objects": [{"type": "subaccount", "name": "acme", "system": "TEN1"}],
+    }
+    prd, _ = fingerprint_finding(finding, system="PRD", client="100")
+    qas, _ = fingerprint_finding(finding, system="QAS", client="100")
+    assert prd == qas, "the object's own system should decide, not the run's"
+
+
+def test_every_cloud_scoped_type_is_exempt_on_BOTH_sides():
+    """The structural guard against this ever splitting again.
+
+    Enumerates _CLOUD_SCOPED_TYPES and asserts, per type, that the node key and the
+    fingerprint are both independent of the run's SID. A type added to the set but
+    handled on only one side fails here rather than in a customer's journey.
+    """
+    from server.identity import _CLOUD_SCOPED_TYPES
+
+    for ctype in sorted(_CLOUD_SCOPED_TYPES):
+        finding = {"check_id": "X-001", "scope": "object",
+                   "affected_objects": [{"type": ctype, "name": "thing"}]}
+        prd, _ = fingerprint_finding(finding, system="PRD", client="100")
+        qas, _ = fingerprint_finding(finding, system="QAS", client="100")
+        assert prd == qas, f"{ctype} takes its fingerprint from the ABAP SID"
+
+        kp = {n["key"] for n in extract_nodes([finding], default_system="PRD")}
+        kq = {n["key"] for n in extract_nodes([finding], default_system="QAS")}
+        assert kp == kq, f"{ctype} takes its node key from the ABAP SID"
+
+
 def test_a_btp_identity_and_an_abap_user_of_the_same_name_are_different_nodes():
     """Different principals reached by different means. Merging them would hide the
     on-prem/BTP crossing that the cloud-to-on-prem attack path exists to show — the
