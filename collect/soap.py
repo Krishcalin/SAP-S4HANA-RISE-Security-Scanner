@@ -28,6 +28,8 @@ import ssl
 import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional
+
+from collect import web
 from xml.etree import ElementTree as ET
 
 #: sapstartsrv answers SOAP 1.1 in this namespace. Confirmed against the WSDL the
@@ -56,22 +58,9 @@ class RefusedOperation(RuntimeError):
     """
 
 
-def _tls_context(*, verify: bool, ca_file: Optional[str]) -> ssl.SSLContext:
-    """A TLS context that verifies by default.
-
-    `verify=False` exists because a great many SAP instances present a
-    self-signed certificate and refusing outright would mean the collector simply
-    could not be used on them. It is opt-in, it is never the default, and every
-    run that uses it records the fact in its manifest — an unverified connection
-    is a caveat on the evidence, not a detail of the plumbing.
-    """
-    if not verify:
-        ctx = ssl._create_unverified_context()      # noqa: S323 — see docstring
-        return ctx
-    ctx = ssl.create_default_context(cafile=ca_file)
-    ctx.check_hostname = True
-    ctx.verify_mode = ssl.CERT_REQUIRED
-    return ctx
+#: One TLS policy for the whole package, in collect/web.py. Two copies would
+#: drift, and the copy that drifted would be the one that stopped verifying.
+_tls_context = web.tls_context
 
 
 class Endpoint:

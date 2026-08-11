@@ -103,80 +103,169 @@ def write_processes(out_dir: Path, processes: Sequence[Mapping[str, Any]]) -> in
                       [[row.get(k, "") for k in keys] for row in processes])
 
 
+READ_THIS = (
+    "This directory was produced by connected collection and is NOT a complete "
+    "export. The sources listed under 'not_reachable' live inside the ABAP stack "
+    "and are reachable over RFC or by an interactive export only; this product "
+    "declines RFC (decision D3), so on this estate they remain export-only. "
+    "Treat every check that depends on an uncollected source as UNKNOWN, never "
+    "as clean.")
+
+
+#: What an ICF probe CANNOT obtain. Longer than the sapcontrol list because this
+#: interface reaches a narrower thing: it observes which endpoints answer, and
+#: nothing about what lives behind them.
+#:
+#: `users`, `roles`, `profiles` and `auth_objects` are first in the list on
+#: purpose. This connector was scoped as "the one that gets users and roles" and
+#: it does not — there is no standard pre-built OData service on ECC exposing
+#: USR02 or AGR_USERS, and Gateway exposes only what an administrator activated.
+#: Recording that where a reader will actually meet it is worth more than a note
+#: in a design document.
+ICF_CANNOT_REACH: Sequence[str] = (
+    "users", "profiles", "roles", "role_profiles", "auth_objects",
+    "role_auth_values", "change_documents", "table_auth_groups",
+    "rfc_destinations", "audit_log_config", "standard_users", "gateway_acl",
+    "security_params", "background_jobs", "transport_routes", "client_settings",
+)
+
+
+def write_icf_services(out_dir: Path, rows: Sequence[Mapping[str, Any]]) -> int:
+    """`icf_services.csv` — ICF_NAME, ICF_ACTIVE, AUTH_REQUIRED.
+
+    The loader's own column names, so the file is indistinguishable from an SICF
+    export. The two extra columns this connector can supply — the HTTP status it
+    actually observed, and why the path is on the list — are written AFTER them:
+    csv.DictReader ignores columns it was not asked for, so they cost the loader
+    nothing and give a human opening the file the evidence behind each row.
+    """
+    if not rows:
+        return 0
+    header = ("ICF_NAME", "ICF_ACTIVE", "AUTH_REQUIRED", "OBSERVED_STATUS",
+              "WHY_IT_MATTERS")
+    return _write_csv(out_dir / "icf_services.csv", header,
+                      [[r.get(k, "") for k in header] for r in rows])
+
+
+def write_api_endpoints(out_dir: Path,
+                        endpoints: Sequence[Mapping[str, Any]]) -> int:
+    """`api_endpoints.json`, in the shape the loader reads.
+
+    Not written when the catalogue could not be read. An empty endpoint list
+    would be read as "this system exposes no APIs", which is a far stronger claim
+    than "we could not reach the catalogue" — and the wrong one to make about a
+    system that may simply have no Gateway.
+    """
+    if not endpoints:
+        return 0
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "api_endpoints.json").write_text(
+        json.dumps({"endpoints": list(endpoints)}, indent=2) + "\n",
+        encoding="utf-8")
+    return len(endpoints)
+
+
 def write_manifest(out_dir: Path, *, source: str, endpoint: str,
                    collected_at: str, wrote: Mapping[str, int],
                    attempts: Sequence[Mapping[str, Any]],
                    unavailable: Sequence[str] = (),
                    cannot_reach: Sequence[str] = SAPCONTROL_CANNOT_REACH,
                    tls_verified: bool = True,
+                   caveats: Sequence[str] = (),
                    posture: Optional[Mapping[str, Any]] = None) -> Path:
-    """State what this run got, what it did not, and under what conditions.
+    """Record what one collector got, what it did not, and under what conditions.
 
-    WHY `cannot_reach` IS A CONSTANT AND NOT A COMPUTED DIFFERENCE. Computing it
-    as "everything the loader knows, minus what we wrote" would silently absorb a
-    future logical source into the not-reachable list the moment somebody added
-    one — turning a new coverage gap into a documented limitation without anyone
-    deciding that. It is written down, so widening it is a choice.
+    IT ACCUMULATES RATHER THAN OVERWRITES. Two collectors run into one directory —
+    that is the intended workflow, since `sapcontrol` and `icf` reach different
+    things — and a manifest that replaced its predecessor would leave a directory
+    whose data came from two collections and whose record described one. The
+    reader would have no way to know that, which is precisely the ambiguity this
+    file exists to remove.
 
-    `partial` is always true for a connected collection, and it is not a field
-    anybody should be able to set. A connected run is partial by construction.
+    WHY `cannot_reach` IS PASSED IN AND NOT COMPUTED. Deriving it as "everything
+    the loader knows, minus what we wrote" would silently absorb a future logical
+    source into the not-reachable list the moment somebody added one — turning a
+    new coverage gap into a documented limitation without anyone deciding that.
+    Each collector states its own, so widening it is a choice.
+
+    `partial` is always true and is not a field a caller can set. A connected
+    collection is partial by construction, not by circumstance.
     """
-    failed = [a for a in attempts if not a.get("ok")]
-    manifest = {
-        "schema": 1,
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "collection_manifest.json"
+
+    existing: Dict[str, Any] = {}
+    if path.is_file():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            # A corrupt manifest must not take the collection down, but it must
+            # not be silently discarded either.
+            existing = {"unreadable_previous_manifest": True}
+    collections: List[Dict[str, Any]] = list(existing.get("collections") or [])
+
+    collections.append({
         "source": source,
         "endpoint": endpoint,
         "collected_at": collected_at,
         "tls_verified": tls_verified,
-        # ALWAYS TRUE. See the docstring — this is a statement about the interface,
-        # not about how this particular run went.
-        "partial": True,
         "files_written": {name: n for name, n in sorted(wrote.items()) if n},
         "operations_attempted": list(attempts),
-        "operations_failed": failed,
+        "operations_failed": [a for a in attempts if not a.get("ok")],
         "advertised_but_unavailable": list(unavailable),
-        "not_reachable_over_this_interface": list(cannot_reach),
+        "not_reachable": list(cannot_reach),
+        "caveats": list(caveats),
         "endpoint_posture": dict(posture or {}),
-        "read_this": (
-            "This directory was produced by a connected collection and is NOT a "
-            "complete export. The sources listed under "
-            "'not_reachable_over_this_interface' live inside the ABAP stack and "
-            "are reachable over RFC or by an interactive export only; this "
-            "product declines RFC (decision D3), so on this estate they remain "
-            "export-only. Scan results from this directory alone describe the "
-            "instance's profile parameters and nothing else. Treat every check "
-            "that depends on an unlisted source as UNKNOWN, never as clean."),
+    })
+
+    manifest = {
+        "schema": 2,
+        # ALWAYS TRUE — a statement about the interfaces, not about how a
+        # particular run went.
+        "partial": True,
+        "read_this": READ_THIS,
+        "collections": collections,
     }
-    out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / "collection_manifest.json"
+    if existing.get("unreadable_previous_manifest"):
+        manifest["unreadable_previous_manifest"] = True
     path.write_text(json.dumps(manifest, indent=2, sort_keys=False) + "\n",
                     encoding="utf-8")
     return path
 
 
 def summarise(manifest_path: Path) -> str:
-    """A human-readable summary, for the console the operator is looking at."""
+    """A human-readable summary of the LAST collection recorded."""
     m = json.loads(manifest_path.read_text(encoding="utf-8"))
+    collections = m.get("collections") or []
+    if not collections:
+        return "  nothing was recorded"
+    c = collections[-1]
+
     lines: List[str] = []
-    files = m.get("files_written") or {}
+    files = c.get("files_written") or {}
     if files:
         for name, n in files.items():
             lines.append(f"  wrote {name} ({n} row(s))")
     else:
         lines.append("  wrote NOTHING — no operation returned usable data")
-    for a in m.get("operations_failed") or []:
+    for a in c.get("operations_failed") or []:
         lines.append(f"  FAILED {a['operation']}: {a.get('error', '')[:140]}")
-    if m.get("advertised_but_unavailable"):
+    if c.get("advertised_but_unavailable"):
         lines.append("  not offered by this instance: "
-                     + ", ".join(m["advertised_but_unavailable"]))
-    posture = m.get("endpoint_posture") or {}
+                     + ", ".join(c["advertised_but_unavailable"]))
+    for caveat in c.get("caveats") or []:
+        lines.append(f"  NOTE: {caveat}")
+    posture = c.get("endpoint_posture") or {}
     if posture.get("unauthenticated_read") is True:
         lines.append("  ATTENTION: this endpoint answered a read with NO "
                      "credentials — see service/protectedwebmethods")
-    if not m.get("tls_verified", True):
+    if not c.get("tls_verified", True):
         lines.append("  ATTENTION: TLS certificate verification was DISABLED for "
                      "this collection")
-    lines.append(f"  {len(m.get('not_reachable_over_this_interface') or [])} "
-                 f"logical source(s) are NOT reachable over this interface and "
-                 f"remain export-only — see collection_manifest.json")
+    lines.append(f"  {len(c.get('not_reachable') or [])} logical source(s) are "
+                 f"NOT reachable over this interface and remain export-only")
+    if len(collections) > 1:
+        lines.append(f"  ({len(collections)} collections recorded in this "
+                     f"directory: "
+                     f"{', '.join(x.get('source', '?') for x in collections)})")
     return "\n".join(lines)

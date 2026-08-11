@@ -327,8 +327,9 @@ def test_the_manifest_states_what_was_not_collected(tmp_path):
                                                      "ok": True}])
     m = json.loads(path.read_text(encoding="utf-8"))
     assert m["partial"] is True
-    assert "users" in m["not_reachable_over_this_interface"]
-    assert "roles" in m["not_reachable_over_this_interface"]
+    c = m["collections"][-1]
+    assert "users" in c["not_reachable"]
+    assert "roles" in c["not_reachable"]
     assert "UNKNOWN, never as clean" in m["read_this"]
 
 
@@ -349,7 +350,7 @@ def test_disabled_tls_verification_is_recorded_not_merely_printed(tmp_path):
         tmp_path, source="sapcontrol", endpoint="e", collected_at="t",
         wrote={}, attempts=[], tls_verified=False)
     m = json.loads(path.read_text(encoding="utf-8"))
-    assert m["tls_verified"] is False
+    assert m["collections"][-1]["tls_verified"] is False
     assert "TLS certificate verification was DISABLED" in extract.summarise(path)
 
 

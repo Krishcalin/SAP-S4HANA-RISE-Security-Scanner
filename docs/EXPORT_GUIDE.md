@@ -579,29 +579,67 @@ did. That is the whole design, and it is why connected mode inherits every test
 the offline path already has.
 
 ```bash
-# 1. Collect. Read-only, out of process, no SDK, no dependencies.
+# 1a. Profile parameters, from the instance's SAP start service.
 python -m collect sapcontrol --host ecc-prod.example.com --instance 00 \
                              --user SAPADM --out ./extract
 
-# 2. Scan what it wrote, exactly as if you had exported it by hand.
+# 1b. The ICF surface — which endpoints are active and which are UNAUTHENTICATED.
+python -m collect icf --host ecc-prod.example.com --user SAPADM --out ./extract
+
+# 2. Scan what they wrote, exactly as if you had exported it by hand.
 python sap_scanner.py --data-dir ./extract
 ```
 
-### What it collects, and what it cannot
+Both collectors write into the same directory and both are recorded in
+`collection_manifest.json` — the manifest accumulates rather than being replaced,
+so a directory built from two collections has a record describing two.
 
-It speaks to **sapstartsrv**, the SAP start service, over its SOAP interface on
-port `5<NN>14` (HTTPS) or `5<NN>13` (HTTP) — so instance `00` is `50014`/`50013`.
-No SAP SDK is involved and no ABAP-side component is installed.
+### The two collectors
 
-| | |
+**`sapcontrol`** speaks to the SAP start service over its SOAP interface on port
+`5<NN>14` (HTTPS) or `5<NN>13` (HTTP) — instance `00` is `50014`/`50013`. No SAP
+SDK is involved and no ABAP-side component is installed.
+
+**`icf`** probes a short, fixed list of documented ICF paths over HTTP(S) and, if
+you supply credentials, reads the SAP Gateway OData catalogue.
+
+| | collects | cannot collect |
+|---|---|---|
+| `sapcontrol` | `security_params.csv` — the instance's profile parameters, the input for the Security Parameters and Baseline modules. Plus instance topology and the process list. | 14 logical sources |
+| `icf` | `icf_services.csv` — which endpoints are active and **which answer with no authentication at all**. Plus `api_endpoints.json` from the Gateway catalogue. | 16 logical sources |
+
+**Neither reaches users, roles, profiles or authorisations.** There is no
+standard, pre-built OData service on ECC exposing `USR02` or `AGR_USERS`, and
+Gateway exposes only the services an administrator has activated. Those sources
+live inside the ABAP stack, are reachable over RFC or by an interactive export,
+and this product declines RFC (decision D3). **A connected collection is partial
+by construction** — the export sections above are still how you get the rest.
+
+### The ICF probe is deliberately anonymous
+
+Every ICF request is sent **without credentials**, and that is the entire point of
+the `AUTH_REQUIRED` column. Sending a credential would turn a `401` into a `200`
+and record an authentication-protected service as one needing none — inverting
+the finding. The status code is the whole observation:
+
+| answer | recorded as |
 |---|---|
-| **Collects** | `security_params.csv` — the instance's profile parameters, which is the input for the Security Parameters and Baseline modules. Plus instance topology and the process list as reference data. |
-| **Cannot collect** | Users, roles, profiles, authorisations, change documents, table authorisation groups, RFC destinations, ICF services, gateway ACLs, background jobs, audit configuration — **14 logical sources in total.** |
+| `404` / `503` | not active here |
+| `401` / `403` | active, authentication required |
+| `302` to a logon page | active, authentication required — the redirect is **not** followed |
+| `200` | **active and unauthenticated** ← the finding |
+| no answer at all | unknown, never "absent" — a firewall is not a clean estate |
 
-The second row is not a backlog. Those sources live inside the ABAP stack and are
-reachable over RFC or by an interactive export; this product declines RFC
-(decision D3, and the reasoning is in `docs/DECISIONS.md`), so on your estate they
-stay export-only. **A connected collection is partial by construction.**
+`--user` is used *only* to read the Gateway catalogue, never for the probe.
+
+**This is an audit of known endpoints, not a scan.** The path list is short,
+fixed and reviewed, each entry carrying a stated reason. It does not enumerate,
+guess, fuzz or follow links: authorising a configuration review is not authorising
+a web crawl of your production application server. Use `--delay` if your
+dispatcher rate-limits.
+
+One documented limitation carried into the manifest: the Gateway catalogue **does
+not list OData V4 services**, so `api_endpoints.json` covers V2 only.
 
 Every run writes `collection_manifest.json` next to the data, listing exactly what
 it obtained, what failed, and what is not reachable at all. Read it. A directory

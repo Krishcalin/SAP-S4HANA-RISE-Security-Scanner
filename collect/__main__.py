@@ -37,7 +37,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from collect import extract, sapcontrol, soap
+from collect import extract, icf, sapcontrol, soap
 
 
 def _read_password(user: Optional[str]) -> Optional[str]:
@@ -124,6 +124,68 @@ def cmd_sapcontrol(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_icf(args: argparse.Namespace) -> int:
+    """Probe the ICF surface, and read the Gateway catalogue if there is one."""
+    collector = icf.IcfCollector(
+        args.host, https=not args.http, port=args.port,
+        sap_client=args.sap_client, verify_tls=not args.insecure,
+        ca_file=args.ca_file, timeout=args.timeout, delay=args.delay)
+
+    print(f"[*] {collector.base}")
+    print(f"[*] probing {len(collector.paths)} documented ICF path(s), "
+          f"WITHOUT credentials")
+    print("    (anonymously on purpose: sending a credential would turn a 401 "
+          "into a 200\n     and record a protected service as needing no "
+          "authentication)")
+    if args.insecure:
+        print("[!] TLS certificate verification is DISABLED for this collection.")
+
+    rows = collector.probe_services()
+    reachable = [r for r in rows if r["ICF_ACTIVE"] == "X"]
+    if not reachable and all(not r["OBSERVED_STATUS"] for r in rows):
+        print(f"[!] nothing answered at {collector.base}. That is a connection "
+              f"problem, NOT a system with no active services.", file=sys.stderr)
+        return 1
+
+    open_now = [r for r in rows if r["AUTH_REQUIRED"] == "NO"]
+    for r in open_now:
+        print(f"[!] UNAUTHENTICATED: {r['ICF_NAME']}  ({r['WHY_IT_MATTERS']})")
+
+    catalog = None
+    if args.user is not None:
+        password = _read_password(args.user)
+        if password is None:
+            return 2
+        catalog = collector.read_catalog(username=args.user, password=password)
+        if catalog is None:
+            print("[*] no readable OData catalogue (no Gateway, not activated, "
+                  "or not visible to this user) — recorded as a gap")
+
+    out = Path(args.out)
+    wrote = {
+        "icf_services.csv": extract.write_icf_services(out, rows),
+        "api_endpoints.json": extract.write_api_endpoints(out, catalog or []),
+    }
+
+    caveats = [icf.CATALOG_OMITS] if catalog else []
+    manifest = extract.write_manifest(
+        out, source="icf", endpoint=collector.base,
+        collected_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        wrote=wrote, attempts=collector.attempts,
+        cannot_reach=extract.ICF_CANNOT_REACH,
+        tls_verified=not args.insecure, caveats=caveats,
+        posture={"unauthenticated_read": bool(open_now),
+                 "detail": ", ".join(r["ICF_NAME"] for r in open_now)})
+
+    print(extract.summarise(manifest))
+    print(f"[*] manifest: {manifest}")
+    print(f"[*] now scan it: python sap_scanner.py --data-dir {out}")
+    if not any(wrote.values()):
+        print("[!] no data was collected", file=sys.stderr)
+        return 1
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="python -m collect",
@@ -163,6 +225,32 @@ def build_parser() -> argparse.ArgumentParser:
                     help="report what the endpoint offers and exposes, collect "
                          "nothing, write nothing")
     sc.set_defaults(fn=cmd_sapcontrol)
+
+    ic = sub.add_parser(
+        "icf",
+        help="probe the ICF service surface over HTTP(S) and, with credentials, "
+             "read the SAP Gateway OData catalogue")
+    ic.add_argument("--host", required=True)
+    ic.add_argument("--port", type=int, default=None,
+                    help="default 443 for HTTPS, 80 for HTTP")
+    ic.add_argument("--http", action="store_true",
+                    help="use HTTP instead of HTTPS")
+    ic.add_argument("--sap-client", default=None,
+                    help="sap-client to append to each request")
+    ic.add_argument("--user", default=None,
+                    help="only used to read the Gateway OData catalogue. The ICF "
+                         "probe is ALWAYS anonymous — that is what makes its "
+                         "AUTH_REQUIRED column mean anything")
+    ic.add_argument("--insecure", action="store_true",
+                    help="do not verify the TLS certificate; recorded in the "
+                         "manifest")
+    ic.add_argument("--ca-file", default=None)
+    ic.add_argument("--timeout", type=float, default=15.0)
+    ic.add_argument("--delay", type=float, default=0.0,
+                    help="seconds between requests, for an estate behind a "
+                         "rate-limited dispatcher")
+    ic.add_argument("--out", default="./extract")
+    ic.set_defaults(fn=cmd_icf)
     return p
 
 

@@ -158,6 +158,24 @@ release gate now refuses.
 > whether the instance answers a read with no credentials at all, which is
 > governed by `service/protectedwebmethods` (SAP Note 927637, SAP Note 1439348 —
 > cited as pointers, not quoted).
+>
+> **Second connector: `python -m collect icf`.** Probes a fixed list of documented
+> ICF paths and writes `icf_services.csv`, plus the Gateway OData catalogue as
+> `api_endpoints.json`. The probe is deliberately anonymous — a credential would
+> turn a 401 into a 200 and record a protected service as open — and redirects are
+> recorded rather than followed for the same reason.
+>
+> **It does NOT reach users and roles, and that corrects an earlier claim in this
+> document's own history.** This connector was scoped as "the one that gets users
+> and roles". There is no standard pre-built OData service on ECC exposing
+> `USR02` or `AGR_USERS`, and Gateway exposes only what an administrator
+> activated. Those four sources head `ICF_CANNOT_REACH` in `collect/extract.py`
+> and a test asserts they stay there, so a future edit cannot quietly start
+> claiming otherwise.
+>
+> The manifest accumulates across collectors rather than being overwritten: a
+> directory built from two collections now has a record describing two, which the
+> first draft got wrong.
 
 ## D4 — Does the four-dependency rule extend to `collect/`?
 
