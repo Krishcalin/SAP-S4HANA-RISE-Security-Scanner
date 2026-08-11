@@ -780,8 +780,13 @@ passes corrected sixteen of them.
 | [`RISE_SECURITY_MODEL.md`](docs/RISE_SECURITY_MODEL.md) | Where SAP's contractual line sits; what a RISE customer can actually export |
 
 **Things that would be a mistake to build** (each is argued in the docs): real-time threat
-detection, peer benchmarking (fiction without a customer base),
-BusinessObjects/SuccessFactors, an ABAP agent of any kind, and check-count comparisons.
+detection, peer benchmarking (fiction without a customer base), BusinessObjects, an ABAP
+agent of any kind, and check-count comparisons.
+
+**SuccessFactors left that list** — decision D1, `docs/DECISIONS.md` — in scope qualified:
+offline-first, security surface only. **A live API client inside `server/` or `modules/`
+is still a mistake**; decision D2 permits connectors only as an out-of-process `collect/`
+package whose sole output is a file the offline path already reads.
 
 **"Transport gating" was on that list and has been deliberately removed** — do not add it back
 by copying an older revision. What was rejected was gating *inside SAP*: an agent or exit that

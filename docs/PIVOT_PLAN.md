@@ -364,7 +364,9 @@ Being crisp about these buys credibility for what we do claim:
 - ~~ABAP source SAST~~ — **moved in scope 2026-08-07** (`docs/CVA_MERGE_PLAN.md`); the "CVA free for PCE" premise was wrong
 - Peer benchmarking (fiction without a customer base — benchmark against the SAP baseline and
   against the customer's own history)
-- BusinessObjects, SuccessFactors
+- BusinessObjects
+- ~~SuccessFactors~~ — **moved in scope** (decision D1, `docs/DECISIONS.md`), qualified:
+  offline-first, security surface only
 - Any ABAP agent or add-on, ever — it would forfeit the entire wedge
 - Competing on check counts
 

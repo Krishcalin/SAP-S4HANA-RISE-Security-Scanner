@@ -1637,7 +1637,16 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## Disclaimer
 
-This tool is for **authorized security assessments only**. The scanner performs offline analysis of exported data and does not connect to or modify any SAP system.
+This tool is for **authorized security assessments only**.
+
+The scanner itself performs **offline analysis of exported data** and never connects to
+anything. Connected mode is an optional, separately-invoked collector (`collect/`) that
+reads from a system you authorise and writes the same export files the offline path
+consumes; the scanner cannot tell which produced them.
+
+**Nothing in this product ever writes to an SAP system, in either mode.** Every connector
+is read-only, and there is no remediation, provisioning or transport path — by design, not
+by omission. See `docs/DECISIONS.md` (D2, D3) for the reasoning and its limits.
 
 <sub>[↑ Contents](#contents)</sub>
 

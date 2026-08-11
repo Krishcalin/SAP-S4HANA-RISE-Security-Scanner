@@ -436,9 +436,20 @@ If what your tenant gives you is a list of SAP policy results ("1ASTDUSR:
 non-compliant"), this importer cannot use it, and no amount of configuration will
 change that: a verdict is not the configuration it was computed from.
 
-Nothing here connects to Cloud ALM, to SAP, or to anything else. **It reads files
-you exported.** There is no live API client, deliberately: one we cannot exercise
-would be a capability claim we could not stand behind.
+Nothing in the scanner connects to Cloud ALM, to SAP, or to anything else. **It reads
+files.** Those files have three possible producers and it cannot tell them apart:
+you, using the commands in this guide; SAP's own tooling; or a `collect/`
+connector you run against a system you authorise (decision D2).
+
+There is still no live API client *inside* the scanner or the server, deliberately:
+one we cannot exercise would be a capability claim we could not stand behind. A
+connector is a separate, optional program that produces an export — never a second
+ingestion path.
+
+**Connected mode does not make an export unnecessary.** Some surfaces are reachable
+only over RFC, which this product declines (decision D3), and those remain
+export-only. A connected run that silently omits them would be the same
+"we could not look, so we said nothing" failure the release gate now refuses.
 
 ### Obtaining the export
 
@@ -520,6 +531,25 @@ They are recognised, listed in the scan output with the reason, and skipped:
 - **Values we do not recognise are passed through, not guessed.** An unrecognised
   activation token is reported rather than assumed to mean "inactive" — assuming
   would clear an exposed service with nothing anywhere saying so.
+
+### Database coverage is HANA only — the other engines are declined, not pending
+
+Decision D6, `docs/DECISIONS.md`. Stated here because this is where you would look
+for it, and because silence about a gap reads as coverage.
+
+`modules/hana_db_security.py` audits **SAP HANA**. It does not audit **Oracle,
+IBM Db2, Microsoft SQL Server or SAP ASE**, and there is no partial or best-effort
+coverage of them: no privileged-account check, no audit-policy check, no
+encryption-at-rest check. If your ECC or NetWeaver system runs on one of those,
+its database layer is **unscanned**, and nothing in a MonitorRisk report should be
+read as a statement about it.
+
+This is a scope decision, not a backlog item. HANA alone is 55 KB of engine-specific
+logic; the other four are four more of those, and a shallow common core presented as
+"database security" would imply a depth that is not there. If it is ever revisited it
+will be as a deliberately scoped common core — privileged accounts, audit, encryption
+at rest — costed as four modules and named as a common core, never as one module and
+never as parity.
 
 ### Mixing CSA and native exports
 

@@ -462,7 +462,10 @@ Being crisp about these buys credibility for the claims we can defend:
   the code lives.
 - **Peer benchmarking** — fiction with a handful of customers. Benchmark the customer against
   themselves and against the SAP baseline.
-- **BusinessObjects, SuccessFactors** — API-only and offline-hostile. Decline rather than fake.
+- **BusinessObjects** — shrinking estate, separate authorisation model. Decline rather than fake.
+- ~~**SuccessFactors**~~ — **in scope as of D1**, qualified: offline-first, security surface
+  only. The "API-only" objection is answered by the `collect/` tier (D2); whether enough of
+  the surface is *security* configuration remains **inferred** and unproven.
 - **Check-count comparisons** — nobody publishes a catalogue; we lose an unverifiable-number war
   even when we are deeper. Compare **depth per domain**, and publish our catalogue.
 

@@ -25,8 +25,11 @@ and there is no host analogue for either.
 Left behind, per ``docs/CVA_MERGE_PLAN.md`` §2:
 
 * ``AbapBtpScanner`` and the 30 ``BTP_API_CHECKS`` — a live OAuth client against
-  SAP endpoints. This product is offline by premise, ``modules/btp_import.py``
-  rejected live connections in writing, roughly three quarters of those checks
+  SAP endpoints, INSIDE ``modules/``. Decision D2 later admitted connectors to an
+  out-of-process ``collect/`` package, which does not resurrect this: the objection
+  was never to reaching BTP, it was to a network client living behind the
+  stdlib-only boundary. This product is offline by premise,
+  ``modules/btp_import.py`` rejected in-product live connections in writing, roughly three quarters of those checks
   duplicate ``modules/btp_cloud_surface.py``, and it carried the only non-stdlib
   import in the source file.
 * ``SAP_VULNERABLE_PACKAGES`` — hardcoded CVE and Note numbers.

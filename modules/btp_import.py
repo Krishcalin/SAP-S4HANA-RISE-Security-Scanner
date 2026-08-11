@@ -19,8 +19,13 @@ no transport and no ECS involvement (docs/RISE_SECURITY_MODEL.md §7.3).
 
 WHY FILES AND NOT A LIVE CLIENT
 -------------------------------
-There is no live connection to SAP anywhere in this product, and there is none
-here. Every function below takes an ALREADY-PARSED JSON payload — a file the
+There is no live connection to SAP anywhere in `modules/` or `server/`, and there
+is none here. Decision D2 (docs/DECISIONS.md) admitted connectors to an
+out-of-process `collect/` package, and this paragraph is deliberately UNCHANGED in
+substance by that: a connector's only output is a file, so what reaches the
+function below is an already-parsed payload either way. If a connector ever
+imports this module rather than writing a file, that is the boundary being
+crossed and the mistake this note exists to prevent. Every function below takes an ALREADY-PARSED JSON payload — a file the
 customer produced by running the `btp` CLI, by curling their own Cloud Connector
 (which runs on their infrastructure), or by retrieving audit-log records — and
 returns our shapes. An OAuth + pagination client against SAP's endpoints cannot be

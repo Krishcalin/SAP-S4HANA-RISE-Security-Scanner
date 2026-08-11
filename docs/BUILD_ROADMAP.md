@@ -457,13 +457,26 @@ catalogue refreshes from SAP in CI rather than by hand.
 
 **465 tests green** (401 unit, 64 against real PostgreSQL 16).
 
-### Deliberately NOT built: live API clients
+### Deliberately NOT built: live API clients *inside the product*
+
+> **Amended by decision D2 (`docs/DECISIONS.md`).** The prohibition below stands for
+> everything under `server/` and `modules/`, and is superseded only in one specific form:
+> connectors may exist **out of process**, under `collect/`, and their only output is a file
+> the offline path already reads. This is recorded as a **reversal** of a considered
+> decision — a BTP live-OAuth scanner was removed from this codebase on exactly these
+> grounds — and not as the resumption of something merely unfinished.
+>
+> The original objection is answered rather than waived. "One we cannot exercise" was about
+> a client whose failures would be invisible inside a product that could not reach a system;
+> a collector that writes a file is exercised against a recorded fixture, and its output is
+> validated by the same loader that validates a customer's own export.
 
 No Cloud ALM OData client, no BTP `auditlog-management` client, no live Cloud Connector
-polling. They cannot be verified in this environment, and shipping unverifiable network code
-would be a capability claim we cannot stand behind. Every importer reads **files the customer
-exported** using documented SAP tooling, and `docs/EXPORT_GUIDE.md` gives the exact commands.
-The live-connector half of Phase 6 remains open and needs a real tenant.
+polling **within the scanner or the server**. They cannot be verified in this environment, and
+shipping unverifiable network code would be a capability claim we cannot stand behind. Every
+importer reads **files** — produced by the customer using documented SAP tooling, by SAP's own
+tooling, or (now) by a `collect/` connector the customer runs against a system they authorise.
+`docs/EXPORT_GUIDE.md` gives the exact commands.
 
 Also stated honestly in the module docstring: the research could **not** confirm whether Cloud
 ALM's API returns raw store values or only SAP's own policy verdicts. The importer covers the
@@ -535,7 +548,8 @@ Being crisp buys credibility for what we do claim.
 | Transport gating | A write path into SAP |
 | ABAP source SAST | ~~SAP gives PCE customers CVA free~~ — **wrong; corrected 2026-08-07.** CVA is fee-free only inside a purchased BTP ABAP Environment entitlement. Now in scope: see `docs/CVA_MERGE_PLAN.md` |
 | Peer benchmarking | Fiction without a customer base. Benchmark against the SAP baseline and the customer's own history |
-| BusinessObjects, SuccessFactors | API-only and offline-hostile |
+| BusinessObjects | Shrinking estate, separate authorisation model, no comparable API story |
+| ~~SuccessFactors~~ | **In scope as of D1**, qualified: offline-first, security surface only. The "API-only" half of the old objection is answered by `collect/` (D2); the "is enough of it *security* configuration" half is still **inferred** and offline stays the default so it keeps being tested |
 | **Any ABAP agent or add-on, ever** | Forfeits the entire wedge |
 | Check-count comparisons | Nobody publishes a catalogue; unwinnable even when we are deeper |
 | A graph database | Recursive CTEs are ample at SAP scale; a third service kills the deployment advantage |

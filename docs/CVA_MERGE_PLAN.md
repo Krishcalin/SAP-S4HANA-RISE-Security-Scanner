@@ -156,9 +156,12 @@ section discloses it.
 
 Three independent reasons converge, and dropping it resolves all three at once.
 
-1. **It is a live OAuth client** against SAP endpoints. `modules/btp_import.py`
-   considered and rejected exactly this, in writing: *"no live connection to SAP
-   anywhere in this product."* **[read]**
+1. **It is a live OAuth client** against SAP endpoints, *inside `modules/`*.
+   `modules/btp_import.py` considered and rejected exactly this, in writing:
+   *"no live connection to SAP anywhere in this product."* **[read]**
+   *Amended by D2:* connectors are now permitted **out of process**, under
+   `collect/`. That does not reverse this decision — the objection was to a network
+   client behind the stdlib-only boundary, and it still stands in that form.
 2. **It is redundant and shallower.** Roughly three quarters of its 30 checks are
    already covered; `BTP-IAS-004` alone is a strict superset of all four
    `ABAP-BTP-PWD-*` rules, using the same lockout threshold while additionally
@@ -401,7 +404,9 @@ offline, pre-ATC, over an export, with no connection to the SAP system.
 
 ## 6. What I would not do
 
-- **Not** merge the BTP scanner. It is a live API client in an offline product.
+- **Not** merge the BTP scanner. It is a live API client *inside `modules/`*. Still
+  true after D2: a connector belongs in `collect/` and writes a file, so merging
+  this scanner would not be the permitted form even now.
 - **Not** build an ABAP parser or AST. Statement-level splitting (Phase 2) gets
   most of the accuracy for a fraction of the cost; a real front end is a
   multi-month project that would not close the interprocedural gap anyway.
