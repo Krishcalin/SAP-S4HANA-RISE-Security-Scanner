@@ -1480,6 +1480,10 @@ class SecurityParamAuditor(BaseAuditor):
             return
 
         param_lookup = self._param_lookup(params)
+        # Named `value_source` rather than `provenance`: this module already uses
+        # that word for the SAP Note reference on a rule, and two meanings of one
+        # name in one file is how the wrong one gets read.
+        value_source = self.param_provenance(params)
 
         for param_name, rule in self.effective_rules().items():
             # Allow baseline overrides
@@ -1501,13 +1505,26 @@ class SecurityParamAuditor(BaseAuditor):
             param_object = {"type": "parameter_name", "name": param_name}
             if rule.get("op") in self._VALUE_PINNING_OPS:
                 param_object["qualifier"] = str(actual_value).strip()
+
+            # AT THE DEFAULT AND SET TO THAT VALUE ARE DIFFERENT FACTS WITH
+            # DIFFERENT FIXES. RSPARAM leaves the user-value column blank when a
+            # parameter is at its kernel default and prints the default beside
+            # it; read without that column the finding said
+            # "login/min_password_lng = ", which is wrong about the value AND
+            # about the system. The remedy differs too: one is "change it", the
+            # other is "set it at all", and a profile that has never named the
+            # parameter will drift the next time SAP changes the default.
+            at_default = value_source.get(param_name.lower()) == self.PARAM_AT_DEFAULT
+            shown = (f"{param_name} = {actual_value} (kernel default; not set in "
+                     f"any profile)" if at_default
+                     else f"{param_name} = {actual_value}")
             self.finding(
                 check_id=f"PARAM-{param_name}",
                 title=f"Parameter {param_name} non-compliant",
                 severity=rule["severity"],
                 category=rule["category"],
                 description=self._describe(rule, actual_value),
-                affected_items=[f"{param_name} = {actual_value}"],
+                affected_items=[shown],
                 affected_objects=[param_object],
                 scope="object",
                 remediation=rule["fix"],

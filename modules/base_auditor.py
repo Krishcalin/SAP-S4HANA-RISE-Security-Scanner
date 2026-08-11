@@ -78,6 +78,23 @@ class BaseAuditor:
     #: …and for its value. CURRENT_VALUE is RSPARAM's running-value spelling.
     PARAM_VALUE_COLUMNS = ("VALUE", "PARAM_VALUE", "CURRENT_VALUE", "VAL")
 
+    #: …and for the SYSTEM DEFAULT, which RSPARAM prints beside the user value.
+    #:
+    #: THE BEST SOURCE OF A DEFAULT IS THE SYSTEM ITSELF, NOT A DOCUMENT. It was
+    #: proposed that this repository carry SAP's documented defaults so that an
+    #: unset parameter could be judged. That would have meant importing ~59 SAP
+    #: facts, and would have been WRONG more often than it looked: a default
+    #: varies by release and by kernel patch, so one recorded value cannot be
+    #: right for every system. RSPARAM already prints the actual default for the
+    #: system in front of you. Reading it invents nothing and is more accurate
+    #: than any table could be.
+    PARAM_DEFAULT_COLUMNS = ("DEFAULT_VALUE", "SYSTEM_DEFAULT", "SAP_DEFAULT",
+                             "DEFAULT", "KERNEL_DEFAULT")
+
+    #: How a parameter's effective value was arrived at.
+    PARAM_SET = "set"                 # explicitly set in a profile
+    PARAM_AT_DEFAULT = "kernel_default"   # left unset; the system's own default
+
     @staticmethod
     def param_lookup(params: Any) -> Dict[str, str]:
         """parameter name (lowercased) -> exported value.
@@ -109,10 +126,59 @@ class BaseAuditor:
                 continue
             value = next((row[c] for c in BaseAuditor.PARAM_VALUE_COLUMNS
                           if row.get(c) is not None), None)
+            default = next((row[c] for c in BaseAuditor.PARAM_DEFAULT_COLUMNS
+                            if row.get(c) is not None), None)
+
+            # RSPARAM LEAVES THE USER VALUE BLANK WHEN A PARAMETER IS AT ITS
+            # KERNEL DEFAULT, and the default sits in its own column. Read as a
+            # bare value that is the empty string, which is what happened before
+            # this: `login/min_password_lng = ` — a finding whose evidence is
+            # wrong, and a false positive outright wherever the default happens
+            # to be compliant.
+            #
+            # The substitution is deliberately narrow: ONLY when a default column
+            # is actually present and the user value is blank. With no default
+            # column the old behaviour is untouched, which matters because an
+            # empty value that is genuinely present IS a real answer — `gw/sec_info`
+            # with nothing after the comma is the unset ACL and must keep firing.
+            if default is not None and (value is None or not str(value).strip()):
+                lookup[name] = str(default)
+                continue
             if value is None:
                 continue
             lookup[name] = str(value)
         return lookup
+
+    @staticmethod
+    def param_provenance(params: Any) -> Dict[str, str]:
+        """parameter name -> how its effective value was arrived at.
+
+        Separate from `param_lookup` so that adding this could not change what
+        any existing caller receives. A finding that says "6" when the parameter
+        is at the kernel default rather than set to 6 is not wrong about the
+        value, but it is wrong about the SYSTEM — and the fix differs: one is
+        "change it", the other is "set it".
+        """
+        out: Dict[str, str] = {}
+        if not isinstance(params, (list, tuple)):
+            return out
+        for row in params:
+            if not isinstance(row, dict):
+                continue
+            name = next((row[c] for c in BaseAuditor.PARAM_NAME_COLUMNS
+                         if row.get(c) is not None), "")
+            name = str(name or "").strip().lower()
+            if not name:
+                continue
+            value = next((row[c] for c in BaseAuditor.PARAM_VALUE_COLUMNS
+                          if row.get(c) is not None), None)
+            default = next((row[c] for c in BaseAuditor.PARAM_DEFAULT_COLUMNS
+                            if row.get(c) is not None), None)
+            if default is not None and (value is None or not str(value).strip()):
+                out[name] = BaseAuditor.PARAM_AT_DEFAULT
+            elif value is not None:
+                out[name] = BaseAuditor.PARAM_SET
+        return out
 
     # ---------------------------------------------------------------- #
     #  Is this export the whole thing?                                  #

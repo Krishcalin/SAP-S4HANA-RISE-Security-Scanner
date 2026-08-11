@@ -505,3 +505,92 @@ def test_a_wrong_declaration_is_undone_by_deleting_one_file(tmp_path):
     with contextlib.redirect_stdout(io.StringIO()):
         again = DataLoader(tmp_path).load_all()
     assert not _unset(SecurityParamAuditor(again, {}).run_all_checks())
+
+
+# --------------------------------------------------------------------------- #
+#  The system's own defaults, rather than a table of SAP facts                #
+# --------------------------------------------------------------------------- #
+#  It was proposed that this repository carry SAP's documented default values so
+#  an unset parameter could be judged. That is NOT what was built, for two
+#  reasons that are worth keeping written down:
+#
+#    1. It would have meant importing ~59 SAP facts that are not here, which the
+#       project's own rules forbid without citable provenance.
+#    2. It would have been WRONG more often than it looked. A default varies by
+#       release and by kernel patch, so one recorded value cannot be right for
+#       every system — and a wrong default produces a confident finding about a
+#       system that is fine.
+#
+#  RSPARAM already prints the actual default for the system in front of you,
+#  beside a user-value column it leaves BLANK when the parameter is at that
+#  default. Reading it invents nothing and is more accurate than any table.
+
+def test_a_parameter_at_its_kernel_default_is_read_as_that_value(tmp_path):
+    """Before this, the blank user-value column was read as the literal empty
+    string: `login/min_password_lng = `. Wrong about the value, and wrong about
+    the system."""
+    rows = [{"NAME": "login/min_password_lng", "VALUE": "",
+             "DEFAULT_VALUE": "6"}]
+    assert BaseAuditor.param_lookup(rows) == {"login/min_password_lng": "6"}
+
+
+def test_a_compliant_default_no_longer_produces_a_false_positive():
+    """The case that made this a correctness fix rather than a cosmetic one. A
+    parameter left at a default that MEETS the baseline was being reported as
+    non-compliant with an empty value."""
+    rows = [{"NAME": "login/min_password_lng", "VALUE": "", "DEFAULT_VALUE": "15"}]
+    findings = SecurityParamAuditor({"security_params": rows}, {}).run_all_checks()
+    assert not [f for f in findings
+                if f["check_id"] == "PARAM-login/min_password_lng"]
+
+
+def test_the_finding_says_when_a_value_came_from_the_default():
+    """At-default and set-to-that-value are different facts with different fixes:
+    one is "change it", the other is "set it at all" — and a profile that never
+    names the parameter drifts the next time SAP changes the default."""
+    rows = [{"NAME": "login/min_password_lng", "VALUE": "", "DEFAULT_VALUE": "6"}]
+    f = next(x for x in SecurityParamAuditor({"security_params": rows}, {}).run_all_checks()
+             if x["check_id"] == "PARAM-login/min_password_lng")
+    assert "kernel default" in f["affected_items"][0]
+    assert "not set in any profile" in f["affected_items"][0]
+
+
+def test_an_explicitly_set_value_is_not_labelled_a_default():
+    rows = [{"NAME": "login/min_password_lng", "VALUE": "6", "DEFAULT_VALUE": "6"}]
+    f = next(x for x in SecurityParamAuditor({"security_params": rows}, {}).run_all_checks()
+             if x["check_id"] == "PARAM-login/min_password_lng")
+    assert "kernel default" not in f["affected_items"][0]
+
+
+def test_without_a_default_column_nothing_changes(tmp_path):
+    """The substitution is narrow on purpose. An empty value that is genuinely
+    present IS a real answer — `gw/sec_info` with nothing after the comma is the
+    unset ACL and must keep firing — so with no default column the old behaviour
+    must be untouched."""
+    assert BaseAuditor.param_lookup([{"NAME": "gw/sec_info", "VALUE": ""}]) \
+        == {"gw/sec_info": ""}
+    assert BaseAuditor.param_provenance([{"NAME": "gw/sec_info", "VALUE": ""}]) \
+        == {"gw/sec_info": BaseAuditor.PARAM_SET}
+
+
+def test_no_table_of_sap_defaults_was_introduced():
+    """THE LINE THIS WORK DID NOT CROSS, again. The defaults used are the
+    system's own, read from the export. If a documented-default table ever
+    appears it needs citable provenance per value — the shape
+    data/ecs_hardening_3250501.json uses — and this test should be replaced by
+    one asserting it."""
+    import json
+    from pathlib import Path as _P
+    for path in sorted((ROOT / "data").glob("*.json")):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        text = json.dumps(payload)
+        assert '"sap_default"' not in text and '"kernel_default"' not in text, \
+            f"{path.name} has grown a default-value table without provenance"
+
+
+def test_provenance_is_reported_separately_from_the_value():
+    """Adding provenance must not have changed what any existing caller of
+    param_lookup receives — the two are separate functions for that reason."""
+    rows = [{"NAME": "p", "VALUE": "15", "DEFAULT_VALUE": "6"}]
+    assert BaseAuditor.param_lookup(rows) == {"p": "15"}
+    assert BaseAuditor.param_provenance(rows) == {"p": BaseAuditor.PARAM_SET}
