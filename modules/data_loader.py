@@ -170,6 +170,12 @@ class DataLoader:
         "personal_data_inventory": ["personal_data_inventory.csv", "pdi.csv"],
         "deletion_requests":       ["deletion_requests.csv", "dsar_requests.csv"],
         "system_landscape":        ["system_landscape.csv", "landscape.csv"],
+        # The installed software components and their releases — the CVERS table,
+        # which SPAM/SAINT shows as "Component version". This is what lets a check
+        # say "this applies from SAP_BASIS 7.40" instead of firing on a release
+        # where the thing it looks for cannot exist. See BaseAuditor.release_gate.
+        "system_component":        ["system_component.csv", "cvers.csv",
+                                    "component_versions.csv"],
         # Code & Transport Security data sources
         "custom_code_scan":        ["custom_code_scan.csv", "atc_results.csv", "code_inspector.csv"],
         "transport_routes":        ["transport_routes.csv", "tms_routes.csv"],

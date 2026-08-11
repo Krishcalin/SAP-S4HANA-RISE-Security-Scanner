@@ -1,0 +1,6 @@
+COMPONENT,RELEASE,SP_LEVEL,DESCRIPTION
+SAP_BASIS,750,0018,SAP Basis Component
+SAP_ABA,750,0018,Cross-Application Component
+SAP_APPL,618,0012,Logistics and Accounting
+SAP_HR,608,0090,Human Resources
+EA-APPL,618,0012,SAP Enterprise Extension Application

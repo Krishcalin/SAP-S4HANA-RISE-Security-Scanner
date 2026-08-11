@@ -811,6 +811,48 @@ CREATE UNIQUE INDEX sap_system_tenant_key
     WHERE platform <> 'abap';
 
 -- ---------------------------------------------------------------------
+--  Installed software components  (CVERS)
+-- ---------------------------------------------------------------------
+--
+-- WHAT THIS IS FOR. A check that looks for something introduced in a particular
+-- release has three possible relationships to a system: it applies, it cannot
+-- apply, or we do not know. Without this table only the first two are
+-- expressible, and "we do not know" collapses into one of them — silently, and
+-- in whichever direction the author happened to code. See
+-- modules/base_auditor.py release_gate.
+--
+-- DECLARED HERE, IN THE MIGRATIONS SECTION, AND NOT UP WITH THE OTHER TABLES.
+-- A CREATE TABLE up there is a no-op on every deployed database, which is fine
+-- for a table nobody has yet — but it also means the indexes and constraints
+-- below it would never be applied on an upgrade. Keeping the whole object in one
+-- place, in the section that runs on both paths, is the idiom this file now uses
+-- for anything added after the first release.
+CREATE TABLE IF NOT EXISTS system_component (
+    id            bigserial PRIMARY KEY,
+    system_id     bigint      NOT NULL REFERENCES sap_system(id) ON DELETE CASCADE,
+    -- SAP_BASIS, SAP_ABA, SAP_APPL, S4CORE, SAP_GWFND … the CVERS component name.
+    component     text        NOT NULL CHECK (component <> ''),
+    -- The release as SAP writes it: '750', '7.50' and '0750' are the same
+    -- release. Stored VERBATIM rather than normalised, because the customer's own
+    -- export is the evidence and rewriting it would make the stored value
+    -- disagree with the file it came from. Comparison normalises at read time —
+    -- see BaseAuditor._release_key, which exists because "750" < "8" as strings.
+    release       text        NOT NULL CHECK (release <> ''),
+    -- Support package level, where the export carries one.
+    sp_level      text,
+    description   text,
+    collected_at  timestamptz NOT NULL DEFAULT now(),
+    -- One release per component per system. A second row for SAP_BASIS is not a
+    -- second component, it is a re-import, and it must update rather than
+    -- accumulate — otherwise a gate reading "the" release gets whichever row the
+    -- query happened to return first.
+    UNIQUE (system_id, component)
+);
+
+CREATE INDEX IF NOT EXISTS system_component_system_idx
+    ON system_component (system_id);
+
+-- ---------------------------------------------------------------------
 --  Schema version
 -- ---------------------------------------------------------------------
 

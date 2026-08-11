@@ -42,6 +42,183 @@ class BaseAuditor:
         self.run_context = run_context or {}
         self.findings: List[Dict[str, Any]] = []
 
+    # ---------------------------------------------------------------- #
+    #  Release gating                                                   #
+    # ---------------------------------------------------------------- #
+    #  THREE ANSWERS, AND CONFLATING ANY TWO IS THE DEFECT.
+    #
+    #  A check that looks for something introduced in a particular release has
+    #  three possible relationships to the system in front of it:
+    #
+    #    APPLIES         the system is new enough — run the check
+    #    NOT_APPLICABLE  the system is too old — the thing cannot exist, and a
+    #                    finding would be a false positive about a system that is
+    #                    correctly configured for what it is
+    #    UNKNOWN         no component export was supplied — we do not know
+    #
+    #  The tempting simplification is to fold UNKNOWN into one of the others.
+    #  Both directions are wrong, and wrong silently:
+    #
+    #    unknown treated as APPLIES        -> a check for a 7.40 parameter fires
+    #                                         on a 7.31 system that could never
+    #                                         have had it. False findings erode
+    #                                         trust in every other finding.
+    #    unknown treated as NOT_APPLICABLE -> the check quietly does not run, and
+    #                                         a report over a system nobody
+    #                                         measured reads exactly like a report
+    #                                         over a compliant one.
+    #
+    #  So UNKNOWN is its own answer, the caller is told which it got, and the
+    #  helper below emits a coverage finding rather than returning silence.
+
+    RELEASE_APPLIES = "applies"
+    RELEASE_NOT_APPLICABLE = "not_applicable"
+    RELEASE_UNKNOWN = "unknown"
+
+    #: The component every ABAP system has. Callers naming nothing else get this.
+    DEFAULT_COMPONENT = "SAP_BASIS"
+
+    def _components(self) -> Dict[str, str]:
+        """component name -> release, upper-cased, from the CVERS export."""
+        rows = self.data.get("system_component")
+        if not isinstance(rows, list):
+            return {}
+        out: Dict[str, str] = {}
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            name = (row.get("COMPONENT") or row.get("component")
+                    or row.get("NAME") or "")
+            rel = (row.get("RELEASE") or row.get("release")
+                   or row.get("VERSION") or "")
+            name, rel = str(name).strip().upper(), str(rel).strip()
+            if name and rel:
+                out[name] = rel
+        return out
+
+    @staticmethod
+    def _release_key(release: str):
+        """Comparable form of an SAP release string.
+
+        SAP writes releases as `750`, `7.50` and occasionally `0750`, and they are
+        the same release. Compared as strings, "750" < "8" and "7.31" > "7.4",
+        both of which are wrong. Normalising to a tuple of integers is the only
+        form in which they order correctly.
+        """
+        text = str(release).strip()
+        if "." in text:
+            # "7.50" -> (7, 50) and "7.4" -> (7, 40). The pad matters: without it
+            # "7.4" reads as minor 4 and sorts BELOW "7.40" (minor 40), so a gate
+            # with a 7.40 floor would decide a 7.4 system does not qualify — for
+            # the same release, written the other way.
+            major, _, minor = text.partition(".")
+            mj = "".join(c for c in major if c.isdigit())
+            mn = "".join(c for c in minor if c.isdigit())
+            if not mj:
+                return None
+            return (int(mj), int((mn + "00")[:2]))
+
+        digits = "".join(ch for ch in text if ch.isdigit()).lstrip("0")
+        if not digits:
+            return None
+        # LSTRIP MATTERS. "0750" is how some exports write 750, and slicing the
+        # raw string gave (0, 75) — a release that sorts below everything, so
+        # every minimum was satisfied and every gated check ran. Caught by
+        # test_the_same_release_written_three_ways_compares_equal.
+        #
+        # `digits[1:]` rather than `digits[1:3]`: S/4HANA year-style releases
+        # (2020, 2021) collapse to the same key under a two-character slice.
+        return (int(digits[0]), int(digits[1:] or 0))
+
+    def release_gate(self, min_release: Optional[str] = None,
+                     max_release: Optional[str] = None,
+                     component: Optional[str] = None) -> str:
+        """Does a release-dependent check apply here? Returns one of the three.
+
+        `min_release` is inclusive, `max_release` exclusive — so a check for
+        something introduced in 7.40 and removed in 7.54 is
+        `release_gate("740", "754")`, which reads the way the SAP documentation
+        does and avoids the off-by-one that an inclusive upper bound invites.
+        """
+        component = (component or self.DEFAULT_COMPONENT).upper()
+        installed = self._components().get(component)
+        if not installed:
+            return self.RELEASE_UNKNOWN
+        here = self._release_key(installed)
+        if here is None:
+            return self.RELEASE_UNKNOWN
+        if min_release is not None:
+            floor = self._release_key(min_release)
+            if floor is not None and here < floor:
+                return self.RELEASE_NOT_APPLICABLE
+        if max_release is not None:
+            ceiling = self._release_key(max_release)
+            if ceiling is not None and here >= ceiling:
+                return self.RELEASE_NOT_APPLICABLE
+        return self.RELEASE_APPLIES
+
+    def skip_for_release(self, check_id: str, what: str, category: str,
+                         min_release: Optional[str] = None,
+                         max_release: Optional[str] = None,
+                         component: Optional[str] = None) -> bool:
+        """True when the caller should NOT run the check — and says why.
+
+        The whole point is the difference between the two skip reasons:
+
+          * NOT_APPLICABLE is silent. The system genuinely cannot have the thing,
+            so there is nothing to report and reporting it would be noise.
+          * UNKNOWN emits an INFO finding carrying ``degrades_coverage``, which is
+            the flag `--gate` reads to refuse a green build. A check that could
+            not determine whether it applied did not examine this system, and the
+            report must not imply that it did.
+
+        `category` IS THE CALLER'S OWN CATEGORY, NOT "Coverage". The first draft
+        invented a new one and `tests/test_compliance_breadth.py` rejected it —
+        correctly, because an unmapped category is silently absent from every
+        compliance panel while the panel still looks complete. Taking the calling
+        check's category is also the better answer on its merits: an auditor
+        reading the Cryptographic Posture panel should see that one crypto check
+        could not be evaluated, in that panel, next to the ones that were.
+
+        Usage:
+
+            if self.skip_for_release("PARAM-XYZ", "the XYZ parameter",
+                                     "Security Baseline Parameters", "740"):
+                return
+        """
+        verdict = self.release_gate(min_release, max_release, component)
+        if verdict == self.RELEASE_APPLIES:
+            return False
+        if verdict == self.RELEASE_NOT_APPLICABLE:
+            return True
+
+        comp = (component or self.DEFAULT_COMPONENT).upper()
+        bounds = " and ".join(
+            p for p in (f"at least {min_release}" if min_release else "",
+                        f"below {max_release}" if max_release else "") if p)
+        self.finding(
+            check_id=f"{check_id}-COVERAGE",
+            title=f"Release could not be determined for: {what}",
+            severity=self.SEVERITY_INFO,
+            category=category,
+            description=(
+                f"This check applies only where {comp} is {bounds}, and the export "
+                f"contains no component version list, so it could not be decided "
+                f"whether it applies here. The check did NOT run. Its silence is "
+                f"therefore not evidence that {what} is correctly configured — it "
+                f"is evidence that this system was not examined for it."),
+            affected_items=[f"{comp} release unknown ({bounds})"],
+            remediation=(
+                "Export the installed component versions and re-run. The list is "
+                "the CVERS table, shown as 'Component version' in SPAM/SAINT and "
+                "in System > Status; save it as system_component.csv with "
+                "COMPONENT and RELEASE columns."),
+            details={"degrades_coverage": True, "component": comp,
+                     "min_release": min_release, "max_release": max_release},
+            scope="aggregate",
+        )
+        return True
+
     def module_is_running(self, module_key: str) -> Optional[bool]:
         """Is `module_key` part of this run? ``None`` when the caller did not say."""
         modules = self.run_context.get("modules")

@@ -35,7 +35,7 @@ run**, on grounds of what an ECC estate HAS and what a Basis team can EXPORT —
 never on which modules they would light up. A fixture assembled after seeing the
 number, or tuned until the number matched, would measure nothing.
 
-- **Tier A — in the fixture (38 sources).** What a realistic ECC 6.0 EHP8 Basis
+- **Tier A — in the fixture (39 sources).** What a realistic ECC 6.0 EHP8 Basis
   and security export contains.
 - **Tier B — cannot exist (37 sources).** HANA (this system is AnyDB), Fiori,
   BTP and the whole cloud surface, ABAP CDS, S/4 business roles, the Gateway
