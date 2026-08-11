@@ -1401,10 +1401,42 @@ class AbapSastAuditor(BaseAuditor):
         self.findings = []
         root = self.data.get(self.SOURCE_KEY)
         if not root:
+            # Nobody asked for a source scan. That is not degraded coverage, it is
+            # an absent input, and the two must not be conflated: if "you did not
+            # ask me to look" armed the gate, every scan that omits one optional
+            # input would come back cannot_assess and the signal would be worth
+            # nothing. The coverage manifest states the absence.
             return self.findings
 
         path = Path(root)
         if not path.is_dir():
+            # ASKED TO LOOK, COULD NOT. This returned an empty list silently, and
+            # silence here is indistinguishable from clean code: a typo in
+            # --abap-src produced zero findings, and --gate turned zero findings
+            # into exit 0. The scan the pipeline believed it was running never ran.
+            self._coverage_finding(
+                check_id="ABAP-COV-001",
+                title="ABAP source scan was requested but the source path is not readable",
+                description=(
+                    f"--abap-src named {root!r}, which is not a directory, so no "
+                    "source was scanned at all. This is reported as a finding "
+                    "rather than an empty result because an empty result is "
+                    "indistinguishable from a clean estate: the scan did not come "
+                    "back clean, it did not happen."
+                ),
+                affected_items=[f"{root} (not a directory)"],
+                remediation=(
+                    "1. Check the path given to --abap-src: it must be the root of "
+                    "an unpacked abapGit export, not the archive and not a file "
+                    "inside it.\n"
+                    "2. In a pipeline, confirm the export step ran and wrote to the "
+                    "path the scan step reads — a failed export upstream is the "
+                    "usual cause.\n"
+                    "3. Re-run the scan. Until it reads real source, treat its "
+                    "silence on code findings as unknown, not clean."
+                ),
+                details={"abap_source_dir": str(root), "reason": "not_a_directory"},
+            )
             return self.findings
 
         scanner = AbapSourceScanner(data_flow=True)
@@ -1415,7 +1447,102 @@ class AbapSastAuditor(BaseAuditor):
         self._emit(raw, scanner)
         return self.findings
 
+    def _coverage_finding(self, *, check_id: str, title: str, description: str,
+                          affected_items: List[str], remediation: str,
+                          details: Dict[str, Any]) -> None:
+        """A finding that says the scan could not see something.
+
+        Every one of these carries ``details["degrades_coverage"] = True``, which is
+        what arms the release gate's fail-closed path. The flag lives on the finding
+        rather than in a list of check ids held by the caller, because the caller
+        cannot know what a module has learned: `--gate` used to derive "degraded"
+        by matching one hardcoded id, so every coverage check added afterwards left
+        the gate returning green. A module that knows it could not look now says so
+        in a way the gate reads without being taught the id.
+
+        These are INFO because they are not vulnerabilities — nothing here says the
+        code is bad. Severity is the wrong axis for them entirely: the point is not
+        how serious the finding is, it is that the rest of the report is not
+        evidence of absence.
+        """
+        details = dict(details)
+        details["degrades_coverage"] = True
+        details["source"] = "abap_scan"
+        self.finding(
+            check_id=check_id,
+            title=title,
+            severity=self.SEVERITY_INFO,
+            category="Code & Transport Security",
+            description=description,
+            affected_items=affected_items,
+            remediation=remediation,
+            details=details,
+            scope="aggregate",
+        )
+
     def _emit(self, raw: List[Dict[str, Any]], scanner: AbapSourceScanner) -> None:
+        if not scanner.files_scanned:
+            # A real directory containing nothing this scanner can read. The usual
+            # causes are an export that only wrote metadata sidecars, a path one
+            # level too high or too low, or an empty checkout — all of which
+            # produced zero findings and a green gate.
+            self._coverage_finding(
+                check_id="ABAP-COV-002",
+                title="ABAP source scan read no source files",
+                description=(
+                    "The source directory was readable but contained no file this "
+                    "scanner recognises as source, so no rule ran against any code. "
+                    f"{scanner.metadata_skipped} metadata sidecar(s) were seen and "
+                    "skipped, which is normal on its own but means the export "
+                    "carried object metadata without object source. Zero findings "
+                    "here is not a clean result: nothing was examined."
+                ),
+                affected_items=[
+                    f"0 source file(s) scanned, "
+                    f"{scanner.metadata_skipped} metadata file(s) skipped"],
+                remediation=(
+                    "1. Confirm --abap-src points at the abapGit repository root — "
+                    "the level holding the object folders, not the .git directory "
+                    "and not one folder above the checkout.\n"
+                    "2. Confirm the export included source and not only the .xml "
+                    "sidecars; an interrupted or partial abapGit pull produces "
+                    "exactly this shape.\n"
+                    "3. Re-run once real source is present. Do not read the current "
+                    "report as evidence that the code is clean."
+                ),
+                details={"files_scanned": 0,
+                         "metadata_skipped": scanner.metadata_skipped,
+                         "reason": "no_source_files"},
+            )
+
+        if scanner.unreadable:
+            # Collected by scan_tree since it was written and never reported: the
+            # files that raised on read were dropped from the scan in silence.
+            self._coverage_finding(
+                check_id="ABAP-COV-003",
+                title="Some source files could not be read and were not scanned",
+                description=(
+                    f"{len(scanner.unreadable)} file(s) raised an error on read and "
+                    f"were skipped. {scanner.files_scanned} file(s) were scanned "
+                    "successfully, so this report covers most of the estate but not "
+                    "all of it — and the gap is not visible in the findings list, "
+                    "which is why it is stated here."
+                ),
+                affected_items=list(scanner.unreadable[:50]),
+                remediation=(
+                    "1. Check the permissions and encoding of the listed files; a "
+                    "locked file or a broken symlink in the export is the usual "
+                    "cause.\n"
+                    "2. Re-export or repair them and re-run.\n"
+                    "3. Until then, treat those objects as unscanned rather than "
+                    "clean."
+                ),
+                details={"unreadable_count": len(scanner.unreadable),
+                         "files_scanned": scanner.files_scanned,
+                         "unreadable": list(scanner.unreadable[:50]),
+                         "reason": "unreadable_files"},
+            )
+
         confirmed = [f for f in raw if f["confidence"] == "confirmed"]
         rest = [f for f in raw if f["confidence"] != "confirmed"]
 
@@ -1458,7 +1585,9 @@ class AbapSastAuditor(BaseAuditor):
                     "— raise it, because the statement in question is a case this "
                     "scanner does not yet model."
                 ),
-                details={"lex_degraded": scanner.lex_degraded, "source": "abap_scan"},
+                details={"lex_degraded": scanner.lex_degraded, "source": "abap_scan",
+                         # The gate reads this flag, not this check's id.
+                         "degrades_coverage": True},
                 scope="aggregate",
             )
 

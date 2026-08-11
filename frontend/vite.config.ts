@@ -40,10 +40,19 @@ export default defineConfig({
     outDir: '../server/spa',
     emptyOutDir: true,
     // 'hidden' still WRITES the maps (so a crash can be symbolicated from the build
-    // artefact) but omits the //# sourceMappingURL comment, so the browser does not
-    // fetch them and they are not advertised. `true` published 1.76 MB of readable
-    // TypeScript at /assets/*.js.map to anyone who could reach the console —
-    // including, before sign-in, anyone at all.
+    // artefact) but omits the //# sourceMappingURL comment.
+    //
+    // THAT IS NOT ACCESS CONTROL, AND THIS COMMENT USED TO SAY IT WAS. It claimed
+    // the maps "are not advertised" and treated that as the fix. index.html
+    // advertises /assets/index-<hash>.js by name, the map is that name plus ".map",
+    // and the SPA mount is unauthenticated because the sign-in screen loads from
+    // it — so the map was readable, in full, by anyone who could reach the login
+    // page. Measured, not assumed: 1,808,208 bytes with `sourcesContent` inlined.
+    //
+    // What actually closes it is server/app.py's SpaFiles.get_response, which
+    // refuses any path ending in .map. This setting is kept at 'hidden' so the maps
+    // still exist in the image for symbolicating a crash — a different trust
+    // boundary, since reading them requires the image rather than a URL.
     sourcemap: 'hidden',
   },
   server: {

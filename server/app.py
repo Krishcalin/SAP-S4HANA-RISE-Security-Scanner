@@ -162,6 +162,25 @@ class SpaFiles(StaticFiles):
         return
 
     async def get_response(self, path: str, scope: Scope) -> Response:
+        # SOURCE MAPS ARE NEVER SERVED, WHATEVER THE BUILD EMITS.
+        #
+        # vite's `sourcemap: 'hidden'` stops the browser FETCHING the map — it omits
+        # the //# sourceMappingURL comment — and that was mistaken for the map being
+        # unreachable. It is not: index.html publicly names /assets/index-<hash>.js,
+        # the map sits at that exact name plus ".map", and this mount is
+        # unauthenticated because the sign-in screen has to load from it. Anyone who
+        # could reach the login page could read 1.8 MB of commented TypeScript with
+        # `sourcesContent` inlined — the whole frontend, including every API shape
+        # and client-side check, before presenting a credential.
+        #
+        # Refused HERE rather than by changing the build, because the build config
+        # is one line in another language in another directory and this is the thing
+        # that actually hands bytes to the internet. A map that reappears — a vite
+        # default changing, a plugin emitting its own, someone setting `true` while
+        # debugging and pushing it — is served by the build and refused by this.
+        if path.lower().endswith(".map"):
+            raise StarletteHTTPException(status_code=404)
+
         # StarletteHTTPException, not FastAPI's — FastAPI's subclasses it, so this
         # catches both, whereas catching only FastAPI's would miss the one
         # StaticFiles actually raises.

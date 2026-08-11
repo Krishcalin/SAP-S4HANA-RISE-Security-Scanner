@@ -289,10 +289,157 @@ def test_the_gate_reads_the_unfiltered_finding_set():
 
 
 def test_degraded_coverage_reaches_the_gate_from_the_scanner():
-    """ABAP-LEX-001 is how the ABAP scanner reports that it lost its place, and the
-    gate reads the same evidence a human would rather than a side channel."""
+    """A module that could not look marks the finding; the gate reads the mark.
+
+    THIS TEST USED TO ASSERT `"ABAP-LEX-001" in src`. That is a string being
+    present in a file, which is not the same claim as the wiring working, and it
+    would have passed unchanged while the gate was disarmed for every coverage
+    check except that one. It now exercises the derivation itself.
+    """
     src = (ROOT / "sap_scanner.py").read_text(encoding="utf-8")
-    assert "ABAP-LEX-001" in src
+    gate_block = src[src.index("# ── Release gate ─", src.index("SCAN COMPLETE")):]
+
+    # The flag, not a list of ids the caller has to be taught. Asserted against
+    # CODE with the comments stripped: the comment block above the derivation
+    # names the old id deliberately, to record what was wrong with it, and an
+    # assertion that cannot tell prose from code would forbid explaining itself.
+    code = "\n".join(line.split("#")[0] for line in gate_block.splitlines())
+    assert "degrades_coverage" in code
+    assert "ABAP-LEX-001" not in code, \
+        "the gate is matching one check id again; a coverage check added " \
+        "afterwards would leave it returning green"
+
+    # And the derivation behaves: any marked finding arms it, unmarked ones do not.
+    marked = finding(check_id="ABAP-COV-002", severity="INFO")
+    marked["details"] = {"degrades_coverage": True}
+    plain = finding(check_id="ABAP-SQLI-001", severity="CRITICAL")
+
+    def derive(findings):
+        return [f for f in findings
+                if (f.get("details") or {}).get("degrades_coverage")]
+
+    assert rg.evaluate(
+        [plain, marked], degraded=bool(derive([plain, marked]))
+    ).exit_code == rg.EXIT_CANNOT_ASSESS
+    assert derive([plain]) == []
+
+
+# --------------------------------------------------------------------------- #
+#  "We could not look" must never render as "we found nothing"                #
+# --------------------------------------------------------------------------- #
+
+def _gate_on(source_dir):
+    """Run the ABAP module over `source_dir` and gate on what it produced."""
+    from modules.abap_sast import AbapSastAuditor
+    data = {} if source_dir is None else {"abap_source_dir": str(source_dir)}
+    findings = AbapSastAuditor(data, {}).run_all_checks()
+    degraded = [f for f in findings
+                if (f.get("details") or {}).get("degrades_coverage")]
+    result = rg.evaluate(findings, degraded=bool(degraded))
+    return [f["check_id"] for f in findings], result
+
+
+def test_an_abap_src_typo_cannot_produce_a_green_gate(tmp_path):
+    """The defect this family exists for. `--abap-src` pointing at a path that is
+    not a directory scanned nothing, returned no findings, and `--gate` turned no
+    findings into exit 0 — so a pipeline whose export step had failed shipped on a
+    scan that never ran, with a clean-looking report to show for it."""
+    ids, result = _gate_on(tmp_path / "does-not-exist")
+    assert "ABAP-COV-001" in ids
+    assert result.decision == "cannot_assess"
+    assert result.exit_code == rg.EXIT_CANNOT_ASSESS
+
+
+def test_a_source_tree_with_no_source_in_it_cannot_produce_a_green_gate(tmp_path):
+    """A real directory holding only abapGit's .xml sidecars: object metadata
+    without object source, which is what a partial export leaves behind. Every rule
+    ran against nothing and the report was silent about it."""
+    (tmp_path / "zcl_thing.clas.xml").write_text("<abapGit/>", encoding="utf-8")
+    ids, result = _gate_on(tmp_path)
+    assert "ABAP-COV-002" in ids
+    assert result.exit_code == rg.EXIT_CANNOT_ASSESS
+
+    # And it says how much it skipped, so the reader can tell this apart from an
+    # empty checkout without going back to the source tree.
+    cov = next(f for f in AbapSastAuditor_findings(tmp_path)
+               if f["check_id"] == "ABAP-COV-002")
+    assert cov["details"]["metadata_skipped"] == 1
+    assert cov["details"]["files_scanned"] == 0
+
+
+def test_files_that_could_not_be_read_are_reported_not_dropped(tmp_path, monkeypatch):
+    """`scan_tree` has collected unreadable files since it was written and nothing
+    ever reported them: a locked or unreadable file left the scan silently, and the
+    objects in it read as clean."""
+    from modules import abap_sast
+
+    good = tmp_path / "zcl_good.clas.abap"
+    good.write_text("CLASS zcl_good DEFINITION. ENDCLASS.", encoding="utf-8")
+    bad = tmp_path / "zcl_bad.clas.abap"
+    bad.write_text("CLASS zcl_bad DEFINITION. ENDCLASS.", encoding="utf-8")
+
+    real_read = Path.read_text
+
+    def refuse(self, *a, **kw):
+        if self.name == "zcl_bad.clas.abap":
+            raise OSError("Permission denied")
+        return real_read(self, *a, **kw)
+
+    monkeypatch.setattr(abap_sast.Path, "read_text", refuse)
+
+    ids, result = _gate_on(tmp_path)
+    assert "ABAP-COV-003" in ids
+    assert result.exit_code == rg.EXIT_CANNOT_ASSESS
+    # Not COV-002: one file WAS scanned. Partial coverage and zero coverage are
+    # different facts and must not collapse into one message.
+    assert "ABAP-COV-002" not in ids
+
+
+def test_not_asking_for_a_source_scan_is_not_degraded_coverage(tmp_path):
+    """The other direction, and the reason this is not simply 'no findings means
+    cannot_assess'. An absent optional input is not a failure to look — if it armed
+    the gate, every scan that omits one input would return cannot_assess and the
+    signal would be worth nothing."""
+    ids, result = _gate_on(None)
+    assert ids == []
+    assert result.decision == "pass"
+    assert result.exit_code == rg.EXIT_PASS
+
+
+def test_a_source_tree_that_really_is_clean_still_passes(tmp_path):
+    """The claim the gate has to keep making. Coverage findings must fire when the
+    scanner could not look and stay silent when it looked and found nothing."""
+    (tmp_path / "zcl_ok.clas.abap").write_text(
+        "CLASS zcl_ok DEFINITION. PUBLIC SECTION. ENDCLASS.", encoding="utf-8")
+    ids, result = _gate_on(tmp_path)
+    assert not [i for i in ids if i.startswith("ABAP-COV")]
+    assert result.decision == "pass"
+    assert result.exit_code == rg.EXIT_PASS
+
+
+def AbapSastAuditor_findings(source_dir):
+    from modules.abap_sast import AbapSastAuditor
+    return AbapSastAuditor({"abap_source_dir": str(source_dir)}, {}).run_all_checks()
+
+
+def test_the_whole_chain_holds_through_the_real_cli(tmp_path):
+    """In-process tests wire the module to the gate by hand, which is the thing
+    that was broken. This runs the actual CLI so the assertion covers the
+    derivation as `main()` performs it, not as the test performs it."""
+    import subprocess
+    out = tmp_path / "r.html"
+    proc = subprocess.run(
+        [sys.executable, "sap_scanner.py", "--data-dir", "sample_data",
+         "--abap-src", str(tmp_path / "nope"), "--modules", "cva",
+         "--gate", "--output", str(out)],
+        capture_output=True, encoding="utf-8", errors="replace", cwd=str(ROOT))
+    assert proc.returncode == rg.EXIT_CANNOT_ASSESS, (
+        f"the CLI gated green on a source path that does not exist "
+        f"(exit {proc.returncode})\n{proc.stdout[-1500:]}")
+    # And it must SAY why, not just exit non-zero: an exit code alone sends the
+    # engineer looking for a finding that does not exist.
+    assert "no source was scanned at all" in proc.stdout, \
+        f"the gate blocked without explaining what went unscanned\n{proc.stdout[-1500:]}"
 
 
 def test_the_scanner_survives_having_its_output_redirected():

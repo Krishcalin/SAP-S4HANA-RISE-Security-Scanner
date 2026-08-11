@@ -644,16 +644,27 @@ def main():
 
         # Degraded coverage is reported by the scanner as a finding rather than a
         # side channel, so the gate reads the same evidence a human would.
-        degraded_finding = next(
-            (f for f in fair_findings if f.get("check_id") == "ABAP-LEX-001"), None)
+        #
+        # THIS USED TO MATCH ONE CHECK ID. It looked for ABAP-LEX-001 and nothing
+        # else, which armed the gate for a mis-lexed file and left it disarmed for
+        # every other way a scan can come back empty — an --abap-src typo, an
+        # export carrying only metadata sidecars, files that failed to read. All of
+        # those returned zero findings, and zero findings is exit 0. A module that
+        # knows it could not look now marks the finding, and the gate reads the
+        # mark, so a new coverage check arms the gate the day it is written instead
+        # of the day someone remembers to add its id here.
+        degraded_findings = [
+            f for f in fair_findings
+            if (f.get("details") or {}).get("degrades_coverage")]
 
         result = release_gate.evaluate(
             fair_findings,
             policy=policy,
             baseline=baseline,
             scope=scope,
-            degraded=degraded_finding is not None,
-            degraded_detail=(degraded_finding or {}).get("description", ""))
+            degraded=bool(degraded_findings),
+            degraded_detail=" ".join(
+                str(f.get("description", "")) for f in degraded_findings).strip())
 
         print(release_gate.render(result))
         if args.gate_json:

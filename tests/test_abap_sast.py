@@ -274,8 +274,30 @@ def _audit(tmp_path, text, name="z_vendor.prog.abap"):
 
 
 def test_no_source_directory_means_no_findings_and_no_crash():
+    """No `--abap-src` at all: the module has nothing to do, and says nothing.
+
+    An absent optional input is not a failure to look, and must stay silent — if
+    it produced a coverage finding, every scan that omits one input would fail the
+    release gate and the gate's degraded signal would be worth nothing.
+    """
     assert AbapSastAuditor({}, {}).run_all_checks() == []
-    assert AbapSastAuditor({"abap_source_dir": "/no/such/dir"}, {}).run_all_checks() == []
+
+
+def test_a_source_directory_that_is_not_there_is_reported_not_swallowed():
+    """THIS TEST ASSERTED `== []` FOR BOTH CASES, WHICH IS HOW THE DEFECT SURVIVED.
+
+    Returning nothing for a path that does not exist looks like the same "no
+    findings, no crash" contract as the case above, and it is not: the caller ASKED
+    for a source scan and got silence, which `--gate` then read as exit 0. A typo
+    in --abap-src, or an export step that failed earlier in the pipeline, shipped
+    the build on a scan that never ran.
+
+    The two halves of the old assertion were testing opposite things, and pairing
+    them in one test is what made the wrong half look right.
+    """
+    findings = AbapSastAuditor({"abap_source_dir": "/no/such/dir"}, {}).run_all_checks()
+    assert [f["check_id"] for f in findings] == ["ABAP-COV-001"]
+    assert findings[0]["details"]["degrades_coverage"] is True
 
 
 def test_identity_is_the_object_never_the_line(tmp_path):

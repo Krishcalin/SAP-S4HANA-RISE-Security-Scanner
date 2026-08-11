@@ -793,3 +793,80 @@ def test_the_console_carries_the_product_brand_not_the_sibling_product():
     src = "".join(p.read_text(encoding="utf-8")
                   for p in sorted((FRONTEND / "src").rglob("*.ts*")))
     assert "overwatch" not in src.lower(), "the sibling product's brand survived the port"
+
+
+# --------------------------------------------------------------------------- #
+#  Trap 5 — the frontend source, served to anyone who could reach the login   #
+# --------------------------------------------------------------------------- #
+
+def test_source_maps_are_never_served(spa_app, tmp_path):
+    """A map beside a bundle must 404 even though the file is right there.
+
+    HOW THIS WAS BELIEVED FIXED AND WAS NOT. vite's `sourcemap: 'hidden'` omits
+    the //# sourceMappingURL comment, and the config comment recorded that as the
+    remedy — the maps "are not advertised". But index.html advertises
+    /assets/index-<hash>.js by name, the map is that name plus ".map", and this
+    mount is unauthenticated because the sign-in screen has to load from it. The
+    URL was derivable by anyone who could reach the login page, and it returned
+    1,808,208 bytes of TypeScript with `sourcesContent` inlined.
+
+    The map is WRITTEN into the synthetic bundle here on purpose. A test that only
+    asserted the build no longer emits maps would pass on an empty directory and
+    prove nothing about what the server does with one.
+    """
+    (tmp_path / "assets" / "app.js.map").write_text(
+        '{"version":3,"sourcesContent":["const secret = 1"]}', encoding="utf-8")
+
+    # The file is present and readable...
+    assert (tmp_path / "assets" / "app.js.map").is_file()
+    # ...the bundle beside it is served...
+    assert spa_app.get("/assets/app.js").status_code == 200
+    # ...and the map is not.
+    r = spa_app.get("/assets/app.js.map")
+    assert r.status_code == 404, \
+        "the frontend source is being served to unauthenticated callers"
+    assert "sourcesContent" not in r.text
+
+
+def test_source_maps_are_refused_by_the_server_not_only_by_the_build(spa_app, tmp_path):
+    """Case matters, and so does where the guard lives.
+
+    The refusal is in server/app.py rather than in vite.config.ts because the build
+    config is one line in another language in another directory, and the server is
+    what actually hands bytes to the internet. A map that reappears — a vite
+    default changing, a plugin emitting its own, someone flipping `true` while
+    debugging — must be refused by the thing serving it.
+    """
+    (tmp_path / "assets" / "UPPER.JS.MAP").write_text("{}", encoding="utf-8")
+    assert spa_app.get("/assets/UPPER.JS.MAP").status_code == 404
+
+    src = (ROOT / "server" / "app.py").read_text(encoding="utf-8")
+    assert '.map' in src and 'endswith(".map")' in src, \
+        "the .map refusal has left server/app.py; the build config alone does not " \
+        "close this, because it only governs what is written, not what is served"
+
+
+@built
+def test_the_compiled_bundle_does_not_expose_its_map(tmp_path):
+    """The same claim against the REAL artefact and the REAL app.
+
+    The synthetic test proves SpaFiles refuses a .map. This proves the map that
+    actually exists, at the name actually derivable from the shipped index.html,
+    is not reachable — which is the claim a reader cares about.
+    """
+    import re as _re
+    from fastapi.testclient import TestClient
+    from server.app import app
+
+    index = (ROOT / "server" / "spa" / "index.html").read_text(encoding="utf-8")
+    bundles = _re.findall(r'src="(/assets/[^"]+\.js)"', index)
+    assert bundles, "index.html names no JS bundle — that is not a built bundle"
+
+    client = TestClient(app)
+    for bundle in bundles:
+        # Derived exactly the way an attacker derives it: read the public
+        # index.html, append four characters.
+        r = client.get(bundle + ".map")
+        assert r.status_code == 404, (
+            f"{bundle}.map is served to unauthenticated callers "
+            f"({len(r.content)} bytes)")
