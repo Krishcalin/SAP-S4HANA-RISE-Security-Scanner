@@ -1550,11 +1550,29 @@ class SecurityParamAuditor(BaseAuditor):
         other_missing: List[str] = []
         other_objects: List[Dict[str, Any]] = []
 
+        # WHERE SOMEBODY HAS STATED THE EXPORT IS THE WHOLE THING, absence stops
+        # being ambiguous: the parameter is not in a complete list, so it is not
+        # set. That is a real observation and it is judged below, per parameter,
+        # rather than disclosed in a roll-up.
+        #
+        # NOTE WHAT THIS DOES NOT REQUIRE. It needs no SAP default value — the
+        # claim is not "it is at the insecure default", which this repository
+        # cannot substantiate for a single parameter. It is "the baseline requires
+        # this to be SET to a value, and it is not set", which is true whatever
+        # SAP ships it as. That distinction is what makes this buildable without
+        # inventing 59 SAP facts.
+        declaration = self.export_completeness("security_params")
+
         for param_name, rule in self.effective_rules().items():
             if ecs and not ecs_baseline.is_mandated(param_name):
                 continue
             if param_name.lower() in param_lookup:
                 continue
+
+            if declaration is not None:
+                self._finding_for_unset_parameter(param_name, rule, declaration)
+                continue
+
             if rule["severity"] in ("CRITICAL", "HIGH"):
                 critical_missing.append(f"{param_name} ({rule['category']})")
                 # No qualifier: the parameter is absent, so there is no value to
@@ -1627,6 +1645,56 @@ class SecurityParamAuditor(BaseAuditor):
                     "time and will always leave gaps. Re-run the scan; these "
                     "parameters will then be judged rather than listed."),
             )
+
+    def _finding_for_unset_parameter(self, param_name: str,
+                                     rule: Dict[str, Any],
+                                     declaration: Dict[str, Any]) -> None:
+        """A parameter absent from an export somebody declared COMPLETE.
+
+        THE SAME check_id AS A WRONG VALUE, DELIBERATELY. `PARAM-<name>` is the
+        defect "this parameter does not meet the baseline", and not-set and
+        set-wrongly are two ways of having it — with the same fix. Giving them
+        separate ids would break the mitigation journey at exactly the moment the
+        customer improves things: setting a previously-absent parameter to a still
+        non-compliant value would retire one finding and raise another, resetting
+        its age to zero and reporting progress as a brand-new problem.
+
+        THE DECLARATION IS QUOTED IN THE FINDING. This verdict rests entirely on
+        somebody's assertion that the export is the whole list, and nothing
+        verifies that assertion. Naming it here is what makes a WRONG declaration
+        diagnosable — the reader can see the claim the finding stands on and check
+        it — rather than leaving them with a confident finding and no way to tell
+        where it came from.
+        """
+        required = rule.get("ecs") or rule.get("expected") or "a defined value"
+        self.finding(
+            check_id=f"PARAM-{param_name}",
+            title=f"Parameter {param_name} is not set",
+            severity=rule["severity"],
+            category=rule["category"],
+            description=(
+                f"{rule['desc']} This parameter is NOT SET. The export was "
+                f"declared complete, so its absence is an observation rather than "
+                f"a gap in the evidence: the setting is not present on this "
+                f"system. Required: {required}.\n\n"
+                f"This verdict rests on that declaration — "
+                f"declared by {declaration['declared_by']}, "
+                f"method: {declaration['method']}. If the export was not in fact "
+                f"the complete parameter list, this finding is wrong and the "
+                f"declaration in export_completeness.json is what to correct."),
+            affected_items=[f"{param_name} = (not set)"],
+            # The same object a PARAM-<name> finding names once the parameter
+            # appears with a value, so the two are one finding across its life.
+            affected_objects=[{"type": "parameter_name", "name": param_name}],
+            scope="object",
+            remediation=rule["fix"],
+            references=rule.get("refs", []),
+            details={"observed": "not_set",
+                     "rests_on_declaration": True,
+                     "declared_by": declaration["declared_by"],
+                     "declared_at": declaration["declared_at"],
+                     "declaration_method": declaration["method"]},
+        )
 
     # ------------------------------------------------------------------ helpers
 

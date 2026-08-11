@@ -115,6 +115,60 @@ class BaseAuditor:
         return lookup
 
     # ---------------------------------------------------------------- #
+    #  Is this export the whole thing?                                  #
+    # ---------------------------------------------------------------- #
+    #  THE QUESTION THAT DECIDES WHETHER ABSENCE MEANS ANYTHING.
+    #
+    #  A parameter missing from `security_params.csv` has two possible causes and
+    #  the file cannot tell them apart:
+    #     the setting is not there  ->  a real observation, judgeable
+    #     the export did not ask    ->  no information at all
+    #  The export guide offers RZ11 — one parameter at a time — as an equal route
+    #  to RSPARAM, so the second cause is not hypothetical; it is the documented
+    #  workflow. That is why absent parameters are disclosed rather than judged.
+    #
+    #  `export_completeness.json` is where somebody states which sources are the
+    #  COMPLETE list. Where a source is declared complete, absence within it
+    #  becomes an observation.
+    #
+    #  IT IS A DECLARATION AND NOT A PROOF. Nothing verifies it. So this returns
+    #  the DECLARATION rather than a bare boolean, callers put it in the finding,
+    #  and a wrong declaration is diagnosable from the report instead of merely
+    #  producing wrong findings.
+
+    COMPLETENESS_KEY = "_export_completeness"
+
+    def export_completeness(self, source: str) -> Optional[Dict[str, Any]]:
+        """The declaration that `source` is complete, or None if none was made.
+
+        None covers both "no declaration file" and "file present, this source not
+        listed". They are the same fact for a caller: nobody has said this export
+        is the whole thing, so absence within it still means nothing.
+        """
+        payload = self.data.get(self.COMPLETENESS_KEY)
+        if not isinstance(payload, dict):
+            return None
+        declared = payload.get("complete_sources")
+        if not isinstance(declared, list) or source not in declared:
+            return None
+        return {
+            "source": source,
+            "declared_by": payload.get("declared_by") or "unstated",
+            "declared_at": payload.get("declared_at") or "unstated",
+            "method": payload.get("method") or "unstated",
+        }
+
+    def absence_is_observable(self, source: str) -> bool:
+        """May a caller treat a missing row in `source` as "it is not there"?
+
+        Deliberately a separate, plainly-named predicate rather than a truthiness
+        check on the dict above: `if self.export_completeness("x"):` reads as "is
+        it complete", and the answer this actually gives is "has anybody said so",
+        which is a weaker claim and needs to look like one at the call site.
+        """
+        return self.export_completeness(source) is not None
+
+    # ---------------------------------------------------------------- #
     #  Release gating                                                   #
     # ---------------------------------------------------------------- #
     #  THREE ANSWERS, AND CONFLATING ANY TWO IS THE DEFECT.

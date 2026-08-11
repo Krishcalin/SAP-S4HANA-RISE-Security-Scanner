@@ -165,6 +165,52 @@ def write_api_endpoints(out_dir: Path,
     return len(endpoints)
 
 
+def declare_complete(out_dir: Path, sources: Sequence[str], *,
+                     declared_by: str, method: str, when: str) -> Optional[Path]:
+    """State that these sources are the COMPLETE list. An INPUT, unlike the manifest.
+
+    THE ONE PIECE OF PROVENANCE THE SCANNER IS ALLOWED TO SEE, and it is not an
+    exception to the rule that a connector's output is indistinguishable from a
+    hand export — because a hand exporter can write this file too, and the export
+    guide says how. Completeness is an attribute of the ARTEFACT, asserted by
+    whoever produced it. The scanner still cannot tell who that was.
+
+    That distinction is why this is not part of `collection_manifest.json`, which
+    is deliberately never read by any check: the manifest is the connector's
+    record OF ITSELF, and this is a claim ABOUT THE DATA that any producer can
+    make.
+
+    WHY THE CONNECTOR MAY MAKE IT. `sapcontrol.profile_parameters` calls
+    `ParameterValue` with no argument, which returns every parameter the instance
+    will report — so the collector genuinely knows the list is complete, and used
+    to discard that knowledge on the way out. A parameter absent from it really is
+    absent from the system, which is the fact `security_params` needs in order to
+    judge rather than disclose.
+
+    It is still a DECLARATION and not a proof: the instance may answer partially,
+    and the finding text says as much and names this file.
+    """
+    if not sources:
+        return None
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "export_completeness.json"
+    payload = {
+        "complete_sources": list(sources),
+        "declared_by": declared_by,
+        "declared_at": when,
+        "method": method,
+        "read_this": (
+            "Each source listed here is asserted to be the COMPLETE list, so a "
+            "row absent from it means the setting is absent from the system "
+            "rather than absent from the export. Findings rest on that "
+            "assertion. If it is not true — a filtered export, an instance that "
+            "answered partially — remove the source from this list and re-run, "
+            "and those findings become coverage disclosures again."),
+    }
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
 def write_manifest(out_dir: Path, *, source: str, endpoint: str,
                    collected_at: str, wrote: Mapping[str, int],
                    attempts: Sequence[Mapping[str, Any]],

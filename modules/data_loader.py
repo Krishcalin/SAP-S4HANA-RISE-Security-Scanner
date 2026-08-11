@@ -313,6 +313,8 @@ class DataLoader:
             else:
                 self._data[logical_name] = None
 
+        self._load_completeness()
+
         self._load_cloudalm_stores()
 
         # Translate any BTP administrative exports into our shapes. Runs
@@ -330,6 +332,67 @@ class DataLoader:
             print(f"    Not found (skipping): {', '.join(missing)}")
 
         return self._data
+
+    #: Where a customer, or a connector, DECLARES that an export is the whole
+    #: thing. Read into the data dict under a key that is deliberately not a
+    #: logical source, so it never appears in the coverage manifest as something
+    #: the customer forgot to send.
+    COMPLETENESS_FILE = "export_completeness.json"
+    COMPLETENESS_KEY = "_export_completeness"
+
+    def _load_completeness(self) -> None:
+        """Read the declaration that an export is complete.
+
+        WHY THIS FILE EXISTS AT ALL
+        For most sources, absence of a row means nothing: the export may simply
+        not have included it. `security_params` is the sharpest case — the export
+        guide offers RZ11, which returns ONE parameter at a time, as an equal
+        route to RSPARAM, so a parameter missing from the file may be unset or may
+        just not have been asked for. Those are opposite facts and the file cannot
+        tell them apart.
+
+        That ambiguity is why absent parameters are disclosed rather than judged.
+        This is the input that resolves it: where somebody states that a source is
+        the COMPLETE list, absence within it becomes a real observation — the
+        setting is not there — and can be judged.
+
+        IT IS A DECLARATION, NOT A PROOF, AND MUST NEVER BE PRESENTED AS ONE.
+        Nothing here verifies that an export really is complete; a customer can
+        assert it wrongly and a connector can assert it about a system that
+        answered partially. So every finding that rests on this says so in its own
+        text and names the declaration, which is what makes a wrong declaration
+        diagnosable instead of merely wrong.
+
+        WHY A SEPARATE FILE rather than a column or a marker row: a column repeats
+        the same claim on every row and lets rows disagree; a marker row is
+        indistinguishable from data to anything that does not know about it. A
+        sidecar leaves the exports themselves untouched, which keeps the
+        connector's output byte-identical in shape to a hand-made one — the
+        property decision D2 rests on.
+        """
+        path = self._resolve(self.COMPLETENESS_FILE)
+        if path is None:
+            # ABSENT MEANS UNKNOWN, never "incomplete" and never "complete".
+            # Defaulting either way would decide the question the file exists to
+            # answer, for every customer who has not heard of it.
+            self._data[self.COMPLETENESS_KEY] = None
+            return
+        payload = self._load_json(path)
+        self._consumed_files.add(path.name)
+        if not isinstance(payload, dict):
+            print(f"    [WARN] {path.name} is not an object; ignoring it. "
+                  f"Completeness stays unknown.")
+            self._data[self.COMPLETENESS_KEY] = None
+            return
+        declared = payload.get("complete_sources")
+        if not isinstance(declared, list):
+            print(f"    [WARN] {path.name} has no 'complete_sources' list; "
+                  f"ignoring it. Completeness stays unknown.")
+            self._data[self.COMPLETENESS_KEY] = None
+            return
+        self._data[self.COMPLETENESS_KEY] = payload
+        names = ", ".join(str(s) for s in declared) or "none"
+        print(f"    Declared complete: {names}  (from {path.name})")
 
     # ------------------------------------------------------------------ #
     #  SAP Cloud ALM CSA store exports                                    #

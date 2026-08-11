@@ -328,3 +328,180 @@ def test_the_further_parameters_finding_keeps_its_age_as_the_export_improves():
                                info.get("subject"), info["affected_items"][:-5],
                                "aggregate")
     assert a == b, "the finding's identity moves when the export improves"
+
+
+# --------------------------------------------------------------------------- #
+#  Completeness — the input that lets absence mean something                  #
+# --------------------------------------------------------------------------- #
+#  Absence has two causes the file cannot tell apart: the setting is not there,
+#  or the export did not ask. The guide offers RZ11 — one parameter at a time —
+#  as an equal route to RSPARAM, so the second is the documented workflow, not an
+#  edge case. `export_completeness.json` is where somebody states that a source
+#  IS the whole list, which turns absence within it into an observation.
+#
+#  It is a DECLARATION, never a proof, and every test below is about keeping that
+#  distinction visible rather than letting it quietly become a fact.
+
+import contextlib                                                     # noqa: E402
+import csv                                                            # noqa: E402
+import io                                                             # noqa: E402
+import json                                                           # noqa: E402
+
+from modules.data_loader import DataLoader                            # noqa: E402
+
+DECL = {"complete_sources": ["security_params"],
+        "declared_by": "basis@acme.example", "declared_at": "2026-08-11",
+        "method": "RSPARAM, full list, no name filter"}
+
+
+def _load(tmp_path, rows, declaration=None):
+    with (tmp_path / "security_params.csv").open("w", encoding="utf-8",
+                                                 newline="") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(("NAME", "VALUE"))
+        for name, value in rows:
+            writer.writerow((name, value))
+    if declaration is not None:
+        (tmp_path / "export_completeness.json").write_text(
+            json.dumps(declaration), encoding="utf-8")
+    with contextlib.redirect_stdout(io.StringIO()):
+        return DataLoader(tmp_path).load_all()
+
+
+def _unset(findings):
+    return [f for f in findings
+            if f.get("details", {}).get("observed") == "not_set"]
+
+
+def test_without_a_declaration_absence_is_disclosed_not_judged(tmp_path):
+    """Today's behaviour, and it must survive: nobody has said the export is the
+    whole list, so a missing parameter still means nothing."""
+    data = _load(tmp_path, [("login/min_password_lng", "15")])
+    findings = SecurityParamAuditor(data, {}).run_all_checks()
+    assert not _unset(findings)
+    assert [f for f in findings if "MISSING" in f["check_id"]], \
+        "absence was neither judged nor disclosed"
+
+
+def test_with_a_declaration_absence_becomes_a_verdict(tmp_path):
+    """The unlock, and note what it does NOT need: no SAP default value. The
+    claim is "the baseline requires this to be set, and it is not set", which is
+    true whatever SAP ships it as."""
+    data = _load(tmp_path, [("login/min_password_lng", "15")], DECL)
+    findings = SecurityParamAuditor(data, {}).run_all_checks()
+    assert _unset(findings), \
+        "a declared-complete export still disclosed instead of judging"
+    assert not [f for f in findings if "MISSING" in f["check_id"]], \
+        "both the verdicts and the roll-up were raised; absence reported twice"
+
+
+def test_the_verdict_names_the_declaration_it_rests_on(tmp_path):
+    """Nothing verifies the declaration. Naming it is what makes a WRONG one
+    diagnosable from the report, instead of leaving the reader a confident
+    finding with no way to tell where it came from."""
+    data = _load(tmp_path, [("login/min_password_lng", "15")], DECL)
+    finding = _unset(SecurityParamAuditor(data, {}).run_all_checks())[0]
+    assert finding["details"]["rests_on_declaration"] is True
+    assert finding["details"]["declared_by"] == "basis@acme.example"
+    assert "rests on that declaration" in finding["description"]
+    assert "export_completeness.json" in finding["description"], \
+        "the reader is not told which file to correct"
+
+
+def test_an_unset_parameter_shares_identity_with_a_wrongly_set_one(tmp_path):
+    """Same check_id, deliberately. Setting a previously-absent parameter to a
+    still non-compliant value is PROGRESS, and a separate id would retire one
+    finding and raise another — reporting the improvement as a brand-new problem
+    with its age reset to zero."""
+    target = "PARAM-login/password_expiration_time"
+
+    absent = _load(tmp_path, [("login/min_password_lng", "15")], DECL)
+    unset = next(f for f in SecurityParamAuditor(absent, {}).run_all_checks()
+                 if f["check_id"] == target)
+
+    later = tmp_path / "later"
+    later.mkdir()
+    now_wrong = _load(later, [("login/min_password_lng", "15"),
+                              ("login/password_expiration_time", "0")], DECL)
+    wrong = next(f for f in SecurityParamAuditor(now_wrong, {}).run_all_checks()
+                 if f["check_id"] == target)
+
+    assert unset["check_id"] == wrong["check_id"]
+    assert unset["affected_objects"] == wrong["affected_objects"], \
+        "the finding's identity moves when an absent parameter is finally set"
+
+
+def test_a_source_not_listed_in_the_declaration_stays_unknown(tmp_path):
+    """A declaration about one source says nothing about another."""
+    data = _load(tmp_path, [("login/min_password_lng", "15")],
+                 {"complete_sources": ["users"], "declared_by": "x"})
+    assert not _unset(SecurityParamAuditor(data, {}).run_all_checks())
+
+
+@pytest.mark.parametrize("junk", [
+    ["not", "an", "object"],
+    {"no_complete_sources_key": True},
+    {"complete_sources": "security_params"},
+])
+def test_a_malformed_declaration_leaves_completeness_unknown(tmp_path, junk):
+    """It must fail towards disclosure. A malformed file read as "complete" would
+    turn every absent parameter into a confident verdict on the strength of a
+    file nobody could parse."""
+    data = _load(tmp_path, [("login/min_password_lng", "15")], junk)
+    assert data.get("_export_completeness") is None
+    assert not _unset(SecurityParamAuditor(data, {}).run_all_checks())
+
+
+def test_the_declaration_is_not_a_logical_source():
+    """It must never appear in the coverage manifest as something the customer
+    forgot to send — it is metadata about an export, not an export."""
+    from server import coverage
+    assert "_export_completeness" not in coverage.all_logical_sources()
+    for module, needs in coverage.module_sources().items():
+        assert "_export_completeness" not in needs, module
+
+
+def test_the_connector_declares_only_what_it_actually_read(tmp_path):
+    """Declaring completeness on the strength of a call that returned nothing
+    would assert that a system has no parameters — never true of an ABAP
+    instance — and would turn every rule into a confident "not set"."""
+    from collect import extract
+    assert extract.declare_complete(tmp_path, [], declared_by="x", method="y",
+                                    when="z") is None
+    assert not (tmp_path / "export_completeness.json").exists()
+
+    path = extract.declare_complete(tmp_path, ["security_params"],
+                                    declared_by="collect/sapcontrol",
+                                    method="ParameterValue, no argument",
+                                    when="2026-08-11T00:00:00+00:00")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["complete_sources"] == ["security_params"]
+    assert "coverage disclosures again" in payload["read_this"], \
+        "the file does not tell the reader how to undo the claim"
+
+
+def test_what_the_connector_writes_is_what_the_loader_reads(tmp_path):
+    """The two halves must agree, or the connector declares completeness into a
+    void and the scanner keeps disclosing."""
+    from collect import extract
+    extract.declare_complete(tmp_path, ["security_params"],
+                             declared_by="collect/sapcontrol",
+                             method="ParameterValue, no argument", when="t")
+    data = _load(tmp_path, [("login/min_password_lng", "15")])
+    auditor = SecurityParamAuditor(data, {})
+    assert auditor.absence_is_observable("security_params") is True
+    assert auditor.export_completeness("security_params")["declared_by"] \
+        == "collect/sapcontrol"
+
+
+def test_a_wrong_declaration_is_undone_by_deleting_one_file(tmp_path):
+    """The escape hatch has to be obvious, because the declaration is the one
+    input that converts disclosures into accusations. If it is wrong, a customer
+    must be able to undo every finding built on it in a single step."""
+    data = _load(tmp_path, [("login/min_password_lng", "15")], DECL)
+    assert _unset(SecurityParamAuditor(data, {}).run_all_checks())
+
+    (tmp_path / "export_completeness.json").unlink()
+    with contextlib.redirect_stdout(io.StringIO()):
+        again = DataLoader(tmp_path).load_all()
+    assert not _unset(SecurityParamAuditor(again, {}).run_all_checks())

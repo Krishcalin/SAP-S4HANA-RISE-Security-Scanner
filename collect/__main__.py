@@ -104,9 +104,25 @@ def cmd_sapcontrol(args: argparse.Namespace) -> int:
         "sapcontrol_processes.csv": extract.write_processes(out, collector.processes()),
     }
 
+    collected_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    # ONLY when the parameter read actually succeeded. Declaring completeness on
+    # the strength of a call that returned nothing would assert that a system has
+    # no parameters — which is never true of an ABAP instance, and would turn
+    # every rule into a confident "not set".
+    if params:
+        decl = extract.declare_complete(
+            out, ["security_params"], declared_by=f"collect/sapcontrol {collector.url}",
+            method="SAPControl ParameterValue with no argument, which returns "
+                   "every parameter the instance reports",
+            when=collected_at)
+        print(f"[*] declared security_params complete: {decl.name}")
+        print("    (absent parameters will now be judged as NOT SET rather than "
+              "listed as gaps — remove that file if the read was partial)")
+
     manifest = extract.write_manifest(
         out, source="sapcontrol", endpoint=collector.url,
-        collected_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        collected_at=collected_at,
         wrote=wrote, attempts=collector.attempts,
         unavailable=probe["unavailable"], tls_verified=not args.insecure,
         posture=posture)

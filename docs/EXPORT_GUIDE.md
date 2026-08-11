@@ -532,6 +532,52 @@ They are recognised, listed in the scan output with the reason, and skipped:
   activation token is reported rather than assumed to mean "inactive" — assuming
   would clear an exposed service with nothing anywhere saying so.
 
+### Telling the scanner an export is complete (`export_completeness.json`)
+
+**Optional, and it changes what a missing row means.**
+
+For most of this guide, a row that isn't in your export means nothing — the
+scanner can't tell whether the setting is absent from the *system* or absent from
+the *export*. Profile parameters are the sharpest case: `RSPARAM` lists every
+parameter, but `RZ11` returns one at a time, and both are offered above. So a
+parameter missing from `security_params.csv` is genuinely ambiguous, and the
+scanner reports it as a gap rather than judging it.
+
+If you know your export is the **complete** list, say so:
+
+```json
+{
+  "complete_sources": ["security_params"],
+  "declared_by": "basis-team@example.com",
+  "declared_at": "2026-08-11",
+  "method": "RSPARAM, full list, no name filter"
+}
+```
+
+Save it as `export_completeness.json` beside your CSVs. With it in place, a
+parameter absent from a listed source is treated as **not set** — a real finding
+against the baseline — rather than listed as something we couldn't see.
+
+| without it | with it |
+|---|---|
+| `PARAM-MISSING` / `PARAM-MISSING-OTHER` name the parameters as coverage gaps | each absent parameter gets a real finding: *"Parameter X is not set"* |
+| the release gate is held open by degraded coverage | the gate judges on the findings themselves |
+
+**Three things to be clear about:**
+
+- **It is a declaration, not a proof.** Nothing verifies it. Every finding built
+  on it says so in its own text and names this file, so if the declaration is
+  wrong the finding is traceable to it rather than merely wrong.
+- **Undoing it is one step.** Delete the file, re-run, and every finding that
+  rested on it goes back to being a coverage disclosure.
+- **`python -m collect sapcontrol` writes it for you**, because it genuinely
+  knows: it asks the instance for *every* parameter rather than a list of names.
+  If that read was partial for any reason, delete the file.
+
+Only list a source you are sure about. Declaring completeness you don't have
+converts honest gaps into confident accusations — which is the failure mode this
+whole product is built to avoid, arriving through the front door.
+
 ### Database coverage is HANA only — the other engines are declined, not pending
 
 Decision D6, `docs/DECISIONS.md`. Stated here because this is where you would look
