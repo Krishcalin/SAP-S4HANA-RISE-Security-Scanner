@@ -47,11 +47,27 @@ CREATE TABLE IF NOT EXISTS landscape (
     created_at      timestamptz NOT NULL DEFAULT now()
 );
 
+-- A ROW HERE IS "A THING FINDINGS ATTACH TO", NOT "AN ABAP SYSTEM".
+-- Decision D8. A SaaS tenant — SuccessFactors, Concur, IAS, a BTP subaccount —
+-- is a row in THIS table carrying a platform and an external key, not a landscape
+-- of its own. A landscape is the customer's estate; a tenant is a thing inside it.
+-- Modelling a tenant as a landscape would fork every query that already scopes by
+-- system.
+--
+-- WHICH IS WHY sid AND client ARE NULLABLE. They were NOT NULL, which is correct
+-- for ABAP and impossible for a tenant that has neither. The discriminator CHECK
+-- below is what keeps that from becoming a licence for half-populated rows: an
+-- abap row must still have both, and a non-abap row must have an external key.
 CREATE TABLE IF NOT EXISTS sap_system (
     id              bigserial PRIMARY KEY,
     landscape_id    bigint      NOT NULL REFERENCES landscape(id) ON DELETE CASCADE,
-    sid             text        NOT NULL,
-    client          text        NOT NULL,
+    -- Mirrors the migration block below. Change BOTH — see "Constraint migrations".
+    platform        text        NOT NULL DEFAULT 'abap',
+    -- The tenant's own identifier, opaque to us: a SuccessFactors company id, a
+    -- Concur entity id, a BTP subaccount id. NULL for ABAP.
+    external_key    text,
+    sid             text,
+    client          text,
     -- prod/qa/dev/sandbox drives more than a label: a trust edge FROM a lower
     -- tier INTO production is the single most load-bearing attack-path fact we
     -- can derive, and it is not computable without this column.
@@ -73,11 +89,39 @@ CREATE TABLE IF NOT EXISTS sap_system (
     owner           text,
     tags            text[]      NOT NULL DEFAULT '{}',
     created_at      timestamptz NOT NULL DEFAULT now(),
-    UNIQUE (landscape_id, sid, client)
+    -- KEPT, deliberately, rather than replaced by a partial index. server/cli.py's
+    -- add-system names it as an ON CONFLICT arbiter, and PostgreSQL cannot infer an
+    -- arbiter from a PARTIAL index unless the INSERT repeats the predicate — so
+    -- replacing this would break that command at runtime with SQLSTATE 42P10, on a
+    -- path no test executes. ABAP rows always have a sid (the discriminator below
+    -- enforces it), so this keeps doing its job; tenant rows have NULL sid, never
+    -- collide here, and are deduplicated by sap_system_tenant_key instead.
+    UNIQUE (landscape_id, sid, client),
+    -- Mirrors the migration block. Change BOTH.
+    CONSTRAINT sap_system_platform_check
+        CHECK (platform IN ('abap', 'btp', 'successfactors', 'concur', 'ias',
+                            'cloud_alm', 'ariba', 'fieldglass')),
+    -- `<> ''` AND NOT `IS NOT NULL`. An empty-string sid satisfies IS NOT NULL and
+    -- normalises to the same canonical fingerprint string as a NULL one, so a
+    -- nullability-only discriminator would leave the exact collision D8 exists to
+    -- remove. Empty sids are insertable today: add-system takes sid positionally
+    -- with no validation.
+    CONSTRAINT sap_system_shape_check CHECK (
+        (platform =  'abap' AND sid <> '' AND client <> ''
+                           AND sid IS NOT NULL AND client IS NOT NULL)
+     OR (platform <> 'abap' AND external_key <> '' AND external_key IS NOT NULL))
 );
 
 CREATE INDEX IF NOT EXISTS sap_system_landscape_idx ON sap_system (landscape_id);
 CREATE INDEX IF NOT EXISTS sap_system_tags_idx      ON sap_system USING gin (tags);
+-- THE TENANT UNIQUENESS INDEX IS NOT HERE. It is defined in the constraint-
+-- migrations section at the end of this file, and this note exists because here is
+-- where you would look for it and putting it here is a real, tested mistake: its
+-- predicate names `platform`, and on an UPGRADE this line is reached before the
+-- ADD COLUMN that creates that column, so the whole migration dies with
+-- `column "platform" does not exist`. It passes a fresh install, which is what
+-- makes it easy to ship. The migration section runs on fresh installs too, so
+-- defining it once down there covers both paths.
 
 -- ---------------------------------------------------------------------
 --  Check catalogue  (the DEFINITION half of the definition/occurrence split)
@@ -702,6 +746,69 @@ CREATE TABLE IF NOT EXISTS auth_attempt (
 ALTER TABLE landscape DROP CONSTRAINT IF EXISTS landscape_deployment_mode_check;
 ALTER TABLE landscape ADD CONSTRAINT landscape_deployment_mode_check
     CHECK (deployment_mode IN ('on_prem', 'rise_pce', 'rise_tailored', 'rise_ecc'));
+
+-- ---------------------------------------------------------------------
+--  sap_system becomes able to hold a SaaS tenant  (decision D8)
+-- ---------------------------------------------------------------------
+--
+-- ORDER MATTERS HERE AND NOWHERE ELSE IN THIS FILE. Every statement that mentions
+-- `platform` must come AFTER the ADD COLUMN that creates it. Writing the tenant
+-- index up beside the other sap_system indexes — the natural place — passes a
+-- fresh install and fails every upgrade with `column "platform" does not exist`.
+--
+-- NOTE THE ABSENT `CHECK` ON THE ADD COLUMN. `ADD COLUMN IF NOT EXISTS` carries
+-- the SAME silent-no-op trap as `CREATE TABLE IF NOT EXISTS` — the column is
+-- skipped and any inline CHECK with it — and the warning above names only CREATE
+-- TABLE. Two live instances of that mistake already exist in this file
+-- (`taint_confidence`, `reachability`): neither list can be widened on a deployed
+-- database. So the platform vocabulary lives in a NAMED constraint below instead.
+
+ALTER TABLE sap_system ADD COLUMN IF NOT EXISTS platform     text NOT NULL DEFAULT 'abap';
+ALTER TABLE sap_system ADD COLUMN IF NOT EXISTS external_key text;
+
+-- Idempotent, and verified so: re-running DROP NOT NULL on an already-nullable
+-- column is accepted and does nothing.
+ALTER TABLE sap_system ALTER COLUMN sid    DROP NOT NULL;
+ALTER TABLE sap_system ALTER COLUMN client DROP NOT NULL;
+
+-- DATA FIRST, AND LOUDLY. The shape CHECK below demands `sid <> ''`, so it will
+-- refuse to apply to any deployment already holding an empty-string sid — and the
+-- two upgrade paths fail DIFFERENTLY: server/db.py runs this file in one
+-- transaction (everything rolls back, nothing applied), while the CI job runs it
+-- under psql statement-per-transaction (the ALTERs above stay, the CHECK does not
+-- — a half-migrated database). Neither failure explains itself. This does.
+DO $$
+DECLARE broken int;
+BEGIN
+    SELECT count(*) INTO broken FROM sap_system
+     WHERE platform = 'abap'
+       AND (sid IS NULL OR sid = '' OR client IS NULL OR client = '');
+    IF broken > 0 THEN
+        RAISE EXCEPTION
+            'sap_system holds % ABAP row(s) with an empty or missing sid/client. '
+            'Decision D8 cannot be applied over them: an empty sid produces the '
+            'same finding fingerprint as every other empty sid, which is the '
+            'collision this migration exists to remove. Give each row a real sid '
+            'and client, or delete the rows, then re-run.', broken;
+    END IF;
+END $$;
+
+ALTER TABLE sap_system DROP CONSTRAINT IF EXISTS sap_system_platform_check;
+ALTER TABLE sap_system ADD CONSTRAINT sap_system_platform_check
+    CHECK (platform IN ('abap', 'btp', 'successfactors', 'concur', 'ias',
+                        'cloud_alm', 'ariba', 'fieldglass'));
+
+ALTER TABLE sap_system DROP CONSTRAINT IF EXISTS sap_system_shape_check;
+ALTER TABLE sap_system ADD CONSTRAINT sap_system_shape_check CHECK (
+    (platform =  'abap' AND sid <> '' AND client <> ''
+                       AND sid IS NOT NULL AND client IS NOT NULL)
+ OR (platform <> 'abap' AND external_key <> '' AND external_key IS NOT NULL));
+
+DROP INDEX IF EXISTS sap_system_tenant_key;
+CREATE UNIQUE INDEX sap_system_tenant_key
+    ON sap_system (landscape_id, platform, external_key)
+    NULLS NOT DISTINCT
+    WHERE platform <> 'abap';
 
 -- ---------------------------------------------------------------------
 --  Schema version

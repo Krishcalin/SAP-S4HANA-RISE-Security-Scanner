@@ -522,6 +522,86 @@ def test_every_cloud_scoped_type_is_exempt_on_BOTH_sides():
         assert kp == kq, f"{ctype} takes its node key from the ABAP SID"
 
 
+#: Every case-bearing type, classified. True = belongs to a cloud tenant and must
+#: never borrow the ABAP SID; False = genuinely lives inside the scanned system.
+#:
+#: WHY THIS MAP EXISTS. The test above holds _CLOUD_SCOPED_TYPES CONSISTENT — every
+#: member exempt on both sides — and that is not the same as holding it COMPLETE.
+#: Six types (btp_destination, btp_service, cc_backend, cpi_credential,
+#: event_queue, ias_application) sat in _CASE_SENSITIVE_TYPES as cloud entities and
+#: NOT in _CLOUD_SCOPED_TYPES, so each borrowed the SID of whatever ABAP system its
+#: bundle arrived beside. The consistency test passed throughout. They were found
+#: by reading the two sets against each other, which is not a thing CI does.
+#:
+#: Written out by hand rather than derived, for the same reason EXPECTED_RISE in
+#: test_deployment_modes.py is: a classification derived from the set under test
+#: agrees with it by construction, including when both are wrong.
+CLOUD_SCOPED_BY_TYPE = {
+    # --- cloud: a tenant owns these, not an ABAP system ---------------------
+    "btp_user": True, "subaccount": True, "role_collection": True,
+    "service_binding": True, "iflow": True, "destination_url": True,
+    "cpi_datastore": True, "cpi_variable": True, "oauth_client": True,
+    "idp_trust": True, "comm_arrangement": True, "btp_destination": True,
+    "btp_service": True, "cc_backend": True, "cpi_credential": True,
+    "event_queue": True, "ias_application": True,
+    # --- system-scoped, despite being case-bearing --------------------------
+    # A STRUST certificate belongs to the system holding it. Exempting it would
+    # merge every system's certificates into one identity — the mirror image of
+    # the bug the cloud set exists to fix, and equally silent.
+    "certificate": False,
+    "icf_path": False, "url": False, "path": False, "file": False,
+    "endpoint": False, "schema": False,
+    # Fiori launchpad content is delivered into, and lives in, the ABAP system.
+    "fiori_catalog": False, "fiori_app": False, "fiori_tile": False,
+    "fiori_space": False,
+    # Data-protection configuration, all ABAP-resident: Read Access Logging
+    # (SRALMANAGER), ILM retention policies (IRMPOL), purpose-of-processing and
+    # cross-border transfer entries, and DSAR requests. Two systems each holding a
+    # policy named RETENTION_HR hold two different policies.
+    "ral_config": False, "ral_channel": False, "ilm_policy": False,
+    "processing_purpose": False, "data_transfer": False, "dsar_request": False,
+    "audit_filter": False,
+}
+
+
+def test_every_case_bearing_type_is_deliberately_classified():
+    """Completeness, not just consistency — the half that was missing.
+
+    A type registered as case-bearing but never classified here fails this test, so
+    the next cloud entity added cannot quietly default to borrowing the ABAP SID.
+    That default is the dangerous direction: it produces a plausible report in which
+    two tenants' objects have silently become one.
+    """
+    from server.identity import _CASE_SENSITIVE_TYPES, _CLOUD_SCOPED_TYPES
+
+    unclassified = sorted(set(_CASE_SENSITIVE_TYPES) - set(CLOUD_SCOPED_BY_TYPE))
+    assert not unclassified, (
+        "these case-bearing types have no cloud/system decision recorded: "
+        f"{unclassified}. Decide deliberately — a type that is really a tenant's "
+        "will otherwise take the SID of whichever ABAP system it was uploaded "
+        "beside, and nothing will report it.")
+
+    # And the map must agree with the live set, in both directions.
+    expected = {t for t, cloud in CLOUD_SCOPED_BY_TYPE.items() if cloud}
+    missing = sorted(expected - set(_CLOUD_SCOPED_TYPES))
+    extra = sorted(set(_CLOUD_SCOPED_TYPES) - expected)
+    assert not missing, f"classified cloud but not exempt: {missing}"
+    assert not extra, f"exempt but not classified cloud: {extra}"
+
+
+def test_a_system_scoped_type_still_takes_the_system(monkeypatch):
+    """The other direction, and the reason the set cannot just absorb every
+    case-bearing type. A certificate in PRD and a certificate of the same name in
+    QAS are two objects, and must keep two identities."""
+    finding = {"check_id": "CRYPTO-001", "scope": "object",
+               "affected_objects": [{"type": "certificate", "name": "CN=acme"}]}
+    prd, _ = fingerprint_finding(finding, system="PRD", client="100")
+    qas, _ = fingerprint_finding(finding, system="QAS", client="100")
+    assert prd != qas, \
+        "a STRUST certificate is being shared across systems; every system's " \
+        "certificates have merged into one identity"
+
+
 def test_a_btp_identity_and_an_abap_user_of_the_same_name_are_different_nodes():
     """Different principals reached by different means. Merging them would hide the
     on-prem/BTP crossing that the cloud-to-on-prem attack path exists to show — the

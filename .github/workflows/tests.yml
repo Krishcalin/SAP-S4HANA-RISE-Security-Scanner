@@ -304,10 +304,20 @@ jobs:
       # Data first: a migration that only works on an empty table is not a
       # migration. If widening a constraint ever has to rewrite rows, this is
       # where the job starts failing and asking somebody to decide.
-      - name: Put a row in it
+      # SEED EVERY TABLE THE MIGRATION TOUCHES, NOT JUST THE ONE IT USED TO.
+      # This job seeded `landscape` alone, so for the whole run `sap_system` was
+      # empty — which meant a discriminator CHECK validated against zero rows and
+      # always passed, a nullability change was never exercised by an insert, and a
+      # unique index built over an empty table could never collide. The comment
+      # above promised data coverage the job did not deliver.
+      - name: Put rows in it
         run: |
+          set -euo pipefail
           psql "$DSN" -v ON_ERROR_STOP=1 -c \
             "INSERT INTO landscape (name, deployment_mode) VALUES ('upgrade-probe','on_prem');"
+          psql "$DSN" -v ON_ERROR_STOP=1 -c \
+            "INSERT INTO sap_system (landscape_id, sid, client, tier)
+             SELECT id, 'PRD', '100', 'prod' FROM landscape WHERE name = 'upgrade-probe';"
 
       - name: Apply the CURRENT schema over it, then twice more
         run: |
@@ -317,11 +327,105 @@ jobs:
             echo "  application $i ok"
           done
 
-      - name: The row survived
+      - name: The rows survived, unaltered
         run: |
+          set -euo pipefail
           psql "$DSN" -v ON_ERROR_STOP=1 -tAc \
             "SELECT count(*) FROM landscape WHERE name = 'upgrade-probe';" | grep -qx 1 \
             || { echo "::error::the upgrade destroyed existing data"; exit 1; }
+          # The pre-existing ABAP system must come through untouched AND be given
+          # the new column's default. A migration that silently rewrote sid or
+          # client would re-identify every finding attached to it.
+          psql "$DSN" -v ON_ERROR_STOP=1 -tAc \
+            "SELECT sid || '|' || client || '|' || platform || '|' ||
+                    coalesce(external_key,'<null>') FROM sap_system;" \
+            | grep -qx 'PRD|100|abap|<null>' \
+            || { echo "::error::the upgrade altered the existing sap_system row"; exit 1; }
+
+      # THE SHAPE OF THE TABLE, NOT ONLY ITS CHECK CONSTRAINTS. A nullability
+      # change and an index definition are both invisible to the constraint
+      # assertion below, and both are load-bearing for decision D8.
+      - name: Nullability and the tenant index actually moved
+        run: |
+          set -euo pipefail
+          nullable=$(psql "$DSN" -v ON_ERROR_STOP=1 -tAc \
+            "SELECT string_agg(column_name || '=' || is_nullable, ',' ORDER BY column_name)
+               FROM information_schema.columns
+              WHERE table_name = 'sap_system'
+                AND column_name IN ('sid','client','platform','external_key');")
+          echo "  $nullable"
+          [ "$nullable" = "client=YES,external_key=YES,platform=NO,sid=YES" ] || {
+            echo "::error::sap_system column nullability is not what schema.sql declares."
+            echo "::error::Relaxing a column in the CREATE TABLE alone is a no-op on an"
+            echo "::error::existing database — it needs an ALTER in the migration section."
+            exit 1; }
+
+          # CREATE UNIQUE INDEX IF NOT EXISTS is idempotent by NAME only; PostgreSQL
+          # never compares the definition. So an index whose predicate or column list
+          # changed is a silent no-op on every deployed database, and this is the
+          # only place that would notice.
+          idx=$(psql "$DSN" -v ON_ERROR_STOP=1 -tAc \
+            "SELECT indexdef FROM pg_indexes
+              WHERE tablename = 'sap_system' AND indexname = 'sap_system_tenant_key';")
+          echo "  $idx"
+          [ -n "$idx" ] || { echo "::error::sap_system_tenant_key does not exist after the upgrade"; exit 1; }
+          case "$idx" in
+            *"landscape_id, platform, external_key"*) ;;
+            *) echo "::error::tenant index columns are not what schema.sql declares"; exit 1;;
+          esac
+          case "$idx" in
+            *"NULLS NOT DISTINCT"*) ;;
+            *) echo "::error::tenant index lost NULLS NOT DISTINCT — duplicate tenants become insertable"; exit 1;;
+          esac
+
+      # BEHAVIOUR, NOT ONLY SHAPE. The constraints exist to refuse specific rows;
+      # asserting their text proves they are declared, not that they work.
+      - name: The migrated table refuses what it must
+        run: |
+          set -euo pipefail
+          refuses() {   # $1 = description, $2 = SQL that must fail
+            if psql "$DSN" -v ON_ERROR_STOP=1 -q -c "$2" >/dev/null 2>&1; then
+              echo "::error::ACCEPTED but should be refused: $1"; exit 1
+            fi
+            echo "  refused: $1"
+          }
+          L="(SELECT id FROM landscape WHERE name='upgrade-probe')"
+
+          # An empty-string sid satisfies IS NOT NULL and normalises to the same
+          # fingerprint as every other empty sid. This is the exact row decision D8
+          # exists to make impossible, and the old schema accepted it.
+          refuses "an ABAP row with an empty sid" \
+            "INSERT INTO sap_system (landscape_id, platform, sid, client) VALUES ($L,'abap','','100');"
+          refuses "an ABAP row with no sid at all" \
+            "INSERT INTO sap_system (landscape_id, platform, client) VALUES ($L,'abap','100');"
+          refuses "a tenant with no external key" \
+            "INSERT INTO sap_system (landscape_id, platform) VALUES ($L,'concur');"
+          refuses "an unknown platform" \
+            "INSERT INTO sap_system (landscape_id, platform, external_key) VALUES ($L,'myspace','x');"
+
+          # And the rows it must ACCEPT, or the migration has bought safety by
+          # making the feature impossible.
+          psql "$DSN" -v ON_ERROR_STOP=1 -q -c \
+            "INSERT INTO sap_system (landscape_id, platform, external_key, tier)
+             VALUES ($L,'successfactors','acme-sf-prod','prod'),
+                    ($L,'successfactors','acme-sf-test','dev');" \
+            || { echo "::error::two distinct SaaS tenants were rejected"; exit 1; }
+          echo "  accepted: two distinct SuccessFactors tenants"
+
+          refuses "the SAME tenant twice" \
+            "INSERT INTO sap_system (landscape_id, platform, external_key) VALUES ($L,'successfactors','acme-sf-prod');"
+
+          # add-system names UNIQUE (landscape_id, sid, client) as an ON CONFLICT
+          # arbiter. PostgreSQL cannot infer an arbiter from a PARTIAL index, so if
+          # that constraint is ever replaced by one this raises 42P10 — at runtime,
+          # on a path no pytest executes.
+          psql "$DSN" -v ON_ERROR_STOP=1 -q -c \
+            "INSERT INTO sap_system (landscape_id, sid, client, tier) VALUES ($L,'PRD','100','qa')
+             ON CONFLICT (landscape_id, sid, client) DO UPDATE SET tier = EXCLUDED.tier;" \
+            || { echo "::error::ON CONFLICT (landscape_id, sid, client) no longer resolves (42P10)."
+                 echo "::error::server/cli.py add-system depends on this constraint being non-partial."
+                 exit 1; }
+          echo "  ON CONFLICT arbiter still resolves"
 
       # THE ASSERTION THAT MAKES THIS JOB WORTH HAVING. Compare the constraint
       # LIVE IN THE DATABASE against the one this commit's schema.sql declares.
@@ -334,28 +438,23 @@ jobs:
       # defect this job exists to catch, reproduced inside the job itself. Both
       # sides are now asserted non-empty before they are compared, and the
       # extraction is Python rather than a locale-dependent grep.
-      - name: The constraint actually moved
+      - name: The constraints actually moved
         run: |
           python - <<'PY'
           import os, re, subprocess, sys
 
-          sql = open("server/schema.sql", encoding="utf-8").read()
-          declared = re.findall(
-              r"deployment_mode\s+IN\s*\(([^)]*)\)", sql, re.IGNORECASE)
-          if len(declared) < 2:
-              sys.exit(f"::error::expected the deployment_mode CHECK in BOTH the "
-                       f"CREATE TABLE and the constraint-migrations section, found "
-                       f"{len(declared)}. This assertion has stopped checking.")
+          # EVERY growable value list, not one. This checked `deployment_mode`
+          # alone, which was all there was; decision D8 added `platform`, and a
+          # single-constraint assertion would have let it be widened in the
+          # CREATE TABLE only — the exact mistake, on the exact next constraint.
+          # Adding a row here is what registering a new growable CHECK costs.
+          CONSTRAINTS = [
+              ("deployment_mode", "landscape_deployment_mode_check"),
+              ("platform",        "sap_system_platform_check"),
+          ]
 
-          live_raw = subprocess.run(
-              ["psql", os.environ["DSN"], "-tAc",
-               "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
-               "WHERE conname = 'landscape_deployment_mode_check'"],
-              capture_output=True, text=True, check=True).stdout.strip()
-          if not live_raw:
-              sys.exit("::error::no constraint named landscape_deployment_mode_check "
-                       "exists in the upgraded database - the migration in the "
-                       "constraint-migrations section did not run")
+          sql = open("server/schema.sql", encoding="utf-8").read()
+          failed = False
 
           # PostgreSQL does NOT store `IN (...)`. It normalises it to
           #   CHECK ((col = ANY (ARRAY['a'::text, 'b'::text])))
@@ -365,39 +464,64 @@ jobs:
           def values(text):
               return sorted(re.findall(r"'([^']*)'", text))
 
-          # THREE-WAY, and it has to be. Comparing only the LAST declaration —
-          # the migration block — against the database proves the migration ran
-          # and says nothing about whether it agrees with the CREATE TABLE above
-          # it. Editing only the CREATE is exactly the mistake this job exists to
-          # catch, and a two-way check passes it: the migration and the database
-          # still agree with each other, both on the old list. Every declaration
-          # in the file and the live constraint must be the same set.
-          lists = [values(d) for d in declared]
-          have = values(live_raw)
+          for column, conname in CONSTRAINTS:
+            print(f"\n--- {column} / {conname} ---")
+            declared = re.findall(
+                rf"{column}\s+IN\s*\(([^)]*)\)", sql, re.IGNORECASE)
+            if len(declared) < 2:
+                sys.exit(f"::error::expected the {column} CHECK in BOTH the "
+                         f"CREATE TABLE and the constraint-migrations section, found "
+                         f"{len(declared)}. This assertion has stopped checking.")
 
-          for i, v in enumerate(lists):
-              print(f"declared #{i + 1} in schema.sql : {v}")
-          print(f"live in the database        : {have}")
+            live_raw = subprocess.run(
+                ["psql", os.environ["DSN"], "-tAc",
+                 "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+                 f"WHERE conname = '{conname}'"],
+                capture_output=True, text=True, check=True).stdout.strip()
+            if not live_raw:
+                sys.exit(f"::error::no constraint named {conname} exists in the "
+                         "upgraded database - the migration in the "
+                         "constraint-migrations section did not run")
 
-          assert all(lists), "a declared value list parsed as empty"
-          assert have, "the live value list parsed as empty"
+            # THREE-WAY, and it has to be. Comparing only the LAST declaration —
+            # the migration block — against the database proves the migration ran
+            # and says nothing about whether it agrees with the CREATE TABLE above
+            # it. Editing only the CREATE is exactly the mistake this job exists to
+            # catch, and a two-way check passes it: the migration and the database
+            # still agree with each other, both on the old list. Every declaration
+            # in the file and the live constraint must be the same set.
+            lists = [values(d) for d in declared]
+            have = values(live_raw)
 
-          if len({tuple(v) for v in lists}) != 1:
-              print("::error::the deployment_mode CHECK is declared more than one "
-                    "way inside schema.sql. The copy in CREATE TABLE governs fresh "
-                    "installs and the copy in the constraint-migrations section "
-                    "governs upgrades - an installation gets whichever one it was "
-                    "born under. Change both.")
+            for i, v in enumerate(lists):
+                print(f"declared #{i + 1} in schema.sql : {v}")
+            print(f"live in the database        : {have}")
+
+            assert all(lists), f"a declared {column} value list parsed as empty"
+            assert have, f"the live {column} value list parsed as empty"
+
+            if len({tuple(v) for v in lists}) != 1:
+                print(f"::error::the {column} CHECK is declared more than one "
+                      "way inside schema.sql. The copy in CREATE TABLE governs fresh "
+                      "installs and the copy in the constraint-migrations section "
+                      "governs upgrades - an installation gets whichever one it was "
+                      "born under. Change both.")
+                failed = True
+                continue
+
+            if lists[0] != have:
+                print(f"::error::the {column} CHECK in the database does not "
+                      "match schema.sql. A CHECK edited inside CREATE TABLE IF NOT "
+                      "EXISTS is a no-op on an existing database - add a DROP/ADD "
+                      "pair to the constraint-migrations section at the end of "
+                      "schema.sql.")
+                failed = True
+                continue
+            print(f"{column}: matches what this commit declares, on both sites")
+
+          if failed:
               sys.exit(1)
-
-          if lists[0] != have:
-              print("::error::the deployment_mode CHECK in the database does not "
-                    "match schema.sql. A CHECK edited inside CREATE TABLE IF NOT "
-                    "EXISTS is a no-op on an existing database - add a DROP/ADD "
-                    "pair to the constraint-migrations section at the end of "
-                    "schema.sql.")
-              sys.exit(1)
-          print("the constraint matches what this commit declares, on both sites")
+          print("\nevery growable constraint matches on every site")
           PY
 
   # ------------------------------------------------------------------ #

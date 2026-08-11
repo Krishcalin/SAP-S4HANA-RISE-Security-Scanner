@@ -192,10 +192,31 @@ _BTP_USER_TYPE = "btp_user"
 #: BTP identity -> Cloud Connector -> ABAP backend is only a PATH if its two ends
 #: are distinguishable. Cloud objects therefore stay un-stamped until something can
 #: name their real scope (a subaccount), rather than borrowing the ABAP SID.
+#: SIX TYPES WERE MISSING FROM THIS SET AND WERE FOUND BY AUDIT, NOT BY A TEST.
+#: `btp_destination`, `btp_service`, `cc_backend`, `cpi_credential`, `event_queue`
+#: and `ias_application` were all registered as case-bearing cloud entities in
+#: `_CASE_SENSITIVE_TYPES` while being absent here — so each still borrowed the SID
+#: of whichever ABAP system its bundle was uploaded beside, which is the same
+#: defect this set was created to remove, for six more types.
+#:
+#: The test that was supposed to protect this asserted that every type IN the set
+#: is exempt on both the fingerprint and the node side. That holds the set
+#: CONSISTENT and says nothing about whether it is COMPLETE, which is why the
+#: omission survived it. `tests/test_identity.py` now also requires every known
+#: object type to be classified deliberately as cloud- or system-scoped.
+#:
+#: `certificate` is deliberately NOT here, and is the reason this set cannot simply
+#: be unioned with the cloud half of `_CASE_SENSITIVE_TYPES`: an ABAP STRUST
+#: certificate genuinely belongs to the system holding it, and exempting it would
+#: merge every system's certificates into one identity — the mirror image of the
+#: bug above, and just as silent.
 _CLOUD_SCOPED_TYPES = frozenset({
     "btp_user", "subaccount", "role_collection", "service_binding", "iflow",
     "destination_url", "cpi_datastore", "cpi_variable", "oauth_client",
     "idp_trust", "comm_arrangement",
+    # Added by the D8 audit. See the note above.
+    "btp_destination", "btp_service", "cc_backend", "cpi_credential",
+    "event_queue", "ias_application",
 })
 
 _WS = re.compile(r"\s+")
