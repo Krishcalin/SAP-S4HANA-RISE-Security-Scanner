@@ -24,6 +24,29 @@
 
 ---
 
+> ### 🔒 Source-available, not open source
+>
+> **Copyright © 2026 Krishnendu De. All rights reserved.**
+>
+> This repository is public so that the work can be **read, reviewed and
+> evaluated**. That is the whole of the permission granted.
+>
+> **You may:** read the source, review the approach, cite it with attribution.
+> **You may not:** run, copy, fork, modify, redistribute, self-host, or use it or
+> any part of it in your own product or service — commercial or otherwise —
+> without prior written permission.
+>
+> Public visibility is **not** a licence. Neither is the absence of a technical
+> barrier. If you are unsure whether what you have in mind is permitted, assume it
+> is not and ask — permission is usually easy to obtain and always cheaper than
+> the alternative.
+>
+> **Licensing, evaluation and commercial enquiries:** krishnendu.de@hotmail.com
+> · Full terms in **[LICENSE](LICENSE)** · Reporting a vulnerability?
+> **[SECURITY.md](SECURITY.md)**
+
+---
+
 ## Contents
 
 - **[Overview](#overview)**
@@ -1608,7 +1631,7 @@ SESSION_SECRET=$(python -c "import secrets;print(secrets.token_urlsafe(48))") \
     python -m pytest -q
 ```
 
-CI (GitHub Actions, `.github/workflows/tests.yml`) runs **five jobs** on every push and pull request:
+CI (GitHub Actions, `.github/workflows/tests.yml`) runs **six jobs** on every push and pull request:
 
 | Job | What it proves |
 |---|---|
@@ -1631,7 +1654,9 @@ added since. Trust the code, and the module tables above, over that document.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+**External code contributions are not accepted** — this is source-available, not open source, and merging outside work into a proprietary codebase makes the copyright jointly held. Bug reports, corrections to SAP facts, and false positive/negative reports are genuinely welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Found a vulnerability **in this tool**? Do not open an issue — see [SECURITY.md](SECURITY.md).
 
 <sub>[↑ Contents](#contents)</sub>
 

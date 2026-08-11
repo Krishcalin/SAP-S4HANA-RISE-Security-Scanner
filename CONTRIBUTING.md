@@ -1,75 +1,71 @@
-# Contributing to SAP S/4HANA RISE Security Scanner
+# Contributing
 
-Thanks for your interest in contributing! This guide will help you get started.
+**This project does not accept external code contributions.**
 
-## How to Contribute
+MonitorRisk is source-available, not open source. The repository is public so the
+work can be read, reviewed and evaluated; the copyright is held solely by
+Krishnendu De and the licence reserves all rights (see [LICENSE](LICENSE)).
 
-### Reporting Issues
-- Use GitHub Issues to report bugs or request features
-- Include the Python version, OS, and sample data (anonymized) if reporting a bug
-- For security vulnerabilities in the scanner itself, please open an issue with the `security` label
+That is why pull requests are declined rather than reviewed, and it is not a
+judgement on the code in them. Merging outside contributions into a proprietary
+codebase makes the copyright jointly held, which quietly undermines the one thing
+the licence asserts — that the software is the exclusive property of its
+copyright holder. Sorting that out afterwards is far harder than declining
+politely up front.
 
-### Adding New Checks
+> This file used to say *"Thanks for your interest in contributing!"* and
+> *"Submit a PR with a clear description."* That was written when the project was
+> open source and it survived the relicensing. It is corrected here rather than
+> quietly deleted, because anyone who acted on the old wording did so in good
+> faith and deserves to see why the answer changed.
 
-1. **Identify the right module:**
-   - `user_auth_audit.py` — Basic user/profile checks
-   - `iam_advanced.py` — SoD, firefighter, role lifecycle, cross-system identity
-   - `security_params.py` — Profile parameter baseline validation
-   - `network_services.py` — RFC, ICF, transport, audit log checks
-   - `rise_btp_checks.py` — RISE/BTP-specific checks
+---
 
-2. **Follow the pattern** — each check method should:
-   - Check if required data is available (`if not data: return`)
-   - Iterate through relevant records
-   - Call `self.finding()` with all required fields for each issue found
+## What *is* welcome
 
-3. **Use proper severity levels:**
-   - `CRITICAL` — Immediate exploitation risk, system compromise possible
-   - `HIGH` — Significant security gap, exploitation likely with moderate effort
-   - `MEDIUM` — Security weakness, defense-in-depth concern
-   - `LOW` — Minor hardening opportunity, informational
+**Bug reports.** If a check misfires, a parser mangles an export, or a finding is
+wrong, that is genuinely useful and easy to act on. Open an issue with:
 
-4. **Include remediation** — every finding should have actionable fix instructions
+- the Python version and OS
+- the module or check id involved (for example `PARAM-014`, `ABAP-SQLI-001`)
+- a **de-identified** fragment of the input that triggers it
 
-5. **Add references** — SAP Notes, CIS Benchmark section numbers, or relevant docs
+> ⚠️ **Never attach a real SAP export to a public issue.** They routinely contain
+> user names, host names, system ids, RFC destinations and occasionally
+> credentials. Reduce it to the few lines that reproduce the problem, and replace
+> anything identifying. If you cannot reduce it safely, describe the shape of the
+> data instead and email it if asked.
 
-### Adding a New Audit Module
+**Corrections to SAP facts.** A wrong SAP Note number, parameter name,
+authorisation object or transaction code is worth reporting on its own. This
+project treats an unverified SAP identifier as a defect, so a citation to SAP
+Help, the SAP Security Baseline or a note number is the most valuable thing you
+can attach.
 
-1. Create a new file in `modules/` extending `BaseAuditor`
-2. Implement `run_all_checks()` returning a list of findings
-3. Add required data file mappings to `DataLoader.FILE_MAP`
-4. Register the module in `sap_scanner.py` main flow
-5. Update `README.md` with the new module's checks
+**False positives and false negatives.** Both matter. A check that fires on a
+correctly configured system erodes trust in every other finding; a check that
+stays silent on a real misconfiguration is worse.
 
-### Code Style
-- Python 3.8+ compatible (no walrus operator, etc.)
-- Type hints encouraged
-- Docstrings on all classes and public methods
-- No external dependencies — stdlib only for core scanner
+**Questions about whether your intended use is permitted.** Ask. See below.
 
-### Pull Request Process
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/new-check-xyz`)
-3. Add/modify checks with test data in `sample_data/`
-4. Run the scanner against sample data to verify
-5. Update README if adding new checks or modules
-6. Submit a PR with a clear description
+## What to do instead of a pull request
 
-## Development Setup
+| you want to | do this |
+|---|---|
+| fix a bug you found | open an issue describing it — a patch in the issue text is fine and welcome as a *description*, but it will be reimplemented rather than merged |
+| use part of this in your own tool | email for permission first |
+| use it internally at your company | email — internal evaluation licences are straightforward |
+| build something similar | you are free to; ideas are not the thing being reserved here |
+| report a security vulnerability | **do not open an issue** — see [SECURITY.md](SECURITY.md) |
 
-```bash
-git clone https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner.git
-cd SAP-S4HANA-RISE-Security-Scanner
+## Security vulnerabilities
 
-# Verify it runs
-python sap_scanner.py --data-dir ./sample_data --output test_report.html
+Reporting a vulnerability in a **public issue** publishes a working attack against
+every deployment before there is a fix. This file previously told people to do
+exactly that, with a `security` label. It should never have.
 
-# Run specific modules during development
-python sap_scanner.py --data-dir ./sample_data --modules iam --output test.html
-```
+Use the process in **[SECURITY.md](SECURITY.md)** instead.
 
-## Important Notes
+---
 
-- **Never commit real SAP data** — always anonymize exports before using as test data
-- **Keep zero-dependency** — the scanner should run on any Python 3.8+ installation without pip installs
-- **Test with sample data** — verify your changes produce expected findings with the included sample data
+**Contact:** krishnendu.de@hotmail.com

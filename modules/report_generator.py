@@ -1040,8 +1040,24 @@ class ReportGenerator:
   </div>
 
   <div class="footer">
-    SAP S/4HANA RISE Security Scanner &middot; Generated {html.escape(self.meta.get('scan_time', '')[:19])} &middot;
-    For authorized security assessments only
+    <!-- THE REPORT IS THE ARTEFACT THAT LEAVES THE BUILDING. It is emailed to
+         auditors, attached to tickets and forwarded to SAP, so it is the one
+         place a tool-ownership notice reliably reaches somebody who has never
+         seen the repository. Two distinct claims, kept distinct:
+           1. the TOOL is proprietary — that is about this software;
+           2. the CONTENTS describe the customer's estate — that is about their
+              data, and it is their confidentiality, not mine, so it is worded as
+              a caution rather than as a claim of ownership over their findings. -->
+    MonitorRisk &mdash; SAP S/4HANA RISE Security Scanner &middot;
+    Generated {html.escape(self.meta.get('scan_time', '')[:19])} &middot;
+    For authorized security assessments only<br>
+    <span style="opacity:.75">
+      &copy; 2026 Krishnendu De. All rights reserved. MonitorRisk is proprietary
+      software, licensed &mdash; not sold &mdash; and this report is generated
+      output, not a grant of any licence to the tool.
+      This report describes the security posture of the assessed system and
+      should be handled accordingly.
+    </span>
   </div>
 </div>
 
