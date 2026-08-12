@@ -128,7 +128,13 @@ jobs:
         run: docker build -t monitorrisk:ci .
 
       - name: Scan for known vulnerabilities
-        uses: aquasecurity/trivy-action@0.28.0
+        # A REAL TAG, CHECKED AGAINST THE GITHUB API BEFORE BEING WRITTEN HERE.
+        # The first version of this line said @0.28.0, which does not exist. The
+        # job then failed in "Set up job" — before a single step ran — because the
+        # runner could not resolve the action, and the failure said nothing about
+        # a version number. Invented dependency versions fail in the least
+        # informative place available.
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: monitorrisk:ci
           format: table
