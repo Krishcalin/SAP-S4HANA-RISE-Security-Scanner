@@ -37,12 +37,12 @@
 
 import type {
   AccountInfo, AssignResult, BulkTransitionResult, ChangesSince, Coverage,
-  CrqParametersView, CrqQuantifyResult, CsfFunctionView, CsfView, Dashboard,
-  FindingDetail, FindingFilters, FindingHistory, FindingPage,
-  GeneratedPassword, Health, Journey, Landscape, Me, PathView, PathsOverview,
-  ResolvedView, RiskView, RunDiff, SapSystem, SaveViewResult, SavedView,
-  ScanRun, TotpConfirmed, TotpEnrolment, TotpStatus, TransitionResult,
-  UploadResult
+  CrqControlsView, CrqParametersView, CrqQuantifyResult, CrqTrendPoint,
+  CsfFunctionView, CsfView, Dashboard, FindingDetail, FindingFilters,
+  FindingHistory, FindingPage, GeneratedPassword, Health, Journey, Landscape,
+  Me, PathView, PathsOverview, ResolvedView, RiskView, RunDiff, SapSystem,
+  SaveViewResult, SavedView, ScanRun, TotpConfirmed, TotpEnrolment,
+  TotpStatus, TransitionResult, UploadResult
 } from './types'
 
 /** Same-origin by default: FastAPI serves this bundle and the API. The override
@@ -466,4 +466,10 @@ export function crqQuantify(
     ...(answers ? { answers_json: JSON.stringify(answers) } : {}),
     simulations: String(simulations),
   })
+}
+export function crqControls(landscapeId: number): Promise<CrqControlsView> {
+  return get<CrqControlsView>(`/crq/controls?landscape_id=${landscapeId}`)
+}
+export function crqTrend(limit = 12): Promise<{ points: CrqTrendPoint[] }> {
+  return get<{ points: CrqTrendPoint[] }>(`/crq/trend?limit=${limit}`)
 }

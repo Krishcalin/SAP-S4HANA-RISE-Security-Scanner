@@ -1075,6 +1075,41 @@ def api_crq_quantify(landscape_id: int = Form(...),
     return crq.quantify_with_parameters(findings, answers, simulations=sims)
 
 
+
+@app.get("/api/crq/controls")
+def api_crq_controls(landscape_id: int,
+                     user: Dict[str, Any] = Depends(current_user)):
+    """Open findings attributed to the nine FAIR-CAM Loss Event Control functions.
+
+    This is the answer to "which lever did those findings pull?". Each function
+    names the FAIR factor it moves, so a reader can follow a finding to Contact
+    Frequency, Probability of Action, Susceptibility or Loss Magnitude rather than
+    taking a severity weight on trust.
+
+    Two things it reports that a tidier version would hide: the confidence of each
+    attribution (nine of sixteen themes map to more than one function, and saying
+    so is the difference between a defensible split and a neat lie), and any
+    function no check can reach — which is `not_assessed`, never a clean zero.
+    """
+    from modules import fair_cam
+    scope = auth.scope_for(user)
+    findings = queries.findings_for_crq(scope, landscape_id)
+    return fair_cam.classify(findings)
+
+
+@app.get("/api/crq/trend")
+def api_crq_trend(user: Dict[str, Any] = Depends(current_user), limit: int = 12):
+    """Portfolio ALE per run, with the fingerprint that says where it may be joined.
+
+    The console must NOT draw one continuous polyline through these points. Risk
+    moves for reasons other than remediation — a revised revenue figure, a changed
+    simulation count, a dropped export that made checks self-skip — and a line
+    drawn straight through such a change asserts the two ends are comparable.
+    They are not. Break the line where `inputs_fingerprint` changes.
+    """
+    return {"points": crq.trend(auth.scope_for(user), limit=max(2, min(limit, 60)))}
+
+
 #  detail.
 #
 #  ANYTHING ADDED BELOW THIS LINE IS UNREACHABLE. New routes go above it.

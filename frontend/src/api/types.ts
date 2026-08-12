@@ -550,6 +550,15 @@ export interface CrqTrendPoint {
   unrouted_count: number
   run_id: number
   started_at: string
+  input_finding_count?: number | null
+  /** Digest of everything about the run that is NOT remediation — the model, the
+   *  money assumptions, the coverage. The line may be drawn continuously ONLY
+   *  between adjacent points whose fingerprints match; elsewhere it must break,
+   *  because the two sides are not comparable. */
+  inputs_fingerprint?: string
+  /** P90 with every finding closed. It does not depend on the findings, so if it
+   *  moves, something other than the customer's posture moved. */
+  residual_p90?: number | null
 }
 
 /** server/app.py `api_risk`. */
@@ -932,4 +941,32 @@ export interface CrqPortfolioStats {
    *  median is true and reads as a typical year; this is what prevents that. */
   p_no_loss: number
   loss_exceedance?: { loss: number; probability: number }[]
+}
+
+
+/** One of the nine FAIR-CAM Loss Event Control functions. modules/fair_cam.py. */
+export interface CrqControlFunction {
+  id: string
+  name: string
+  domain: 'Prevention' | 'Detection' | 'Response'
+  /** The FAIR factor this function moves. */
+  factor: string
+  definition: string
+  findings: number
+  weight: number
+  severities: Record<string, number>
+  themes: string[]
+  confidence: 'high' | 'medium' | 'ambiguous' | 'none'
+  /** assessed | clear | not_assessed — never two states. */
+  status: string
+  reason: string | null
+}
+
+export interface CrqControlsView {
+  functions: CrqControlFunction[]
+  domains: { domain: string; findings: number; weight: number; functions: string[] }[]
+  variance_management: { findings: number; weight: number; themes: string[]; note: string }
+  unattributed: { count: number; categories: string[]; note: string }
+  severity_weights: Record<string, number>
+  total_findings: number
 }

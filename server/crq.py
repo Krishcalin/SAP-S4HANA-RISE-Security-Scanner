@@ -45,6 +45,8 @@ a **calibration input**, i.e. by selecting a band, never by multiplying a score.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -223,6 +225,7 @@ def trend(scope: Optional[Sequence[int]] = None, limit: int = 12) -> List[Dict[s
     rows = db.query(
         f"""
         SELECT c.ale_p50, c.ale_p90, c.ale_mean, c.unrouted_count,
+               c.input_finding_count, c.detail,
                r.id AS run_id, r.started_at
         FROM crq_result c
         JOIN scan_run r ON r.id = c.scan_run_id
@@ -230,7 +233,70 @@ def trend(scope: Optional[Sequence[int]] = None, limit: int = 12) -> List[Dict[s
           AND c.ale_p90 IS NOT NULL AND {clause}
         ORDER BY r.started_at DESC LIMIT %s
         """, list(params) + [limit])
-    return list(reversed(rows))
+    rows = list(reversed(rows))
+
+    # THE TREND LINE MOVES FOR SEVEN REASONS AND ONLY ONE OF THEM IS REMEDIATION.
+    #
+    # Findings closing is the intended one. The others: the scenario catalogue is
+    # edited; the simulation count changes; a different engine is resolved on
+    # disk; the caller's row scope differs (two users screenshot two different
+    # lines and neither image says so); the customer revises their financial
+    # answers; and — worst of all — COVERAGE DROPS. A missing export makes checks
+    # self-skip, so fewer checks means fewer findings means a lower ALE, and the
+    # chart draws "we could not look" as an improvement in money.
+    #
+    # So every point carries a fingerprint of everything that is NOT remediation.
+    # The console draws one polyline per fingerprint group and breaks the line
+    # where it changes. A break is honest; a continuous line across a model change
+    # is a claim that the two ends are comparable, which they are not.
+    for row in rows:
+        row["inputs_fingerprint"] = _inputs_fingerprint(row)
+        row["residual_p90"] = _residual_p90(row)
+    return rows
+
+
+def _inputs_fingerprint(row: Dict[str, Any]) -> str:
+    """A short digest of everything about a run EXCEPT which findings were open.
+
+    Deliberately excludes ale_* and the finding count: those are the signal. It
+    covers the model, the money assumptions and the coverage, because a change in
+    any of them makes this point incomparable with its neighbour.
+    """
+    detail = row.get("detail") or {}
+    if not isinstance(detail, dict):
+        detail = {}
+    org = detail.get("organization") or {}
+    material = {
+        "simulations": detail.get("simulations"),
+        "revenue": org.get("revenue") or org.get("annual_revenue"),
+        "industry": org.get("industry"),
+        "exposure_weight": detail.get("exposure_weight"),
+        "crq_parameters_id": detail.get("crq_parameters_id"),
+        "model_version": detail.get("model_version"),
+        "engine_found": detail.get("engine_found"),
+    }
+    canonical = json.dumps(material, sort_keys=True, separators=(",", ":"),
+                           default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+
+
+def _residual_p90(row: Dict[str, Any]) -> Optional[float]:
+    """The floor: what P90 would be with every finding closed.
+
+    It earns its place on the chart twice. It shows the line cannot reach zero,
+    which removes a whole class of misreading. And because it depends on the model
+    and the money assumptions but NOT on findings, if the floor moves then
+    something other than the customer's security posture moved.
+    """
+    detail = row.get("detail") or {}
+    if not isinstance(detail, dict):
+        return None
+    target = detail.get("target_portfolio") or {}
+    value = target.get("ale_p90") if isinstance(target, dict) else None
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 # ── CFO parameters ──────────────────────────────────────────────────────────

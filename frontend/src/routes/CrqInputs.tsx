@@ -22,11 +22,14 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import {
-  ApiError, crqParameters, crqQuantify, saveCrqParameters,
+  ApiError, crqControls, crqParameters, crqQuantify, crqTrend,
+  saveCrqParameters,
 } from '../api/client'
 import type {
-  CrqParameter, CrqParametersView, CrqQuantifyResult,
+  CrqControlsView, CrqParameter, CrqParametersView, CrqQuantifyResult,
+  CrqTrendPoint,
 } from '../api/types'
+import { LossExceedance, RiskTrend } from './CrqCharts'
 import { useTitle } from '../lib/title'
 import { money } from './Risk'
 
@@ -59,6 +62,8 @@ export function CrqInputs() {
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
+  const [controls, setControls] = useState<CrqControlsView | null>(null)
+  const [trend, setTrend] = useState<CrqTrendPoint[] | null>(null)
 
   useEffect(() => {
     let live = true
@@ -75,6 +80,15 @@ export function CrqInputs() {
         const status = e instanceof ApiError ? e.status : 0
         setFailure(`The question set could not be loaded${status ? ` (HTTP ${status})` : ''}.`)
       })
+    return () => { live = false }
+  }, [])
+
+  // Separate, and each swallows its own failure: the control attribution and the
+  // trend are context for the figure, not the reason anyone opened this screen.
+  useEffect(() => {
+    let live = true
+    crqControls(LANDSCAPE_ID).then((c) => { if (live) setControls(c) }).catch(() => {})
+    crqTrend(12).then((r) => { if (live) setTrend(r.points) }).catch(() => {})
     return () => { live = false }
   }, [])
 
@@ -160,6 +174,13 @@ export function CrqInputs() {
           )}
 
           {result && <Result result={result} />}
+          {controls && <Controls controls={controls} />}
+          {trend && trend.length > 1 && (
+            <>
+              <h2 className={H2}>Has the exposure actually fallen?</h2>
+              <div className={CARD}><RiskTrend points={trend} /></div>
+            </>
+          )}
         </>
       )}
     </>
@@ -256,9 +277,12 @@ function Result({ result }: { result: CrqQuantifyResult }) {
           <div className={KPI_NOTE}>mean across {p.iterations.toLocaleString()} simulated years</div>
         </div>
         <div className={CARD}>
-          <h3 className={CARD_H3}>If every finding were fixed</h3>
+          <h3 className={CARD_H3}>Fully hardened floor</h3>
           <div className={`${KPI} text-ok`}>{money(t.ale_p90)}</div>
-          <div className={KPI_NOTE}>residual P90 — never zero, and it should not be</div>
+          <div className={KPI_NOTE}>
+            every finding closed <em>and</em> detection healthy — more than
+            clearing the backlog, and never zero
+          </div>
         </div>
         <div className={CARD}>
           <h3 className={CARD_H3}>Reducible by remediation</h3>
@@ -267,6 +291,11 @@ function Result({ result }: { result: CrqQuantifyResult }) {
             the P90 gap between today and a fully remediated estate
           </div>
         </div>
+      </div>
+
+      <h2 className={H2}>The whole distribution, not one number</h2>
+      <div className={CARD}>
+        <LossExceedance current={p} target={t} />
       </div>
 
       <h2 className={H2}>Where the loss figures came from</h2>
@@ -327,6 +356,101 @@ function Result({ result }: { result: CrqQuantifyResult }) {
         not a measurement, and it does not determine materiality — that is a legal
         judgement your counsel makes, which the FAIR Institute is explicit about.
       </p>
+    </>
+  )
+}
+
+
+function Controls({ controls }: { controls: CrqControlsView }) {
+  const v = controls.variance_management
+  const u = controls.unattributed
+  return (
+    <>
+      <h2 className={H2}>Which control the findings actually weaken</h2>
+      <p className="text-[12px] text-ink2 mb-2.5 max-w-[80ch]">
+        FAIR-CAM sorts controls into nine functions, and each one moves a
+        different part of the model. Prevention changes how often a loss event
+        happens; Detection and Response change how much it costs when it does.
+        This is the answer to &ldquo;which lever would fixing these pull?&rdquo;
+      </p>
+      <div className={TABLE_CARD}>
+        <table className="w-full border-collapse">
+          <thead>
+            <tr>
+              <th className={TH}>Control function</th>
+              <th className={TH}>FAIR-CAM domain</th>
+              <th className={TH}>Moves</th>
+              <th className={`${TH} text-right`}>Findings</th>
+              <th className={TH}>Attribution</th>
+            </tr>
+          </thead>
+          <tbody>
+            {controls.functions.map((f) => (
+              <tr key={f.id} className="hover:bg-panel2">
+                <td className={TD}>
+                  <div className="text-ink">{f.name}</div>
+                  <div className="text-[11px] text-ink3 max-w-[38ch]">{f.definition}</div>
+                </td>
+                <td className={`${TD} text-[12px] text-ink2`}>{f.domain}</td>
+                <td className={`${TD} font-mono text-[12px] text-ink2`}>
+                  {f.factor.replace(/_/g, ' ')}
+                </td>
+                <td className={`${TD} text-right font-mono`}>
+                  {f.status === 'not_assessed'
+                    ? <span className="text-ink3">&mdash;</span>
+                    : f.findings.toFixed(1)}
+                </td>
+                <td className={TD}>
+                  {/* not_assessed is DASHED, never a clean zero: no check this
+                      product runs is evidence about it, and 0.0 drawn like a
+                      measurement would say "healthy" about the unexamined. */}
+                  {f.status === 'not_assessed' ? (
+                    <>
+                      <span className="csf-state csf-state-not_assessed">not assessed</span>
+                      <div className="text-[11px] text-ink3 mt-1 max-w-[46ch]">{f.reason}</div>
+                    </>
+                  ) : f.status === 'clear' ? (
+                    <span className="csf-state csf-state-clear">no findings</span>
+                  ) : (
+                    <>
+                      <span className={f.confidence === 'ambiguous'
+                        ? 'csf-state csf-state-not_assessed'
+                        : 'csf-state csf-state-assessed'}>
+                        {f.confidence === 'ambiguous' ? 'ambiguous split' : f.confidence}
+                      </span>
+                      <div className="text-[11px] text-ink3 mt-1">{f.themes.join(' · ')}</div>
+                    </>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="text-[12px] text-ink3 px-3.5 py-2.5 m-0">
+          Findings are counted <strong>fractionally</strong>: one finding whose
+          theme reaches three functions contributes a third to each, so the column
+          sums to the corpus rather than triple-counting it. An
+          <strong> ambiguous split</strong> means the theme genuinely spans more
+          than one function — least privilege both resists an action and shrinks
+          its blast radius — and the weighting is a stated modelling choice, not a
+          measurement.
+        </p>
+      </div>
+
+      {(v.findings > 0 || u.count > 0) && (
+        <div className="banner banner-info mt-3.5">
+          {v.findings > 0 && (
+            <>
+              <strong>{v.findings.toFixed(1)} findings are Variance Management
+              controls</strong> ({v.themes.join(', ')}). {v.note}{' '}
+            </>
+          )}
+          {u.count > 0 && (
+            <><strong>{u.count} findings reach no control function at all</strong>
+              {' '}({u.categories.join(', ')}). {u.note}</>
+          )}
+        </div>
+      )}
     </>
   )
 }

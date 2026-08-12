@@ -177,7 +177,16 @@ function Body({ view }: { view: RiskView }) {
         <div className={CARD}>
           <h3 className={CARD_H3}>Reducible by remediation</h3>
           <div className={`${KPI} text-ok`}>{money(num(d.reducible_ale_p90))}</div>
-          <div className={KPI_NOTE}>if the open findings were closed</div>
+          {/* NOT "if the open findings were closed". fair_adapter builds this
+              arm by resetting every scenario to baseline contact frequency and
+              probability of action, HARDENED resistance strength, and no
+              detection penalty — a fully hardened posture, which is more than
+              closing today's findings and includes work a RISE customer is not
+              permitted to do themselves. The old label promised a floor that
+              closing the backlog would not reach. */}
+          <div className={KPI_NOTE}>
+            if every finding closed <em>and</em> detection were healthy
+          </div>
         </div>
         <div className={CARD}>
           <h3 className={CARD_H3}>Residual after remediation</h3>
