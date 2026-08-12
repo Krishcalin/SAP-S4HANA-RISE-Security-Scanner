@@ -44,6 +44,8 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from . import fair_provenance
+
 _SEV_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
 _SEV_RANK_WORST = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFO": 0, "NONE": 0}
 
@@ -280,29 +282,64 @@ def build_inputs(priorities: List[Any], catalog: Dict[str, Any],
 
 # ── engine location + simulation ─────────────────────────────────────────
 
-def locate_engine(explicit: Optional[str] = None):
-    """Import the CRQ engine module from an explicit path, the CRQ_ENGINE env
-    var, or a sibling-repo candidate. Returns the module or None if not found."""
-    candidates: List[Path] = []
+def locate_engine_with_origin(explicit: Optional[str] = None):
+    """Resolve the CRQ engine and say where it came from.
+
+    Returns (module_or_None, origin_dict).
+
+    THE OLD LOOP SWALLOWED EVERY FAILURE. A bare `except Exception: continue`
+    meant a broken external engine was passed over in silence and the bundled one
+    substituted different mathematics with no record anywhere — the run produced a
+    number and reported nothing unusual. Every skipped candidate is now recorded
+    with the exception class that skipped it, so a deployment problem is visible
+    in the stored result instead of being invisible in a number.
+
+    An engine resolved from CRQ_ENGINE or --crq-engine still WINS, because an
+    operator who types a path has consented. It is simply no longer secret.
+    """
+    candidates: List[Tuple[str, Path]] = []
     if explicit:
-        candidates.append(Path(explicit))
+        candidates.append(("explicit", Path(explicit)))
     env = os.environ.get("CRQ_ENGINE")
     if env:
-        candidates.append(Path(env))
-    candidates.extend(_ENGINE_CANDIDATES)
+        candidates.append(("env", Path(env)))
+    for cand in _ENGINE_CANDIDATES:
+        candidates.append(("bundled" if cand == _ENGINE_CANDIDATES[-1] else "sibling",
+                           cand))
 
-    for cand in candidates:
-        try:
-            if cand and cand.is_file():
-                spec = importlib.util.spec_from_file_location("crq_engine", str(cand))
-                if spec and spec.loader:
-                    mod = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(mod)
-                    if hasattr(mod, "FAIREngine"):
-                        return mod
-        except Exception:
+    skipped: List[Dict[str, str]] = []
+    for kind, cand in candidates:
+        if not cand:
             continue
-    return None
+        try:
+            if not cand.is_file():
+                continue
+            spec = importlib.util.spec_from_file_location("crq_engine", str(cand))
+            if not (spec and spec.loader):
+                skipped.append({"path": str(cand), "reason": "no import spec"})
+                continue
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            if not hasattr(mod, "FAIREngine"):
+                skipped.append({"path": str(cand),
+                                "reason": "no FAIREngine in module"})
+                continue
+            return mod, fair_provenance.engine_provenance(kind, cand, skipped)
+        except Exception as exc:                          # noqa: BLE001
+            skipped.append({"path": str(cand),
+                            "reason": type(exc).__name__})
+            continue
+    return None, fair_provenance.engine_provenance("none", None, skipped)
+
+
+def locate_engine(explicit: Optional[str] = None):
+    """The module alone, for callers that do not need the origin.
+
+    Kept so existing callers and tests are untouched; the origin-aware form above
+    is what `run` uses.
+    """
+    module, _origin = locate_engine_with_origin(explicit)
+    return module
 
 
 def _percentile(sorted_vals: List[float], p: float) -> float:
@@ -432,7 +469,19 @@ def run(findings: List[Dict[str, Any]], priorities: List[Any],
         "loss_model": loss_provenance,
     }
 
-    engine_module = locate_engine(engine_path)
+    engine_module, engine_origin = locate_engine_with_origin(engine_path)
+    # WHAT ACTUALLY RAN, recorded whether or not it succeeded. A run with no
+    # engine still carries the catalogue it would have used and the candidates it
+    # passed over, because "no number" is a result somebody has to diagnose.
+    provenance = {
+        "catalogue": fair_provenance.catalogue_provenance(
+            catalog_path or _DEFAULT_CATALOG, catalog),
+        "engine": engine_origin,
+        "model_version": fair_provenance.MODEL_VERSION,
+        "simulations": simulations,
+        "seed": seed,
+    }
+    out["provenance"] = provenance
     if engine_module is None:
         return out
 
@@ -469,5 +518,6 @@ def run(findings: List[Dict[str, Any]], priorities: List[Any],
         # currency number whose basis lives one API call away is a number that
         # will be quoted without its basis.
         "loss_model": loss_provenance,
+        "provenance": provenance,
     }
     return out

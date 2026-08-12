@@ -927,6 +927,17 @@ export interface CrqQuantifyResult {
   seed: number
   finding_count: number
   unrouted: number
+  model_version?: number
+  /** What produced this figure. modules/fair_provenance.py. */
+  provenance?: {
+    catalogue: { path: string; version: string | null; currency: string | null
+                 sha256: string | null; scenario_count: number | null }
+    engine: { kind: string; path: string | null; sha256: string | null
+              skipped: { path: string; reason: string }[] }
+    model_version: number
+    simulations: number
+    seed: number
+  }
 }
 
 export interface CrqPortfolioStats {

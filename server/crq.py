@@ -52,6 +52,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from psycopg.types.json import Jsonb
 
+from modules import fair_provenance
 from server import db
 
 log = logging.getLogger(__name__)
@@ -168,7 +169,8 @@ def compute_and_store(conn, run_id: int, landscape_id: int,
                               "were built but not simulated",
                     "exposure_weight": weight,
                     "crq_parameters_id": (parameter_set or {}).get("id"),
-                    "model_version": MODEL_VERSION})))
+                    "model_version": MODEL_VERSION,
+                    "provenance": result.get("provenance")})))
         return {"computed": False, "engine_found": False, "unrouted": unrouted,
                 "reason": "Monte-Carlo engine not locatable"}
 
@@ -194,6 +196,13 @@ def compute_and_store(conn, run_id: int, landscape_id: int,
                 "crq_parameters_id": (parameter_set or {}).get("id"),
                 "model_version": MODEL_VERSION,
                 "loss_model": summary.get("loss_model"),
+                # WHICH CATALOGUE AND WHICH ENGINE PRODUCED THIS.
+                # A loss band edited in data/fair_scenarios.json moves every
+                # customer's figure on unchanged findings; an engine dropped at
+                # CRQ_ENGINE changes the mathematics outright. Both were
+                # invisible. The digest is of the file's BYTES, because
+                # _meta.version is a string a human remembers to bump.
+                "provenance": summary.get("provenance"),
                 "target_portfolio": summary.get("target_portfolio"),
                 "reducible_ale_p90": summary.get("reducible_ale_p90"),
                 "reducible_ale_mean": summary.get("reducible_ale_mean"),
@@ -293,6 +302,11 @@ def _inputs_fingerprint(row: Dict[str, Any]) -> str:
     if not isinstance(detail, dict):
         detail = {}
     org = detail.get("organization") or {}
+    provenance = detail.get("provenance") or {}
+    if not isinstance(provenance, dict):
+        provenance = {}
+    catalogue = provenance.get("catalogue") or {}
+    engine = provenance.get("engine") or {}
     material = {
         "simulations": detail.get("simulations"),
         "revenue": org.get("revenue") or org.get("annual_revenue"),
@@ -301,10 +315,13 @@ def _inputs_fingerprint(row: Dict[str, Any]) -> str:
         "crq_parameters_id": detail.get("crq_parameters_id"),
         "model_version": detail.get("model_version"),
         "engine_found": detail.get("engine_found"),
+        # The catalogue's BYTES, not its declared version. They disagree exactly
+        # when somebody edited it without bumping _meta.version — the case the
+        # version alone cannot catch and the one most likely to happen.
+        "catalogue_sha256": catalogue.get("sha256") if isinstance(catalogue, dict) else None,
+        "engine_sha256": engine.get("sha256") if isinstance(engine, dict) else None,
     }
-    canonical = json.dumps(material, sort_keys=True, separators=(",", ":"),
-                           default=str)
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+    return fair_provenance.fingerprint(material)
 
 
 def _residual_p90(row: Dict[str, Any]) -> Optional[float]:
@@ -414,4 +431,8 @@ def quantify_with_parameters(findings: List[Dict[str, Any]],
         "unrouted": int(result.get("unrouted") or 0),
         "finding_count": len(findings or []),
         "model_version": MODEL_VERSION,
+        # Shown in the screen's footnote. A figure whose catalogue and
+        # engine are one API call away is a figure that gets quoted
+        # without them.
+        "provenance": summary.get("provenance"),
     }

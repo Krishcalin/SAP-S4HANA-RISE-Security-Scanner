@@ -158,14 +158,26 @@ def test_emitted_scenarios_match_engine_contract():
 
 
 def test_run_without_engine_still_exports_json(monkeypatch):
-    # Simulate "engine not installed" deterministically (the real sibling repo
-    # is present in dev, so we force locate_engine to fail).
-    monkeypatch.setattr(fa, "locate_engine", lambda explicit=None: None)
+    # Simulate "engine not installed" deterministically (a bundled engine ships,
+    # so we force resolution to fail).
+    #
+    # PATCHES locate_engine_with_origin, NOT locate_engine. `run` resolves through
+    # the origin-aware form so it can record WHICH engine produced the figure;
+    # patching the old name left the real engine loading and this assertion is
+    # what caught it. A patched seam the code no longer uses is a test that
+    # silently stops testing.
+    monkeypatch.setattr(fa, "locate_engine_with_origin",
+                        lambda explicit=None: (None, {"kind": "none", "path": None,
+                                                      "sha256": None, "skipped": []}))
     findings = [_f("AUTH-001", "ABAP Authorization & Critical Access", "CRITICAL")]
     out = fa.run(findings, _prio(findings))
     assert out["engine_found"] is False
     assert out["summary"] is None
     assert out["crq_input"]["scenarios"] and "organization" in out["crq_input"]
+    # Even with no engine the run says what it WOULD have used — "no number" is a
+    # result somebody has to diagnose, and the catalogue is half the diagnosis.
+    assert out["provenance"]["catalogue"]["sha256"]
+    assert out["provenance"]["engine"]["kind"] == "none"
 
 
 def test_empty_findings_no_crash():

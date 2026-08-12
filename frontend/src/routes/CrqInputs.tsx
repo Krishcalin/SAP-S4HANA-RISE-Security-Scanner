@@ -413,8 +413,23 @@ function Result({ result }: { result: CrqQuantifyResult }) {
       <p className="text-[12px] text-ink3 mt-4 max-w-[80ch]">
         Computed from {result.finding_count.toLocaleString()} open findings over{' '}
         {result.simulations.toLocaleString()} Monte Carlo iterations, seed{' '}
-        {result.seed}. Identical answers and identical findings reproduce this
-        figure exactly. This is an <strong>estimate built from your assumptions</strong>,
+        {result.seed}
+        {result.provenance && (
+          <>
+            {', scenario catalogue '}
+            {result.provenance.catalogue.version ?? 'unversioned'}
+            {' ('}
+            <span className="font-mono">
+              {(result.provenance.catalogue.sha256 ?? '').slice(0, 12) || 'no digest'}
+            </span>
+            {'), '}
+            {result.provenance.engine.kind} engine, model v
+            {result.provenance.model_version}
+          </>
+        )}
+        . Identical answers, findings, catalogue and engine reproduce this figure
+        exactly &mdash; and the trend line breaks wherever any of them changed, so
+        a revised assumption is never drawn as an improvement. This is an <strong>estimate built from your assumptions</strong>,
         not a measurement, and it does not determine materiality — that is a legal
         judgement your counsel makes, which the FAIR Institute is explicit about.
       </p>
