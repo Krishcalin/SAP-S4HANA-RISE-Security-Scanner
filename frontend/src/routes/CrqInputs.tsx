@@ -20,14 +20,15 @@
  *     must not silently write that into the history the trend chart is drawn from.
  */
 import { useCallback, useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router'
 
 import {
-  ApiError, crqControls, crqParameters, crqQuantify, crqTrend,
+  ApiError, crqControls, crqParameters, crqQuantify, crqTrend, landscapes,
   saveCrqParameters,
 } from '../api/client'
 import type {
   CrqControlsView, CrqParameter, CrqParametersView, CrqQuantifyResult,
-  CrqTrendPoint,
+  CrqTrendPoint, Landscape,
 } from '../api/types'
 import { LossExceedance, RiskTrend } from '../components/CrqCharts'
 import { useTitle } from '../lib/title'
@@ -43,8 +44,16 @@ const TH = 'text-left text-[11px] font-semibold uppercase tracking-[.05em] text-
 const TD = 'px-2.5 py-2.5 border-b border-line align-top'
 const TABLE_CARD = 'rounded-lg border border-line bg-panel overflow-x-auto'
 
-/** The landscape whose figures these are. One landscape, one set of financials. */
-const LANDSCAPE_ID = 1
+/*
+ * WHICH LANDSCAPE'S FIGURES THESE ARE.
+ *
+ * It was hardcoded to 1, which is wrong the moment a customer has two — and this
+ * product's own reference deployment has two, so the screen opened on the wrong
+ * one and showed every question blank. It lives in the URL rather than in state
+ * because a CFO sends this screen to somebody, and a link that silently opens a
+ * different landscape's money is worse than no link. Trend.tsx keeps its filters
+ * in the URL for the same reason.
+ */
 
 function unitHint(unit: string): string {
   if (unit === 'currency') return 'amount'
@@ -56,6 +65,9 @@ function unitHint(unit: string): string {
 
 export function CrqInputs() {
   useTitle('Risk quantification')
+  const [params, setParams] = useSearchParams()
+  const [scapes, setScapes] = useState<Landscape[] | null>(null)
+  const selected = Number(params.get('landscape') || 0)
   const [view, setView] = useState<CrqParametersView | null>(null)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [result, setResult] = useState<CrqQuantifyResult | null>(null)
@@ -67,7 +79,24 @@ export function CrqInputs() {
 
   useEffect(() => {
     let live = true
-    crqParameters(LANDSCAPE_ID)
+    landscapes()
+      .then((ls) => {
+        if (!live) return
+        setScapes(ls)
+        if (!selected && ls.length) {
+          setParams({ landscape: String(ls[0].id) }, { replace: true })
+        }
+      })
+      .catch(() => { if (live) setScapes([]) })
+    return () => { live = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!selected) return
+    let live = true
+    setResult(null)
+    crqParameters(selected)
       .then((v) => {
         if (!live) return
         setView(v)
@@ -81,16 +110,18 @@ export function CrqInputs() {
         setFailure(`The question set could not be loaded${status ? ` (HTTP ${status})` : ''}.`)
       })
     return () => { live = false }
-  }, [])
+  }, [selected])
 
   // Separate, and each swallows its own failure: the control attribution and the
   // trend are context for the figure, not the reason anyone opened this screen.
   useEffect(() => {
+    if (!selected) return
     let live = true
-    crqControls(LANDSCAPE_ID).then((c) => { if (live) setControls(c) }).catch(() => {})
+    setControls(null)
+    crqControls(selected).then((c) => { if (live) setControls(c) }).catch(() => {})
     crqTrend(12).then((r) => { if (live) setTrend(r.points) }).catch(() => {})
     return () => { live = false }
-  }, [])
+  }, [selected])
 
   const numeric = useCallback((): Record<string, number> => {
     const out: Record<string, number> = {}
@@ -106,7 +137,7 @@ export function CrqInputs() {
     setBusy(true)
     setFailure(null)
     setSaved(null)
-    crqQuantify(LANDSCAPE_ID, numeric())
+    crqQuantify(selected, numeric())
       .then(setResult)
       .catch((e: unknown) => {
         const status = e instanceof ApiError ? e.status : 0
@@ -118,11 +149,11 @@ export function CrqInputs() {
   function save() {
     setBusy(true)
     setFailure(null)
-    saveCrqParameters(LANDSCAPE_ID, numeric(), '')
+    saveCrqParameters(selected, numeric(), '')
       .then((r) => {
         setSaved(`Saved as revision ${r.id}. Earlier revisions are kept, so any `
           + `figure computed from them stays explainable.`)
-        return crqParameters(LANDSCAPE_ID).then(setView)
+        return crqParameters(selected).then(setView)
       })
       .catch((e: unknown) => {
         const status = e instanceof ApiError ? e.status : 0
@@ -144,11 +175,42 @@ export function CrqInputs() {
         benchmark, an industry average, or a number we invented.
       </p>
 
+      {scapes && scapes.length > 1 && (
+        <div className="flex items-center gap-2.5 mb-4">
+          <label className="text-[12px] text-ink2" htmlFor="crq-landscape">
+            Landscape
+          </label>
+          <select
+            id="crq-landscape"
+            className="field"
+            value={selected || ''}
+            onChange={(e) => setParams({ landscape: e.target.value })}
+          >
+            {scapes.map((l) => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </select>
+          <span className="text-[12px] text-ink3">
+            Financial figures are recorded per landscape — one estate, one set of
+            assumptions.
+          </span>
+        </div>
+      )}
+
+      {scapes && scapes.length === 0 && (
+        <div className="banner banner-warn">
+          There are no landscapes yet, so there is nothing to quantify. Create one
+          with <code>server.cli add-landscape</code> and upload a scan first.
+        </div>
+      )}
+
       {failure && <div className="banner banner-bad" role="alert">{failure}</div>}
       {saved && <div className="banner banner-ok">{saved}</div>}
-      {!failure && view === null && <p className="text-[13px] text-ink3">Loading…</p>}
+      {!failure && selected > 0 && view === null && (
+        <p className="text-[13px] text-ink3">Loading…</p>
+      )}
 
-      {view && (
+      {view && selected > 0 && (
         <>
           <Questions view={view} answers={answers} setAnswers={setAnswers} />
 

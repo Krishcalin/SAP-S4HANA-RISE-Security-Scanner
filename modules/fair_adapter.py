@@ -376,7 +376,8 @@ def run(findings: List[Dict[str, Any]], priorities: List[Any],
         catalog_path: Optional[str] = None,
         org_overrides: Optional[Dict[str, Any]] = None,
         engine_path: Optional[str] = None,
-        simulations: int = 10000, seed: int = 42) -> Dict[str, Any]:
+        simulations: int = 10000, seed: int = 42,
+        loss_answers: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Full adapter run. Returns:
         {
           "crq_input": <as-is CRQ scenario JSON to export / hand to crq_engine>,
@@ -395,6 +396,32 @@ def run(findings: List[Dict[str, Any]], priorities: List[Any],
         if v is not None:
             org[k] = v
 
+    # THE CUSTOMER'S OWN LOSS FIGURES, APPLIED HERE AND NOWHERE ELSE.
+    #
+    # This is deliberately the single calibration point. The interactive /crq
+    # screen and the scan-time quantification both arrive here, so a CFO cannot
+    # see one number on the screen and a different one on the dashboard. A second
+    # implementation of "price the catalogue from the answers" would drift from
+    # this one, and the first person to notice would be a customer comparing a
+    # board pack against the console.
+    loss_provenance: Dict[str, Any] = {"applied": False}
+    if loss_answers:
+        from .fair_loss_model import (apply_to_scenario, build_loss_components,
+                                      scale_factor)
+        priced = build_loss_components(loss_answers)
+        scale = scale_factor(loss_answers, float(org.get("revenue") or 0.0))
+        if loss_answers.get("sap_revenue"):
+            org["revenue"] = float(loss_answers["sap_revenue"])
+        catalog = dict(catalog)
+        catalog["scenarios"] = [apply_to_scenario(s, priced, scale)
+                                for s in catalog.get("scenarios", [])]
+        loss_provenance = {
+            "applied": True,
+            "priced_modules": priced["priced_modules"],
+            "unpriced": [u["module"] for u in priced["unpriced"]],
+            "scale_factor": scale,
+        }
+
     built = build_inputs(priorities, catalog, org)
     out: Dict[str, Any] = {
         "crq_input": built["asis"], "meta": built["meta"],
@@ -402,6 +429,7 @@ def run(findings: List[Dict[str, Any]], priorities: List[Any],
         "unevidenced": built["unevidenced"],
         "engine_found": False, "summary": None,
         "organization": org,
+        "loss_model": loss_provenance,
     }
 
     engine_module = locate_engine(engine_path)
@@ -437,5 +465,9 @@ def run(findings: List[Dict[str, Any]], priorities: List[Any],
         # for the same reason: a number the reader cannot interrogate is a number
         # they should not trust.
         "unevidenced": built["unevidenced"],
+        # The provenance travels WITH the figure into the stored summary. A
+        # currency number whose basis lives one API call away is a number that
+        # will be quoted without its basis.
+        "loss_model": loss_provenance,
     }
     return out

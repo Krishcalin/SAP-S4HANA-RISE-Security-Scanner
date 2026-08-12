@@ -59,6 +59,13 @@ log = logging.getLogger(__name__)
 #: Criticality -> revenue-at-risk weight. Selects a band; does NOT scale a score.
 #: A landscape whose scanned systems are all sandboxes should not report the same
 #: loss exposure as one centred on a production ledger.
+#: Bumped whenever a change to the model would move a figure for unchanged
+#: findings. Stored per result and folded into the trend fingerprint, so the
+#: console breaks the line at the version change rather than drawing the jump as
+#: a security improvement. v2 = the customer's own loss figures replaced the
+#: catalogue's illustrative ones, and the engine seed became process-stable.
+MODEL_VERSION = 2
+
 CRITICALITY_WEIGHT: Dict[str, float] = {
     "critical": 1.0,
     "high": 0.6,
@@ -129,9 +136,18 @@ def compute_and_store(conn, run_id: int, landscape_id: int,
     if industry:
         overrides["industry"] = industry
 
+    # THE CUSTOMER'S SAVED FIGURES, ON THE SCAN PATH.
+    #
+    # Without this the /crq screen and the dashboard disagree: the screen prices
+    # from the CFO's answers while every stored result stays on the catalogue's
+    # illustrative $1bn company. Same landscape, same findings, two numbers, and
+    # nothing on either screen saying why.
+    parameter_set = latest_parameters(landscape_id)
+    loss_answers = (parameter_set or {}).get("answers") or None
+
     try:
         result = fair_run(findings, priorities, org_overrides=overrides or None,
-                          simulations=simulations)
+                          simulations=simulations, loss_answers=loss_answers)
     except Exception:                                    # noqa: BLE001
         log.exception("FAIR run failed")
         return {"computed": False, "reason": "FAIR run raised"}
@@ -150,7 +166,9 @@ def compute_and_store(conn, run_id: int, landscape_id: int,
              Jsonb({"engine_found": False,
                     "reason": "Monte-Carlo engine not locatable; scenario inputs "
                               "were built but not simulated",
-                    "exposure_weight": weight})))
+                    "exposure_weight": weight,
+                    "crq_parameters_id": (parameter_set or {}).get("id"),
+                    "model_version": MODEL_VERSION})))
         return {"computed": False, "engine_found": False, "unrouted": unrouted,
                 "reason": "Monte-Carlo engine not locatable"}
 
@@ -158,15 +176,24 @@ def compute_and_store(conn, run_id: int, landscape_id: int,
     conn.execute(
         """
         INSERT INTO crq_result (scan_run_id, scenario_id, ale_p10, ale_p50, ale_p90,
-                                ale_mean, unrouted_count, input_finding_count, detail)
-        VALUES (%s, NULL, %s, %s, %s, %s, %s, %s, %s)
+                                ale_mean, ale_p95, p_no_loss, unrouted_count,
+                                input_finding_count, detail)
+        VALUES (%s, NULL, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (run_id, portfolio.get("ale_p10"), portfolio.get("ale_p50"),
-         portfolio.get("ale_p90"), portfolio.get("mean_ale"), unrouted, input_count,
+         portfolio.get("ale_p90"), portfolio.get("mean_ale"),
+         portfolio.get("ale_p95"), portfolio.get("p_no_loss"), unrouted, input_count,
          Jsonb({"engine_found": True,
                 "simulations": summary.get("simulations"),
                 "organization": summary.get("organization"),
                 "exposure_weight": weight,
+                # WHICH ANSWERS PRODUCED THIS FIGURE, AND UNDER WHICH MODEL.
+                # _inputs_fingerprint reads both. Without them the trend cannot
+                # tell a revised revenue assumption from a closed finding, which
+                # is the one confusion the series break exists to prevent.
+                "crq_parameters_id": (parameter_set or {}).get("id"),
+                "model_version": MODEL_VERSION,
+                "loss_model": summary.get("loss_model"),
                 "target_portfolio": summary.get("target_portfolio"),
                 "reducible_ale_p90": summary.get("reducible_ale_p90"),
                 "reducible_ale_mean": summary.get("reducible_ale_mean"),
@@ -344,54 +371,47 @@ def quantify_with_parameters(findings: List[Dict[str, Any]],
                              seed: int = 42) -> Dict[str, Any]:
     """Run FAIR with the customer's own loss figures. No database, no writes.
 
-    This is the interactive path: the input screen calls it on every recompute so
-    a CFO can see what a different recovery-time assumption does without polluting
-    the stored history with a draft.
+    The interactive path: the input screen calls it on every recompute so a CFO
+    can see what a different recovery-time assumption does without writing a draft
+    into the history the trend is drawn from.
+
+    IT DELEGATES TO fair_adapter.run, WHICH IS THE POINT. An earlier version
+    calibrated the catalogue itself, which made two implementations of "price the
+    scenarios from the answers" — and the first person to notice they had drifted
+    would have been a customer holding a board pack in one hand and the console in
+    the other. One calibration point, two callers.
     """
-    from modules import fair_loss_model as loss_model
-    from modules.fair_adapter import (build_inputs, load_catalog, locate_engine,
-                                      _quantify)
+    from modules.fair_adapter import run as fair_run
     from modules.risk_prioritizer import prioritize
 
-    catalogue = load_catalog()
-    org = dict(catalogue.get("organization_default", {}))
-    priced = loss_model.build_loss_components(answers or {})
-    scale = loss_model.scale_factor(answers or {},
-                                    float(org.get("revenue") or 0.0))
-    if answers.get("sap_revenue"):
-        org["revenue"] = float(answers["sap_revenue"])
-
-    scenarios = [loss_model.apply_to_scenario(s, priced, scale)
-                 for s in catalogue.get("scenarios", [])]
-    calibrated = dict(catalogue)
-    calibrated["scenarios"] = scenarios
-
-    engine = locate_engine()
-    if engine is None:
-        return {"computed": False, "reason": "no FAIR engine available",
-                "priced": priced}
-
     priorities = prioritize(findings or [])
-    built = build_inputs(priorities, calibrated, org)
-    asis = _quantify(built["asis"], engine, simulations, seed)
-    target = _quantify(built["target"], engine, simulations, seed)
+    result = fair_run(findings or [], priorities, simulations=simulations,
+                      seed=seed, loss_answers=answers or None)
+    summary = result.get("summary")
+    if not summary:
+        from modules.fair_loss_model import build_loss_components
+        return {"computed": False,
+                "reason": "no FAIR engine available",
+                "priced": build_loss_components(answers or {})}
 
+    from modules.fair_loss_model import build_loss_components
+    portfolio = summary.get("portfolio") or {}
+    target = summary.get("target_portfolio") or {}
     return {
         "computed": True,
-        "portfolio": asis["portfolio"],
-        "target_portfolio": target["portfolio"],
-        "scenarios": asis["scenarios"],
-        "reducible_ale_p90": max(0.0, asis["portfolio"]["ale_p90"]
-                                 - target["portfolio"]["ale_p90"]),
-        "reducible_ale_mean": max(0.0, asis["portfolio"]["mean_ale"]
-                                  - target["portfolio"]["mean_ale"]),
-        # The loss provenance travels WITH the figure, always. A currency number
-        # whose basis is one API call away is a number that will be quoted without
-        # its basis.
-        "priced": priced,
-        "scale_factor": scale,
+        "portfolio": portfolio,
+        "target_portfolio": target,
+        "scenarios": summary.get("scenarios") or [],
+        "reducible_ale_p90": summary.get("reducible_ale_p90") or 0.0,
+        "reducible_ale_mean": summary.get("reducible_ale_mean") or 0.0,
+        # The breakdown the screen renders under every figure. Rebuilt rather than
+        # threaded out of the adapter because the adapter only needs the bands;
+        # the screen needs the arithmetic in words.
+        "priced": build_loss_components(answers or {}),
+        "scale_factor": (summary.get("loss_model") or {}).get("scale_factor"),
         "simulations": simulations,
         "seed": seed,
-        "unrouted": built.get("unrouted", 0),
+        "unrouted": int(result.get("unrouted") or 0),
         "finding_count": len(findings or []),
+        "model_version": MODEL_VERSION,
     }
