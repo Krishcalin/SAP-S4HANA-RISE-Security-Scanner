@@ -29,7 +29,7 @@ import type {
   CrqControlsView, CrqParameter, CrqParametersView, CrqQuantifyResult,
   CrqTrendPoint,
 } from '../api/types'
-import { LossExceedance, RiskTrend } from './CrqCharts'
+import { LossExceedance, RiskTrend } from '../components/CrqCharts'
 import { useTitle } from '../lib/title'
 import { money } from './Risk'
 
