@@ -1,3 +1,16 @@
 # Development / test dependencies only.
 # The scanner itself has ZERO runtime dependencies (Python 3.8+ stdlib).
 pytest>=7.0
+
+# PyYAML is here to read docker-compose.yml in tests/test_deployment_hardening.py.
+#
+# It is DEV-ONLY and never reaches the image: the runtime list in
+# requirements.txt is four packages and tests/test_spa_mount.py asserts it
+# verbatim, so this cannot drift into the deployment.
+#
+# It earns the line because the alternative was a purpose-built parser for a
+# handful of keys — a second, worse YAML implementation that would misparse
+# quietly — or `importorskip`, which would have made every hardening assertion
+# skip in CI. A test that cannot run is not a test, and hardening that nothing
+# checks is the kind that gets deleted during the next debugging session.
+PyYAML>=6.0

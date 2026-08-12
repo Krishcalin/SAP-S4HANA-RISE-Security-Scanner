@@ -24,6 +24,24 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+
+    # Postgres is NOT read_only: it writes its data directory, a socket in
+    # /var/run/postgresql and temporary files, and forcing it read-only means
+    # mounting three tmpfs to work around a database doing database things.
+    # The capabilities it does not need are dropped instead. CHOWN, SETUID,
+    # SETGID, DAC_OVERRIDE and FOWNER are kept because the official entrypoint
+    # starts as root, fixes ownership of the data directory, then drops to the
+    # postgres user — remove those and initdb fails on a fresh volume.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
 
   app:
@@ -40,6 +58,48 @@ services:
       - "127.0.0.1:8000:8000"
     volumes:
       - uploads:/var/lib/sapsec/uploads
+      # THE SAMPLE FIXTURES ARE NOT IN THE IMAGE, DELIBERATELY — they are ~50
+      # directories of demonstration data that a production deployment should not
+      # carry. That has one sharp edge worth knowing: anything you copy into the
+      # container by hand is GONE after `docker compose build`, because a rebuild
+      # replaces the writable layer. Uncomment this to keep them available across
+      # rebuilds when demonstrating or testing:
+      # - ./sample_data_landscape:/srv/fixtures/sample_data_landscape:ro
+      # - ./sample_data:/srv/fixtures/sample_data:ro
+      #   then: docker compose exec app python -m server.cli scan "<landscape>"       #           /srv/fixtures/sample_data_landscape/P01 --sid P01 --client 100
+
+    # ── container hardening ──────────────────────────────────────────────────
+    # The app reads uploaded files and writes to exactly one directory. Every
+    # line below removes something it therefore does not need, and each was
+    # verified against a running container rather than assumed.
+
+    # The image is immutable at runtime. Uploads go to the named volume above and
+    # scan working directories are created INSIDE it (server/app.py uses
+    # tempfile.mkdtemp(dir=upload_dir), not /tmp), so nothing legitimate writes
+    # to the root filesystem. Bytecode is compiled at build time — see Dockerfile.
+    read_only: true
+
+    # /tmp is still given to the process because the standard library reaches for
+    # it in places nobody enumerates, and a 64M in-memory filesystem is cheaper
+    # than discovering the exception in production. noexec/nosuid: nothing should
+    # ever be executed from a scratch directory.
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+
+    # It binds :8000 as uid 10001, which needs no capability at all. CAP_NET_BIND_SERVICE
+    # is not required because the port is above 1024.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    # The Monte Carlo is pure Python and CPU-bound; a large `simulations` value is
+    # accepted from an authenticated caller and clamped in the route, but a limit
+    # here is the backstop that does not depend on remembering to clamp.
+    pids_limit: 256
+    mem_limit: 2g
+    cpus: 2.0
+
     restart: unless-stopped
 
 volumes:

@@ -54,7 +54,33 @@ COPY --from=spa /build/server/spa ./server/spa
 RUN useradd --system --create-home --uid 10001 sapsec \
  && mkdir -p /var/lib/sapsec/uploads \
  && chown -R sapsec:sapsec /app /var/lib/sapsec
+# BYTECODE IS COMPILED AT BUILD TIME, WHICH IS WHAT LETS THE ROOT FILESYSTEM BE
+# READ-ONLY AT RUNTIME.
+#
+# Python writes __pycache__/*.pyc beside the source on first import — the running
+# container was doing exactly that under /app/server. With `read_only: true` that
+# write fails, and CPython degrades SILENTLY: it recompiles on every import rather
+# than erroring, so the only symptom is a slower start nobody attributes to this.
+# Compiling here means the .pyc are already present, and PYTHONDONTWRITEBYTECODE
+# stops anything trying to add more.
+#
+# `|| true` because compileall exits non-zero on any file it cannot compile, and
+# one unparseable vendored sample must not fail the build. Anything that matters
+# is imported at startup and would fail loudly there instead.
+RUN python -m compileall -q /app/server /app/modules /app/collect || true \
+ && chown -R sapsec:sapsec /app
+
 USER sapsec
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# Compose waited on the DATABASE's healthcheck and had nothing to wait on for the
+# app, so `docker compose up` reported success while the console was still 503.
+# urllib rather than curl: the slim base ships no curl, and installing one to
+# check a health endpoint would grow the attack surface faster than it describes it.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
+  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else 1)"
 
 EXPOSE 8000
 # --proxy-headers / --forwarded-allow-ips: the session cookie's Secure flag is
