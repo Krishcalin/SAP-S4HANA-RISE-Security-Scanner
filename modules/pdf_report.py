@@ -415,10 +415,55 @@ class PDFReportGenerator:
             return "%s$%.0fK" % (sign, a / 1e3)
         return "%s$%.0f" % (sign, a)
 
+    def _fair_unpriced(self, fair):
+        """The FAIR page when nobody has priced the business.
+
+        It still reports the scenario matching, because that IS driven by the
+        customer's findings and is real. Only the money is withheld.
+        """
+        self._new_content_page()
+        self._section_title("Financial Risk Exposure (FAIR)")
+        self._para(
+            "NO CURRENCY FIGURE IS PRESENTED FOR THIS ORGANISATION. The FAIR model ran "
+            "and the scenarios below were matched to this estate's findings, but nobody "
+            "supplied what an hour of SAP downtime costs, how many personal records are "
+            "held, or what a payment run is worth. The shipped scenario catalogue is "
+            "calibrated to an illustrative $1 billion manufacturer, and printing that "
+            "company's losses under this organisation's name would be a fabrication "
+            "rather than an estimate.",
+            size=9, color=INK, leading=13, gap_after=8)
+        self._para(
+            "Supply crq_parameters.json alongside the export, or pass --crq-inputs, and "
+            "this section will price the scenarios from the organisation's own figures "
+            "with the arithmetic shown.",
+            size=8.5, color=MUTED, leading=12, gap_after=14)
+        for sc in sorted(fair.get("scenarios", []) or [],
+                         key=lambda s: -(s.get("finding_count") or 0)):
+            fc = sc.get("finding_count")
+            self._para(
+                "%s  -  %s finding(s) routed, worst severity %s"
+                % (sc.get("name", sc.get("id", "")),
+                   fc if fc is not None else "-",
+                   sc.get("worst_severity", "-")),
+                size=8.5, color=INK, leading=12, gap_after=4)
+        self._para(
+            "Scenario matching is real and independent of the money: it is driven by the "
+            "findings. Only the loss magnitude is unpriced.",
+            size=8, color=MUTED, leading=11, gap_after=10)
+
     def _fair_section(self):
         fair = self.fair
         if not fair or not fair.get("portfolio"):
             return
+
+        # NO CUSTOMER FIGURES, NO CURRENCY TOTAL. Same rule as the HTML report and
+        # the terminal. This file matters most of the three: the PDF is what goes
+        # to an auditor, and until now it printed an illustrative $1bn
+        # manufacturer's losses under the customer's name, to the cent.
+        if not (fair.get("loss_model") or {}).get("applied"):
+            self._fair_unpriced(fair)
+            return
+
         pf = fair["portfolio"]
         org = fair.get("organization", {})
         self._new_content_page()

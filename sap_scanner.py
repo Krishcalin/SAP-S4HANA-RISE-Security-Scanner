@@ -162,6 +162,11 @@ def main():
         help="Industry for the FAIR loss multiplier (financial_services, healthcare, "
              "technology, retail, manufacturing, government, energy, education).")
     parser.add_argument("--crq-org-name", default=None, help="Organization name for the FAIR report.")
+    parser.add_argument("--crq-inputs", default=None, metavar="FILE",
+        help="Path to the customer's financial figures (crq_parameters.json shape). "
+             "Defaults to crq_parameters.json in the data directory if present. "
+             "Without figures, no currency total is presented as this "
+             "organisation's exposure.")
     parser.add_argument("--crq-sims", type=int, default=10000,
         help="Monte Carlo iterations per scenario (default: 10000).")
 
@@ -549,13 +554,60 @@ def main():
         print("[*] FAIR cyber-risk quantification (mapping findings to SAP loss scenarios)...")
         org_overrides = {"name": args.crq_org_name, "revenue": args.crq_revenue,
                          "industry": args.crq_industry}
+
+        # THE CUSTOMER'S OWN FIGURES REACH THE OFFLINE REPORT HERE.
+        #
+        # Until this existed the offline path was structurally incapable of
+        # printing them: fair_adapter.run gates all pricing on `loss_answers` and
+        # nothing offline ever passed it. So the HTML and PDF a customer sends to
+        # their auditor carried the catalogue's illustrative $1bn manufacturer,
+        # while the console showed the customer's own — same product, same estate,
+        # two different numbers, and neither artefact said why.
+        #
+        # Precedence: an explicit --crq-inputs beats crq_parameters.json in the
+        # data directory, for the same reason --crq-engine beats the bundled
+        # engine — somebody who types a path has said what they mean.
+        crq_answers = None
+        crq_source = None
+        if getattr(args, "crq_inputs", None):
+            with open(args.crq_inputs, "r", encoding="utf-8") as fh:
+                payload = json.load(fh)
+            crq_answers = (payload or {}).get("answers") or None
+            crq_source = args.crq_inputs
+        else:
+            sidecar = data.get(DataLoader.CRQ_PARAMETERS_KEY)
+            if sidecar:
+                crq_answers = sidecar.get("answers") or None
+                crq_source = DataLoader.CRQ_PARAMETERS_FILE
+
+        # --crq-revenue ALONE NOW MEANS SOMETHING.
+        #
+        # It was inert: it set org["revenue"], and crq_engine.simulate_scenario
+        # never reads the organization dict at all. Measured before this change,
+        # 42,000,000 and 4,200,000,000 produced the identical P90 — a documented
+        # flag that promised to change the analysis and did nothing. Turning it
+        # into the one answer it actually is lets the revenue ratio scale the
+        # catalogue's bands, which is the whole of what a bare revenue figure can
+        # honestly support.
+        if crq_answers is None and args.crq_revenue:
+            crq_answers = {"sap_revenue": float(args.crq_revenue)}
+            crq_source = "--crq-revenue"
+
         # FAIR runs on the UNFILTERED finding set (see fair_findings above) so a
         # report severity filter never changes the quantified loss exposure.
         fair_prio = (prio_results if args.severity == "ALL"
                      else RiskPrioritizer().prioritize(fair_findings))
         crq_out = fair_adapter.run(
             fair_findings, fair_prio, org_overrides=org_overrides,
-            engine_path=args.crq_engine, simulations=args.crq_sims)
+            engine_path=args.crq_engine, simulations=args.crq_sims,
+            loss_answers=crq_answers)
+        if crq_answers:
+            print(f"    Loss figures: {len(crq_answers)} answer(s) from {crq_source}")
+        else:
+            print("    Loss figures: NONE SUPPLIED. The scenario catalogue's "
+                  "illustrative company is used for the shape of the analysis, and "
+                  "the report will NOT present a currency figure as this "
+                  "organisation's exposure. Supply crq_parameters.json to price it.")
         crq_json_path = base + ".crq.json"
         with open(crq_json_path, "w", encoding="utf-8") as fh:
             json.dump(crq_out["crq_input"], fh, indent=2)
@@ -566,10 +618,19 @@ def main():
         if crq_out["engine_found"] and crq_out["summary"]:
             fair_summary = crq_out["summary"]
             pf = fair_summary["portfolio"]
-            print("    Annual loss exposure (ALE):  P50 ${:,.0f}   P90 ${:,.0f}   mean ${:,.0f}".format(
-                pf["ale_p50"], pf["ale_p90"], pf["mean_ale"]))
-            print("    Reducible toward hardened posture: ~${:,.0f} (P90)".format(
-                fair_summary["reducible_ale_p90"]))
+            # THE TERMINAL OBEYS THE SAME RULE AS THE REPORT. It said "will NOT
+            # present a currency figure" and then printed one two lines later —
+            # and a figure on a terminal is copied into a chat message exactly as
+            # readily as one in a PDF.
+            if (fair_summary.get("loss_model") or {}).get("applied"):
+                print("    Annual loss exposure (ALE):  P50 ${:,.0f}   P90 ${:,.0f}   mean ${:,.0f}".format(
+                    pf["ale_p50"], pf["ale_p90"], pf["mean_ale"]))
+                print("    Reducible toward hardened posture: ~${:,.0f} (P90)".format(
+                    fair_summary["reducible_ale_p90"]))
+            else:
+                print("    Scenario shape computed; NO currency figure is reported "
+                      "for this organisation because none of its own loss figures "
+                      "were supplied.")
         else:
             print("    CRQ engine not found - scenario JSON exported only. Quantify it with:")
             print(f"      python crq_engine.py {crq_json_path} --html")

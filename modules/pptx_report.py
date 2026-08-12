@@ -431,10 +431,18 @@ class PPTXReportGenerator:
                    [_p(fw["name"], 13, b=True, color=INK)])
             s.text(Inches(0.6), y + Inches(0.32), Inches(5.8), Inches(0.3),
                    [_p(fw["subtitle"], 9, color=MUTED)])
-            frac = fw["controls_flagged"] / max(fw["total_controls"], 1)
+            # THE BAR IS GONE, AND IT IS NOT COMING BACK AS A CAPTION.
+            #
+            # It drew controls_flagged / total_controls in a risk colour. A bar
+            # length IS a percentage and the colour gives it a direction, so this
+            # was a compliance score in everything but name —
+            # modules/compliance_mapping.py forbids one in as many words: "we see
+            # the findings, not the control environment, so any percentage would
+            # be a coverage claim about evidence we do not hold."
+            #
+            # The counts below say what is true without implying a denominator
+            # means completeness.
             s.rect(bar_x, y + Inches(0.08), bar_full, Inches(0.24), fill=LIGHT, round_=True)
-            s.rect(bar_x, y + Inches(0.08), max(Inches(0.1), int(bar_full * frac)),
-                   Inches(0.24), fill=self.risk_color, round_=True)
             s.text(W - Inches(0.75), y, Inches(0.15) + Inches(0.0), Inches(0.35), [_p("", 9)])
             s.text(bar_x, y + Inches(0.34), bar_full + Inches(0.7), Inches(0.3),
                    [_p("%d of %d control areas flagged  ·  %d findings mapped"

@@ -65,7 +65,7 @@ log = logging.getLogger(__name__)
 #: console breaks the line at the version change rather than drawing the jump as
 #: a security improvement. v2 = the customer's own loss figures replaced the
 #: catalogue's illustrative ones, and the engine seed became process-stable.
-MODEL_VERSION = 2
+MODEL_VERSION = 3
 
 CRITICALITY_WEIGHT: Dict[str, float] = {
     "critical": 1.0,

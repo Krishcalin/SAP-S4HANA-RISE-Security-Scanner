@@ -141,6 +141,8 @@ class ReportGenerator:
         findings_html = self._render_findings()
         compliance_html = self._render_compliance()
         fair_html = self._render_fair()
+        csf_html = self._render_csf()
+        fair_cam_html = self._render_fair_cam()
         category_chart_data = json.dumps([
             {"name": k, "count": v} for k, v in sorted(by_category.items(), key=lambda x: -x[1])
         ])
@@ -1016,7 +1018,9 @@ class ReportGenerator:
   </div>
 
   <!-- Compliance / Control-Framework Mapping -->
-  {compliance_html}
+  {csf_html}
+    {fair_cam_html}
+    {compliance_html}
 
   <!-- Financial Risk Exposure (FAIR cyber-risk quantification) -->
   {fair_html}
@@ -1329,6 +1333,23 @@ window.addEventListener('beforeprint', () => {{
         fair = self.fair
         if not fair or not fair.get("portfolio"):
             return ""
+
+        # WITHOUT THE CUSTOMER'S FIGURES, NO CURRENCY TOTAL IS PRESENTED AS THEIRS.
+        #
+        # The scenario catalogue is calibrated, by its own _meta, to an illustrative
+        # $1bn manufacturer. Before this, a report with no supplied figures printed
+        # that company's losses under the customer's name, to the cent, with nothing
+        # on the page saying so — and this report is the artefact that goes to an
+        # auditor or a board.
+        #
+        # A caveat under the number was considered and rejected. Every caveat this
+        # product has written has been outlived by the figure above it; a number in
+        # a board pack is screenshotted without its footnote. So the headline is
+        # ABSENT rather than annotated, and the section explains what would make it
+        # appear. An absent number cannot be quoted.
+        if not (fair.get("loss_model") or {}).get("applied"):
+            return self._render_fair_unpriced(fair)
+
         pf = fair["portfolio"]
         org = fair.get("organization", {})
         sims = fair.get("simulations", 0)
@@ -1458,6 +1479,211 @@ window.addEventListener('beforeprint', () => {{
     {unevidenced_html}
   </div>"""
 
+    def _render_fair_unpriced(self, fair) -> str:
+        """The FAIR section when nobody has priced the business.
+
+        Reports what the model DID establish — which scenarios apply and how many
+        findings routed to each — and refuses to turn any of it into this
+        organisation's money.
+        """
+        # THE EXCLUSION DISCLOSURES BELONG HERE TOO.
+        #
+        # They are statements about FINDINGS — how many were held out of
+        # calibration for want of evidence, and how many had no scenario route —
+        # not about money. Routing the unpriced case past them dropped a
+        # disclosure the priced case makes, which a test caught: withholding a
+        # currency figure must not withhold an admission about the analysis.
+        unrouted = int(fair.get("unrouted") or 0)
+        unevidenced = int(fair.get("unevidenced") or 0)
+        disclosures = ""
+        if unrouted:
+            disclosures += (
+                '<p class="fair-note" style="font-style:normal;">&#9432; '
+                + str(unrouted) + " finding(s) had no explicit scenario route and were "
+                "folded into the privileged-access scenario, which may overstate it.</p>")
+        if unevidenced:
+            disclosures += (
+                '<p class="fair-note" style="font-style:normal;">&#9432; '
+                + str(unevidenced) + " code finding(s) rest on a statement pattern with "
+                "no data-flow evidence and did <strong>not</strong> calibrate this "
+                "analysis. They are still reported, ranked and tracked to closure.</p>")
+
+        scenarios = fair.get("scenarios", []) or []
+        rows_html = "".join(
+            "<tr><td>" + html.escape(str(sc.get("name", sc.get("id", "")))) + "</td>"
+            "<td class='num'>"
+            + (str(sc.get("finding_count")) if sc.get("finding_count") is not None else "&mdash;")
+            + "</td><td>" + html.escape(str(sc.get("worst_severity", ""))) + "</td></tr>"
+            for sc in scenarios)
+        return f"""
+    <h2><span class="fair-eyebrow">Cyber Risk Quantification</span> Financial Risk Exposure &middot; FAIR</h2>
+    <div style="margin:.6rem 0 1rem;padding:.8rem 1rem;border-left:4px solid var(--medium);background:var(--medium-bg);border-radius:6px;">
+      <strong>No currency figure is presented for this organisation.</strong>
+      The FAIR model ran and the scenarios below were matched to your findings, but nobody has told it what an
+      hour of SAP downtime costs you, how many personal records you hold, or what a payment run is worth. The
+      shipped scenario catalogue is calibrated to an illustrative $1&nbsp;billion manufacturer, and printing that
+      company&rsquo;s losses under your name would be a fabrication rather than an estimate.
+      <br><br>
+      Supply <code>crq_parameters.json</code> alongside your export, or pass <code>--crq-inputs</code>, and this
+      section will price the scenarios from your own figures with the arithmetic shown.
+    </div>
+    <table class="fw-table">
+      <thead><tr><th>Loss scenario</th><th class="num">Findings routed</th><th>Worst severity</th></tr></thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+    <p class="fair-note">Scenario matching is real and independent of the money: it is driven by your findings.
+      Only the loss magnitude is unpriced.</p>
+    {disclosures}
+"""
+    def _render_csf(self) -> str:
+        """NIST CSF 2.0, at Function and Category level.
+
+        FUNCTIONS AND CATEGORIES, NOT SUBCATEGORIES. Evidence is mapped at Category
+        granularity (modules/nist_csf.py), so a per-Subcategory mark would be an
+        invention at exactly the resolution a reader trusts most. CSWP 29 also says
+        the Subcategories "are not a checklist of actions to perform", which is what
+        a printed tick-list would turn them into.
+
+        The three states survive into print: a Category this product cannot assess
+        is drawn DASHED with its reason, never as a clean zero. Ten of the
+        twenty-two are in that state, and a board reading a green CSF page for
+        outcomes nobody examined is the failure this section exists to avoid.
+        """
+        if not self.findings:
+            return ""
+        try:
+            from modules import nist_csf
+        except Exception:                                # noqa: BLE001
+            return ""
+        rolled = nist_csf.roll_up(self.findings)
+        tot = rolled["totals"]
+        framework_txt = html.escape(rolled["framework"])
+        reference_txt = html.escape(rolled["reference"])
+
+        cards = []
+        for fn in rolled["functions"]:
+            na = fn["categories_total"] - fn["categories_assessed"]
+            cards.append(
+                '<div class="csf-card csf-' + fn["id"] + '">'
+                '<div class="csf-mono">' + fn["id"] + '</div>'
+                '<div class="csf-name">' + html.escape(fn["name"]) + '</div>'
+                '<div class="csf-big">' + str(fn["total"]) + '</div>'
+                '<div class="csf-cap">' + str(fn["categories_assessed"]) + " of "
+                + str(fn["categories_total"]) + " categories assessed"
+                + (" &middot; " + str(na) + " not assessed" if na else "") + "</div></div>")
+        fn_cards_html = "".join(cards)
+
+        rows = []
+        for fn in rolled["functions"]:
+            for cat in fn["categories"]:
+                if cat["status"] == "not_assessed":
+                    state = '<span class="csf-state csf-na">not assessed</span>'
+                    count = "&mdash;"
+                    why = html.escape(cat["reason"] or "")
+                else:
+                    state = ('<span class="csf-state csf-clear">no findings</span>'
+                             if cat["status"] == "clear"
+                             else '<span class="csf-state csf-found">findings</span>')
+                    count = str(cat["total"])
+                    why = html.escape(" / ".join(cat["themes"])) if cat["themes"] else ""
+                rows.append(
+                    '<tr><td class="csf-id">' + cat["id"] + "</td><td>"
+                    + html.escape(cat["name"]) + "</td><td>" + state
+                    + '</td><td class="num">' + count + '</td><td class="csf-why">'
+                    + why + "</td></tr>")
+        rows_html = "".join(rows)
+        return f"""
+    <style>
+      .csf-cards {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:.7rem; margin:.8rem 0 1.2rem; }}
+      .csf-card {{ border:1px solid var(--border); border-left-width:4px; border-radius:8px; padding:.7rem .8rem; }}
+      .csf-GV {{ border-left-color:#d4a017; }} .csf-ID {{ border-left-color:#0ea5e9; }}
+      .csf-PR {{ border-left-color:#8b5cf6; }} .csf-DE {{ border-left-color:#f59e0b; }}
+      .csf-RS {{ border-left-color:#ef4444; }} .csf-RC {{ border-left-color:#22c55e; }}
+      .csf-mono {{ font-family:ui-monospace,monospace; font-weight:700; font-size:.7rem; color:var(--text-muted); }}
+      .csf-name {{ font-weight:600; font-size:.82rem; text-transform:uppercase; letter-spacing:.04em; }}
+      .csf-big {{ font-size:1.5rem; font-weight:700; margin-top:.25rem; }}
+      .csf-cap {{ font-size:.68rem; color:var(--text-muted); margin-top:.15rem; }}
+      .csf-state {{ font-size:.66rem; font-weight:700; padding:.1rem .4rem; border-radius:4px; white-space:nowrap; }}
+      .csf-found {{ color:var(--text-muted); border:1px solid var(--border); }}
+      .csf-clear {{ color:#15803d; background:rgba(34,197,94,.13); }}
+      .csf-na {{ color:var(--text-muted); border:1px dashed var(--border); }}
+      .csf-id {{ font-family:ui-monospace,monospace; font-size:.72rem; white-space:nowrap; }}
+      .csf-why {{ font-size:.7rem; color:var(--text-muted); }}
+    </style>
+    <h2>NIST Cybersecurity Framework 2.0</h2>
+    <div class="fair-sub">Your open findings, arranged by the outcome each one is evidence against.
+      {tot['categories_assessable']} of the {tot['categories']} CSF Categories are assessable from an SAP
+      export; the other {tot['categories_not_assessed']} describe governance, training and incident-response
+      outcomes this product produces no evidence about. They are listed below, dashed, with the reason for each.</div>
+    <div class="csf-cards">{fn_cards_html}</div>
+    <table class="fw-table">
+      <thead><tr><th>Category</th><th>Name</th><th>State</th><th class="num">Findings</th><th>Basis / why not</th></tr></thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+    <p class="fair-note">A finding is evidence against more than one outcome, so it can appear under several
+      Categories; each counts it once. Nothing here is a statement that you comply with a Category &mdash; the
+      absence of findings is not evidence of compliance, and no score or percentage is given because we see the
+      findings, not your control environment. {framework_txt} &middot; {reference_txt}.</p>
+"""
+    def _render_fair_cam(self) -> str:
+        """FAIR-CAM: which control function the findings actually weaken.
+
+        The ambiguity flag is KEPT in print. Nine of the sixteen themes genuinely
+        span more than one function, and a printed table that hides that reads as a
+        precise attribution — which is worse on paper than on screen, because paper
+        is what gets quoted back.
+        """
+        if not self.findings:
+            return ""
+        try:
+            from modules import fair_cam
+        except Exception:                                # noqa: BLE001
+            return ""
+        result = fair_cam.classify(self.findings)
+
+        rows = []
+        for fn in result["functions"]:
+            if fn["status"] == "not_assessed":
+                count = "&mdash;"
+                note = html.escape(fn["reason"] or "")
+                state = '<span class="csf-state csf-na">not assessed</span>'
+            else:
+                count = "%.1f" % fn["findings"]
+                state = ('<span class="csf-state csf-clear">no findings</span>'
+                         if fn["status"] == "clear"
+                         else '<span class="csf-state csf-found">'
+                              + html.escape(fn["confidence"]) + "</span>")
+                note = html.escape(" / ".join(fn["themes"]))
+            rows.append(
+                "<tr><td>" + html.escape(fn["name"]) + "</td><td>" + fn["domain"]
+                + '</td><td class="csf-id">' + fn["factor"].replace("_", " ")
+                + "</td><td>" + state + '</td><td class="num">' + count
+                + '</td><td class="csf-why">' + note + "</td></tr>")
+        rows_html = "".join(rows)
+
+        vm = result["variance_management"]
+        extra_html = ""
+        if vm["findings"]:
+            extra_html = ('<p class="fair-note"><strong>%.1f findings are Variance '
+                          "Management controls</strong> (%s). %s</p>"
+                          % (vm["findings"], html.escape(", ".join(vm["themes"])),
+                             html.escape(vm["note"])))
+        return f"""
+    <h2>Which control the findings weaken &middot; FAIR-CAM</h2>
+    <div class="fair-sub">FAIR-CAM sorts controls into nine functions and each moves a different part of the
+      risk model. Prevention changes how often a loss event happens; Detection and Response change how much it
+      costs when it does.</div>
+    <table class="fw-table">
+      <thead><tr><th>Control function</th><th>Domain</th><th>Moves</th><th>Attribution</th><th class="num">Findings</th><th>Evidence from</th></tr></thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+    <p class="fair-note">Findings are counted fractionally: one finding whose theme reaches three functions
+      contributes a third to each, so the column sums to the corpus rather than triple-counting it. An
+      <em>ambiguous</em> attribution means the theme genuinely spans more than one function &mdash; least
+      privilege both resists an action and shrinks its blast radius &mdash; and the weighting is a stated
+      modelling choice, not a measurement.</p>
+    {extra_html}
+"""
     def _render_compliance(self) -> str:
         """Map findings onto control frameworks (ISO 27001 / NIST CSF / CIS /
         TISAX / SOC 2 / GDPR) and render a collapsible gap-mapping section."""

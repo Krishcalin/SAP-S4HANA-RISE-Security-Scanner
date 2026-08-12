@@ -41,7 +41,7 @@ from typing import Any, Dict, List, Optional
 #: Bumped when a change to the model would move a figure for unchanged findings.
 #: Mirrors server.crq.MODEL_VERSION; the test asserts they agree, because two
 #: version numbers that can disagree are worse than one.
-MODEL_VERSION = 2
+MODEL_VERSION = 3
 
 
 def file_digest(path: Any) -> Optional[str]:

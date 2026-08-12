@@ -429,6 +429,20 @@ def run(findings: List[Dict[str, Any]], priorities: List[Any],
     simulations = max(1, int(simulations or 1))   # guard: 0/negative -> empty engine dists
     catalog = load_catalog(catalog_path)
     org = dict(catalog.get("organization_default", {}))
+
+    # THE CATALOGUE'S OWN REVENUE, CAPTURED BEFORE ANY OVERRIDE TOUCHES IT.
+    #
+    # scale_factor's denominator must be the ILLUSTRATIVE company the shipped loss
+    # bands were calibrated against — that is what makes the ratio mean anything.
+    # Reading it out of `org` AFTER applying org_overrides was a live bug: the
+    # console passes the customer's revenue as an override AND as an answer, so the
+    # ratio became revenue/revenue = 1.0 and the revenue scaling silently did
+    # nothing. Measured on the reference estate: scale 1.0 where it should have
+    # been 0.42, which left reputational damage and competitive advantage — often
+    # the two largest components — carrying a $1bn company's absolute figures on a
+    # $420m business. Exactly the defect the scaling was added to fix.
+    catalogue_revenue = float(org.get("revenue") or 0.0)
+
     for k, v in (org_overrides or {}).items():
         if v is not None:
             org[k] = v
@@ -446,7 +460,7 @@ def run(findings: List[Dict[str, Any]], priorities: List[Any],
         from .fair_loss_model import (apply_to_scenario, build_loss_components,
                                       scale_factor)
         priced = build_loss_components(loss_answers)
-        scale = scale_factor(loss_answers, float(org.get("revenue") or 0.0))
+        scale = scale_factor(loss_answers, catalogue_revenue)
         if loss_answers.get("sap_revenue"):
             org["revenue"] = float(loss_answers["sap_revenue"])
         catalog = dict(catalog)

@@ -315,6 +315,8 @@ class DataLoader:
 
         self._load_completeness()
 
+
+        self._load_crq_parameters()
         self._load_cloudalm_stores()
 
         # Translate any BTP administrative exports into our shapes. Runs
@@ -339,6 +341,13 @@ class DataLoader:
     #: the customer forgot to send.
     COMPLETENESS_FILE = "export_completeness.json"
     COMPLETENESS_KEY = "_export_completeness"
+
+    #: The customer's own financial figures, for the FAIR quantification. Same
+    #: convention as the completeness declaration above and for the same reason:
+    #: a key that is NOT a logical source, so a customer who has never heard of
+    #: CRQ is never told they forgot to export something.
+    CRQ_PARAMETERS_FILE = "crq_parameters.json"
+    CRQ_PARAMETERS_KEY = "_crq_parameters"
 
     def _load_completeness(self) -> None:
         """Read the declaration that an export is complete.
@@ -393,6 +402,45 @@ class DataLoader:
         self._data[self.COMPLETENESS_KEY] = payload
         names = ", ".join(str(s) for s in declared) or "none"
         print(f"    Declared complete: {names}  (from {path.name})")
+
+
+    def _load_crq_parameters(self) -> None:
+        """Read the customer's financial figures, if they supplied any.
+
+        WHY A FILE, AND WHY THIS ONE
+        The console stores these in PostgreSQL; the offline scanner has no
+        database, so the figures arrive the way everything else does in offline
+        mode — as a file in the data directory. `export_completeness.json` set
+        that precedent and this follows it exactly rather than inventing a second
+        convention.
+
+        ABSENT MEANS THE CUSTOMER HAS NOT PRICED THEIR BUSINESS. It does NOT mean
+        zero, and it must never be quietly replaced by the catalogue's
+        illustrative company — which is precisely what the offline report did
+        before this existed: it printed a $1bn manufacturer's losses under the
+        customer's name, to the cent, with nothing on the page saying so.
+        """
+        path = self._resolve(self.CRQ_PARAMETERS_FILE)
+        if path is None:
+            self._data[self.CRQ_PARAMETERS_KEY] = None
+            return
+        payload = self._load_json(path)
+        self._consumed_files.add(path.name)
+        if not isinstance(payload, dict):
+            print(f"    [WARN] {path.name} is not an object; ignoring it. "
+                  f"Loss figures stay unpriced.")
+            self._data[self.CRQ_PARAMETERS_KEY] = None
+            return
+        answers = payload.get("answers")
+        if not isinstance(answers, dict) or not answers:
+            print(f"    [WARN] {path.name} has no 'answers' object; ignoring it. "
+                  f"Loss figures stay unpriced.")
+            self._data[self.CRQ_PARAMETERS_KEY] = None
+            return
+        self._data[self.CRQ_PARAMETERS_KEY] = payload
+        revision = payload.get("revision") or payload.get("as_of") or "unversioned"
+        print(f"    CRQ figures supplied: {len(answers)} answer(s), "
+              f"revision {revision}  (from {path.name})")
 
     # ------------------------------------------------------------------ #
     #  SAP Cloud ALM CSA store exports                                    #
