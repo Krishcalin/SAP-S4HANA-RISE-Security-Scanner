@@ -1,0 +1,8 @@
+{
+  "complete_sources": [
+    "security_params"
+  ],
+  "declared_by": "tools/build_landscape_fixture.py (P01)",
+  "declared_at": "2026-08-12",
+  "method": "generated fixture \u2014 the parameter list is written in full"
+}

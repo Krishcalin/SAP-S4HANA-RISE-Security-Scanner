@@ -1,0 +1,6 @@
+ICF_NAME,ICF_ACTIVE,AUTH_REQUIRED
+/sap/public/info,X,NO
+/sap/bc/ping,X,YES
+/sap/bc/soap/rfc,X,YES
+/sap/bc/webrfc,,
+/sap/bc/gui/sap/its/webgui,X,YES
