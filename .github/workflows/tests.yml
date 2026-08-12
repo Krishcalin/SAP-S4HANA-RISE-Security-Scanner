@@ -155,7 +155,13 @@ jobs:
 
       # Proves the read_only claim at the image level: with the root filesystem
       # mounted read-only and every capability dropped, the app must still start
-      # and answer /health. If a future change starts writing to the image, this
+      # and answer /health.
+      #
+      # The uploads VOLUME is not optional under --read-only, and this step is how
+      # that was discovered: without it the app died with FileNotFoundError on a
+      # path inside the image. The secret is 40 characters because config.validate
+      # rejects anything under 32 — the first version used a short one and the
+      # container refused to start, correctly. If a future change starts writing to the image, this
       # goes red here rather than at a customer.
       - name: It starts under the compose hardening
         run: |
@@ -165,7 +171,7 @@ jobs:
           for i in $(seq 1 30); do
             docker exec ci-db pg_isready -U sapsec -d sapsec && break || sleep 2
           done
-          docker run -d --name ci-app --network ci-net             --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m             --cap-drop ALL --security-opt no-new-privileges:true             -e DB_DSN=postgresql://sapsec:citest@ci-db:5432/sapsec             -e SESSION_SECRET=ci-not-a-real-secret             -p 127.0.0.1:8000:8000 monitorrisk:ci
+          docker run -d --name ci-app --network ci-net             --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m             --cap-drop ALL --security-opt no-new-privileges:true             -e DB_DSN=postgresql://sapsec:citest@ci-db:5432/sapsec             -e SESSION_SECRET=ci-only-not-a-real-secret-0123456789abcdef             -v ci-uploads:/var/lib/sapsec/uploads             -p 127.0.0.1:8000:8000 monitorrisk:ci
           ok=""
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8000/health > /tmp/health.json; then ok=1; break; fi

@@ -75,6 +75,20 @@ USER sapsec
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
+# THE IMAGE'S DEFAULT UPLOAD DIRECTORY IS THE ONE THE IMAGE ACTUALLY CREATES.
+#
+# server/config.py falls back to ROOT/var/uploads — a path inside /app that this
+# image does not contain and, under a read-only root, cannot create. So
+# `docker run --read-only` without an explicit UPLOAD_DIR died at startup with
+# FileNotFoundError while compose worked fine, because compose sets the variable.
+# An image whose default only works when something else overrides it has the
+# wrong default.
+#
+# Found by the new CI job starting the image the way a customer might, rather
+# than the way our compose file does. Compose still sets it explicitly, so
+# nothing about that path changes.
+ENV UPLOAD_DIR=/var/lib/sapsec/uploads
+
 # Compose waited on the DATABASE's healthcheck and had nothing to wait on for the
 # app, so `docker compose up` reported success while the console was still 503.
 # urllib rather than curl: the slim base ships no curl, and installing one to
