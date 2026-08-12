@@ -72,10 +72,12 @@ Background and the full plan: [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md),
   and `BASELINE-*` id: `abap_authorizations._emit` and `baseline_params._flag` forward
   `check_id` positionally into `finding()`. Include both wrappers or your number is wrong.
   Keep the README badge and `docs/CHECKS_REFERENCE.md` in sync when you add checks —
-  ⚠️ `docs/CHECKS_REFERENCE.md` documents 193 of the 621 (31%) — and eleven GRC rows carry the WRONG title and four the wrong severity. It has not been touched since the
-  initial commit. It is the most out-of-date file in the repo.
-- CIS SAP / DSAG-aligned; findings cite real SAP Notes / SAP Security Baseline / CIS.
-- **Flow**: `sap_scanner.py` **LOADs** the exports (`DataLoader`) → runs the 30 auditor
+  `docs/CHECKS_REFERENCE.md` is GENERATED from the code by
+  `tools/build_checks_reference.py`, and the `purity` CI job fails if it drifts.
+  It covers all 618 ids — 363 literal plus 255 from five runtime families —
+  and renders a title or severity the code computes per finding as *varies*
+  rather than freezing one branch as fact. Do not hand-edit it; change the
+  check and regenerate.
   **MODULES** → each emits severity-ranked findings (**CHECKS** → **RANK**) → a **REPORT** is
   written.
   ⚠️ **`docs/banner.svg` is stale and nothing checks it** — it still reads *v2.0, 19 MODULES ·

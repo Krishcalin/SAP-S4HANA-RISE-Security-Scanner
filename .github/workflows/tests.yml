@@ -178,6 +178,10 @@ jobs:
   #
   # `continue-on-error` is deliberately NOT set. If the fetch breaks, the
   # check must fail loudly rather than quietly stop verifying.
+
+      - name: docs/CHECKS_REFERENCE.md matches the code
+        run: python -m tools.build_checks_reference --check
+
   sap-content:
     name: SAP baseline catalogue is current
     runs-on: ubuntu-22.04

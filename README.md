@@ -1522,7 +1522,7 @@ SAP-S4HANA-RISE-Security-Scanner/
 │   └── test_integration_*.py       # end-to-end against a real PostgreSQL (skip without DB_DSN)
 ├── docs/
 │   ├── EXPORT_GUIDE.md             # how to export each data file from SAP
-│   ├── CHECKS_REFERENCE.md         # per-check reference (⚠️ incomplete — see Testing)
+│   ├── CHECKS_REFERENCE.md         # per-check reference (GENERATED; CI fails on drift)
 │   ├── RELEASE_GATE.md             # using the scanner as a CI gate
 │   ├── CVA_ENGINE_IMPROVEMENT_PLAN.md  # the ABAP engine: shipped / declined / unverified
 │   ├── PIVOT_PLAN.md               # Architecture + 6 phases, with rationale
@@ -1628,7 +1628,7 @@ SAP-S4HANA-RISE-Security-Scanner/
 - [x] Custom-code scanner (CVA) — 133 rules, statement lexer, intra-procedural taint analysis
 - [x] React + TypeScript console, compiled at build time and served by the same FastAPI process
 - [x] SAP's published Security Baseline policies adopted as the control vocabulary (CI fails on drift)
-- [ ] Bring `docs/CHECKS_REFERENCE.md` back in line with the catalogue (documents ~161 of 359 IDs)
+- [x] Generate `docs/CHECKS_REFERENCE.md` from the code and fail CI on drift
 - [ ] Sample fixtures for `resilience`, `ecsconfig` and `cva` so they fire on the bundled `sample_data`
 
 ---
@@ -1695,7 +1695,7 @@ none of the analytics and none of the HTTP layer. A suite that silently skips is
 that does not exist, because it *looks* verified.
 
 ⚠️ [`docs/CHECKS_REFERENCE.md`](docs/CHECKS_REFERENCE.md) is the least current file in the repo —
-it documents roughly 161 of the 359 literal check IDs and has not kept pace with the modules
+it is generated from the code by `tools/build_checks_reference.py` and CI fails if it drifts, so it cannot fall behind the modules again.
 added since. Trust the code, and the module tables above, over that document.
 
 <sub>[↑ Contents](#contents)</sub>
