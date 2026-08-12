@@ -36,6 +36,12 @@ product became client-server**, deliberately and one-way. It has NOT been relaxe
   the RUNTIME list in `requirements.txt` went DOWN. The frontend's own budget is equally
   tight — react, react-dom, react-router, lucide-react, vite, typescript, tailwind. No state
   library, no component library, no data-fetching library, no chart library.
+- **`collect/` is new (2026-08-11) and is stdlib-only too — by choice, not by rule.**
+  Decision D4 *permits* the connector tier its own requirements and it spends none:
+  `urllib`, `ssl` and `xml.etree` cover SOAP, OData, SCIM and REST, so a customer running a
+  connector against their own SAP system installs nothing. The `purity` CI job now covers
+  `collect/` as well as `modules/`, because an allowance that is not taken is only real if
+  something checks.
 - The deployment is **one app container + one PostgreSQL**. A third service — a Node server, an
   nginx — is a design failure, not a feature; it forfeits the product's clearest structural
   advantage over competitors that need a console VM plus sensors. The SPA is built inside the
@@ -58,7 +64,7 @@ Background and the full plan: [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md),
 - **~600 checks across 30 audit modules.** Measure, never estimate — and know which number you
   are quoting. `modules/` holds 50 files, of which **30 emit findings**; the other 20 are rule
   tables, loaders, importers and report writers. Those 30 are exactly `sap_scanner.py`'s
-  `--modules` choices. Check IDs: **359** are written as literals, and **617** exist once the
+  `--modules` choices. Check IDs: **363** are written as literals, and **621** exist once the
   five runtime-generated families resolve against their shipped rulesets — `PARAM-<param>` (78),
   the SAST rule ids (133), `ARA-<risk>` (27), `IAM-<sod_rule>` (10) and `ATC-<family>` (10),
   which do not overlap the static set at all.
@@ -66,7 +72,7 @@ Background and the full plan: [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md),
   and `BASELINE-*` id: `abap_authorizations._emit` and `baseline_params._flag` forward
   `check_id` positionally into `finding()`. Include both wrappers or your number is wrong.
   Keep the README badge and `docs/CHECKS_REFERENCE.md` in sync when you add checks —
-  ⚠️ `docs/CHECKS_REFERENCE.md` documents ~161 of the 359 and has not been touched since the
+  ⚠️ `docs/CHECKS_REFERENCE.md` documents 193 of the 621 (31%) — and eleven GRC rows carry the WRONG title and four the wrong severity. It has not been touched since the
   initial commit. It is the most out-of-date file in the repo.
 - CIS SAP / DSAG-aligned; findings cite real SAP Notes / SAP Security Baseline / CIS.
 - **Flow**: `sap_scanner.py` **LOADs** the exports (`DataLoader`) → runs the 30 auditor
@@ -372,6 +378,30 @@ target's current one. The audit log records the event and never the value.
   - **Do not reach for `subject` just to make `fingerprint_basis` read `objects`.** A genuine
     aggregate is honestly `check_only`; the console presents `objects` as "structural, survives
     rewording", so mislabelling it is a claim the data does not support.
+  - The cloud set must be kept **complete as well as consistent**. The structural test asserts
+    every member is exempt on both the fingerprint and the node side; that says nothing about a
+    type that should be a member and is not. Six were missing and each still borrowed whatever
+    ABAP SID its bundle arrived beside. `tests/test_identity.py` now requires every case-bearing
+    type to be **classified deliberately**, and `certificate` is deliberately NOT cloud — a
+    STRUST certificate belongs to the system holding it.
+
+  **Helpers on `BaseAuditor` that exist so a check can say "I could not tell":**
+  - `param_lookup(params)` / `param_provenance(params)` — the **one** reader for a profile
+    parameter export. Two modules once had their own and read different column spellings, which
+    produced a HIGH finding against a system whose value was correct. A row is only judged when
+    it actually carries a value column; where RSPARAM supplies a default column and leaves the
+    user value blank, the default is the effective value and the provenance says so.
+  - `release_gate(min, max, component)` / `skip_for_release(...)` — three answers, never two:
+    `applies`, `not_applicable`, `unknown`. Folding `unknown` into either neighbour is the
+    defect — one way invents findings on systems that cannot have the thing, the other quietly
+    does not run and reads exactly like a pass.
+  - `export_completeness(source)` / `absence_is_observable(source)` — whether anybody has
+    **declared** a source complete. Named that way on purpose: the honest question is "has
+    somebody said so", which is weaker than "is it complete" and must look weaker at the call
+    site. Where declared, an absent row is an observation; otherwise it is a coverage gap.
+  - Coverage findings carry `details={"degrades_coverage": True}`. That flag is what `--gate`
+    reads to refuse a green build, so a module that knows it could not look **says so in a way
+    the gate reads without being taught the check id**.
 - **`modules/data_loader.py`** — `DataLoader.FILE_MAP` maps a logical data-source name to a
   list of candidate filenames. CSV → list of dicts with **headers normalized to
   UPPERCASE, spaces→underscores** and values stripped; JSON → the parsed object. Missing
@@ -427,12 +457,51 @@ target's current one. The audit log records the event and never the value.
     — a currency number that drifts between runs is indistinguishable from a real change in
     exposure and makes the trend chart worthless.
 
+### The connector tier (`collect/`) — connected mode
+
+Added 2026-08-11 by decisions D2/D3/D4. **The scanner still connects to nothing.** A
+connector is a separate, optional program that reads from a system the operator authorises
+and writes **the same export files the offline path already reads**:
+
+```
+online   SAP instance ──HTTPS──> collect/ ──writes──> extract files ─┐
+                                                                     ├─> DataLoader ──> modules/
+offline  the customer's own export ─────────────────────────────────┘
+```
+
+Both modes converge before the first check runs, which is what makes connected mode
+affordable rather than a second product: it inherits the offline path's whole test suite and
+`modules/` never learns a network exists.
+
+| file | role |
+|---|---|
+| `web.py` | Shared HTTP. **GET-only by construction** — `fetch` has no `method` and no body parameter, so POSTing requires editing the file. One TLS policy for the package. |
+| `soap.py` | Minimal SOAP, the single exception to GET-only because SOAP requires POST. Carries an **operation allowlist enforced before any byte reaches the network**. |
+| `sapcontrol.py` | `python -m collect sapcontrol` — profile parameters via `ParameterValue`, over sapstartsrv on `5<NN>14`. |
+| `icf.py` | `python -m collect icf` — probes documented ICF paths **anonymously** (that is what makes `AUTH_REQUIRED` mean anything) and reads the Gateway OData catalogue with credentials. |
+| `extract.py` | Writes the export files, the run manifest, and `export_completeness.json`. |
+
+**Four rules, and they are structural rather than aspirational** (`tests/test_collect.py`
+asserts each):
+
+1. **Nothing in `server/` or `modules/` may import `collect/`.** A connector imported into the
+   product is a live API client inside the product, which is what D2 declined.
+2. **Deleting the directory leaves every test passing and the image building.**
+3. **Stdlib only** — see the charter note above.
+4. **Read-only, enforced not intended.** sapstartsrv offers `Start`, `Stop`, `Restart` and OS
+   command execution on the same endpoint and port. A typo must not be able to stop a
+   production instance.
+
+`sap_scanner.py` must never grow `--connect`, `--host` or `--live`; a test asserts that too.
+**Connected mode is partial by construction** — RFC-only surfaces stay export-only (D3) — and
+every run writes a manifest saying what it could not reach.
+
 ### The server tier (`server/`)
 
 | file | role |
 |---|---|
 | `identity.py` | **The load-bearing module.** `AffectedObject`, normalization, `compute_fingerprint`, `extract_nodes`. Read its docstring before changing anything about finding identity. |
-| `schema.sql` | 20 tables. Single-tenant (no `tenant_id`); `landscape` preserves the option. Idempotent — re-running it upgrades an existing deployment. |
+| `schema.sql` | 28 tables. Single-tenant (no `tenant_id`); `landscape` preserves the option. Idempotent — re-running it upgrades an existing deployment. |
 | `db.py` | psycopg pool, `scope_clause` (**the one place** row scoping is expressed), `audit`. |
 | `auth.py` | PBKDF2 passwords, sessions, ranked roles, per-system scope, password change/reset and the forced-change flag. |
 | `api_auth.py` | The **only** sign-in surface: `APIRouter(prefix="/api")` serving `/auth/me`, `/auth/login`, `/auth/logout`, `/account`, `/account/password`, `/account/reset/{user_id}`. Also owns both auth dependencies — `current_user` and `require(role)` — and `SESSION_COOKIE`. Unlike the rest of the write API these take **JSON bodies, not forms**, as a CSRF control. |
@@ -671,6 +740,33 @@ Two edges worth knowing before you trust an exit code:
 
 ## Conventions & gotchas (learned the hard way)
 
+- **A textual check cannot tell code from prose about code.** Three tests in one week grepped
+  source and then flagged their own explanation — the deployment-mode test tripped on a
+  comment recording the old behaviour, the `--password` test on the docstring explaining why
+  there is no `--password`, the Python-matrix test on its own module docstring. A test that
+  forces the reasoning to be deleted in order to pass trades the documentation for the check.
+  **Parse it.** `ast` distinguishes a call from a sentence about a call.
+- **Do not pin a whole result list.** `assert ids(findings) == ["PARAM-MISSING"]` failed the
+  moment a legitimate new finding arrived, and the temptation is then to weaken the assertion
+  rather than read it. Assert the claim the test is actually making — "no accusation" — not
+  the shape of everything that came back.
+- **Consistency is not completeness, and the difference is where things hide.** The
+  cloud-scope test asserted every member of a set behaved correctly and said nothing about
+  types that should have been members; six were missing. The coverage manifest reported on
+  modules it could parse and said nothing about four it could not. When a guard enumerates a
+  set, ask what enumerates the set's *boundary*.
+- **A shared rule belongs to neither module.** Two auditors read the same export with two
+  column vocabularies, and the one that drifted accused a compliant system. A copy is not a
+  fix for drift — it is the mechanism of it. Put it on `BaseAuditor`.
+- **Fail towards silence, never towards accusation — but check which silence.** An
+  unrecognised rule operator returned `False`, which the caller reads as *accuse*, so a typo
+  fired on every system. The first fix raised instead, which was worse: the runner skips a
+  raising module, so one typo would have cost the customer every finding from it. The answer
+  was silent at runtime plus a test asserting every shipped rule uses a known operator — the
+  programming error fails CI rather than somebody's report.
+- **Order is load-bearing exactly once in `server/schema.sql`.** Anything naming a column added
+  by an `ALTER` must come after it. A partial index placed beside the other indexes passes a
+  fresh install and fails every upgrade — which is how it gets shipped.
 - **Never fabricate SAP identifiers.** SAP Note numbers, CVEs, authorization objects/fields
   (`S_DEVELOP`/`OBJTYPE`/`ACTVT`), and profile parameter names must be **verified against SAP
   Help / SAP Security Baseline / CIS SAP / DSAG** before shipping. Past verification passes
@@ -704,7 +800,7 @@ Two edges worth knowing before you trust an exit code:
 - **CSV header normalization:** the loader upper-cases headers and replaces spaces with `_`,
   so match `row.get("USER_NAME")` etc. Values are stripped but keep their case.
 - **Tests + CI exist** (`tests/`, `.github/workflows/tests.yml`, `requirements-dev.txt`). About
-  **1,975** tests; no SAP system needed. ⚠️ **`requirements-dev.txt` alone is not enough to run
+  **2,365** tests; no SAP system needed. ⚠️ **`requirements-dev.txt` alone is not enough to run
   the whole suite** — it is only `pytest`, and the server-tier suites import psycopg/starlette
   at module level, which aborts collection rather than skipping. Install both:
   ```bash

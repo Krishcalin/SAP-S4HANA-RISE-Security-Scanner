@@ -1,3 +1,30 @@
+> # ⚠️ THIS DOCUMENT IS 31% COMPLETE AND PARTLY WRONG. DO NOT TRUST IT.
+>
+> **Measured 2026-08-12.** The code emits **621** distinct check ids. This file
+> names **193** of them — so **428 (69%) are undocumented**, and **12 of the 30
+> audit modules have no entry at all** (`abap_sast`, `atc_import`,
+> `code_inventory_report`, `code_transport`, `data_protection`,
+> `ecs_config_items`, `fiori_ui`, `integration_layer`, `log_monitoring`,
+> `log_review`, `resilience_posture`, `snc_posture`).
+>
+> **Worse than the omissions:** eleven of the thirteen GRC rows and one FIN row
+> carry the **wrong title** for a real check id, and four rows carry the **wrong
+> severity**. A reader who trusts this file is misinformed rather than merely
+> under-informed, and a wrong severity is the kind of error that reaches a
+> customer's report.
+>
+> **Use instead:** the per-module tables in [README.md](../README.md), which are
+> current and are checked; or the code, which is the only authority.
+>
+> **Why it is still here.** Deleting it loses the prose on ~193 checks that is
+> otherwise nowhere. The right fix is to GENERATE it from the same AST walk that
+> produced the numbers above plus `data/finding_details.json`, and fail CI on
+> drift — exactly as the `sap-content` and `schema-upgrade` jobs already do for
+> the other two vocabularies. Until that happens this banner stays, because a
+> stale reference with no warning is worse than no reference.
+
+---
+
 # Security Checks Reference
 
 Complete reference for all checks performed by the scanner.

@@ -3,8 +3,8 @@
 </p>
 
 <p align="center">
-  <strong>Offline, agentless security auditing for SAP S/4HANA RISE, ECS and BTP</strong><br/>
-  <sub>Nothing installed in the SAP system · no RFC user · no credentials handed over · no open port</sub>
+  <strong>Agentless security auditing for SAP S/4HANA RISE, ECS, ECC and BTP</strong><br/>
+  <sub>Offline by default · optional read-only connectors · nothing ever installed in the SAP system · no RFC user · nothing is ever written back</sub>
 </p>
 
 <p align="center">
@@ -51,6 +51,7 @@
 
 - **[Overview](#overview)**
 - **[Server mode — quick start](#server-mode--quick-start)**
+- **[Connected mode](#connected-mode)**
   - [What the server adds over the CLI](#what-the-server-adds-over-the-cli)
 - **[Audit Modules](#audit-modules)** &nbsp;<sub>30 modules · 73 documented families</sub>
   <details><summary><sub>expand by family</sub></summary>
@@ -122,8 +123,9 @@ It runs in **two modes that share one scanner core**:
 | State | Single-shot, stateless | PostgreSQL — findings persist across uploads |
 | Use it for | Air-gapped review, one-off assessment | Continuous tracking of the **mitigation journey** |
 
-- **No direct system connection required** — offline & agentless. Nothing is installed in the SAP system, no RFC user, no credentials handed over, no open port. In RISE, third-party ABAP add-ons are an Excluded Task requiring an additional SKU and a multi-week evaluation; an export bundle needs none of that.
-- **~600 security checks across 30 audit modules** — ABAP authorizations, HANA DB, BTP/Cloud, GRC Access Control, SOX financial-config controls, permission-level Segregation of Duties, and a custom-code scanner. Precisely: **359** check IDs are written as literals and **617** exist once the five runtime-generated families (profile parameters, ABAP rules, SoD risks, ATC families) resolve against their shipped rulesets.
+- **No direct system connection required** — offline & agentless by default. Nothing is ever installed in the SAP system and no RFC user is created, in either mode.
+- **Connected mode is optional and separately invoked.** `python -m collect …` reads from a system you authorise and writes the same export files the offline path consumes — read-only, enforced in the transport rather than promised. The scanner itself still connects to nothing. See [Connected mode](#connected-mode). In RISE, third-party ABAP add-ons are an Excluded Task requiring an additional SKU and a multi-week evaluation; an export bundle needs none of that.
+- **~600 security checks across 30 audit modules** — ABAP authorizations, HANA DB, BTP/Cloud, GRC Access Control, SOX financial-config controls, permission-level Segregation of Duties, and a custom-code scanner. Precisely: **363** check IDs are written as literals and **621** exist once the five runtime-generated families (profile parameters, ABAP rules, SoD risks, ATC families) resolve against their shipped rulesets.
 - **Complete against SAP's mandatory ECS baseline** — **92 of 92** profile parameters from **SAP Note 3250501** (the hardening requirements SAP makes mandatory for AS ABAP in Enterprise Cloud Services), plus its configuration half. Every value is read from a recorded extract of the note, never hand-typed, because a transcription typo tells a customer they are compliant when they are not.
 - **Deployment-aware** — `--deployment-mode` decides what *compliant* means. `snc/accept_insecure_gui = 1` is **SAP's own mandated value** in ECS, `rfc/callback_security_method = 1` is a **documented exception** SAP permits (the ECS standard is `3`), and an unlocked `DDIC` is explicitly not required to be locked. All three are findings on classic on-premise ABAP. A RISE-specific scanner that flags SAP's own baseline is confidently wrong on every compliant system.
 - **Custom code (CVA)** — **133 rules dispatched by file type** (118 ABAP/CDS/RAP, 7 JavaScript/UI5, 8 BTP descriptor) over a statement-level lexer with intra-procedural taint analysis, so a finding is graded `confirmed` / `tentative` / `pattern-only` rather than asserted. ABAP statements end at a period and span lines; matching them one line at a time loses real injections and invents false ones.
@@ -153,6 +155,9 @@ docker compose up -d --build
 docker compose exec app python -m server.cli init-db
 docker compose exec app python -m server.cli create-user admin admin --generate
 docker compose exec app python -m server.cli add-landscape "Acme Production" --mode rise_pce
+# An ABAP system, or a SaaS tenant (SuccessFactors, Concur, IAS, a BTP subaccount):
+#   … add-system  "Acme Production" PRD 100 --tier prod
+#   … add-tenant  "Acme Production" successfactors acme-sf-prod --tier prod
 ```
 
 Open <http://127.0.0.1:8000> and sign in — the console is branded **MonitorRisk**.
@@ -193,7 +198,7 @@ product's clearest structural advantage, and a third service would forfeit it.
 - **Mitigation journey** — re-upload the same exports over time; each finding is classified
   *new · persisting · resolved · regressed*, with age, assignee, due date and MTTR. A finding
   that comes back re-opens the **same row** with its history intact rather than appearing as new.
-- **Coverage manifest** — *"you supplied 105 of 122 sources; 10 modules ran with incomplete
+- **Coverage manifest** — *"you supplied 105 of 123 sources; 10 modules ran with incomplete
   input; 1 source is not obtainable in RISE at all."* Without it a partial upload produces a
   clean-looking report over a fraction of the estate.
 - **Risk acceptance with expiry**, false-positive disputes with a mandatory reason, and a
@@ -208,6 +213,42 @@ product's clearest structural advantage, and a third service would forfeit it.
 
 
 <sub>[↑ Contents](#contents)</sub>
+
+## Connected mode
+
+Everything above assumes **you** produce the export. On an estate you can reach
+over the network — ECC and on-premise NetWeaver typically, RISE typically not —
+MonitorRisk can produce part of it itself.
+
+**The scanner still connects to nothing.** `collect/` is a separate, optional
+program that writes the same files the offline path reads. The scanner cannot tell
+which produced them, and that is the design: connected mode inherits the offline
+path's entire test suite.
+
+```bash
+# Profile parameters, from the instance's SAP start service (sapstartsrv).
+python -m collect sapcontrol --host ecc-prod.example.com --instance 00                              --user SAPADM --out ./extract
+
+# The ICF surface — which endpoints are active, and which answer UNAUTHENTICATED.
+python -m collect icf --host ecc-prod.example.com --out ./extract
+
+# Then scan it, exactly as if you had exported it by hand.
+python sap_scanner.py --data-dir ./extract
+```
+
+| | |
+|---|---|
+| **No SDK, no add-on** | sapstartsrv SOAP on `5<NN>14`, and plain HTTPS. `collect/` is stdlib-only, so a customer running it installs nothing. |
+| **Read-only, enforced** | The same service also offers `Start`, `Stop`, `Restart` and OS command execution. An allowlist is checked *before any byte reaches the network*. |
+| **No `--password`** | A credential in argv is visible in `ps` and in shell history. Prompted, piped, or `SAPCONTROL_PASSWORD`. |
+| **Partial by construction** | Users, roles and authorisations are RFC-only, and RFC is declined ([decision D3](docs/DECISIONS.md)). Every run writes a manifest naming what it could not reach. |
+
+`--probe-only` reports what an endpoint exposes — including whether it answers
+with **no credentials at all** — and collects nothing. Worth running first.
+
+Full detail, including the `export_completeness.json` declaration that lets an
+absent parameter be judged rather than merely disclosed, is in
+**[docs/EXPORT_GUIDE.md](docs/EXPORT_GUIDE.md)**.
 
 ## Audit Modules
 
@@ -960,6 +1001,7 @@ python sap_scanner.py --data-dir ./exports --output report.html --format both --
 
 # Tell the scanner which estate this is — it changes what "compliant" means (see below)
 python sap_scanner.py --data-dir ./exports --deployment-mode rise_pce
+# modes: on_prem · rise_pce · rise_tailored · rise_ecc  (ECC running inside RISE)
 
 # Scan custom ABAP from an abapGit offline export (the `cva` module)
 python sap_scanner.py --data-dir ./exports --abap-src ./abapgit_export --modules cva
@@ -1379,9 +1421,15 @@ Access Risk Analysis can also be driven by a **custom SoD ruleset** — drop an 
 ```
 SAP-S4HANA-RISE-Security-Scanner/
 ├── sap_scanner.py                  # Main entry point & CLI orchestrator
+├── collect/                        # CONNECTED MODE — optional, out-of-process, stdlib-only
+│   ├── __main__.py                 # python -m collect sapcontrol | icf
+│   ├── sapcontrol.py               # profile parameters over the sapstartsrv SOAP interface
+│   ├── icf.py                      # ICF surface probe + SAP Gateway OData catalogue
+│   ├── soap.py / web.py            # minimal SOAP and GET-only HTTP, read-only by construction
+│   └── extract.py                  # writes the same export files the offline path reads
 ├── modules/
 │   ├── base_auditor.py             # BaseAuditor: finding()/get_config() + severity constants
-│   ├── data_loader.py              # CSV/JSON loader (auto-delimiter, header normalize; 122 logical sources)
+│   ├── data_loader.py              # CSV/JSON loader (auto-delimiter, header normalize; 123 logical sources)
 │   ├── report_generator.py         # Interactive HTML dashboard (light theme, XSS-safe, weighted risk score, compliance panel)
 │   ├── pdf_report.py               # Multi-page PDF report (cover → priority → categories → compliance → fix-first findings)
 │   ├── pdf_writer.py               # Dependency-free PDF engine (standard-14 fonts, wrapping, tables)

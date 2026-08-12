@@ -85,7 +85,7 @@ What replaces the prohibition:
 > deleting the directory leaves every test passing and the image building.
 
 The distinction is not a technicality. The original objection —
-[`docs/EXPORT_GUIDE.md:440`](EXPORT_GUIDE.md), *"one we cannot exercise"* — was
+[`docs/EXPORT_GUIDE.md`](EXPORT_GUIDE.md) (the *no live API client* passage), *"one we cannot exercise"* — was
 about a client whose failures would be invisible and untestable inside a product
 that could not reach a system. A collector that writes a file can be exercised
 against a recorded fixture, and its output is validated by the same loader that
@@ -346,17 +346,29 @@ in the file:
    therefore leaves production untouched and CI half-migrated. The migration needs
    an explicit pre-step that normalises or rejects `sid = ''`.
 
-The `schema-upgrade` CI job cannot currently catch any of this: it inserts one row
-into `landscape` and none into `sap_system`, and its only assertion is hardcoded
-to `deployment_mode`. Extending it is part of D8, not a follow-up.
+The `schema-upgrade` CI job could not catch any of this: it inserted one row into
+`landscape` and none into `sap_system`, and its only assertion was hardcoded to
+`deployment_mode`.
+
+> **Since built.** The job now seeds an ABAP system, asserts that row survives the
+> upgrade byte-for-byte, checks column nullability and the tenant index
+> *definition* (not merely its existence), and exercises behaviour — five row
+> shapes that must be refused, two tenants that must be accepted, and the
+> `ON CONFLICT` arbiter that must still resolve. Its constraint assertion is no
+> longer hardcoded to one column.
 
 ### Also uncovered, and in scope for D8
 
-`_CLOUD_SCOPED_TYPES` holds 11 types. Six more are registered as case-bearing
-cloud entities and are **not** exempt — `btp_destination`, `btp_service`,
+`_CLOUD_SCOPED_TYPES` held 11 types. Six more were registered as case-bearing
+cloud entities and were **not** exempt — `btp_destination`, `btp_service`,
 `cc_backend`, `cpi_credential`, `event_queue`, `ias_application` — so each still
-takes its identity from whichever ABAP SID it was uploaded beside. That is the
-same defect the cloud-scope fix addressed, for six more types.
+took its identity from whichever ABAP SID it was uploaded beside. That is the same
+defect the cloud-scope fix addressed, for six more types.
+
+> **Since built.** All six are in the set, which now holds 17, and
+> `tests/test_identity.py` requires every case-bearing type to carry a deliberate
+> cloud-or-system classification — so the next one cannot default into borrowing
+> a SID.
 
 `certificate` is deliberately **excluded** from that list: an ABAP STRUST
 certificate genuinely is system-scoped, so the set cannot be widened

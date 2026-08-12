@@ -27,7 +27,7 @@ politely up front.
 wrong, that is genuinely useful and easy to act on. Open an issue with:
 
 - the Python version and OS
-- the module or check id involved (for example `PARAM-014`, `ABAP-SQLI-001`)
+- the module or check id involved (for example `PARAM-login/min_password_lng`, `ABAP-SQLI-001`)
 - a **de-identified** fragment of the input that triggers it
 
 > ⚠️ **Never attach a real SAP export to a public issue.** They routinely contain

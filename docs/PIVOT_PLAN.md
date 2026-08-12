@@ -1,5 +1,25 @@
 # Pivot Plan — Offline CLI → Client-Server SAP Security Platform
 
+> ## ⚠️ Status note — 2026-08-12
+>
+> Read the phase lists below as a **record of what was planned**, not of what is
+> outstanding. A great deal has shipped since they were written, and this document
+> has not been rewritten phase by phase:
+>
+> - **30 audit modules** (these documents say 23), 621 check ids, 123 logical sources.
+> - **Connected mode exists** — `collect/` with two read-only connectors. It was
+>   the *last* phase in the coverage plan and was built early.
+> - **The ECC axis is measured, not estimated**: 14 of 30 auditors produce
+>   identical findings on an ECC export. See [ECC_COVERAGE.md](ECC_COVERAGE.md).
+> - **Release gating, the tenant model and the schema-upgrade CI job have all
+>   landed.** See [DECISIONS.md](DECISIONS.md) for D1–D8 and what each one changed.
+>
+> Where a phase below is marked "PASSED" with numbers, treat those numbers as a
+> dated measurement taken when that phase closed — they are records, and several
+> have since moved.
+
+---
+
 **Status:** proposal, 2026-08-05. **Not started. Requires sign-off before any code is written.**
 
 Companion documents: [`COMPETITIVE_ANALYSIS.md`](COMPETITIVE_ANALYSIS.md) ·
@@ -99,7 +119,7 @@ precedent and already runs this exact shape in production:
 | DB | **PostgreSQL 16, single instance**, not published to the host | Recursive CTEs are ample for SAP-scale graphs; a graph DB would be an unforced dependency and would break the deployment-simplicity wedge |
 | Driver | **psycopg** | Precedent |
 | Deploy | **One `docker compose`** — app + Postgres | If we need more than one modest container we forfeit our only structural advantage over an 8-core/16 GB/200 GB console + sensor pair |
-| Scanner core | **The existing 23 modules, unchanged in logic** | They are the product. Only the contract and the I/O boundary change |
+| Scanner core | **The existing 30 modules, unchanged in logic** | They are the product. Only the contract and the I/O boundary change |
 
 Target: keep the runtime dependency count in single digits, as LogOcean does (7).
 

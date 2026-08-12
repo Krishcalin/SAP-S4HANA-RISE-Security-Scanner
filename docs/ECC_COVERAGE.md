@@ -93,7 +93,7 @@ about whether 6 is all of them.
 
 | module | status | ECC | full | verdict |
 |---|---|---:|---:|---|
-| `security_params` | complete | 34 | 34 | **identical to full sample** |
+| `security_params` | complete | 35 | 35 | **identical to full sample** |
 | `abap_authorizations` | complete | 16 | 16 | **identical to full sample** |
 | `atc_import` | complete | 12 | 12 | **identical to full sample** |
 | `baseline_params` | complete | 12 | 12 | **identical to full sample** |
@@ -115,7 +115,7 @@ about whether 6 is all of them.
 | `data_protection` | degraded | 3 | 18 | partial — 3 of 18 |
 | `role_governance` | degraded | 2 | 3 | partial — 2 of 3 |
 | `resilience_posture` | degraded | 0 | 0 | silent on both |
-| `abap_sast` | no_file_inputs | 0 | 0 | no file inputs (needs --abap-src) |
+| `abap_sast` | no_file_inputs | 0 | 0 | no file inputs (needs `--abap-src`) |
 | `btp_cloud_surface` | skipped | 0 | 32 | **cannot exist on ECC** |
 | `financial_controls` | skipped | 0 | 5 | optional tooling — ECC could, if exported |
 | `fiori_ui` | skipped | 0 | 6 | **cannot exist on ECC** |

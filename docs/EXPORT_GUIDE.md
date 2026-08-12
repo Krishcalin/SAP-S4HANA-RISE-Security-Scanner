@@ -42,7 +42,14 @@ Required: ICF_NAME, ICF_ACTIVE, AUTH_REQUIRED
 Optional: HANDLER_CLASS
 ```
 
-> **`HANDLER_CLASS` is worth the extra column.** It is the ABAP class that serves
+> ⚠️ **`HANDLER_CLASS` IS NOT READ BY ANYTHING TODAY. Supply it only if you want to.**
+> The paragraph below describes what it is *for*, and that design is still the
+> intention — but no module currently consumes the column, and
+> `modules/reachability.py` says so in its own docstring ("no handler class").
+> Asking for a column and then ignoring it wastes somebody's afternoon in SICF, so
+> the honest position is stated here rather than left to be discovered.
+>
+> **What it would be worth.** It is the ABAP class that serves
 > the node, and it is the one field that connects a *code* finding to the *outside
 > world*. With it, a SQL injection inside a class published on an unauthenticated
 > ICF node is identifiable as internet-reachable and ranks accordingly; without
@@ -50,6 +57,22 @@ Optional: HANDLER_CLASS
 > references the object at all. In SICF the value is on the node's *Handler List*
 > tab. Supplying it is what upgrades this product's reachability answer for custom
 > code from "referenced somewhere" to "reachable from outside".
+
+### Installed components (`system_component.csv`)
+**Transaction:** `SPAM` / `SAINT` (Component version) · **Table:** `CVERS` ·
+also **System > Status > Component information**
+```
+Required: COMPONENT, RELEASE
+Optional: SP_LEVEL, DESCRIPTION
+```
+
+> **What it unlocks.** A check that looks for something introduced in a particular
+> release has three possible relationships to your system: it applies, it cannot
+> apply, or nobody can tell. Without this file only the third is available, and a
+> check that cannot tell whether it applies did not examine your system — so its
+> silence is not a pass, and the release gate is held open to say so.
+>
+> Example rows: `SAP_BASIS,750,0018` · `SAP_APPL,618,0012` · `S4CORE,105,0002`.
 
 ### Audit Config (`audit_config.csv`)
 **Transaction:** `SM19`
@@ -216,7 +239,10 @@ Required: SERVICE_NAME, AUTH_CHECK
 Optional: ALIAS, SCOPE, REQUIRED_AUTH_OBJECT, IMPL_CLASS
 ```
 
-> **`IMPL_CLASS` is the OData half of the same link as `HANDLER_CLASS` above** —
+> ⚠️ **`IMPL_CLASS` IS NOT READ BY ANYTHING TODAY EITHER** — same position as
+> `HANDLER_CLASS` above, and the same reason for saying so plainly.
+>
+> **What it would be worth.** It is the OData half of the same link —
 > the Data Provider Class behind the service. It is what lets a code finding in a
 > DPC method be identified as sitting behind a published, possibly
 > unauthenticated, OData service. Without it, custom code exposed exclusively

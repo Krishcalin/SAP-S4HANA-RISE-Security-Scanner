@@ -92,7 +92,12 @@ the gate be strict *because* it is fair.
 
 Ownership is assigned server-side. The offline CLI has no ownership data, so
 everything reads as unknown there — and **unknown blocks**, because unknown is not
-a licence to ship. Use `exempt_checks` offline, or run the gate against the server.
+a licence to ship. Use `exempt_checks` offline.
+
+> There is **no server-side gate**, and this paragraph used to imply one. `server/`
+> does not import `release_gate` and exposes no gate route; the gate is CLI-only by
+> design, because it belongs in somebody else's pipeline rather than behind a login.
+> `CLAUDE.md` states this correctly and this document did not.
 
 ---
 
@@ -100,9 +105,28 @@ a licence to ship. Use `exempt_checks` offline, or run the gate against the serv
 
 If coverage was degraded, the answer is `2` — never `0`.
 
-The ABAP scanner reports lost lexer state as an `ABAP-LEX-001` finding, and the gate
-reads that same evidence rather than a side channel. An unreadable or misspelled
-policy is also `2`: a typo in a config file must not quietly disarm the gate.
+Degraded coverage is reported as a FINDING rather than a side channel, so the gate
+reads the same evidence a human would. It no longer keys on one check id: any
+finding carrying `details["degrades_coverage"]` arms the fail-closed path, so a
+coverage check written later arms the gate the day it is written rather than the
+day somebody remembers to teach the gate its id.
+
+The findings that carry it today:
+
+| check | what could not be looked at |
+|---|---|
+| `ABAP-LEX-001` | the lexer lost its place in a source file |
+| `ABAP-COV-001` | `--abap-src` names a path that is not a directory — the scan never ran |
+| `ABAP-COV-002` | the source tree held no file the scanner recognises |
+| `ABAP-COV-003` | files that could not be read were skipped |
+| `BASELINE-000` | no profile parameter export, so eighteen parameters went unjudged |
+| `PARAM-MISSING-OTHER` | parameters absent from an export nobody declared complete |
+| `<CHECK>-COVERAGE` | a release-gated check could not determine whether it applied |
+
+An unreadable or misspelled policy is also `2`: a typo in a config file must not
+quietly disarm the gate. **A scan that read nothing at all is `2` as well** — zero
+findings from an empty directory used to be exit `0`, which is the same lie as a
+mis-lexed file and arrived by a shorter route.
 
 A mis-lexed file that yields a green pipeline is the single worst outcome this
 feature can produce. It is indistinguishable from clean code, and it is a lie told

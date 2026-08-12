@@ -1,5 +1,25 @@
 # Build Roadmap — Execution Plan
 
+> ## ⚠️ Status note — 2026-08-12
+>
+> Read the phase lists below as a **record of what was planned**, not of what is
+> outstanding. A great deal has shipped since they were written, and this document
+> has not been rewritten phase by phase:
+>
+> - **30 audit modules** (these documents say 23), 621 check ids, 123 logical sources.
+> - **Connected mode exists** — `collect/` with two read-only connectors. It was
+>   the *last* phase in the coverage plan and was built early.
+> - **The ECC axis is measured, not estimated**: 14 of 30 auditors produce
+>   identical findings on an ECC export. See [ECC_COVERAGE.md](ECC_COVERAGE.md).
+> - **Release gating, the tenant model and the schema-upgrade CI job have all
+>   landed.** See [DECISIONS.md](DECISIONS.md) for D1–D8 and what each one changed.
+>
+> Where a phase below is marked "PASSED" with numbers, treat those numbers as a
+> dated measurement taken when that phase closed — they are records, and several
+> have since moved.
+
+---
+
 **Companion to [`PIVOT_PLAN.md`](PIVOT_PLAN.md)**, which carries the *rationale*. This is the
 *execution* view: what is built, what is next, what each phase depends on, and how each one is
 proved done.
@@ -29,7 +49,7 @@ meant migrating twice.
 |---|---|---|
 | Fingerprint + `AffectedObject` | `server/identity.py` | ✅ |
 | Extended finding contract | `modules/base_auditor.py` | ✅ |
-| Schema — 18 tables, 17 indexes | `server/schema.sql` | ✅ |
+| Schema — 28 tables, 17 indexes | `server/schema.sql` | ✅ |
 | Pool, row scoping, audit | `server/db.py` | ✅ |
 | RBAC, PBKDF2, sessions | `server/auth.py` | ✅ |
 | Query layer (one layer, many renderings) | `server/queries.py` | ✅ |
@@ -51,7 +71,7 @@ tests/test_integration_ingest.py 10 passed   (real PostgreSQL 16)
 full unit suite                 198 passed, 1 skipped
 ```
 
-Measured on the bundled `sample_data`: **296 findings, 204 graph nodes, 105 of 117 logical
+Measured on the bundled `sample_data`: **296 findings, 204 graph nodes, 106 of 123 logical
 sources supplied.** The three collisions that blocked the pivot now resolve —
 `USR-001` 4→4 distinct, `CODE-STMT-001` 4→4, `RISE-002` 2→2.
 
@@ -455,7 +475,7 @@ catalogue refreshes from SAP in CI rather than by hand.
 | Retrospective Security Audit Log review | `modules/log_review.py` (`logreview`) | ✅ |
 | Export guidance for all three | `docs/EXPORT_GUIDE.md` | ✅ |
 
-**465 tests green** (401 unit, 64 against real PostgreSQL 16).
+**2,365 tests collected** (401 unit, 64 against real PostgreSQL 16).
 
 ### Deliberately NOT built: live API clients *inside the product*
 
@@ -630,5 +650,5 @@ Re-verified end to end after conversion: scanning the same bundle twice still gi
 3. Begin Phase 4 — the attack-path graph. The node substrate is in place: **626 typed nodes**
    from real exports, with cloud and on-premise identities correctly separated.
 
-**Done:** README `PARAM-* (25+)` overstatement corrected to 23. CI now has three jobs including
+**Done:** README `PARAM-* (25+)` overstatement corrected to 23. CI now has six jobs including
 a stdlib-purity gate and a skip guard.
