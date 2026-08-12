@@ -16,6 +16,8 @@ import { SavedView } from './routes/SavedView'
 import { RunDetail } from './routes/RunDetail'
 import { Upload } from './routes/Upload'
 import { Coverage } from './routes/Coverage'
+import { Csf } from './routes/Csf'
+import { CsfFunction } from './routes/CsfFunction'
 import { PathDetail } from './routes/PathDetail'
 import { Paths } from './routes/Paths'
 import { Risk } from './routes/Risk'
@@ -66,6 +68,11 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/account" element={<Account />} />
           <Route path="/coverage" element={<Coverage />} />
+          <Route path="/csf" element={<Csf />} />
+          {/* /csf/:fn takes a Function id, so it has no nav entry: it is
+              reached from the six Function tiles on /csf, and from the CSF
+              strip on the dashboard. */}
+          <Route path="/csf/:fn" element={<CsfFunction />} />
           <Route path="/findings" element={<Findings />} />
           {/* /findings/:id takes an id, so it has no nav entry: it is reached by
               clicking a row on /findings, which links both the check id and the

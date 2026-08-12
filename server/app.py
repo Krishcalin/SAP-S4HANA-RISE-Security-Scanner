@@ -54,7 +54,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import Scope
 
 from server import analytics, auth, crq, db, graph, ingest, queries, sapcontent
-from modules import platforms
+from modules import nist_csf, platforms
 #: SESSION_COOKIE is imported but not USED here any more — the routes that set and
 #: cleared it were the Jinja form's sign-in and sign-out, and the SPA uses
 #: /api/auth/login and /api/auth/logout instead. It stays as a deliberate
@@ -955,6 +955,49 @@ def health():
 #  silent in exactly the way that takes a day to find. It sat safely near the top
 #  of the file for the whole migration only because "/ui" claimed a prefix nothing
 #  else used; giving the console the root turned its position into a load-bearing
+
+# ── NIST Cybersecurity Framework (CSF) 2.0 ───────────────────────────────────
+#  The literal path is declared BEFORE the parameterised one. FastAPI matches in
+#  declaration order, so /api/csf/{function_id} declared first would swallow any
+#  future literal sibling.
+
+
+@app.get("/api/csf")
+def api_csf(user: Dict[str, Any] = Depends(current_user)):
+    """Open findings rolled up onto the CSF 2.0 Core.
+
+    Returns the WHOLE Core — all 6 Functions and all 22 Categories — not only
+    the ones carrying findings. A Category missing from the answer would be
+    indistinguishable from a Category we cannot assess, and that ambiguity is
+    the one thing modules/nist_csf.py exists to remove: every Category comes
+    back labelled `assessed`, `clear` or `not_assessed`, and the last of those
+    carries the reason no SAP export can answer it.
+
+    No percentage is returned, here or anywhere below. compliance_mapping.py
+    forbids one and the reason holds just as well for CSF: we see findings, not
+    the control environment, so a "% compliant" would be a claim about evidence
+    we do not hold.
+    """
+    findings = queries.findings_for_compliance(auth.scope_for(user))
+    return nist_csf.roll_up(findings)
+
+
+@app.get("/api/csf/{function_id}")
+def api_csf_function(function_id: str,
+                     user: Dict[str, Any] = Depends(current_user)):
+    """One CSF Function in detail, with its Categories and their Subcategories.
+
+    404 on anything that is not one of the six Function ids — an unknown id must
+    not render as a Function with no findings, which is what returning an empty
+    shell would look like on screen.
+    """
+    findings = queries.findings_for_compliance(auth.scope_for(user))
+    detail = nist_csf.function_detail(findings, function_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="no such CSF Function")
+    return detail
+
+
 #  detail.
 #
 #  ANYTHING ADDED BELOW THIS LINE IS UNREACHABLE. New routes go above it.

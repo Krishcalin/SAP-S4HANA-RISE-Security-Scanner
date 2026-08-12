@@ -37,11 +37,11 @@
 
 import type {
   AccountInfo, AssignResult, BulkTransitionResult, ChangesSince, Coverage,
-  Dashboard, FindingDetail, FindingFilters, FindingHistory, FindingPage,
-  GeneratedPassword, Health, Journey, Landscape, Me, PathView, PathsOverview,
-  ResolvedView, RiskView, RunDiff, SapSystem, SavedView, SaveViewResult,
-  ScanRun, TotpConfirmed, TotpEnrolment, TotpStatus, TransitionResult,
-  UploadResult,
+  CsfFunctionView, CsfView, Dashboard, FindingDetail, FindingFilters,
+  FindingHistory, FindingPage, GeneratedPassword, Health, Journey, Landscape,
+  Me, PathView, PathsOverview, ResolvedView, RiskView, RunDiff, SapSystem,
+  SaveViewResult, SavedView, ScanRun, TotpConfirmed, TotpEnrolment,
+  TotpStatus, TransitionResult, UploadResult
 } from './types'
 
 /** Same-origin by default: FastAPI serves this bundle and the API. The override
@@ -434,4 +434,12 @@ export async function health(): Promise<Health> {
   const r = await fetch('/health', { headers: { Accept: 'application/json' } })
   if (!r.ok) throw await failure(r)
   return (await r.json()) as Health
+}
+
+// ══ NIST CSF 2.0 ════════════════════════════════════════════════════════════
+export function csf(): Promise<CsfView> {
+  return get<CsfView>('/csf')
+}
+export function csfFunction(functionId: string): Promise<CsfFunctionView> {
+  return get<CsfFunctionView>(`/csf/${encodeURIComponent(functionId)}`)
 }

@@ -8,9 +8,9 @@
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { ApiError, dashboard } from '../api/client'
+import { ApiError, csf, dashboard } from '../api/client'
 import type {
-  Dashboard as DashboardData, RemediationOwner, ScanRun, Severity,
+  CsfView, Dashboard as DashboardData, RemediationOwner, ScanRun, Severity,
 } from '../api/types'
 import { useTitle } from '../lib/title'
 // The ONE transcription of server/app.py `_money`, exported from the screen the
@@ -38,12 +38,27 @@ export function Dashboard() {
   useTitle('Dashboard')
   const [data, setData] = useState<DashboardData | null>(null)
   const [error, setError] = useState('')
+  const [csfView, setCsfView] = useState<CsfView | null>(null)
 
   useEffect(() => {
     let cancelled = false
     dashboard()
       .then((d) => { if (!cancelled) setData(d) })
       .catch((e) => { if (!cancelled) setError(describe(e)) })
+    return () => { cancelled = true }
+  }, [])
+
+  // A SEPARATE request, and a swallowed failure. The CSF strip is context for
+  // the findings above it, not the reason anyone opens this screen; letting its
+  // roll-up fail the whole dashboard would trade the four panels a reader came
+  // for against a panel they did not. On failure the strip renders nothing,
+  // which is honest — it never renders empty tiles, because six zeroes read as
+  // "clean in every Function" rather than "this did not load".
+  useEffect(() => {
+    let cancelled = false
+    csf()
+      .then((v) => { if (!cancelled) setCsfView(v) })
+      .catch(() => { /* strip stays hidden; see above */ })
     return () => { cancelled = true }
   }, [])
 
@@ -217,6 +232,57 @@ export function Dashboard() {
         </div>
       </div>
 
+      {/* NIST CSF 2.0 — the signal that these findings sit inside a framework a
+          reader already trusts. Six tiles, one per Function, each a link into
+          /csf/<function>. It is guarded on `csfView` for the reason the CRQ pair
+          above is guarded: a row of empty tiles reads as "nothing wrong in any
+          Function", which is the opposite of "we have not loaded this yet".
+
+          The scope line under the tiles is not decoration. Ten of the 22
+          Categories are outside anything an SAP export can answer, and a reader
+          who takes this strip for full CSF coverage has been misled by us. */}
+      {csfView && (
+        <>
+          <h2 className={H2}>
+            NIST CSF 2.0
+            <Link className="ml-2.5 text-[12px] font-normal text-accent hover:underline" to="/csf">
+              Full framework view →
+            </Link>
+          </h2>
+          <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(174px,1fr))]">
+            {csfView.functions.map((f) => (
+              <Link
+                key={f.id}
+                to={`/csf/${CSF_SLUG[f.id]}`}
+                className={`${CARD} csf-rail csf-rail-${f.id} block no-underline hover:bg-panel2`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`csf csf-${f.id}`}>{f.id}</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-[.06em] text-ink2">
+                    {f.name}
+                  </span>
+                </div>
+                <div className={`${KPI} text-ink`}>{f.total}</div>
+                <div className={KPI_NOTE}>
+                  {f.total === 0 && f.categories_assessed > 0
+                    ? 'no findings'
+                    : `finding${f.total === 1 ? '' : 's'}`}
+                  {' · '}
+                  {f.categories_assessed}/{f.categories_total} cats
+                </div>
+              </Link>
+            ))}
+          </div>
+          <p className="text-[12px] text-ink3 mt-2.5">
+            {csfView.totals.categories_assessable} of {csfView.totals.categories} CSF
+            Categories are assessable from an SAP export;{' '}
+            {csfView.totals.categories_not_assessed} describe governance, training and
+            incident-response outcomes this product produces no evidence about.{' '}
+            <Link className="text-accent hover:underline" to="/csf">See which, and why →</Link>
+          </p>
+        </>
+      )}
+
       <h2 className={H2}>Systems</h2>
       <div className={`${CARD} p-0 overflow-x-auto`}>
         <table className="w-full border-collapse">
@@ -308,6 +374,11 @@ export function Dashboard() {
 // base.html's .card/.kpi/.grid are NOT in index.css: only the chips whose exact
 // palette had to survive the port were copied there. These strings reproduce the
 // rest locally rather than growing the shared stylesheet from a screen file.
+const CSF_SLUG: Record<string, string> = {
+  GV: 'govern', ID: 'identify', PR: 'protect',
+  DE: 'detect', RS: 'respond', RC: 'recover',
+}
+
 const CARD = 'rounded-lg border border-line bg-panel p-4'
 const CARD_TITLE = 'mb-3 text-[12px] font-semibold uppercase tracking-[.06em] text-ink3'
 const KPI = 'text-[30px] font-semibold tracking-[-.02em] leading-[1.1]'

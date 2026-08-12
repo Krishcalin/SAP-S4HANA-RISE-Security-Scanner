@@ -781,3 +781,76 @@ export interface TotpConfirmed {
   recovery_codes: string[]
   other_sessions_revoked: boolean
 }
+
+// ── NIST CSF 2.0 ────────────────────────────────────────────────────────────
+
+/** One of the six CSF Function ids. server/app.py `api_csf`. */
+export type CsfFunctionId = 'GV' | 'ID' | 'PR' | 'DE' | 'RS' | 'RC'
+
+/**
+ * Whether this product can speak to a Category at all.
+ * modules/nist_csf.py — ASSESSED / CLEAR / NOT_ASSESSED.
+ *
+ * `clear` and `not_assessed` are NOT interchangeable and must not render alike:
+ * clear means the run produced no findings, not_assessed means no SAP export
+ * answers that outcome in any run.
+ */
+export type CsfStatus = 'assessed' | 'clear' | 'not_assessed'
+
+/** A CSF Subcategory: NIST's id and its outcome text, verbatim. */
+export interface CsfSubcategory {
+  id: string
+  text: string
+}
+
+/** A CSF Category. modules/nist_csf.py `roll_up`. */
+export interface CsfCategory {
+  id: string
+  function: CsfFunctionId
+  name: string
+  description: string
+  status: CsfStatus
+  themes: string[]
+  /** Why no evidence exists here. Non-null exactly when status is not_assessed. */
+  reason: string | null
+  counts: Record<string, number>
+  total: number
+  subcategories: CsfSubcategory[]
+}
+
+/** A CSF Function with its Categories. server/app.py `api_csf_function`. */
+export interface CsfFunctionView {
+  id: CsfFunctionId
+  name: string
+  /** The Function's outcome statement, verbatim from CSWP 29. */
+  outcome: string
+  counts: Record<string, number>
+  total: number
+  categories: CsfCategory[]
+  categories_total: number
+  categories_assessed: number
+  categories_with_findings: number
+  subcategories_total: number
+  reference?: string
+  doi?: string
+}
+
+/** The whole Core rolled up. server/app.py `api_csf`. */
+export interface CsfView {
+  framework: string
+  reference: string
+  doi: string
+  functions: CsfFunctionView[]
+  totals: {
+    functions: number
+    categories: number
+    subcategories: number
+    categories_assessable: number
+    categories_not_assessed: number
+    /** The corpus. `mapped` + `unmapped` account for it; they are never merged. */
+    findings: number
+    mapped: number
+    unmapped: number
+    unmapped_categories: Record<string, number>
+  }
+}

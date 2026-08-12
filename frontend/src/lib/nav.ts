@@ -7,8 +7,15 @@
  */
 
 import {
-  LayoutDashboard, CircleAlert, TrendingUp, Waypoints, CircleDollarSign,
-  ShieldCheck, Upload, UserCog,
+  CircleAlert,
+  CircleDollarSign,
+  Landmark,
+  LayoutDashboard,
+  ShieldCheck,
+  TrendingUp,
+  Upload,
+  UserCog,
+  Waypoints,
   type LucideIcon,
 } from 'lucide-react'
 import type { Role } from '../api/types'
@@ -48,6 +55,7 @@ export const NAV_MAIN: NavItem[] = [
   // sits in the main list rather than under a reports submenu.
   { to: '/risk', label: 'Risk ($)', icon: CircleDollarSign },
   { to: '/coverage', label: 'Coverage', icon: ShieldCheck },
+  { to: '/csf', label: 'NIST CSF', icon: Landmark },
   { to: '/upload', label: 'Upload', icon: Upload, minRole: 'analyst' },
 ]
 

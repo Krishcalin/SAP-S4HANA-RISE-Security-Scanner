@@ -156,6 +156,24 @@ def list_systems(scope: Optional[Sequence[int]]) -> List[Dict[str, Any]]:
 #  Dashboard                                                                  #
 # --------------------------------------------------------------------------- #
 
+def findings_for_compliance(scope: Optional[Sequence[int]]) -> List[Dict[str, Any]]:
+    """Every OPEN finding as {category, severity} — the whole corpus, unpaginated.
+
+    Two columns because that is genuinely all ComplianceMapper reads, and a
+    control-framework roll-up that silently ran on page 1 of the findings would
+    understate every control in the report. `category` lives on check_definition,
+    not on finding, so the join is not optional: without it every row arrives
+    with no category, maps to no theme, and the whole framework reports zero
+    while looking perfectly healthy.
+    """
+    where, params = ["f.state NOT IN ('resolved','false_positive')"], []
+    _scoped(where, params, scope)
+    return db.query(
+        "SELECT cd.category, f.severity FROM finding f "
+        "JOIN check_definition cd ON cd.check_id = f.check_id "
+        f"WHERE {' AND '.join(where)}", params)
+
+
 def dashboard_summary(scope: Optional[Sequence[int]]) -> Dict[str, Any]:
     where, params = ["f.state NOT IN ('resolved','false_positive')"], []
     _scoped(where, params, scope)

@@ -106,6 +106,56 @@ body {
 .tier-P3 { background:var(--panel-2); color:var(--ink-dim); border:1px solid var(--line); }
 .tier-P4 { background:transparent; color:var(--ink-faint); border:1px dashed var(--line); }
 
+/* ── NIST CSF 2.0 ────────────────────────────────────────────────────────────
+   FUNCTION HUES ARE NIST'S OWN, NOT OURS. CSWP 29 Fig. 2 draws the Core as a
+   wheel with GOVERN gold at the centre and Identify blue, Protect purple, Detect
+   orange, Respond red, Recover green around it. Reusing those hues means a
+   reader who knows the framework recognises a Function before reading its label;
+   inventing a sixth palette would have thrown that away for nothing.
+
+   Three of them land near a severity token (Respond/--crit, Detect/--high,
+   Recover/--ok) and that is deliberate, not an oversight: a Function chip is a
+   MONOGRAM — square, monospace, two letters — and a severity is a `.pill`, round
+   and worded. Different shape, different vocabulary, so the coincidence of hue
+   never has to carry meaning. Do not restyle these into pills.
+
+   THE THREE STATES ARE THE POINT OF THIS FILE'S CSF SECTION.
+   `clear` and `not-assessed` MUST NOT look alike. Clear is an observation — we
+   looked and the run produced nothing. Not-assessed is the absence of one: no
+   SAP export answers that outcome, in any run. Clear therefore keeps a solid
+   border and a green edge it has earned; not-assessed is DASHED and dimmed,
+   borrowing the same "this is not a value" language `.tier-P4` already uses.
+   A green tick on an outcome we never examined is the exact lie this design
+   exists to prevent. */
+.csf { display:inline-flex; align-items:center; justify-content:center;
+  min-width:26px; padding:2px 5px; border-radius:4px; font-family:var(--font-mono, ui-monospace, monospace);
+  font-size:11px; font-weight:700; letter-spacing:.04em; }
+.csf-GV { background:rgba(212,160,23,.18);  color:#d4a017; }
+.csf-ID { background:rgba(14,165,233,.18);  color:#0ea5e9; }
+.csf-PR { background:rgba(139,92,246,.18);  color:#8b5cf6; }
+.csf-DE { background:rgba(245,158,11,.18);  color:#f59e0b; }
+.csf-RS { background:rgba(239,68,68,.18);   color:#ef4444; }
+.csf-RC { background:rgba(34,197,94,.18);   color:#22c55e; }
+
+/* The rail that gives a Function tile its identity without a second chip. */
+.csf-rail { border-left:3px solid var(--line); }
+.csf-rail-GV { border-left-color:#d4a017; }
+.csf-rail-ID { border-left-color:#0ea5e9; }
+.csf-rail-PR { border-left-color:#8b5cf6; }
+.csf-rail-DE { border-left-color:#f59e0b; }
+.csf-rail-RS { border-left-color:#ef4444; }
+.csf-rail-RC { border-left-color:#22c55e; }
+
+.csf-state { display:inline-block; padding:2px 7px; border-radius:4px; font-size:11px;
+  font-weight:600; letter-spacing:.02em; white-space:nowrap; }
+.csf-state-assessed     { background:var(--panel-2); color:var(--ink-dim); border:1px solid var(--line); }
+.csf-state-clear        { background:rgba(34,197,94,.13); color:var(--ok); border:1px solid transparent; }
+.csf-state-not_assessed { background:transparent; color:var(--ink-faint); border:1px dashed var(--line); }
+
+/* Category cards carry the same distinction at block level. */
+.csf-card-clear        { border-color:rgba(34,197,94,.35); }
+.csf-card-not_assessed { border-style:dashed; opacity:.72; }
+
 /* ── Brand ───────────────────────────────────────────────────────────────────
    THE ARTWORK'S OWN FIELD, AND WHY IT IS A CSS COLOUR TOO.
    The lockup is navy "Monitor" + WHITE "Risk" on blue #6cc2fb. Both inks were
