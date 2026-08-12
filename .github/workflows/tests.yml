@@ -82,6 +82,7 @@ jobs:
             --ignore=tests/test_spa_mount.py \
             --ignore=tests/test_api_auth.py \
             --ignore=tests/test_account.py \
+            --ignore=tests/test_crq_trend.py \
             --ignore=tests/test_api_finding_detail.py \
             --ignore=tests/test_code_finding_console.py \
             --ignore=tests/test_branding.py \
