@@ -37,11 +37,12 @@
 
 import type {
   AccountInfo, AssignResult, BulkTransitionResult, ChangesSince, Coverage,
-  CsfFunctionView, CsfView, Dashboard, FindingDetail, FindingFilters,
-  FindingHistory, FindingPage, GeneratedPassword, Health, Journey, Landscape,
-  Me, PathView, PathsOverview, ResolvedView, RiskView, RunDiff, SapSystem,
-  SaveViewResult, SavedView, ScanRun, TotpConfirmed, TotpEnrolment,
-  TotpStatus, TransitionResult, UploadResult
+  CrqParametersView, CrqQuantifyResult, CsfFunctionView, CsfView, Dashboard,
+  FindingDetail, FindingFilters, FindingHistory, FindingPage,
+  GeneratedPassword, Health, Journey, Landscape, Me, PathView, PathsOverview,
+  ResolvedView, RiskView, RunDiff, SapSystem, SaveViewResult, SavedView,
+  ScanRun, TotpConfirmed, TotpEnrolment, TotpStatus, TransitionResult,
+  UploadResult
 } from './types'
 
 /** Same-origin by default: FastAPI serves this bundle and the API. The override
@@ -442,4 +443,27 @@ export function csf(): Promise<CsfView> {
 }
 export function csfFunction(functionId: string): Promise<CsfFunctionView> {
   return get<CsfFunctionView>(`/csf/${encodeURIComponent(functionId)}`)
+}
+
+// ══ Cyber Risk Quantification ═══════════════════════════════════════════════
+export function crqParameters(landscapeId: number): Promise<CrqParametersView> {
+  return get<CrqParametersView>(`/crq/parameters?landscape_id=${landscapeId}`)
+}
+export function saveCrqParameters(
+  landscapeId: number, answers: Record<string, number>, note: string,
+): Promise<{ id: number }> {
+  return post<{ id: number }>('/crq/parameters', {
+    landscape_id: String(landscapeId),
+    answers_json: JSON.stringify(answers),
+    note,
+  })
+}
+export function crqQuantify(
+  landscapeId: number, answers: Record<string, number> | null, simulations = 20000,
+): Promise<CrqQuantifyResult> {
+  return post<CrqQuantifyResult>('/crq/quantify', {
+    landscape_id: String(landscapeId),
+    ...(answers ? { answers_json: JSON.stringify(answers) } : {}),
+    simulations: String(simulations),
+  })
 }

@@ -579,3 +579,26 @@ def changes_since(run_id: int, scope: Optional[Sequence[int]]) -> Dict[str, Any]
         f"FROM finding f JOIN check_definition cd ON cd.check_id = f.check_id "
         f"WHERE {' AND '.join(where)} ORDER BY f.last_detected_at DESC", params)
     return {"since_run": run_id, "count": len(rows), "findings": rows}
+
+
+def findings_for_crq(scope: Optional[Sequence[int]],
+                     landscape_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    """Every OPEN finding in a landscape, shaped for the FAIR prioritiser.
+
+    UNPAGINATED, DELIBERATELY. compute_and_store's docstring says the complete
+    unfiltered set is the one thing that makes this number honest; quantifying a
+    page of findings would understate every scenario while looking identical.
+    """
+    where = ["f.state NOT IN ('resolved','false_positive')"]
+    params: List[Any] = []
+    _scoped(where, params, scope)
+    if landscape_id is not None:
+        where.append("s.landscape_id = %s")
+        params.append(landscape_id)
+    return db.query(
+        "SELECT f.id, f.check_id, f.severity, f.state, f.remediation_owner, "
+        "       f.priority_score, cd.category, cd.title, s.sid, s.tier "
+        "FROM finding f "
+        "JOIN check_definition cd ON cd.check_id = f.check_id "
+        "LEFT JOIN sap_system s ON s.id = f.system_id "
+        f"WHERE {' AND '.join(where)}", params)

@@ -347,11 +347,26 @@ def _quantify(crq_input: Dict[str, Any], engine_module, simulations: int,
     mean_port = sum(ps) / len(ps) if ps else 0.0
     lec = engine_module.FAIREngine._calc_loss_exceedance(ps) if ps else []
 
+    # p10 IS EMITTED BECAUSE THE DATABASE HAS ALWAYS ASKED FOR IT.
+    # server/crq.py reads portfolio["ale_p10"] into a column that this function
+    # never populated, so crq_result.ale_p10 was NULL in every row ever written —
+    # 30 of 30 in the reference deployment. The column, the query and the wire type
+    # all existed; only the value was missing. p95 was computed and then dropped on
+    # the floor for the same reason. Both now have a home.
+    #
+    # p_zero is the share of iterations with NO loss event at all. FAIR frequencies
+    # are low enough that most years are quiet, and a distribution whose 10th
+    # percentile is 0 is telling the reader something true and important that a
+    # mean alone hides.
+    zero_years = sum(1 for v in ps if v <= 0.0)
     return {
         "scenarios": per_scenario,
         "portfolio": {
-            "ale_p50": _percentile(ps, 50), "ale_p90": _percentile(ps, 90),
-            "ale_p95": _percentile(ps, 95), "mean_ale": mean_port,
+            "ale_p10": _percentile(ps, 10), "ale_p50": _percentile(ps, 50),
+            "ale_p90": _percentile(ps, 90), "ale_p95": _percentile(ps, 95),
+            "ale_p99": _percentile(ps, 99), "mean_ale": mean_port,
+            "iterations": len(ps),
+            "p_no_loss": (zero_years / len(ps)) if ps else 0.0,
             "loss_exceedance": lec,
         },
     }

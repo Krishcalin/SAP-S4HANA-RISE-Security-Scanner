@@ -115,6 +115,14 @@ def compute_and_store(conn, run_id: int, landscape_id: int,
     weight = landscape_exposure_weight(conn, landscape_id)
     overrides: Dict[str, Any] = {}
     if revenue:
+        # THE CATALOGUE KEY IS "revenue", NOT "annual_revenue".
+        # This wrote a key nothing ever read, so --crq-revenue was silently inert:
+        # the figure stayed calibrated to the catalogue's illustrative $1B whatever
+        # the customer's real turnover. Both keys are written now — "revenue"
+        # because it is what data/fair_scenarios.json and the loss model read, and
+        # "annual_revenue" so any consumer that grew to depend on the old spelling
+        # keeps working.
+        overrides["revenue"] = float(revenue) * weight
         overrides["annual_revenue"] = float(revenue) * weight
     if industry:
         overrides["industry"] = industry
@@ -223,3 +231,101 @@ def trend(scope: Optional[Sequence[int]] = None, limit: int = 12) -> List[Dict[s
         ORDER BY r.started_at DESC LIMIT %s
         """, list(params) + [limit])
     return list(reversed(rows))
+
+
+# ── CFO parameters ──────────────────────────────────────────────────────────
+
+def save_parameters(landscape_id: int, answers: Dict[str, Any],
+                    currency: str = "USD", note: Optional[str] = None,
+                    created_by: Optional[str] = None) -> int:
+    """Record a revision of the customer's financial answers. Returns its id.
+
+    INSERT, never UPDATE. A past quantification must stay explainable, and it
+    cannot be if the answers behind it can be edited underneath it.
+
+    Unknown keys are dropped rather than stored: they would travel into the loss
+    model, match nothing, and look like an answered question in the UI.
+    """
+    from modules.fair_loss_model import PARAMETER_KEYS
+    clean = {k: v for k, v in (answers or {}).items()
+             if k in PARAMETER_KEYS and v not in (None, "")}
+    row = db.one(
+        "INSERT INTO crq_parameters (landscape_id, answers, currency, note, created_by) "
+        "VALUES (%s, %s, %s, %s, %s) RETURNING id",
+        (landscape_id, Jsonb(clean), currency or "USD", note, created_by))
+    return int(row["id"])
+
+
+def latest_parameters(landscape_id: int) -> Optional[Dict[str, Any]]:
+    """The most recent revision for a landscape, or None if never answered."""
+    return db.one(
+        "SELECT id, landscape_id, answers, currency, note, created_by, created_at "
+        "FROM crq_parameters WHERE landscape_id = %s "
+        "ORDER BY created_at DESC, id DESC LIMIT 1", (landscape_id,))
+
+
+def parameter_history(landscape_id: int, limit: int = 20) -> List[Dict[str, Any]]:
+    """Every revision, newest first — the audit trail behind a moving number."""
+    return db.query(
+        "SELECT id, answers, currency, note, created_by, created_at "
+        "FROM crq_parameters WHERE landscape_id = %s "
+        "ORDER BY created_at DESC, id DESC LIMIT %s", (landscape_id, limit))
+
+
+def quantify_with_parameters(findings: List[Dict[str, Any]],
+                             answers: Dict[str, Any],
+                             simulations: int = 10000,
+                             seed: int = 42) -> Dict[str, Any]:
+    """Run FAIR with the customer's own loss figures. No database, no writes.
+
+    This is the interactive path: the input screen calls it on every recompute so
+    a CFO can see what a different recovery-time assumption does without polluting
+    the stored history with a draft.
+    """
+    from modules import fair_loss_model as loss_model
+    from modules.fair_adapter import (build_inputs, load_catalog, locate_engine,
+                                      _quantify)
+    from modules.risk_prioritizer import prioritize
+
+    catalogue = load_catalog()
+    org = dict(catalogue.get("organization_default", {}))
+    priced = loss_model.build_loss_components(answers or {})
+    scale = loss_model.scale_factor(answers or {},
+                                    float(org.get("revenue") or 0.0))
+    if answers.get("sap_revenue"):
+        org["revenue"] = float(answers["sap_revenue"])
+
+    scenarios = [loss_model.apply_to_scenario(s, priced, scale)
+                 for s in catalogue.get("scenarios", [])]
+    calibrated = dict(catalogue)
+    calibrated["scenarios"] = scenarios
+
+    engine = locate_engine()
+    if engine is None:
+        return {"computed": False, "reason": "no FAIR engine available",
+                "priced": priced}
+
+    priorities = prioritize(findings or [])
+    built = build_inputs(priorities, calibrated, org)
+    asis = _quantify(built["asis"], engine, simulations, seed)
+    target = _quantify(built["target"], engine, simulations, seed)
+
+    return {
+        "computed": True,
+        "portfolio": asis["portfolio"],
+        "target_portfolio": target["portfolio"],
+        "scenarios": asis["scenarios"],
+        "reducible_ale_p90": max(0.0, asis["portfolio"]["ale_p90"]
+                                 - target["portfolio"]["ale_p90"]),
+        "reducible_ale_mean": max(0.0, asis["portfolio"]["mean_ale"]
+                                  - target["portfolio"]["mean_ale"]),
+        # The loss provenance travels WITH the figure, always. A currency number
+        # whose basis is one API call away is a number that will be quoted without
+        # its basis.
+        "priced": priced,
+        "scale_factor": scale,
+        "simulations": simulations,
+        "seed": seed,
+        "unrouted": built.get("unrouted", 0),
+        "finding_count": len(findings or []),
+    }

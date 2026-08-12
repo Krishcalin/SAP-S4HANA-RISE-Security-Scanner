@@ -856,6 +856,36 @@ CREATE INDEX IF NOT EXISTS system_component_system_idx
 --  Schema version
 -- ---------------------------------------------------------------------
 
+-- ── CRQ parameters: the CFO's own figures ───────────────────────────────────
+--  INSERT-ONLY, NEVER UPDATED, AND THAT IS THE WHOLE DESIGN.
+--
+--  A quantification is only defensible if the answers behind it can be produced
+--  months later, unchanged. If a row were updated in place, every historical
+--  crq_result would silently start claiming it was computed from figures that did
+--  not exist when it ran, and the trend chart would redraw its own past. So a
+--  revision is a NEW ROW, and crq_result records which revision produced it.
+--
+--  This also disarms the trap in the trend line. Risk moves for two unrelated
+--  reasons — findings changed, or somebody revised an input — and a reader seeing
+--  one line cannot tell which. With the revision id stored per result, the chart
+--  can BREAK the series wherever the parameters changed, so an input revision can
+--  never be read as a security improvement.
+CREATE TABLE IF NOT EXISTS crq_parameters (
+    id            bigserial PRIMARY KEY,
+    landscape_id  bigint NOT NULL REFERENCES landscape(id) ON DELETE CASCADE,
+    -- The answers, keyed by modules/fair_loss_model.PARAMETER_KEYS. jsonb rather
+    -- than 14 columns because the question set is expected to grow, and a schema
+    -- migration per new question would guarantee the set never grows.
+    answers       jsonb NOT NULL DEFAULT '{}'::jsonb,
+    currency      text NOT NULL DEFAULT 'USD',
+    note          text,
+    created_by    text,
+    created_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS crq_parameters_landscape_idx
+    ON crq_parameters (landscape_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS schema_version (
     version    integer PRIMARY KEY,
     applied_at timestamptz NOT NULL DEFAULT now()
@@ -864,3 +894,13 @@ CREATE TABLE IF NOT EXISTS schema_version (
 INSERT INTO schema_version (version) VALUES (1) ON CONFLICT DO NOTHING;
 INSERT INTO schema_version (version) VALUES (2) ON CONFLICT DO NOTHING;
 INSERT INTO schema_version (version) VALUES (3) ON CONFLICT DO NOTHING;
+
+-- CRQ v2. crq_result gains the parameter revision that produced it and the model
+-- version, so a stored figure stays explainable after the model moves on. Both are
+-- nullable: rows written before this migration were computed from the illustrative
+-- catalogue, and NULL says exactly that. Backfilling them with a revision they were
+-- not computed from would be inventing provenance.
+ALTER TABLE crq_result ADD COLUMN IF NOT EXISTS crq_parameters_id bigint;
+ALTER TABLE crq_result ADD COLUMN IF NOT EXISTS model_version integer;
+ALTER TABLE crq_result ADD COLUMN IF NOT EXISTS ale_p95 numeric;
+ALTER TABLE crq_result ADD COLUMN IF NOT EXISTS p_no_loss numeric;

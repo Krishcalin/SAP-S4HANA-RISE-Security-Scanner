@@ -16,6 +16,7 @@ import { SavedView } from './routes/SavedView'
 import { RunDetail } from './routes/RunDetail'
 import { Upload } from './routes/Upload'
 import { Coverage } from './routes/Coverage'
+import { CrqInputs } from './routes/CrqInputs'
 import { Csf } from './routes/Csf'
 import { CsfFunction } from './routes/CsfFunction'
 import { PathDetail } from './routes/PathDetail'
@@ -68,6 +69,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/account" element={<Account />} />
           <Route path="/coverage" element={<Coverage />} />
+          <Route path="/crq" element={<CrqInputs />} />
           <Route path="/csf" element={<Csf />} />
           {/* /csf/:fn takes a Function id, so it has no nav entry: it is
               reached from the six Function tiles on /csf, and from the CSF

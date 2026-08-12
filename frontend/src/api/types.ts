@@ -854,3 +854,82 @@ export interface CsfView {
     unmapped_categories: Record<string, number>
   }
 }
+
+// ── Cyber Risk Quantification: the customer's own figures ───────────────────
+
+/** One question. server/app.py `api_crq_parameters`, from modules/fair_loss_model.PARAMETERS. */
+export interface CrqParameter {
+  key: string
+  label: string
+  unit: 'currency' | 'percent' | 'hours' | 'count' | string
+  group: string
+  help: string
+  feeds: string[]
+}
+
+/** A stored revision. INSERT-ONLY — a past figure must stay explainable. */
+export interface CrqParameterSet {
+  id: number
+  landscape_id?: number
+  answers: Record<string, number>
+  currency: string
+  note: string | null
+  created_by: string | null
+  created_at: string
+}
+
+export interface CrqParametersView {
+  parameters: CrqParameter[]
+  mam_modules: Record<string, { name: string; kind: string }>
+  spread: Record<string, number>
+  latest: CrqParameterSet | null
+  history: CrqParameterSet[]
+}
+
+/** One priced FAIR-MAM component, with the arithmetic that produced it. */
+export interface CrqPricedComponent {
+  band: { min: number; likely: number; max: number }
+  mam_module: string
+  fair_form: string
+  /** The sum in words. This travels with the figure and is always rendered. */
+  basis: string
+  inputs: string[]
+}
+
+export interface CrqPriced {
+  components: Record<string, CrqPricedComponent>
+  /** Modules NOT priced. Never zero — unknown. */
+  unpriced: { module: string; needs: string }[]
+  priced_modules: string[]
+  spread: Record<string, number>
+}
+
+/** server/app.py `api_crq_quantify`. */
+export interface CrqQuantifyResult {
+  computed: boolean
+  reason?: string
+  portfolio: CrqPortfolioStats
+  target_portfolio: CrqPortfolioStats
+  reducible_ale_p90: number
+  reducible_ale_mean: number
+  priced: CrqPriced
+  scale_factor: number | null
+  simulations: number
+  seed: number
+  finding_count: number
+  unrouted: number
+}
+
+export interface CrqPortfolioStats {
+  ale_p10: number
+  ale_p50: number
+  ale_p90: number
+  ale_p95: number
+  ale_p99: number
+  mean_ale: number
+  iterations: number
+  /** Share of simulated years with NO loss event. A P90 headline beside a $0
+   *  median is true and reads as a typical year; this is what prevents that. */
+  p_no_loss: number
+  loss_exceedance?: { loss: number; probability: number }[]
+}

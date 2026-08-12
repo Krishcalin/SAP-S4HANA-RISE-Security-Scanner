@@ -36,6 +36,7 @@ SharePoint) is a design smell we are deliberately not reproducing.
 """
 from __future__ import annotations
 
+import json
 import asyncio
 import logging
 import shutil
@@ -996,6 +997,82 @@ def api_csf_function(function_id: str,
     if detail is None:
         raise HTTPException(status_code=404, detail="no such CSF Function")
     return detail
+
+
+
+# ── Cyber Risk Quantification: the customer's own figures ────────────────────
+
+
+@app.get("/api/crq/parameters")
+def api_crq_parameters(landscape_id: int,
+                       user: Dict[str, Any] = Depends(current_user)):
+    """The question set, the latest answers, and the revision history.
+
+    The QUESTIONS ship with the answers deliberately. The console must render the
+    help text, the unit and which FAIR-MAM cost module each question prices, and
+    duplicating that catalogue in TypeScript would let the two drift — at which
+    point the screen would be explaining a model the server no longer runs.
+    """
+    from modules import fair_loss_model as loss_model
+    latest = crq.latest_parameters(landscape_id)
+    return {
+        "parameters": loss_model.PARAMETERS,
+        "mam_modules": {k: {"name": n, "kind": kind}
+                        for k, (n, kind) in loss_model.MAM_MODULES.items()},
+        "spread": dict(loss_model.SPREAD),
+        "latest": latest,
+        "history": crq.parameter_history(landscape_id),
+    }
+
+
+@app.post("/api/crq/parameters")
+def api_crq_save_parameters(landscape_id: int = Form(...),
+                            answers_json: str = Form(...),
+                            currency: str = Form("USD"),
+                            note: Optional[str] = Form(None),
+                            user: Dict[str, Any] = Depends(require("analyst"))):
+    """Record a revision. Analyst or above: these figures drive a board number."""
+    try:
+        answers = json.loads(answers_json)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="answers_json is not valid JSON")
+    if not isinstance(answers, dict):
+        raise HTTPException(status_code=400, detail="answers_json must be an object")
+    new_id = crq.save_parameters(landscape_id, answers, currency, note,
+                                 created_by=user.get("username"))
+    return {"id": new_id, "landscape_id": landscape_id}
+
+
+@app.post("/api/crq/quantify")
+def api_crq_quantify(landscape_id: int = Form(...),
+                     answers_json: Optional[str] = Form(None),
+                     simulations: int = Form(10000),
+                     user: Dict[str, Any] = Depends(current_user)):
+    """Quantify against a set of answers WITHOUT storing them.
+
+    The input screen calls this on every recompute, so a CFO can try a different
+    recovery time and see the effect immediately. Nothing is written: a draft
+    assumption must never enter the history a trend chart is drawn from.
+
+    `simulations` is clamped. The loop is pure Python and an unbounded value from
+    the wire is a request that never returns.
+    """
+    answers: Dict[str, Any] = {}
+    if answers_json:
+        try:
+            parsed = json.loads(answers_json)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="answers_json is not valid JSON")
+        if isinstance(parsed, dict):
+            answers = parsed
+    if not answers:
+        stored = crq.latest_parameters(landscape_id)
+        answers = (stored or {}).get("answers") or {}
+
+    scope = auth.scope_for(user)
+    findings = queries.findings_for_crq(scope, landscape_id)
+    sims = max(1000, min(int(simulations or 10000), 50000))
+    return crq.quantify_with_parameters(findings, answers, simulations=sims)
 
 
 #  detail.
