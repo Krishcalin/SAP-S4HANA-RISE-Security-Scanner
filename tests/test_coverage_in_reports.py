@@ -207,3 +207,118 @@ def test_an_empty_export_is_reported_separately(partial_manifest):
         html = ReportGenerator([_finding()], {"target": "T"},
                                coverage=partial_manifest)._render_coverage()
         assert "present but contained no rows" in html
+
+
+# ── "did not run" is not one state, it is two ────────────────────────────────
+#
+# `skipped`  the customer supplied none of the module's input.
+# `not_run`  the scan did not execute the module — filtered out, or it failed.
+#
+# They have different owners and different remedies. `modules_not_run` was
+# computed on every single run and read by nobody: no summary clause, no card in
+# any of the three report formats, and no entry in either label map, so the raw
+# enum leaked into the customer's table and sorted BELOW "complete". A scan of
+# six modules out of thirty printed three reassuring zeroes.
+
+@pytest.fixture(scope="module")
+def filtered_manifest():
+    """One module asked for out of thirty — the shape `--modules users` produces."""
+    with contextlib.redirect_stdout(io.StringIO()):
+        data = DataLoader(ROOT / "sample_data").load_all()
+    return build_manifest(data, modules_run=["users"])
+
+
+def test_a_filtered_run_actually_reports_modules_that_were_not_executed(filtered_manifest):
+    assert filtered_manifest["counts"]["modules_not_run"] > 20
+
+
+def test_the_summary_sentence_says_so(filtered_manifest):
+    """The sentence an operator reads without a legend. It counted degraded and
+    skipped and stopped there, so the one number that mattered most on a
+    filtered run was the one it left out."""
+    summary = filtered_manifest["summary"]
+    assert "were not executed" in summary
+    assert str(filtered_manifest["counts"]["modules_not_run"]) in summary
+
+
+def test_a_filtered_run_is_never_described_as_complete(filtered_manifest):
+    """"Coverage is complete." was gated on the SOURCES alone. Every source can be
+    present while most modules were never asked to look at them, which is the
+    most reassuring sentence this file can emit about the least complete thing it
+    describes."""
+    assert "Coverage is complete." not in filtered_manifest["summary"]
+
+
+def test_a_genuinely_complete_run_still_says_so():
+    """The gate must not have become unsatisfiable — a rule that never passes is
+    indistinguishable from a broken one."""
+    from modules.coverage import summarize
+    complete = {"sources_supplied": 123, "sources_known": 123, "sources_empty": 0,
+                "modules_degraded": 0, "modules_skipped": 0, "modules_not_run": 0}
+    assert "Coverage is complete." in summarize(complete)
+
+
+@pytest.mark.parametrize("generator", [ReportGenerator, PDFReportGenerator,
+                                       PPTXReportGenerator])
+def test_every_format_shows_the_not_executed_count(generator, filtered_manifest,
+                                                   tmp_path):
+    """All three, because all three read `modules_skipped` and none read this."""
+    suffix = {"ReportGenerator": ".html", "PDFReportGenerator": ".pdf",
+              "PPTXReportGenerator": ".pptx"}[generator.__name__]
+    out = tmp_path / f"report{suffix}"
+    with contextlib.redirect_stdout(io.StringIO()):
+        generator([_finding()], {"scan_time": "2026-01-01"},
+                  coverage=filtered_manifest).generate(str(out))
+    if suffix == ".pptx":
+        # OOXML is a zip; the words are in the slide parts, not in the file bytes.
+        import re, zipfile
+        with zipfile.ZipFile(out) as z:
+            text = " ".join(
+                " ".join(re.findall(r"<a:t>(.*?)</a:t>", z.read(n).decode("utf-8")))
+                for n in z.namelist() if re.match(r"ppt/slides/slide\d+\.xml$", n))
+    else:
+        text = out.read_text(encoding="utf-8", errors="replace")
+    assert "not executed" in text
+
+
+def test_the_html_table_labels_the_state_instead_of_leaking_the_enum(filtered_manifest):
+    """`not_run` was in neither label map, so the fallback printed the raw
+    identifier into a customer-facing table."""
+    html_out = ReportGenerator([_finding()], {"target": "T"},
+                               coverage=filtered_manifest)._render_coverage()
+    assert ">not_run<" not in html_out
+    assert "not executed" in html_out
+
+
+def test_the_state_that_means_we_did_not_look_sorts_to_the_top(filtered_manifest):
+    """Absent from the order map it defaulted to 9 and sorted below `complete`,
+    putting the one state a reader needs at the bottom of a table read
+    top-down."""
+    html_out = ReportGenerator([_finding()], {"target": "T"},
+                               coverage=filtered_manifest)._render_coverage()
+    body = html_out[html_out.index("<tbody>"):]
+    # Compared against whatever "we did look" labels this manifest actually
+    # produced — pinning it to one of them makes the test depend on the fixture
+    # happening to contain that state.
+    ran_labels = [lbl for lbl in ("complete", "partial input", "needs no export")
+                  if ">" + lbl + "<" in body]
+    assert ran_labels, "fixture produced no module that ran, so there is no order to check"
+    assert all(body.index("not executed") < body.index(">" + lbl + "<")
+               for lbl in ran_labels)
+
+
+def test_the_coverage_section_precedes_every_number_the_report_produces(tmp_path):
+    """Its docstring has said "rendered FIRST" since it was written, and it sat
+    below the risk ring, the severity cards, the priority queue and the category
+    bars — which is every number a reader anchors on."""
+    with contextlib.redirect_stdout(io.StringIO()):
+        data = DataLoader(ROOT / "sample_data").load_all()
+    out = tmp_path / "report.html"
+    with contextlib.redirect_stdout(io.StringIO()):
+        ReportGenerator([_finding()], {"scan_time": "2026-01-01"},
+                        coverage=build_manifest(data)).generate(str(out))
+    page = out.read_text(encoding="utf-8")
+    first = page.index("What this scan could not look at")
+    for later in ('class="summary-grid"', "Risk-Prioritized Remediation Queue",
+                  "Findings by Category"):
+        assert first < page.index(later), later

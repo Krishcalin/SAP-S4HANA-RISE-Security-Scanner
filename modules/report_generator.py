@@ -963,6 +963,14 @@ class ReportGenerator:
     Offensive/red-team tooling is benign-by-default and intended for environments you own or are authorized to test.
   </div>
 
+  <!-- WHAT THE SCAN COULD NOT SEE, BEFORE ANY NUMBER IT PRODUCED.
+       Its own docstring has said "rendered FIRST, before the findings, because a
+       reader who sees the finding count before the coverage will anchor on the
+       wrong number" since it was written — and it sat below the risk ring, four
+       severity cards, the P1-P4 queue and the category bars, which is every
+       number a reader anchors on. -->
+  {coverage_html}
+
   <!-- Summary Grid -->
   <div class="summary-grid">
     <div class="risk-card">
@@ -1023,7 +1031,6 @@ class ReportGenerator:
   </div>
 
   <!-- Compliance / Control-Framework Mapping -->
-  {coverage_html}
     {csf_html}
     {fair_cam_html}
     {compliance_html}
@@ -1571,6 +1578,11 @@ window.addEventListener('beforeprint', () => {{
         known = counts.get("sources_known", 0)
         degraded = counts.get("modules_degraded", 0)
         skipped = counts.get("modules_skipped", 0)
+        # A FIFTH CARD RATHER THAN A BIGGER FOURTH. "You did not supply the input"
+        # and "the scan did not run this module" have different owners and
+        # different remedies, and adding them together produces a number nobody
+        # can act on.
+        not_run = counts.get("modules_not_run", 0)
         empty = counts.get("sources_empty", 0)
         lead = html.escape(manifest.get("summary", ""))
 
@@ -1584,10 +1596,17 @@ window.addEventListener('beforeprint', () => {{
                 "upload, and it is reported separately because an empty file and "
                 "an absent one mean different things.</p>")
 
-        order = {"skipped": 0, "degraded": 1, "no_file_inputs": 2, "complete": 3}
+        # `not_run` FIRST, and in both tables. Absent from `label` the raw enum
+        # leaked into the customer's table as the string "not_run"; absent from
+        # `order` it fell to the default 9 and sorted BELOW "complete", so the
+        # one state meaning "this module never looked" sat at the bottom of a
+        # table read top-down.
+        order = {"not_run": 0, "skipped": 1, "degraded": 2,
+                 "no_file_inputs": 3, "complete": 4}
         label = {"complete": ("cov-complete", "complete"),
                  "degraded": ("cov-degraded", "partial input"),
-                 "skipped": ("cov-skipped", "did not run"),
+                 "skipped": ("cov-skipped", "no input supplied"),
+                 "not_run": ("cov-skipped", "not executed"),
                  "no_file_inputs": ("cov-complete", "needs no export")}
         rows = []
         for name, info in sorted(manifest.get("modules", {}).items(),
@@ -1618,7 +1637,9 @@ window.addEventListener('beforeprint', () => {{
       <div class="cov-card"><div class="cov-big">{degraded}</div>
         <div class="cov-cap">modules ran on partial input</div></div>
       <div class="cov-card"><div class="cov-big">{skipped}</div>
-        <div class="cov-cap">modules did not run at all</div></div>
+        <div class="cov-cap">modules had no input supplied</div></div>
+      <div class="cov-card"><div class="cov-big">{not_run}</div>
+        <div class="cov-cap">modules were not executed</div></div>
       <div class="cov-card"><div class="cov-big">{empty}</div>
         <div class="cov-cap">files present but empty</div></div>
     </div>

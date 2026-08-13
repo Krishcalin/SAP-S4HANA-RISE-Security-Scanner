@@ -500,15 +500,19 @@ class PPTXReportGenerator:
         s.text(Inches(0.6), Inches(1.68), W - Inches(1.2), Inches(0.6),
                [_p(manifest.get("summary", ""), 11, color=SUB)])
 
+        # Five cards, not four. `modules_not_run` was computed on every run and
+        # displayed nowhere, so a deck built from `--modules users` showed three
+        # reassuring zeroes over a scan in which twenty-nine modules never ran.
         cards = [
             (str(counts.get("sources_supplied", 0)) + " / " + str(counts.get("sources_known", 0)),
              "logical sources supplied"),
             (str(counts.get("modules_degraded", 0)), "modules on partial input"),
-            (str(counts.get("modules_skipped", 0)), "modules did not run"),
+            (str(counts.get("modules_skipped", 0)), "modules had no input"),
+            (str(counts.get("modules_not_run", 0)), "modules not executed"),
             (str(counts.get("sources_empty", 0)), "files present but empty"),
         ]
         x = Inches(0.6)
-        cw = (W - Inches(1.2) - Inches(0.9)) / 4
+        cw = (W - Inches(1.2) - Inches(1.2)) / 5
         for value, caption in cards:
             s.text(x, Inches(2.5), cw, Inches(0.6), [_p(value, 26, b=True, color=INK)])
             s.text(x, Inches(3.1), cw, Inches(0.5), [_p(caption, 10, color=SUB)])

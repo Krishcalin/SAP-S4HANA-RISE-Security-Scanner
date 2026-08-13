@@ -662,7 +662,8 @@ def main():
         print(f"\n[*] Coverage: supplied {counts['sources_supplied']} of "
               f"{counts['sources_known']} logical sources; "
               f"{counts['modules_degraded']} module(s) ran with incomplete input, "
-              f"{counts['modules_skipped']} did not run at all.")
+              f"{counts['modules_skipped']} had no input supplied, "
+              f"{counts.get('modules_not_run', 0)} were not executed.")
     except Exception:                                    # noqa: BLE001
         # A manifest that cannot be built must not lose the scan. The reports
         # then say the coverage is unknown, which is worse than knowing and

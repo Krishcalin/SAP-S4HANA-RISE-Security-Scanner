@@ -342,8 +342,13 @@ export function RunDetail() {
   const covModules = Object.entries(cov.modules ?? {})
     .sort(([a], [b]) => a.localeCompare(b))
   const rise = (cov.deployment_mode ?? '').startsWith('rise')
+  // `modules_not_run` counts too. A run that executed six of thirty modules has
+  // perfect source coverage and no skipped modules, so without this the screen
+  // reported it as unqualified — the one state meaning "we did not look" was the
+  // one state the warning ignored.
   const covDegraded = (cov.counts?.modules_degraded ?? 0) > 0
                    || (cov.counts?.modules_skipped ?? 0) > 0
+                   || (cov.counts?.modules_not_run ?? 0) > 0
 
   const moduleErrors = Object.entries((r.module_status ?? {}) as Record<string, ModuleRun>)
     .filter(([, m]) => m.status === 'failed')

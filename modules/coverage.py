@@ -517,12 +517,34 @@ def summarize(counts: Dict[str, int], deployment_mode: str = "on_prem") -> str:
             f"{counts['modules_skipped']} module(s) did not run at all because none of "
             "their input was supplied."
         )
+    # SKIPPED AND NOT_RUN HAVE DIFFERENT OWNERS, so they get different sentences.
+    # "You did not send the export" is the customer's to act on; "the scan did not
+    # execute this module" is ours, or their scan configuration's. Folding the
+    # second into the first tells a customer to go and find a file that would
+    # have changed nothing.
+    #
+    # This clause was missing for the whole life of the manifest, and the four
+    # summary cards below count `modules_skipped` — so `--modules users` produced
+    # "Supplied 106 of 123 logical sources. 1 module(s) ran with incomplete
+    # input." over a report in which twenty-nine modules never executed.
+    if counts.get("modules_not_run"):
+        parts.append(
+            f"{counts['modules_not_run']} module(s) were not executed in this scan — "
+            "they were filtered out by the module selection, or they failed. Their "
+            "checks produced no findings, which is not the same as finding nothing."
+        )
     if counts.get("sources_unreachable_in_rise"):
         parts.append(
             f"{counts['sources_unreachable_in_rise']} source(s) are not obtainable in "
             "RISE at all (they require OS access) and are excluded rather than counted "
             "as missing."
         )
-    if counts["sources_supplied"] == counts["sources_known"]:
+    # GATED ON THE MODULES TOO, not on the sources alone. Every source can be
+    # present while half the modules were never asked to look at them, and
+    # "Coverage is complete." over a filtered run is the most reassuring sentence
+    # this file can emit about the least complete thing it describes.
+    if (counts["sources_supplied"] == counts["sources_known"]
+            and not counts["modules_skipped"]
+            and not counts.get("modules_not_run")):
         parts.append("Coverage is complete.")
     return " ".join(parts)

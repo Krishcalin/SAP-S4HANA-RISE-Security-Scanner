@@ -279,17 +279,23 @@ class PDFReportGenerator:
         counts = manifest.get("counts", {})
         self._para(manifest.get("summary", ""), size=9, color=INK, leading=13,
                    gap_after=10)
+        # `not_run` is its own figure. It counted for nothing here while the table
+        # below stamped it on every module of a filtered run, so the line and the
+        # list disagreed about the same scan.
         self._para(
             "%s of %s logical sources supplied  -  %s module(s) ran on partial input  -  "
-            "%s did not run at all  -  %s file(s) present but empty"
+            "%s had no input supplied  -  %s were not executed  -  "
+            "%s file(s) present but empty"
             % (counts.get("sources_supplied", 0), counts.get("sources_known", 0),
                counts.get("modules_degraded", 0), counts.get("modules_skipped", 0),
-               counts.get("sources_empty", 0)),
+               counts.get("modules_not_run", 0), counts.get("sources_empty", 0)),
             size=8.5, color=MUTED, leading=12, gap_after=12)
 
-        order = {"skipped": 0, "degraded": 1, "no_file_inputs": 2, "complete": 3}
+        order = {"not_run": 0, "skipped": 1, "degraded": 2,
+                 "no_file_inputs": 3, "complete": 4}
         label = {"complete": "complete", "degraded": "partial input",
-                 "skipped": "did not run", "no_file_inputs": "needs no export"}
+                 "skipped": "no input supplied", "not_run": "not executed",
+                 "no_file_inputs": "needs no export"}
         for name, info in sorted(manifest.get("modules", {}).items(),
                                  key=lambda kv: (order.get(kv[1].get("status"), 9), kv[0])):
             status = info.get("status", "")
