@@ -357,6 +357,41 @@ RAN_STATUSES = ("complete", "degraded", "no_file_inputs")
 _STATUS_RANK = {name: i for i, name in enumerate(RAN_STATUSES)}
 
 
+def ran_modules(manifest: Optional[Dict[str, Any]]) -> Optional[Set[str]]:
+    """The modules that actually executed, or None when we cannot tell.
+
+    None is not an empty set and the difference is the whole point: an empty set
+    means nothing ran, None means nobody checked. A caller that receives None must
+    not report anything as unsupplied — claiming an export was missing without
+    having looked is the same class of error as claiming it was clean.
+    """
+    if not manifest or not isinstance(manifest.get("modules"), dict):
+        return None
+    return {name for name, info in manifest["modules"].items()
+            if isinstance(info, dict) and info.get("status") in RAN_STATUSES}
+
+
+def modules_for_categories(categories: Iterable[str]) -> Set[str]:
+    """Which auditor modules can produce a finding in any of these categories.
+
+    THE ONE DERIVATION, for every roll-up that needs it. nist_csf, fair_cam and
+    domains each have to answer "did anything that could have found something
+    here actually run?", and three copies of that question is three chances for
+    one of them to keep saying CLEAR. Derived from the code (`module_categories`)
+    rather than declared, for the reason that function already argues.
+
+    modules/domains.py deliberately does NOT use this for its prefix-split
+    domains: two of the twelve share a finding category with a sibling and are
+    separated only by check-id prefix, so category alone over-attributes there.
+    Everything else — the CSF Categories, the FAIR-CAM control functions — maps
+    at category granularity and this is the right resolution for them.
+    """
+    wanted = set(categories)
+    if not wanted:
+        return set()
+    return {mod for mod, cats in module_categories().items() if wanted & set(cats)}
+
+
 def merge_manifests(manifests: Iterable[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """Fold several runs' manifests into one, taking the BEST status per module.
 

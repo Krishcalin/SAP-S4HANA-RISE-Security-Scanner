@@ -41,6 +41,10 @@ const SLUG: Record<string, string> = {
 export function statusLabel(status: CsfStatus): string {
   if (status === 'clear') return 'No findings'
   if (status === 'not_assessed') return 'Not assessed'
+  // "We would have looked and the export never arrived" is the customer's to
+  // act on, unlike `not_assessed`, which is ours. Worded as the thing they can
+  // do something about rather than as a status code.
+  if (status === 'not_supplied') return 'Export not supplied'
   return 'Findings'
 }
 

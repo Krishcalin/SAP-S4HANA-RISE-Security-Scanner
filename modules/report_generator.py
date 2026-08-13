@@ -1742,7 +1742,7 @@ window.addEventListener('beforeprint', () => {{
             from modules import nist_csf
         except Exception:                                # noqa: BLE001
             return ""
-        rolled = nist_csf.roll_up(self.full_findings)
+        rolled = nist_csf.roll_up(self.full_findings, coverage=self.coverage)
         tot = rolled["totals"]
         framework_txt = html.escape(rolled["framework"])
         reference_txt = html.escape(rolled["reference"])
@@ -1767,6 +1767,14 @@ window.addEventListener('beforeprint', () => {{
                     state = '<span class="csf-state csf-na">not assessed</span>'
                     count = "&mdash;"
                     why = html.escape(cat["reason"] or "")
+                elif cat["status"] == "not_supplied":
+                    # An em dash, never the 0 this Category actually computed. A
+                    # zero drawn like a measurement is the sentence this whole
+                    # section exists to avoid printing.
+                    state = '<span class="csf-state csf-na">export not supplied</span>'
+                    count = "&mdash;"
+                    why = ("No module feeding this Category ran in this scan, so "
+                           "the absence of findings is unexamined rather than clean.")
                 else:
                     state = ('<span class="csf-state csf-clear">no findings</span>'
                              if cat["status"] == "clear"
@@ -1826,7 +1834,7 @@ window.addEventListener('beforeprint', () => {{
             from modules import fair_cam
         except Exception:                                # noqa: BLE001
             return ""
-        result = fair_cam.classify(self.full_findings)
+        result = fair_cam.classify(self.full_findings, coverage=self.coverage)
 
         rows = []
         for fn in result["functions"]:
@@ -1834,6 +1842,11 @@ window.addEventListener('beforeprint', () => {{
                 count = "&mdash;"
                 note = html.escape(fn["reason"] or "")
                 state = '<span class="csf-state csf-na">not assessed</span>'
+            elif fn["status"] == "not_supplied":
+                count = "&mdash;"
+                note = ("No module feeding this control function ran in this "
+                        "scan; its pressure is unmeasured, not zero.")
+                state = '<span class="csf-state csf-na">export not supplied</span>'
             else:
                 count = "%.1f" % fn["findings"]
                 state = ('<span class="csf-state csf-clear">no findings</span>'

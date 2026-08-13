@@ -995,8 +995,13 @@ def api_csf(user: Dict[str, Any] = Depends(current_user)):
     the control environment, so a "% compliant" would be a claim about evidence
     we do not hold.
     """
-    findings = queries.findings_for_compliance(auth.scope_for(user))
-    return nist_csf.roll_up(findings)
+    scope = auth.scope_for(user)
+    findings = queries.findings_for_compliance(scope)
+    # THE MANIFEST, for the reason /api/domains states four hundred lines
+    # below: without it an assessable Category whose feeding modules never
+    # ran renders as the green "no findings" chip. Measured on a users-only
+    # upload: eleven Categories, including all of Detect and Respond.
+    return nist_csf.roll_up(findings, coverage=queries.latest_coverage(scope))
 
 
 @app.get("/api/csf/{function_id}")
@@ -1008,8 +1013,10 @@ def api_csf_function(function_id: str,
     not render as a Function with no findings, which is what returning an empty
     shell would look like on screen.
     """
-    findings = queries.findings_for_compliance(auth.scope_for(user))
-    detail = nist_csf.function_detail(findings, function_id)
+    scope = auth.scope_for(user)
+    findings = queries.findings_for_compliance(scope)
+    detail = nist_csf.function_detail(findings, function_id,
+                                      coverage=queries.latest_coverage(scope))
     if detail is None:
         raise HTTPException(status_code=404, detail="no such CSF Function")
     return detail
@@ -1110,7 +1117,7 @@ def api_crq_controls(landscape_id: int,
     from modules import fair_cam
     scope = auth.scope_for(user)
     findings = queries.findings_for_crq(scope, landscape_id)
-    return fair_cam.classify(findings)
+    return fair_cam.classify(findings, coverage=queries.latest_coverage(scope))
 
 
 @app.get("/api/crq/trend")

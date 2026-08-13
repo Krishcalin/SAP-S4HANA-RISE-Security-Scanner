@@ -811,11 +811,16 @@ export type CsfFunctionId = 'GV' | 'ID' | 'PR' | 'DE' | 'RS' | 'RC'
  * Whether this product can speak to a Category at all.
  * modules/nist_csf.py — ASSESSED / CLEAR / NOT_ASSESSED.
  *
+ * FOUR states, and no two of them may render alike. `not_assessed` is a property
+ * of the PRODUCT — no SAP export can answer this outcome, on any run.
+ * `not_supplied` is a property of THIS run — the Category is assessable and
+ * nothing that feeds it executed. `clear` is the only one that means we looked.
+ *
  * `clear` and `not_assessed` are NOT interchangeable and must not render alike:
  * clear means the run produced no findings, not_assessed means no SAP export
  * answers that outcome in any run.
  */
-export type CsfStatus = 'assessed' | 'clear' | 'not_assessed'
+export type CsfStatus = 'assessed' | 'clear' | 'not_supplied' | 'not_assessed'
 
 /** A CSF Subcategory: NIST's id and its outcome text, verbatim. */
 export interface CsfSubcategory {

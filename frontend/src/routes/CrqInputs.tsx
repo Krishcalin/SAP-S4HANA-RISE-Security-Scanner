@@ -519,7 +519,7 @@ function Controls({ controls }: { controls: CrqControlsView }) {
                   {f.factor.replace(/_/g, ' ')}
                 </td>
                 <td className={`${TD} text-right font-mono`}>
-                  {f.status === 'not_assessed'
+                  {f.status === 'not_assessed' || f.status === 'not_supplied'
                     ? <span className="text-ink3">&mdash;</span>
                     : f.findings.toFixed(1)}
                 </td>
@@ -531,6 +531,17 @@ function Controls({ controls }: { controls: CrqControlsView }) {
                     <>
                       <span className="csf-state csf-state-not_assessed">not assessed</span>
                       <div className="text-[11px] text-ink3 mt-1 max-w-[46ch]">{f.reason}</div>
+                    </>
+                  ) : f.status === 'not_supplied' ? (
+                    /* 0.0 is what an unfed function computes, and 0.0 drawn as a
+                       measurement says "healthy" about something nothing looked
+                       at. Dashed, with the count replaced by an em dash above. */
+                    <>
+                      <span className="csf-state csf-state-not_supplied">export not supplied</span>
+                      <div className="text-[11px] text-ink3 mt-1 max-w-[46ch]">
+                        No module feeding this control function ran in the scans you
+                        can see, so its pressure is unmeasured rather than zero.
+                      </div>
                     </>
                   ) : f.status === 'clear' ? (
                     <span className="csf-state csf-state-clear">no findings</span>

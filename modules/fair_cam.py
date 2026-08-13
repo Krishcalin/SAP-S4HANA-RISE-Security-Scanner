@@ -219,6 +219,13 @@ UNREACHABLE_FUNCTIONS: Dict[str, str] = {
 ASSESSED = "assessed"
 CLEAR = "clear"
 NOT_ASSESSED = "not_assessed"
+#: We would have looked, and the export never arrived. NOT_ASSESSED is a property
+#: of the product (no theme reaches this function, on any run); this is a property
+#: of THIS run. See the same note in modules/nist_csf.py — measured before it
+#: existed, a `--modules users` scan reported six control functions clean,
+#: including the whole Detection and Response half of the control model, having
+#: read no log configuration whatsoever.
+NOT_SUPPLIED = "not_supplied"
 
 
 def factor_of(function_id: str) -> Optional[str]:
@@ -234,8 +241,30 @@ def functions_for_theme(theme: str) -> Dict[str, float]:
     return dict(entry[0]) if entry else {}
 
 
+def _empty_state(function_id: str, category_themes: Dict[str, List[str]],
+                 ran: Optional[set], modules_for_categories) -> str:
+    """CLEAR or NOT_SUPPLIED for a reachable function with no findings.
+
+    A function is reached by THEMES and a finding reaches a theme through its own
+    category, so the categories feeding a function are those whose themes reach
+    it — the same two hops the CSF view walks, at the same resolution.
+    """
+    if ran is None:
+        return CLEAR
+    themes = {theme for theme, entry in THEME_FUNCTIONS.items()
+              if function_id in (entry[0] or {})}
+    if not themes:
+        return CLEAR
+    feeding = {cat for cat, cat_themes in category_themes.items()
+               if themes & set(cat_themes)}
+    feeders = modules_for_categories(feeding)
+    # Untieable to a module means we cannot say the evidence was missing.
+    return CLEAR if (not feeders or (feeders & ran)) else NOT_SUPPLIED
+
+
 def classify(findings: Sequence[Dict[str, Any]],
-             category_themes: Optional[Dict[str, List[str]]] = None
+             category_themes: Optional[Dict[str, List[str]]] = None,
+             coverage: Optional[Dict[str, Any]] = None
              ) -> Dict[str, Any]:
     """Attribute findings to FAIR-CAM control functions.
 
@@ -246,10 +275,16 @@ def classify(findings: Sequence[Dict[str, Any]],
 
     Returns per-function deficiency pressure, the domain roll-up, and the findings
     that reached no function at all.
+
+    `coverage` is a manifest from modules/coverage.py. Supplied, a reachable
+    function that nothing fed reports NOT_SUPPLIED rather than CLEAR. Omitted, no
+    function ever claims its evidence was missing.
     """
     if category_themes is None:
         from .compliance_mapping import ComplianceMapper
         category_themes = ComplianceMapper.CATEGORY_THEMES
+    from .coverage import modules_for_categories, ran_modules
+    ran = ran_modules(coverage)
 
     per_function: Dict[str, Dict[str, Any]] = {
         fid: {"id": fid, "name": FUNCTIONS[fid][0], "domain": FUNCTIONS[fid][1],
@@ -318,7 +353,9 @@ def classify(findings: Sequence[Dict[str, Any]],
             # and 0.0 drawn like a measured zero says "clean" about something
             # nobody examined.
             "status": (NOT_ASSESSED if fid in UNREACHABLE_FUNCTIONS
-                       else (ASSESSED if e["findings"] > 0 else CLEAR)),
+                       else (ASSESSED if e["findings"] > 0
+                             else _empty_state(fid, category_themes, ran,
+                                               modules_for_categories))),
             "reason": UNREACHABLE_FUNCTIONS.get(fid),
         })
 

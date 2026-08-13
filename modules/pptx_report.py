@@ -488,14 +488,34 @@ class PPTXReportGenerator:
             y = Inches(1.8)
             for d in group:
                 covered = d["reach"] != domains.NONE
+                # THE STATE AXIS, WHICH THIS SLIDE USED TO COMPUTE AND DISCARD.
+                # roll_up() is handed the manifest above and returns both axes;
+                # only `reach` was ever read, so a domain whose export never
+                # arrived printed "0" beside "fully assessed" — the reach word
+                # reading as a verdict, which is the one thing the two-axis
+                # design exists to prevent. Measured on a users-only export:
+                # four tiles.
+                unmeasured = (not covered
+                              or d["state"] in (domains.NOT_SUPPLIED,
+                                                domains.NOT_ASSESSED))
                 s.text(x, y, col_w - Inches(0.9), Inches(0.3),
                        [_p(d["label"], 11, b=True, color=INK)])
                 s.text(x + col_w - Inches(0.9), y - Inches(0.02), Inches(0.85),
                        Inches(0.3),
-                       [_p(str(d["total"]) if covered else "—", 13, b=True,
-                           color=INK if covered else MUTED, align="r")])
+                       [_p("—" if unmeasured else str(d["total"]), 13, b=True,
+                           color=MUTED if unmeasured else INK, align="r")])
+                # The second line carries the reach word normally, and is
+                # overridden by the run-specific state when there is one —
+                # "configuration only" is not the useful sentence about a domain
+                # whose export never arrived.
+                if covered and d["state"] == domains.NOT_SUPPLIED:
+                    caption = "export not supplied"
+                elif covered and d["state"] == domains.CLEAR:
+                    caption = reach_word[d["reach"]] + " · no findings"
+                else:
+                    caption = reach_word[d["reach"]]
                 s.text(x, y + Inches(0.24), col_w - Inches(0.9), Inches(0.26),
-                       [_p(reach_word[d["reach"]], 8, color=MUTED)])
+                       [_p(caption, 8, color=MUTED)])
                 y += Inches(0.52)
 
         note = ("Two facts per domain: the count is what this scan found, the "

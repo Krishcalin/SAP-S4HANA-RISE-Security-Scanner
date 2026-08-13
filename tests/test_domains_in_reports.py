@@ -138,6 +138,34 @@ def test_the_slide_publishes_no_score_or_percentage(slide):
     assert not re.search(r"(score|rating|maturity)\s*(is|of|:|=)?\s*\d", slide, re.I)
 
 
+def test_the_slide_reads_the_state_axis_it_computes(tmp_path):
+    """IT COMPUTED BOTH AXES AND PRINTED ONE. `roll_up` is handed the coverage
+    manifest and returns reach AND state; the tile loop read only reach, so a
+    domain whose export never arrived printed "0" beside "fully assessed" — the
+    reach word reading as a verdict, which is the single thing the two-axis
+    design exists to prevent."""
+    manifest = {"modules": {"user_auth_audit": {"status": "complete"},
+                            "log_review": {"status": "skipped"},
+                            "access_risk_analysis": {"status": "not_run"}}}
+    out = tmp_path / "deck.pptx"
+    with contextlib.redirect_stdout(io.StringIO()):
+        PPTXReportGenerator(_findings(), {"scan_time": "2026-01-01"},
+                            coverage=manifest).generate(str(out), full=False)
+    with zipfile.ZipFile(out) as z:
+        pages = [" ".join(re.findall(r"<a:t>(.*?)</a:t>", z.read(n).decode("utf-8")))
+                 for n in z.namelist() if re.match(r"ppt/slides/slide\d+\.xml$", n)]
+    page = next(p for p in pages if "Twelve Security Domains" in p)
+    assert "export not supplied" in page
+
+    rolled = domains.roll_up(_findings(), coverage=manifest)
+    for d in rolled["domains"]:
+        if d["state"] == domains.NOT_SUPPLIED:
+            # Its count must not be printed at all: a zero drawn beside a reach
+            # word reads as a measurement of the customer's estate.
+            head, _, tail = page.partition(d["label"].replace("&", "&amp;"))
+            assert tail.lstrip().startswith("—"), (d["label"], tail[:40])
+
+
 def test_the_findings_outside_the_taxonomy_are_counted_on_the_slide(slide):
     """They are real findings this product produced. A summary that silently
     dropped them would understate the product while claiming to summarise it."""

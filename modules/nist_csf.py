@@ -52,6 +52,11 @@ references a Category that does not exist in the Core.
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .compliance_mapping import ComplianceMapper
+# Imported under short names because both are used inside roll_up() and the long
+# spellings would push its already dense lines past readability. Same module,
+# same derivation the domain and coverage views use.
+from .coverage import modules_for_categories as coverage_modules_for
+from .coverage import ran_modules as coverage_ran
 
 
 # ── Functions ────────────────────────────────────────────────────────────────
@@ -300,6 +305,18 @@ _SEVERITY_ORDER: Tuple[str, ...] = ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")
 ASSESSED = "assessed"
 CLEAR = "clear"
 NOT_ASSESSED = "not_assessed"
+#: We would have looked, and the export never arrived.
+#:
+#: THE FOURTH STATE, AND WHY THREE WERE NOT ENOUGH. NOT_ASSESSED is a property of
+#: the PRODUCT — ten Categories describe governance and training outcomes no SAP
+#: export can answer, and that is true on every run. NOT_SUPPLIED is a property
+#: of THIS RUN: the Category is perfectly assessable and nothing that feeds it
+#: executed. Collapsing the two loses the only one the customer can act on, and
+#: collapsing either into CLEAR is the failure this whole module exists to
+#: prevent. Measured before this existed: a `--modules users` scan rendered
+#: eleven Categories green, including the entire Detect and Respond half, having
+#: read no log configuration at all.
+NOT_SUPPLIED = "not_supplied"
 
 
 def function_of(category_id: str) -> str:
@@ -338,16 +355,40 @@ def assessable_categories() -> Dict[str, List[str]]:
     return {k: sorted(set(v)) for k, v in sorted(out.items())}
 
 
+def _modules_feeding(category_id: str, assessable: Dict[str, List[str]],
+                     mapper: Any) -> set:
+    """Which auditor modules can produce evidence for one CSF Category.
+
+    A CSF Category is reached by THEMES; a finding reaches a theme through its
+    own category. So the finding-categories feeding this Category are those whose
+    themes intersect it, and the modules are whoever emits those categories.
+    Derived at both hops rather than declared, so a new check lands here the day
+    it is written.
+    """
+    themes = set(assessable.get(category_id) or ())
+    if not themes:
+        return set()
+    feeding = {cat for cat, cat_themes in mapper.CATEGORY_THEMES.items()
+               if themes & set(cat_themes)}
+    return coverage_modules_for(feeding)
+
+
 def _blank_counts() -> Dict[str, int]:
     return {s: 0 for s in _SEVERITY_ORDER}
 
 
-def roll_up(findings: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+def roll_up(findings: Sequence[Dict[str, Any]],
+            coverage: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Roll findings up to the CSF Core.
 
     Returns the whole Core — every Function and every Category — never only the
     ones with findings, because a Category's ABSENCE from the answer is exactly
     the ambiguity this module exists to remove.
+
+    `coverage` is a manifest from modules/coverage.py. Supplied, an assessable
+    Category whose feeding modules never ran reports NOT_SUPPLIED instead of
+    CLEAR. Omitted, no Category ever claims its export was missing — the same
+    restraint modules/domains.py applies, and for the same reason.
     """
     mapper = ComplianceMapper(list(findings))
     assessable = assessable_categories()
@@ -408,11 +449,22 @@ def roll_up(findings: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
             entry["counts"][severity] += 1
         entry["total"] = len(indices)
 
-    # An assessable Category with nothing in it is CLEAR — we looked. That is a
-    # different statement from NOT_ASSESSED and is rendered differently.
+    # An assessable Category with nothing in it is CLEAR — we looked — UNLESS
+    # nothing that feeds it ran, in which case we did not. "We looked and found
+    # nothing" and "the export never arrived" are different sentences and only
+    # one of them is reassuring.
+    ran = coverage_ran(coverage)
     for entry in per_category.values():
-        if entry["status"] == ASSESSED and entry["total"] == 0:
+        if entry["status"] != ASSESSED or entry["total"] != 0:
+            continue
+        if ran is None:
             entry["status"] = CLEAR
+            continue
+        feeders = _modules_feeding(entry["id"], assessable, mapper)
+        # No feeder found means we cannot tie the Category to a module, so we
+        # cannot say its export was missing. Over-reporting NOT_SUPPLIED tells a
+        # customer they forgot something they did send.
+        entry["status"] = CLEAR if (not feeders or (feeders & ran)) else NOT_SUPPLIED
 
     functions: List[Dict[str, Any]] = []
     for fn_id in FUNCTION_ORDER:
@@ -499,12 +551,20 @@ def resolve_function(value: str) -> Optional[str]:
     return _BY_SLUG.get(value.lower())
 
 
-def function_detail(findings: Sequence[Dict[str, Any]], function_id: str) -> Optional[Dict[str, Any]]:
-    """One Function's roll-up, or None if `function_id` is not a CSF Function."""
+def function_detail(findings: Sequence[Dict[str, Any]], function_id: str,
+                    coverage: Optional[Dict[str, Any]] = None
+                    ) -> Optional[Dict[str, Any]]:
+    """One Function's roll-up, or None if `function_id` is not a CSF Function.
+
+    `coverage` is threaded through rather than defaulted away: the Function tile
+    on /csf and the Function page behind it are the same roll-up, and a tile
+    saying "export not supplied" over a page saying "no findings" is worse than
+    either being wrong alone — the reader who clicks is the one who notices.
+    """
     fn = resolve_function(function_id)
     if fn is None:
         return None
-    rolled = roll_up(findings)
+    rolled = roll_up(findings, coverage=coverage)
     for entry in rolled["functions"]:
         if entry["id"] == fn:
             entry["reference"] = rolled["reference"]
