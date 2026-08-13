@@ -465,6 +465,51 @@ def _split_where(where: str, width: int = 72) -> List[str]:
     return out
 
 
+#: Every SDK symbol this collector declares. Checked by `--check-sdk` so a
+#: missing or renamed entry point is a named error rather than an AttributeError
+#: raised mid-collection, three tables in.
+REQUIRED_SYMBOLS = (
+    "RfcOpenConnection", "RfcCloseConnection",
+    "RfcGetFunctionDesc", "RfcCreateFunction", "RfcDestroyFunction", "RfcInvoke",
+    "RfcSetChars", "RfcGetChars", "RfcGetTable", "RfcGetRowCount",
+    "RfcMoveToFirstRow", "RfcMoveToNextRow", "RfcGetCurrentRow",
+    "RfcAppendNewRow",
+)
+
+
+def check_sdk(home: Optional[str] = None) -> Dict[str, Any]:
+    """Load the SDK and bind every symbol, WITHOUT connecting to anything.
+
+    This is the first thing to run on a machine that has the SDK, and it is the
+    honest version of a check `available()` cannot make: that function only asks
+    whether a file exists at the expected path, which says nothing about whether
+    it loads or whether the entry points this code declares are really in it.
+
+    No host, no credential, no network. What it can catch: a wrong SAPNWRFC_HOME,
+    an SDK whose siblings are not on the loader path, an architecture mismatch,
+    and a symbol this binding names that the installed SDK version does not have.
+
+    What it CANNOT catch is the shape of a call — argument order, struct layout,
+    the RFC_READ_TABLE sequence. Those need a live system, and this collector has
+    never been run against one.
+    """
+    # NO ctypes.c_wchar HERE, NOT EVEN TO MEASURE IT.
+    # The first version reported the platform's wchar_t width as a diagnostic and
+    # the test that forbids c_wchar in this file failed — correctly. An absolute
+    # rule is worth more than the line it would have printed: a reader who sees
+    # c_wchar mentioned anywhere has to work out whether THIS use is the safe one,
+    # and the whole point is that nobody should have to.
+    result: Dict[str, Any] = {"loaded": False, "path": None, "missing": [],
+                              "sap_uc_bytes": 2}
+    path = sdk_library_path(home)
+    result["path"] = path
+    lib = load_sdk(home)                       # raises RfcUnavailable with detail
+    result["loaded"] = True
+    result["missing"] = [name for name in REQUIRED_SYMBOLS
+                         if not hasattr(lib, name)]
+    return result
+
+
 def available(home: Optional[str] = None) -> Tuple[bool, str]:
     """Whether an RFC collection could run here, and why not if it could not.
 

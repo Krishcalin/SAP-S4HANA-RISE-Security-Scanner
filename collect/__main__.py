@@ -221,6 +221,28 @@ def cmd_rfc(args) -> int:
         return 2
     print("[*] RFC SDK: %s" % detail)
 
+    if args.check_sdk:
+        try:
+            report = rfc.check_sdk(args.sdk_home)
+        except rfc.RfcUnavailable as exc:
+            print("[!] %s" % exc, file=sys.stderr)
+            return 2
+        print("    loaded            %s" % report["path"])
+        print("    symbols declared  %d" % len(rfc.REQUIRED_SYMBOLS))
+        if report["missing"]:
+            print("    MISSING           %s" % ", ".join(report["missing"]),
+                  file=sys.stderr)
+            print("    This SDK version does not export everything this binding "
+                  "declares. Report the list above.", file=sys.stderr)
+            return 1
+        print("    all symbols bound ok")
+        print("    strings encoded as SAP_UC (%d bytes/char), explicitly, on "
+              "every platform" % report["sap_uc_bytes"])
+        print("    NOTE: this proves the library loads and the entry points "
+              "exist. It does NOT prove a call's argument order or struct "
+              "layout — only a live system does that.")
+        return 0
+
     if args.list_sources:
         print("    produces:")
         for e in rfc_tables.EXTRACTS:
@@ -395,6 +417,10 @@ def build_parser() -> argparse.ArgumentParser:
                          "should always have one")
     rf.add_argument("--row-limit", type=int, default=0,
                     help="maximum rows per table (0 = no limit)")
+    rf.add_argument("--check-sdk", action="store_true",
+                    help="load the SDK and bind every symbol this collector "
+                         "declares, then exit. No host, no credential, no "
+                         "network — run this first")
     rf.add_argument("--list-sources", action="store_true",
                     help="print what this collector produces and what it still "
                          "cannot reach, then exit. Needs the SDK present but no "

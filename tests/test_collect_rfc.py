@@ -268,3 +268,36 @@ def test_pyrfc_is_not_imported_anywhere():
     """The decision was to depend on no binding at all."""
     for path in (ROOT / "collect").glob("*.py"):
         assert "import pyrfc" not in path.read_text(encoding="utf-8"), path.name
+
+
+# ── the SDK check ────────────────────────────────────────────────────────────
+
+def test_check_sdk_declares_every_symbol_the_binding_uses():
+    """A symbol declared in _declare but absent from REQUIRED_SYMBOLS would not be
+    checked, and would fail mid-collection instead of at --check-sdk."""
+    import ast
+    source = (ROOT / "collect" / "rfc.py").read_text(encoding="utf-8")
+    declared = set()
+    for node in ast.walk(ast.parse(source)):
+        if (isinstance(node, ast.Attribute) and node.attr.startswith("Rfc")
+                and isinstance(node.value, ast.Name) and node.value.id == "lib"):
+            declared.add(node.attr)
+    missing = declared - set(rfc.REQUIRED_SYMBOLS)
+    assert not missing, f"used but not checked by --check-sdk: {sorted(missing)}"
+
+
+def test_check_sdk_refuses_clearly_without_an_sdk(monkeypatch):
+    monkeypatch.delenv(rfc.SDK_HOME_ENV, raising=False)
+    with pytest.raises(rfc.RfcUnavailable):
+        rfc.check_sdk()
+
+
+def test_available_does_not_claim_the_library_loads():
+    """available() only stats a path. It was described in conversation as proving
+    the library loads and the bindings resolve; it does neither, which is why
+    check_sdk exists."""
+    import inspect
+    source = inspect.getsource(rfc.available)
+    assert "isfile" in source
+    assert "load_sdk" not in source
+    assert "CDLL" not in source
