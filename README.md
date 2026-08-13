@@ -1137,9 +1137,11 @@ Every category is mapped to control frameworks and rendered as a per-framework p
 
 The same findings, arranged in the vocabulary the SAP security market talks in, so a reader
 holding an RFP checklist can match them line for line. It appears on the dashboard, on
-`/domains` and `/domains/{id}` in the console, as a section of the HTML report and as a slide
-in the PPTX deck — all from one module (`modules/domains.py`), because a report and a screen
-that sort the same findings by two copies of the same rules eventually disagree.
+`/domains` and `/domains/{id}` in the console, as a `?domain=` filter on the triage queue, and
+as one slide in the PPTX deck — all from one module (`modules/domains.py`), because a screen
+and a slide that sort the same findings by two copies of the same rules eventually disagree.
+The HTML and PDF reports deliberately carry **no** domain section: they are the long-form
+hand-over documents and are kept simple.
 
 Every domain carries **two facts that are not the same question**:
 
@@ -1677,7 +1679,7 @@ SAP-S4HANA-RISE-Security-Scanner/
 - [x] Scan comparison mode (diff two scans) — run-over-run diff in the console, `GET /api/runs/{id}/diff` and `GET /api/findings/changes`
 - [x] CI/CD integration with exit codes — `--gate`, exit 0/1/2, see [Release Gate](#release-gate)
 - [x] Client-server tier: PostgreSQL persistence, RBAC with per-system row scoping, audit log
-- [x] Twelve security domains — the buyer's own vocabulary, each stating what we can see there as well as what we found (`/domains`, `?domain=` on the queue, report section, deck slide)
+- [x] Twelve security domains — the buyer's own vocabulary, each stating what we can see there as well as what we found (`/domains`, `?domain=` on the queue, deck slide)
 - [x] Attack-path graph — templates instantiated from co-existing findings, with cuts and choke points
 - [x] SAP Note 3250501 — 92 of 92 mandatory ECS profile parameters, plus the configuration half
 - [x] Custom-code scanner (CVA) — 133 rules, statement lexer, intra-procedural taint analysis

@@ -420,7 +420,11 @@ target's current one. The audit log records the event and never the value.
   home in `modules/domains.py`** (a domain, or `UNPLACED_CATEGORIES` with the reason).
   `tests/test_domains.py` fails on a category with neither.
 - **`modules/domains.py`** — the twelve buyer-facing security domains, used by the console
-  (`/domains`), the `?domain=` queue filter, the HTML report and the PPTX deck. **Two axes,
+  (`/domains`, the dashboard strip), the `?domain=` queue filter and one PPTX slide.
+  ⚠️ **The HTML and PDF reports carry no domain section, by decision (2026-08-13)** — they are
+  the long-form hand-over documents and stay simple. It shipped in the HTML for a day and was
+  removed; `tests/test_domains_in_reports.py` records the decision, because re-adding it would
+  look like filling a gap rather than reversing a call. **Two axes,
   and they must not be collapsed:** `reach` is what the product can *ever* see in a domain
   (author-time, same for every customer) and `state` is what a run produced. Merging them
   cannot express a configuration-only domain that came back clean, which is a real and
