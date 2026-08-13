@@ -63,6 +63,7 @@ from modules.pptx_report import PPTXReportGenerator
 from modules.finding_kb import FindingKB
 from modules.risk_prioritizer import RiskPrioritizer
 from modules import fair_adapter
+from modules.coverage import build_manifest
 from modules.data_loader import DataLoader
 from modules.deployment_modes import DEPLOYMENT_MODES, DEFAULT_DEPLOYMENT_MODE
 
@@ -642,19 +643,49 @@ def main():
     # risk narrative + step-by-step remediation for each finding (both formats).
     kb = FindingKB()
     detail = f"detailed knowledge base: {len(kb)} checks" if kb.loaded else "finding descriptions (no KB)"
+
+    # WHAT THE SCAN COULD NOT LOOK AT, COMPUTED HERE AND CARRIED INTO EVERY REPORT.
+    #
+    # A missing export file loads as None and every check that needs it self-skips
+    # SILENTLY, so a customer who supplied a fraction of the sources got a
+    # clean-looking report with nothing anywhere saying so. modules/coverage.py has
+    # said that in its own docstring since it was written — and was wired to the
+    # server's ingest path only, which is why no PDF ever carried a word of it.
+    #
+    # It is computed once and passed as data rather than imported by the report
+    # tier, because a generator's job is to render what it was given.
+    try:
+        coverage_manifest = build_manifest(
+            data, modules_run=sorted(run_modules) if run_modules else None,
+            deployment_mode=args.deployment_mode)
+        counts = coverage_manifest["counts"]
+        print(f"\n[*] Coverage: supplied {counts['sources_supplied']} of "
+              f"{counts['sources_known']} logical sources; "
+              f"{counts['modules_degraded']} module(s) ran with incomplete input, "
+              f"{counts['modules_skipped']} did not run at all.")
+    except Exception:                                    # noqa: BLE001
+        # A manifest that cannot be built must not lose the scan. The reports
+        # then say the coverage is unknown, which is worse than knowing and
+        # better than implying completeness.
+        coverage_manifest = None
+        print("\n[!] Coverage manifest could not be built; the reports will say so.")
+
     if args.format in ("html", "both", "all"):
         print(f"\n[*] Generating HTML report: {html_path}  ({detail})")
         ReportGenerator(all_findings, scan_meta, kb, priorities=prio_results,
-                        fair=fair_summary).generate(html_path)
+                        fair=fair_summary,
+                        coverage=coverage_manifest).generate(html_path)
     if args.format in ("pdf", "both", "all"):
         print(f"[*] Generating PDF report: {pdf_path}  ({detail})")
         PDFReportGenerator(all_findings, scan_meta, kb, priorities=prio_results,
-                           fair=fair_summary).generate(pdf_path)
+                           fair=fair_summary,
+                           coverage=coverage_manifest).generate(pdf_path)
     if args.format in ("pptx", "all"):
         full = args.pptx_mode == "full"
         kind = "full per-finding deck" if full else "summarised meeting deck"
         print(f"[*] Generating PPTX presentation: {pptx_path}  ({kind})")
-        PPTXReportGenerator(all_findings, scan_meta, kb, priorities=prio_results).generate(
+        PPTXReportGenerator(all_findings, scan_meta, kb, priorities=prio_results,
+                            coverage=coverage_manifest).generate(
             pptx_path, full=full)
 
     # Summary

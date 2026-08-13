@@ -88,10 +88,12 @@ def _img_dims(path: str):
 
 class PPTXReportGenerator:
     def __init__(self, findings: List[Dict[str, Any]], meta: Dict[str, Any],
-                 kb: Optional[FindingKB] = None, priorities: Optional[List[Any]] = None):
+                 kb: Optional[FindingKB] = None, priorities: Optional[List[Any]] = None,
+                 coverage: Optional[Dict[str, Any]] = None):
         self.findings = findings
         self.meta = meta
         self.kb = kb if kb is not None else FindingKB()
+        self.coverage = coverage
         self.pageno = 0
         self.assets = Path(__file__).resolve().parent.parent / "assets"
 
@@ -201,6 +203,7 @@ class PPTXReportGenerator:
         self.pageno = 0
         # executive front matter
         self._slide_title()
+        self._slide_coverage()
         self._slide_exec()
         self._slide_priority()
         self._slide_categories()
@@ -407,6 +410,53 @@ class PPTXReportGenerator:
         s.text(Inches(0.6), y + Inches(0.15), W - Inches(1.2), Inches(0.4),
                [_p("Top 8 of %d finding categories shown." % len(self.by_cat), 10, i=True, color=MUTED)])
         self._footer(s)
+
+    def _slide_coverage(self):
+        """What the scan could not look at.
+
+        SECOND, RIGHT AFTER THE TITLE, and before the executive summary. This is
+        the deck an executive reads, often only the first three slides, and a
+        finding count met before the coverage anchors on the wrong number. The
+        deck carried nothing of this until now: a customer who supplied a fraction
+        of the exports got a clean-looking summary with no indication that most
+        checks never ran.
+        """
+        manifest = self.coverage
+        s = self._new()
+        W = self.w.W
+        self._heading(s, "Scope", "What This Scan Could Not Look At")
+
+        if manifest is None:
+            s.text(Inches(0.6), Inches(1.9), W - Inches(1.2), Inches(1.2),
+                   [_p("Coverage could not be determined for this scan. This deck "
+                       "cannot say how much of the estate it saw, so the findings "
+                       "that follow are a floor rather than a survey.",
+                       13, color=INK)])
+            return
+
+        counts = manifest.get("counts", {})
+        s.text(Inches(0.6), Inches(1.68), W - Inches(1.2), Inches(0.6),
+               [_p(manifest.get("summary", ""), 11, color=SUB)])
+
+        cards = [
+            (str(counts.get("sources_supplied", 0)) + " / " + str(counts.get("sources_known", 0)),
+             "logical sources supplied"),
+            (str(counts.get("modules_degraded", 0)), "modules on partial input"),
+            (str(counts.get("modules_skipped", 0)), "modules did not run"),
+            (str(counts.get("sources_empty", 0)), "files present but empty"),
+        ]
+        x = Inches(0.6)
+        cw = (W - Inches(1.2) - Inches(0.9)) / 4
+        for value, caption in cards:
+            s.text(x, Inches(2.5), cw, Inches(0.6), [_p(value, 26, b=True, color=INK)])
+            s.text(x, Inches(3.1), cw, Inches(0.5), [_p(caption, 10, color=SUB)])
+            x += cw + Inches(0.3)
+
+        s.text(Inches(0.6), Inches(4.0), W - Inches(1.2), Inches(0.9),
+               [_p("A module that did not run produces no findings, and no findings "
+                   "is not a clean result — it is an unexamined one. The slides that "
+                   "follow describe the part of the estate this scan could see.",
+                   11, color=SUB)])
 
     def _slide_compliance(self):
         s = self._new()

@@ -403,7 +403,7 @@ def test_every_emitted_check_id_routes_to_a_team():
 def test_the_module_is_registered_everywhere():
     assert '("abap_sast", "AbapSastAuditor")' in \
         (ROOT / "server" / "ingest.py").read_text(encoding="utf-8")
-    assert '"abap_sast"' in (ROOT / "server" / "coverage.py").read_text(encoding="utf-8")
+    assert '"abap_sast"' in (ROOT / "modules" / "coverage.py").read_text(encoding="utf-8")
     assert '"cva"' in (ROOT / "sap_scanner.py").read_text(encoding="utf-8")
 
 

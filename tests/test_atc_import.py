@@ -236,7 +236,7 @@ def test_the_module_is_registered_everywhere_it_has_to_be():
         (ROOT / "server" / "ingest.py").read_text(encoding="utf-8"), \
         "server ingest would never run this auditor"
     assert '"atc"' in (ROOT / "sap_scanner.py").read_text(encoding="utf-8")
-    assert '"atc_import"' in (ROOT / "server" / "coverage.py").read_text(encoding="utf-8"), \
+    assert '"atc_import"' in (ROOT / "modules" / "coverage.py").read_text(encoding="utf-8"), \
         "the coverage manifest would not mention this module"
 
 

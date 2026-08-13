@@ -25,10 +25,14 @@ class ReportGenerator:
 
     def __init__(self, findings: List[Dict[str, Any]], meta: Dict[str, Any],
                  kb: Optional[FindingKB] = None, priorities: Optional[List[Any]] = None,
-                 fair: Optional[Dict[str, Any]] = None):
+                 fair: Optional[Dict[str, Any]] = None,
+                 coverage: Optional[Dict[str, Any]] = None):
         self.findings = findings
         self.meta = meta
         self.kb = kb if kb is not None else FindingKB()
+        #: What the scan could NOT look at. None means the manifest could
+        #: not be built, which the report says rather than passing over.
+        self.coverage = coverage
         # Optional FAIR cyber-risk-quantification summary (from fair_adapter.run
         # -> summary). None unless --crq ran and the CRQ engine was located.
         self.fair = fair
@@ -139,6 +143,7 @@ class ReportGenerator:
             risk_label, risk_color = "Low", "#16a34a"
 
         findings_html = self._render_findings()
+        coverage_html = self._render_coverage()
         compliance_html = self._render_compliance()
         fair_html = self._render_fair()
         csf_html = self._render_csf()
@@ -1018,7 +1023,8 @@ class ReportGenerator:
   </div>
 
   <!-- Compliance / Control-Framework Mapping -->
-  {csf_html}
+  {coverage_html}
+    {csf_html}
     {fair_cam_html}
     {compliance_html}
 
@@ -1535,6 +1541,98 @@ window.addEventListener('beforeprint', () => {{
       Only the loss magnitude is unpriced.</p>
     {disclosures}
 """
+    def _render_coverage(self) -> str:
+        """What the scan could not look at.
+
+        THE MOST IMPORTANT SECTION IN THE REPORT, and it was absent for the whole
+        life of the product. A missing export loads as None and every check that
+        needs it self-skips SILENTLY, so a customer who supplied a fraction of the
+        sources received a clean-looking report with nothing anywhere saying so.
+        modules/coverage.py has said exactly that in its own docstring since it was
+        written; the manifest was wired to the server's ingest path only, and the
+        artefact that most needed it could not even import the code.
+
+        It is rendered FIRST, before the findings, because a reader who sees the
+        finding count before the coverage will anchor on the wrong number.
+        """
+        manifest = self.coverage
+        if manifest is None:
+            return f"""
+    <h2>What this scan could not look at</h2>
+    <div class="banner-warn" style="padding:.8rem 1rem;border-left:4px solid var(--medium);background:var(--medium-bg);border-radius:6px;">
+      <strong>Coverage could not be determined for this scan.</strong> The manifest that
+      records which exports were supplied and which modules ran on partial input could not be
+      built, so this report cannot tell you how much of the estate it saw. Treat the findings
+      below as a floor rather than a survey.
+    </div>
+"""
+        counts = manifest.get("counts", {})
+        supplied = counts.get("sources_supplied", 0)
+        known = counts.get("sources_known", 0)
+        degraded = counts.get("modules_degraded", 0)
+        skipped = counts.get("modules_skipped", 0)
+        empty = counts.get("sources_empty", 0)
+        lead = html.escape(manifest.get("summary", ""))
+
+        empty_html = ""
+        if manifest.get("empty"):
+            names = ", ".join(html.escape(str(s)) for s in manifest["empty"])
+            empty_html = (
+                '<p class="fair-note" style="font-style:normal;">&#9432; '
+                + str(empty) + " file(s) were present but contained no rows ("
+                + names + "). That is a problem with the export rather than the "
+                "upload, and it is reported separately because an empty file and "
+                "an absent one mean different things.</p>")
+
+        order = {"skipped": 0, "degraded": 1, "no_file_inputs": 2, "complete": 3}
+        label = {"complete": ("cov-complete", "complete"),
+                 "degraded": ("cov-degraded", "partial input"),
+                 "skipped": ("cov-skipped", "did not run"),
+                 "no_file_inputs": ("cov-complete", "needs no export")}
+        rows = []
+        for name, info in sorted(manifest.get("modules", {}).items(),
+                                 key=lambda kv: (order.get(kv[1].get("status"), 9), kv[0])):
+            cls, text = label.get(info.get("status"), ("cov-skipped", info.get("status", "")))
+            missing = ", ".join(html.escape(str(s)) for s in info.get("sources_missing", []))
+            rows.append(
+                "<tr><td>" + html.escape(name) + '</td><td><span class="cov-state '
+                + cls + '">' + text + "</span></td>"
+                + '<td class="csf-why">' + (missing or "&mdash;") + "</td></tr>")
+        rows_html = "".join(rows)
+        return f"""
+    <style>
+      .cov-cards {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:.7rem; margin:.8rem 0 1rem; }}
+      .cov-card {{ border:1px solid var(--border); border-radius:8px; padding:.7rem .8rem; }}
+      .cov-big {{ font-size:1.5rem; font-weight:700; }}
+      .cov-cap {{ font-size:.68rem; color:var(--text-muted); margin-top:.15rem; }}
+      .cov-state {{ font-size:.66rem; font-weight:700; padding:.1rem .4rem; border-radius:4px; white-space:nowrap; }}
+      .cov-complete {{ color:#15803d; background:rgba(34,197,94,.13); }}
+      .cov-degraded {{ color:var(--medium); background:var(--medium-bg); }}
+      .cov-skipped {{ color:var(--text-muted); border:1px dashed var(--border); }}
+    </style>
+    <h2>What this scan could not look at</h2>
+    <div class="cov-lead">{lead}</div>
+    <div class="cov-cards">
+      <div class="cov-card"><div class="cov-big">{supplied} <span style="font-size:.9rem;color:var(--text-muted)">/ {known}</span></div>
+        <div class="cov-cap">logical sources supplied</div></div>
+      <div class="cov-card"><div class="cov-big">{degraded}</div>
+        <div class="cov-cap">modules ran on partial input</div></div>
+      <div class="cov-card"><div class="cov-big">{skipped}</div>
+        <div class="cov-cap">modules did not run at all</div></div>
+      <div class="cov-card"><div class="cov-big">{empty}</div>
+        <div class="cov-cap">files present but empty</div></div>
+    </div>
+    {empty_html}
+    <table class="fw-table">
+      <thead><tr><th>Module</th><th>State</th><th>Missing input</th></tr></thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+    <p class="fair-note">A module that did not run produces no findings, and no findings is
+      not a clean result &mdash; it is an unexamined one. Every check that needed an export you
+      did not supply self-skipped silently, so the sections above describe the part of the
+      estate this scan could see. Supply the missing sources and re-run to widen it.</p>
+"""
+
     def _render_csf(self) -> str:
         """NIST CSF 2.0, at Function and Category level.
 
