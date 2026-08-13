@@ -129,7 +129,7 @@ What connected mode uses instead, all over HTTP(S):
 | surface | transport | feeds |
 |---|---|---|
 | Profile / instance parameters | SAPControl SOAP web service | `security_params`, `baseline_params` |
-| Users, roles, authorisations | ICF / OData via SAP Gateway | `user_auth_audit`, `s4_business_authz` |
+| Users, roles, authorisations | **RFC only** — see the Since-built note below | `user_auth_audit`, `s4_business_authz` |
 | Landscape configuration | SolMan / Focused Run CCDB | multi-system ingest |
 | SaaS tenants | vendor REST / SCIM | the Phase 6–7 modules |
 
@@ -176,6 +176,44 @@ release gate now refuses.
 > The manifest accumulates across collectors rather than being overwritten: a
 > directory built from two collections now has a record describing two, which the
 > first draft got wrong.
+
+> **Since built — and the asserted claim is now verified.**
+>
+> **PyRFC is archived and yanked.** The repository was archived on 28 May 2026 and
+> the PyPI releases carry a yank reason of "No longer supported", so `pip install
+> pyrfc` fails without an exact version pin. SAP discontinued it for want of a
+> maintainer with access to the SDK source, and discontinued the Node.js and other
+> bindings at the same time — SAP has exited RFC language bindings, not just the
+> Python one. There is no official replacement. This decision recorded that claim
+> as **asserted**; it is now **verified**, and it is worse than it read.
+>
+> **The decision holds, and an RFC collector was still built** — because the two
+> are not in conflict. What D3 declined was making RFC a REQUIREMENT: an SDK the
+> image cannot carry, mounted before the container starts, for every user
+> including the majority who only scan offline. `collect/rfc.py` is not that. It is
+> optional, out-of-process and customer-installed, exactly like the other two
+> collectors, and the image is byte-identical whether or not it exists.
+>
+> **It depends on no binding at all.** Building the most sensitive collector in a
+> security product on an archived, yanked package that will never receive another
+> patch is not a trade worth making, so the SDK is bound directly through `ctypes`
+> — standard library. The dependency count does not move and there is no upstream
+> left to rot.
+>
+> **What the customer still supplies is unchanged:** the SDK itself, under their
+> own S-user licence. That fact is what this decision rests on and nothing about
+> it has changed. It has simply moved from being a precondition for everyone to a
+> precondition for the customers who want the sixteen sources HTTPS cannot reach.
+>
+> **The table above said ICF reaches users, roles and authorisations. It does
+> not** — `users`, `profiles`, `roles` and `role_profiles` head `ICF_CANNOT_REACH`
+> in `collect/extract.py`, and D3's own built-note said so while the table went
+> uncorrected. That row is fixed above.
+>
+> **An RFC connection is not a complete export either.** `collect/rfc_tables.py`
+> declares six sources it still cannot produce — gateway ACL files, audit-log
+> configuration, TMS routes and others — with a reason for each, and the manifest
+> reports them the way the other collectors report theirs.
 
 ## D4 — Does the four-dependency rule extend to `collect/`?
 

@@ -202,6 +202,106 @@ def cmd_icf(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_rfc(args) -> int:
+    """Collect the RFC-only sources, if the customer has installed the SDK.
+
+    THIS IS THE ONLY COLLECTOR THAT CAN FAIL BEFORE IT STARTS, and it says so in
+    one line. The SAP NetWeaver RFC SDK is S-user gated and cannot be shipped, so
+    the first thing reported is whether one is present and where it was looked
+    for — a customer who has not installed it should learn that from a sentence,
+    not from a stack trace inside ctypes.
+    """
+    from collect import rfc, rfc_tables
+
+    ok, detail = rfc.available(args.sdk_home)
+    if not ok:
+        print("[!] RFC SDK unavailable: %s" % detail, file=sys.stderr)
+        print("    This collector is optional. sapcontrol and icf need no SDK "
+              "and reach everything else.", file=sys.stderr)
+        return 2
+    print("[*] RFC SDK: %s" % detail)
+
+    if args.list_sources:
+        print("    produces:")
+        for e in rfc_tables.EXTRACTS:
+            print("      %-18s <- %-10s -> %s" % (e["source"], e["table"], e["file"]))
+        print("    still cannot reach:")
+        for name, why in sorted(rfc_tables.RFC_CANNOT_REACH.items()):
+            print("      %-18s %s" % (name, why))
+        return 0
+
+    password = _read_password(args.user)
+    if password is None:
+        return 2
+
+    params = {"ashost": args.host, "sysnr": "%02d" % args.instance,
+              "client": args.client, "user": args.user, "passwd": password,
+              "lang": args.lang}
+    if args.saprouter:
+        params["saprouter"] = args.saprouter
+
+    out = Path(args.out)
+    endpoint = "%s/%02d client %s" % (args.host, args.instance, args.client)
+
+    try:
+        conn = rfc.Connection(params, home=args.sdk_home).open()
+    except (rfc.RfcUnavailable, rfc.RfcCallFailed) as exc:
+        print("[!] %s" % exc, file=sys.stderr)
+        return 1
+
+    wrote = {}
+    attempts = []
+    try:
+        if args.probe_only:
+            print("[*] RFCPING ...", end=" ")
+            print("ok" if conn.ping() else "no response")
+            print("    --probe-only: nothing collected, nothing written.")
+            return 0
+
+        wanted = set(args.only.split(",")) if args.only else None
+        for e in rfc_tables.EXTRACTS:
+            if wanted and e["source"] not in wanted:
+                continue
+            fields = rfc_tables.fields_for(e)
+            try:
+                rows = conn.read_table(e["table"], fields,
+                                       where=args.where or "",
+                                       row_limit=args.row_limit)
+            except rfc.RfcCallFailed as exc:
+                # ONE TABLE FAILING MUST NOT LOSE THE OTHERS. A field absent on an
+                # older release, or an authorisation this RFC user lacks, is a
+                # per-source outcome and is recorded as one rather than aborting
+                # a collection that has already succeeded elsewhere.
+                print("    %-18s FAILED: %s" % (e["source"], exc))
+                attempts.append({"source": e["source"], "table": e["table"],
+                                 "ok": False, "error": str(exc)})
+                continue
+            records = rfc_tables.rows_to_csv(e, rows)
+            header = list(e["columns"])
+            n = extract._write_csv(out / e["file"], header,
+                                   [[r.get(h, "") for h in header] for r in records])
+            print("    %-18s %7d row(s) -> %s" % (e["source"], n, e["file"]))
+            wrote[e["file"]] = n
+            attempts.append({"source": e["source"], "table": e["table"],
+                             "ok": True, "rows": n,
+                             "derived": bool(e.get("derive"))})
+    finally:
+        conn.close()
+
+    extract.write_manifest(
+        out, source="rfc", endpoint=endpoint,
+        collected_at=datetime.now(timezone.utc).isoformat(timespec="seconds"), wrote=wrote, attempts=attempts,
+        cannot_reach=tuple(sorted(rfc_tables.RFC_CANNOT_REACH)),
+        caveats=("RFC_READ_TABLE returns a 512-byte row, so every extract names "
+                 "its columns rather than taking the table.",
+                 "rfc_destinations host and user are PARSED out of the RFCOPTIONS "
+                 "blob rather than read as columns; SNC and auth type are left "
+                 "blank because their encoding varies by release and a wrong "
+                 "value would mislabel a destination as secured."))
+    print("[*] wrote %s" % out)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="python -m collect",
@@ -267,6 +367,43 @@ def build_parser() -> argparse.ArgumentParser:
                          "rate-limited dispatcher")
     ic.add_argument("--out", default="./extract")
     ic.set_defaults(fn=cmd_icf)
+
+    rf = sub.add_parser(
+        "rfc",
+        help="collect the users, roles, authorisations and RFC destinations that "
+             "HTTPS cannot reach. Needs the SAP NetWeaver RFC SDK, which you "
+             "supply under your own licence")
+    rf.add_argument("--host", required=True, help="application server host")
+    rf.add_argument("--instance", type=int, default=0,
+                    help="instance number 00-99 (default 00)")
+    rf.add_argument("--client", required=True, help="SAP client, e.g. 100")
+    rf.add_argument("--user", required=True,
+                    help="RFC user. The password is NEVER an argument: it is "
+                         "prompted, piped, or taken from SAPCONTROL_PASSWORD")
+    rf.add_argument("--lang", default="EN")
+    rf.add_argument("--saprouter", default=None,
+                    help="SAProuter string, if the system is behind one")
+    rf.add_argument("--sdk-home", default=None,
+                    help="the unpacked nwrfcsdk directory. Defaults to the "
+                         "SAPNWRFC_HOME environment variable")
+    rf.add_argument("--only", default=None,
+                    help="comma-separated source names to collect (see "
+                         "--list-sources)")
+    rf.add_argument("--where", default=None,
+                    help="a WHERE clause applied to every table read. AGR_1251 "
+                         "and CDHDR are unbounded on a production system and "
+                         "should always have one")
+    rf.add_argument("--row-limit", type=int, default=0,
+                    help="maximum rows per table (0 = no limit)")
+    rf.add_argument("--list-sources", action="store_true",
+                    help="print what this collector produces and what it still "
+                         "cannot reach, then exit. Needs the SDK present but no "
+                         "connection and no password")
+    rf.add_argument("--probe-only", action="store_true",
+                    help="RFCPING only: prove the credential works, collect "
+                         "nothing, write nothing")
+    rf.add_argument("--out", default="./extract")
+    rf.set_defaults(fn=cmd_rfc)
     return p
 
 

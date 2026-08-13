@@ -4,6 +4,62 @@ Step-by-step instructions for exporting the configuration data needed by the sca
 
 ---
 
+
+## Connected mode: the RFC collector (optional)
+
+`python -m collect sapcontrol` and `python -m collect icf` need no SDK and should
+be your first choice. Sixteen logical sources are beyond them — users, profiles,
+roles, authorisation values, RFC destinations, client settings, background jobs
+and change documents — and those need RFC.
+
+```bash
+export SAPNWRFC_HOME=/opt/nwrfcsdk          # you supply this; see below
+export LD_LIBRARY_PATH=$SAPNWRFC_HOME/lib   # Linux: the .so loads its siblings
+
+python -m collect rfc --list-sources        # what it produces; no connection made
+python -m collect rfc --host p01.acme.internal --instance 00 \
+                      --client 100 --user MONITOR --probe-only
+python -m collect rfc --host p01.acme.internal --instance 00 \
+                      --client 100 --user MONITOR --out ./extract
+python sap_scanner.py --data-dir ./extract
+```
+
+**You supply the SDK.** The SAP NetWeaver RFC SDK is downloaded from SAP under
+your own S-user licence and cannot be redistributed, so this product does not
+ship it and the container image does not contain it. That is the whole reason
+this collector is optional and out-of-process.
+
+**No Python binding is installed.** PyRFC was archived in May 2026 and its PyPI
+releases yanked; this collector calls the SDK directly through `ctypes`, which is
+part of the standard library. There is nothing to `pip install`.
+
+**Read-only, enforced before the network.** Three function modules are permitted —
+`RFC_READ_TABLE`, `RFC_SYSTEM_INFO`, `RFCPING` — and the allowlist is checked
+before any handle is opened. RFC exposes every remote-enabled function module in
+the system, including ones that change user master records and execute ABAP, so
+this is enforced in the transport rather than trusted to callers.
+
+**Bound the big tables.** `AGR_1251` (authorisation values) and `CDHDR` (change
+documents) are unbounded on a production system. Always pass `--where`, and
+`--row-limit` while you are testing:
+
+```bash
+python -m collect rfc ... --only change_documents --where "UDATE GE '20260101'"
+python -m collect rfc ... --only role_auth_values --row-limit 50000
+```
+
+**The minimum authorisation** the RFC user needs is `S_RFC` for the function group
+that contains `RFC_READ_TABLE` (`SDTX`), plus `S_TABU_DIS`/`S_TABU_NAM` read access
+to the tables listed by `--list-sources`. Granting more than that is not required
+and should not be done for a read-only collection.
+
+**What it still cannot reach**, and which the export guide's manual routes remain
+the answer for: gateway ACL files (`gw/sec_info`, `gw/reg_info` are files on the
+application server, not tables), audit-log configuration, TMS transport routes,
+and table authorisation groups. `--list-sources` prints the current list with a
+reason for each.
+
+
 ## Core Data Exports
 
 ### Users (`users.csv`)

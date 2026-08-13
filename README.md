@@ -232,6 +232,12 @@ python -m collect sapcontrol --host ecc-prod.example.com --instance 00          
 # The ICF surface — which endpoints are active, and which answer UNAUTHENTICATED.
 python -m collect icf --host ecc-prod.example.com --out ./extract
 
+# Users, roles, authorisations and RFC destinations — the surfaces HTTPS cannot
+# reach. Optional: needs the SAP NetWeaver RFC SDK, which you supply under your
+# own licence. No Python binding is installed; the SDK is called via ctypes.
+python -m collect rfc --host ecc-prod.example.com --instance 00 \
+                      --client 100 --user MONITOR --out ./extract
+
 # Then scan it, exactly as if you had exported it by hand.
 python sap_scanner.py --data-dir ./extract
 ```
