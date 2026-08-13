@@ -26,8 +26,26 @@ class ReportGenerator:
     def __init__(self, findings: List[Dict[str, Any]], meta: Dict[str, Any],
                  kb: Optional[FindingKB] = None, priorities: Optional[List[Any]] = None,
                  fair: Optional[Dict[str, Any]] = None,
-                 coverage: Optional[Dict[str, Any]] = None):
+                 coverage: Optional[Dict[str, Any]] = None,
+                 full_findings: Optional[List[Dict[str, Any]]] = None):
         self.findings = findings
+        #: THE CORPUS AS SCANNED, before any display filter narrowed it.
+        #:
+        #: `--severity HIGH` is a DISPLAY option: it decides which findings are
+        #: listed, not which were found. Anything that makes a claim ABOUT THE
+        #: ESTATE — the framework roll-ups, the control-function map, the domain
+        #: view — must read this instead of `findings`, or the filter silently
+        #: converts "we found MEDIUM issues here" into the green "no findings"
+        #: chip, and nothing on the page says a filter was applied.
+        #:
+        #: sap_scanner.py already snapshots the unfiltered set for exactly this
+        #: reason, with the comment that the severity filter "must not silently
+        #: change the dollar figure". The money was protected; the framework
+        #: sections were not.
+        #:
+        #: Defaults to `findings` so an existing caller keeps working — and gets
+        #: the filtered set, which is the status quo, not a silent new claim.
+        self.full_findings = full_findings if full_findings is not None else findings
         self.meta = meta
         self.kb = kb if kb is not None else FindingKB()
         #: What the scan could NOT look at. None means the manifest could
@@ -143,6 +161,7 @@ class ReportGenerator:
             risk_label, risk_color = "Low", "#16a34a"
 
         findings_html = self._render_findings()
+        filter_html = self._render_filter_notice()
         coverage_html = self._render_coverage()
         compliance_html = self._render_compliance()
         fair_html = self._render_fair()
@@ -953,6 +972,7 @@ class ReportGenerator:
         <span>Scan: {html.escape(self.meta.get('scan_time', 'N/A')[:19])}</span>
         <span>Source: {html.escape(self.meta.get('data_directory', 'N/A'))}</span>
         <span>Modules: {html.escape(', '.join(self.meta.get('modules_run', [])))}</span>
+        <span>Severity filter: {html.escape(str(self.meta.get('severity_filter', 'ALL')))}</span>
       </div>
     </div>
   </div>
@@ -970,6 +990,7 @@ class ReportGenerator:
        severity cards, the P1-P4 queue and the category bars, which is every
        number a reader anchors on. -->
   {coverage_html}
+  {filter_html}
 
   <!-- Summary Grid -->
   <div class="summary-grid">
@@ -1548,6 +1569,38 @@ window.addEventListener('beforeprint', () => {{
       Only the loss magnitude is unpriced.</p>
     {disclosures}
 """
+    def _render_filter_notice(self) -> str:
+        """Say that a display filter is on, and which numbers it moved.
+
+        WHY THIS IS NOT OPTIONAL NOW. The finding list obeys `--severity`; the
+        framework roll-ups deliberately do not, because they describe the estate
+        rather than the selection. That is the correct behaviour and it makes two
+        numbers on one page disagree — so the page has to say why, or a reader
+        reconciling "341 findings" against a CSF section counting more concludes
+        one of them is broken.
+
+        Silence was the worse failure and it is the one that shipped: the filter
+        USED to narrow the roll-ups too, so a Category with real MEDIUM findings
+        rendered the green "no findings" chip and nothing anywhere said a filter
+        had been applied.
+        """
+        chosen = str(self.meta.get("severity_filter", "ALL") or "ALL").upper()
+        if chosen == "ALL":
+            return ""
+        shown, scanned = len(self.findings), len(self.full_findings)
+        hidden = max(0, scanned - shown)
+        return f"""
+    <div class="cov-lead" style="border-left:4px solid var(--accent);background:var(--accent-dim);padding:.7rem 1rem;border-radius:6px;margin:.6rem 0 1rem;">
+      <strong>A severity filter is applied to this report.</strong>
+      It lists the {shown} finding(s) at {html.escape(chosen)} or above and omits
+      {hidden} below it. The framework sections &mdash; NIST CSF, FAIR-CAM and the
+      compliance mapping &mdash; are computed over all {scanned} findings this scan
+      produced, because they describe the estate rather than this selection. That is
+      why their counts are larger, and it is deliberate: a display option must not be
+      able to turn a finding into a clean control.
+    </div>
+"""
+
     def _render_coverage(self) -> str:
         """What the scan could not look at.
 
@@ -1668,13 +1721,13 @@ window.addEventListener('beforeprint', () => {{
         twenty-two are in that state, and a board reading a green CSF page for
         outcomes nobody examined is the failure this section exists to avoid.
         """
-        if not self.findings:
+        if not self.full_findings:
             return ""
         try:
             from modules import nist_csf
         except Exception:                                # noqa: BLE001
             return ""
-        rolled = nist_csf.roll_up(self.findings)
+        rolled = nist_csf.roll_up(self.full_findings)
         tot = rolled["totals"]
         framework_txt = html.escape(rolled["framework"])
         reference_txt = html.escape(rolled["reference"])
@@ -1752,13 +1805,13 @@ window.addEventListener('beforeprint', () => {{
         precise attribution — which is worse on paper than on screen, because paper
         is what gets quoted back.
         """
-        if not self.findings:
+        if not self.full_findings:
             return ""
         try:
             from modules import fair_cam
         except Exception:                                # noqa: BLE001
             return ""
-        result = fair_cam.classify(self.findings)
+        result = fair_cam.classify(self.full_findings)
 
         rows = []
         for fn in result["functions"]:
@@ -1806,9 +1859,9 @@ window.addEventListener('beforeprint', () => {{
     def _render_compliance(self) -> str:
         """Map findings onto control frameworks (ISO 27001 / NIST CSF / CIS /
         TISAX / SOC 2 / GDPR) and render a collapsible gap-mapping section."""
-        if not self.findings:
+        if not self.full_findings:
             return ""
-        frameworks = ComplianceMapper(self.findings).assess()
+        frameworks = ComplianceMapper(self.full_findings).assess()
         frameworks = [f for f in frameworks if f["controls"]]
         if not frameworks:
             return ""

@@ -508,10 +508,16 @@ def main():
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
 
-    # Keep the COMPLETE finding set for the FAIR analysis — a FAIR quantification
-    # must reflect total scenario risk from all evidence (including LOW/MEDIUM
-    # detection/exposure signals), so the report's severity filter (a display
-    # option) must not silently change the dollar figure.
+    # THE CORPUS AS SCANNED. `--severity` is a DISPLAY option — it decides what
+    # is listed, not what was found — so everything that makes a claim ABOUT THE
+    # ESTATE reads this rather than the filtered list below.
+    #
+    # It was introduced for the FAIR figure alone, with the argument that a
+    # display option "must not silently change the dollar figure". The argument
+    # was right and its scope was too narrow: the CSF, FAIR-CAM, compliance and
+    # domain roll-ups make exactly the same kind of claim, and on --severity HIGH
+    # a Category with real MEDIUM findings rendered the green "no findings" chip.
+    # The money was protected and the frameworks were not.
     fair_findings = list(all_findings)
 
     # Filter by severity (affects the displayed findings / tiers only)
@@ -674,19 +680,20 @@ def main():
     if args.format in ("html", "both", "all"):
         print(f"\n[*] Generating HTML report: {html_path}  ({detail})")
         ReportGenerator(all_findings, scan_meta, kb, priorities=prio_results,
-                        fair=fair_summary,
-                        coverage=coverage_manifest).generate(html_path)
+                        fair=fair_summary, coverage=coverage_manifest,
+                        full_findings=fair_findings).generate(html_path)
     if args.format in ("pdf", "both", "all"):
         print(f"[*] Generating PDF report: {pdf_path}  ({detail})")
         PDFReportGenerator(all_findings, scan_meta, kb, priorities=prio_results,
-                           fair=fair_summary,
-                           coverage=coverage_manifest).generate(pdf_path)
+                           fair=fair_summary, coverage=coverage_manifest,
+                           full_findings=fair_findings).generate(pdf_path)
     if args.format in ("pptx", "all"):
         full = args.pptx_mode == "full"
         kind = "full per-finding deck" if full else "summarised meeting deck"
         print(f"[*] Generating PPTX presentation: {pptx_path}  ({kind})")
         PPTXReportGenerator(all_findings, scan_meta, kb, priorities=prio_results,
-                            coverage=coverage_manifest).generate(
+                            coverage=coverage_manifest,
+                            full_findings=fair_findings).generate(
             pptx_path, full=full)
 
     # Summary

@@ -59,8 +59,26 @@ class PDFReportGenerator:
     def __init__(self, findings: List[Dict[str, Any]], meta: Dict[str, Any],
                  kb: Optional[FindingKB] = None, priorities: Optional[List[Any]] = None,
                  fair: Optional[Dict[str, Any]] = None,
-                 coverage: Optional[Dict[str, Any]] = None):
+                 coverage: Optional[Dict[str, Any]] = None,
+                 full_findings: Optional[List[Dict[str, Any]]] = None):
         self.findings = findings
+        #: THE CORPUS AS SCANNED, before any display filter narrowed it.
+        #:
+        #: `--severity HIGH` is a DISPLAY option: it decides which findings are
+        #: listed, not which were found. Anything that makes a claim ABOUT THE
+        #: ESTATE — the framework roll-ups, the control-function map, the domain
+        #: view — must read this instead of `findings`, or the filter silently
+        #: converts "we found MEDIUM issues here" into the green "no findings"
+        #: chip, and nothing on the page says a filter was applied.
+        #:
+        #: sap_scanner.py already snapshots the unfiltered set for exactly this
+        #: reason, with the comment that the severity filter "must not silently
+        #: change the dollar figure". The money was protected; the framework
+        #: sections were not.
+        #:
+        #: Defaults to `findings` so an existing caller keeps working — and gets
+        #: the filtered set, which is the status quo, not a silent new claim.
+        self.full_findings = full_findings if full_findings is not None else findings
         self.meta = meta
         self.kb = kb or FindingKB()
         self.fair = fair
@@ -387,7 +405,7 @@ class PDFReportGenerator:
             self.y -= 15
 
     def _compliance_section(self):
-        frameworks = ComplianceMapper(self.findings).assess()
+        frameworks = ComplianceMapper(self.full_findings).assess()
         frameworks = [fw for fw in frameworks if fw["controls"]]
         if not frameworks:
             return

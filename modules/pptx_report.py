@@ -89,8 +89,26 @@ def _img_dims(path: str):
 class PPTXReportGenerator:
     def __init__(self, findings: List[Dict[str, Any]], meta: Dict[str, Any],
                  kb: Optional[FindingKB] = None, priorities: Optional[List[Any]] = None,
-                 coverage: Optional[Dict[str, Any]] = None):
+                 coverage: Optional[Dict[str, Any]] = None,
+                 full_findings: Optional[List[Dict[str, Any]]] = None):
         self.findings = findings
+        #: THE CORPUS AS SCANNED, before any display filter narrowed it.
+        #:
+        #: `--severity HIGH` is a DISPLAY option: it decides which findings are
+        #: listed, not which were found. Anything that makes a claim ABOUT THE
+        #: ESTATE — the framework roll-ups, the control-function map, the domain
+        #: view — must read this instead of `findings`, or the filter silently
+        #: converts "we found MEDIUM issues here" into the green "no findings"
+        #: chip, and nothing on the page says a filter was applied.
+        #:
+        #: sap_scanner.py already snapshots the unfiltered set for exactly this
+        #: reason, with the comment that the severity filter "must not silently
+        #: change the dollar figure". The money was protected; the framework
+        #: sections were not.
+        #:
+        #: Defaults to `findings` so an existing caller keeps working — and gets
+        #: the filtered set, which is the status quo, not a silent new claim.
+        self.full_findings = full_findings if full_findings is not None else findings
         self.meta = meta
         self.kb = kb if kb is not None else FindingKB()
         self.coverage = coverage
@@ -128,7 +146,7 @@ class PPTXReportGenerator:
             self.tier_meta = TIER_META
         except Exception:
             self.tier_meta = {}
-        self.compliance = ComplianceMapper(findings).assess()
+        self.compliance = ComplianceMapper(self.full_findings).assess()
 
     @staticmethod
     def _band(score):
@@ -267,7 +285,18 @@ class PPTXReportGenerator:
         s.text(Inches(0.6), Inches(5.5), W - Inches(1.2), Inches(0.4),
                [_p("Assessment date: %s      Findings: %d      Risk posture: %s"
                    % (date, self.total, self.risk_label.upper()), 12, b=True, color=INK)])
-        s.text(Inches(0.6), Inches(6.0), W - Inches(1.2), Inches(1.0),
+        # A FILTERED DECK SAYS SO ON ITS FIRST SLIDE. "Findings: 84" is the
+        # sentence a room remembers, and if a display filter produced it while
+        # the framework slides describe all 341, the deck has to reconcile the
+        # two itself — nobody in the room can open the CLI history.
+        chosen = str(self.meta.get("severity_filter", "ALL") or "ALL").upper()
+        if chosen != "ALL":
+            hidden = max(0, len(self.full_findings) - self.total)
+            s.text(Inches(0.6), Inches(5.9), W - Inches(1.2), Inches(0.5),
+                   [_p("Severity filter: %s or above. %d finding(s) below it are not "
+                       "listed; the framework slides cover all %d."
+                       % (chosen, hidden, len(self.full_findings)), 10, color=SUB)])
+        s.text(Inches(0.6), Inches(6.35), W - Inches(1.2), Inches(1.0),
                [_p("CONFIDENTIAL — contains sensitive SAP security information; distribute only to "
                    "authorized security, Basis and audit personnel. Point-in-time, offline analysis "
                    "of exported configuration; no SAP system was connected to or modified.", 9,
@@ -432,7 +461,7 @@ class PPTXReportGenerator:
             from modules import domains
         except Exception:                                # noqa: BLE001
             return
-        rolled = domains.roll_up(self.findings, coverage=self.coverage)
+        rolled = domains.roll_up(self.full_findings, coverage=self.coverage)
         reach_word = {domains.FULL: "fully assessed",
                       domains.PARTIAL: "partly assessed",
                       domains.CONFIG_ONLY: "configuration only",
@@ -573,7 +602,7 @@ class PPTXReportGenerator:
         self._heading(s, "Recommendations", "Recommended Actions")
         # findings per theme
         theme_ct = {}
-        for f in self.findings:
+        for f in self.full_findings:
             for th in ComplianceMapper.CATEGORY_THEMES.get(f.get("category", ""), []):
                 theme_ct[th] = theme_ct.get(th, 0) + 1
         top = sorted(theme_ct.items(), key=lambda x: -x[1])[:6]
