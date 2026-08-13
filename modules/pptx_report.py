@@ -126,7 +126,16 @@ class PPTXReportGenerator:
         self.med = by.get("MEDIUM", 0)
         self.low = by.get("LOW", 0)
         self.total = len(findings)
-        self.risk_score = min(100, self.crit * 25 + self.high * 10 + self.med * 4 + self.low * 1)
+        # THE POSTURE SCORE DESCRIBES THE ESTATE, so it counts the estate —
+        # see the same note in modules/report_generator.py. The severity counts
+        # above it stay on the listed findings, which is what they are labelled as.
+        _est = {}
+        for f in self.full_findings:
+            _est[f["severity"]] = _est.get(f["severity"], 0) + 1
+        self.risk_score = min(100, _est.get("CRITICAL", 0) * 25
+                              + _est.get("HIGH", 0) * 10
+                              + _est.get("MEDIUM", 0) * 4
+                              + _est.get("LOW", 0) * 1)
         self.risk_label, self.risk_color = self._band(self.risk_score)
 
         if priorities is None:

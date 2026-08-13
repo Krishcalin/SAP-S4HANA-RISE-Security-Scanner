@@ -171,6 +171,67 @@ def test_an_unfiltered_report_says_nothing_about_filters(tmp_path):
     assert "A severity filter is applied" not in out.read_text(encoding="utf-8")
 
 
+# ── the posture score is a claim about the estate ────────────────────────────
+#
+# THE HALF-FINISHED FIX. The roll-ups were threaded onto the unfiltered corpus
+# and the headline score was not, so `--severity CRITICAL` moved sample_data from
+# 100/100 Critical to 50/100 High with no data change — a display option
+# improving the customer's security posture — while the framework sections beside
+# it had just been corrected to describe the whole estate. One page, two corpora.
+
+@pytest.mark.parametrize("generator", [ReportGenerator, PDFReportGenerator,
+                                       PPTXReportGenerator])
+def test_the_posture_score_does_not_move_when_the_display_is_filtered(generator):
+    """It sits under the words "Risk Score" and a one-word posture. That is a
+    claim about the systems, not about this page's selection."""
+    filtered = generator(SHOWN, META, full_findings=FULL)
+    whole = generator(FULL, {"scan_time": "2026-01-01", "severity_filter": "ALL"},
+                      full_findings=FULL)
+    if generator is ReportGenerator:
+        # The HTML computes it inside generate(); compare the rendered figure.
+        import tempfile
+        scores = []
+        for gen in (filtered, whole):
+            with tempfile.TemporaryDirectory() as tmp:
+                out = Path(tmp) / "r.html"
+                with contextlib.redirect_stdout(io.StringIO()):
+                    gen.generate(str(out))
+                page = out.read_text(encoding="utf-8")
+                scores.append(re.search(r'class="score-number"[^>]*>(\d+)', page).group(1))
+        assert scores[0] == scores[1], scores
+    else:
+        assert filtered.risk_score == whole.risk_score
+        assert filtered.risk_label == whole.risk_label
+
+
+def test_the_severity_cards_still_describe_what_is_listed(tmp_path):
+    """The other half of the same decision. The cards are a breakdown of the
+    findings below them and are labelled as such, so they follow the filter — and
+    the notice above the grid reconciles them with the score."""
+    page = _generate(ReportGenerator, tmp_path, ".html")
+    card = re.search(r'sev-card critical.*?sev-count">(\d+)<', page, re.S)
+    assert card and card.group(1) == str(len(SHOWN))
+
+
+def test_the_pdf_reconciles_its_two_finding_counts(tmp_path):
+    """The PDF cover already named the filter, so the fact was disclosed. What
+    was missing is the arithmetic: "total 64" on page one against "341 findings
+    mapped" a few pages later, with nothing joining them."""
+    out = tmp_path / "r.pdf"
+    with contextlib.redirect_stdout(io.StringIO()):
+        PDFReportGenerator(SHOWN, META, full_findings=FULL).generate(str(out))
+    blob = out.read_bytes().upper()
+    assert b"A SEVERITY FILTER IS APPLIED" in blob
+
+
+def test_an_unfiltered_pdf_carries_no_notice(tmp_path):
+    out = tmp_path / "all.pdf"
+    with contextlib.redirect_stdout(io.StringIO()):
+        PDFReportGenerator(FULL, {"scan_time": "2026-01-01", "severity_filter": "ALL"},
+                           full_findings=FULL).generate(str(out))
+    assert b"A SEVERITY FILTER IS APPLIED" not in out.read_bytes().upper()
+
+
 # ── the default must not become a silent new claim ───────────────────────────
 
 def test_a_caller_that_passes_no_full_corpus_gets_the_status_quo():

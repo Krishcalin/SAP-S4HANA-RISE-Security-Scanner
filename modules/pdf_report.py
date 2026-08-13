@@ -124,7 +124,16 @@ class PDFReportGenerator:
         self.med = self.by_sev.get("MEDIUM", 0)
         self.low = self.by_sev.get("LOW", 0)
         self.info = self.by_sev.get("INFO", 0)
-        self.risk_score = min(100, self.crit * 25 + self.high * 10 + self.med * 4 + self.low * 1)
+        # THE POSTURE SCORE DESCRIBES THE ESTATE, so it counts the estate —
+        # see the same note in modules/report_generator.py. The severity counts
+        # above it stay on the listed findings, which is what they are labelled as.
+        _est = {}
+        for f in self.full_findings:
+            _est[f["severity"]] = _est.get(f["severity"], 0) + 1
+        self.risk_score = min(100, _est.get("CRITICAL", 0) * 25
+                              + _est.get("HIGH", 0) * 10
+                              + _est.get("MEDIUM", 0) * 4
+                              + _est.get("LOW", 0) * 1)
         self.risk_label, self.risk_col = self._risk_band(self.risk_score)
 
     @staticmethod
@@ -185,6 +194,7 @@ class PDFReportGenerator:
     def generate(self, output_path: str):
         self._cover_page()                 # header + risk posture + severity summary
         self._coverage_section()           # What this scan could not look at - FIRST
+        self._filter_notice()              # ...and what a display filter is hiding
         self._priority_section()           # Risk-Prioritized Remediation Queue (P1-P4 + top-10)
         self._categories_section()         # Findings by Category
         self._compliance_section()         # Compliance & Control-Framework Mapping
@@ -330,6 +340,32 @@ class PDFReportGenerator:
             "you did not supply self-skipped silently, so the sections that follow "
             "describe the part of the estate this scan could see.",
             size=8.5, color=MUTED, leading=12, gap_after=10)
+
+    def _filter_notice(self) -> None:
+        """Reconcile the two finding counts this document now carries.
+
+        The cover already names the filter in its scope card, so the fact is
+        disclosed. What was missing is the arithmetic: "FINDINGS BY SEVERITY
+        (total 64)" on page one against seven framework rows reading "341
+        findings mapped" a few pages later, with nothing joining them. A reader
+        who cannot reconcile two numbers concludes one is wrong, and the one they
+        distrust is whichever they read second.
+        """
+        chosen = str(self.meta.get("severity_filter", "ALL") or "ALL").upper()
+        if chosen == "ALL":
+            return
+        shown, scanned = len(self.findings), len(self.full_findings)
+        self._label("A severity filter is applied")
+        self._para(
+            "This report lists the %d finding(s) at %s or above and omits %d below it. "
+            "The risk posture on the cover and the framework sections that follow "
+            "— NIST CSF, FAIR-CAM and the compliance mapping — are computed over "
+            "all %d findings this scan produced, because they describe the estate "
+            "rather than this selection. That is why their counts are larger, and it "
+            "is deliberate: a display option must not be able to turn a finding into "
+            "a clean control."
+            % (shown, chosen, max(0, scanned - shown), scanned),
+            size=9, color=INK, leading=13, gap_after=14)
 
     def _priority_section(self):
         self._new_content_page()

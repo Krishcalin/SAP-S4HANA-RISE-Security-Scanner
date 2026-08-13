@@ -149,8 +149,23 @@ class ReportGenerator:
                 f'<button class="filter-btn" onclick="filterFindings(\'P3\')">P3 &middot; Planned ({tier_counts["P3"]})</button>'
                 f'<button class="filter-btn" onclick="filterFindings(\'P4\')">P4 &middot; Backlog ({tier_counts["P4"]})</button>')
 
-        # Risk score (weighted)
-        risk_score = min(100, crit * 25 + high * 10 + med * 4 + low * 1)
+        # THE POSTURE SCORE DESCRIBES THE ESTATE, so it counts the estate.
+        #
+        # It sits under the words "Risk Score" and a one-word posture, which is a
+        # claim about the systems and not about this page's selection. Computed
+        # over the filtered list it moved from 100/100 Critical to 50/100 High on
+        # `--severity CRITICAL` with no data change whatsoever — a display option
+        # improving the customer's security posture — and it sat beside framework
+        # sections that had just been corrected to describe all of it.
+        #
+        # The severity CARDS keep counting the filtered list. They are a
+        # breakdown of what is listed below them, they are labelled as such, and
+        # the notice above the grid reconciles the two.
+        est = {}
+        for f in self.full_findings:
+            est[f["severity"]] = est.get(f["severity"], 0) + 1
+        risk_score = min(100, est.get("CRITICAL", 0) * 25 + est.get("HIGH", 0) * 10
+                         + est.get("MEDIUM", 0) * 4 + est.get("LOW", 0) * 1)
         if risk_score >= 75:
             risk_label, risk_color = "Critical", "#dc2626"
         elif risk_score >= 50:
