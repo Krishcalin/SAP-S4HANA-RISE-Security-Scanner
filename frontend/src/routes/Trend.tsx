@@ -301,7 +301,7 @@ function Body({ j }: { j: Journey }) {
           <thead>
             <tr>
               <th className={TH}>Category</th>
-              <th className={`${TH} w-[36%]`}>Compliant</th>
+              <th className={`${TH} w-[36%]`}>Checks passing</th>
               <th className={`${TH} text-right`}>Checks run</th>
               <th className={`${TH} text-right`}>Failing</th>
             </tr>
@@ -309,7 +309,20 @@ function Body({ j }: { j: Journey }) {
           <tbody>
             {j.domains.map((d) => {
               const pct = d.pct_compliant ?? 0
-              const fill = pct >= 80 ? 'var(--ok)' : pct >= 60 ? 'var(--med)' : 'var(--crit)'
+              // NOT A TRAFFIC LIGHT, AND NOT CALLED "COMPLIANT".
+              //
+              // Two separate problems, and only one of them was the word. The
+              // column read "Compliant", which claims conformance with something
+              // external; this is the pass rate over the checks that actually ran,
+              // which is a statement about our own checks and nothing else.
+              //
+              // The colour was worse. green >= 80 / amber >= 60 / red asserts that
+              // eighty per cent passing is a good result, and it is SEVERITY-BLIND:
+              // a category with sixteen passes and four CRITICAL failures rendered
+              // green while being on fire. The bar is now neutral and the failing
+              // count beside it carries the weight, because that column already
+              // links to the findings themselves.
+              const fill = 'var(--ink-faint)'
               return (
                 <tr key={d.category ?? 'uncategorised'} className="hover:bg-panel2">
                   <td className={TD}>

@@ -1141,7 +1141,7 @@ How it stays methodologically honest:
 - **Calibration is range-selection, not arithmetic on CVSS.** The worst open *prevention* finding selects a Resistance-Strength band; the scanner's existing `exposed`/`exploited` signals select the Contact-Frequency and Probability-of-Action bands. Logging/monitoring gaps aren't a scenario — they set a **dwell-time loss multiplier** (weak detection ⇒ longer dwell ⇒ larger loss, per FAIR-CAM).
 - **Correct aggregation.** The portfolio ALE is the element-wise Monte-Carlo sum of the independent per-scenario loss distributions — *never* a sum of percentiles.
 - **Report filters never move the number.** The quantification always runs on the **complete** finding set, so a display `--severity` filter can't change the dollar figure.
-- **Honest by construction.** Loss magnitudes are **modelled estimates** from public benchmarks (IBM Cost of a Data Breach, Verizon DBIR, ACFE, Sophos, GDPR enforcement) scaled to `--crq-revenue`/`--crq-industry`; the report says so, and the scenario input is exported alongside as `*.crq.json`.
+- **Honest by construction.** Loss magnitudes are **priced from figures you supply** in `crq_parameters.json`; without them **no currency total is presented as your exposure** — the shipped catalogue is calibrated to an illustrative $1bn manufacturer and printing its losses under your name would be a fabrication. The report says which components came from your answers and which went unpriced, and the scenario input is exported alongside as `*.crq.json`.
 
 The Monte-Carlo engine is **bundled** (`modules/crq_engine.py`, standard library only), so `--crq` produces an actual number on a plain checkout. It is deliberately **last** in the lookup order, so `--crq-engine`, the `CRQ_ENGINE` env var and a sibling [Cyber-Risk-Quantification](https://github.com/Krishcalin/Cyber-Risk-Quantification) checkout all still take precedence. If no engine resolves at all, the scanner still exports the `*.crq.json` scenario input so you can quantify it standalone — there is **no hard dependency** on the sibling repo.
 
@@ -1151,7 +1151,7 @@ The Monte-Carlo engine is **bundled** (`modules/crq_engine.py`, standard library
 |------|---------|
 | `--crq` | Enable FAIR quantification; write `<output>.crq.json` and embed the ALE + loss-exceedance curve in the HTML/PDF report |
 | `--crq-revenue` | Organization annual revenue (USD) for the loss scaling (default: illustrative $1B) |
-| `--crq-industry` | Industry for the loss multiplier (`financial_services`, `healthcare`, `technology`, `retail`, `manufacturing`, `government`, `energy`, `education`) |
+| `--crq-industry` | Industry **label** printed on the report. It scales nothing — there is no industry multiplier in the engine and there never has been (`financial_services`, `healthcare`, `technology`, `retail`, `manufacturing`, `government`, `energy`, `education`) |
 | `--crq-org-name` | Organization name shown in the report |
 | `--crq-sims` | Monte-Carlo iterations per scenario (default: 10000) |
 | `--crq-engine` | Explicit path to `crq_engine.py` (overrides auto-detect / `CRQ_ENGINE`) |

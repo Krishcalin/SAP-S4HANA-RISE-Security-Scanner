@@ -1473,7 +1473,7 @@ window.addEventListener('beforeprint', () => {{
     </div>
     <p class="fair-note">FAIR (Factor Analysis of Information Risk): a finding is not a risk &mdash; findings are evidence that shifts the frequency
       and magnitude factors of scoped SAP loss scenarios. Loss magnitudes are modelled estimates from public benchmarks (IBM, Verizon DBIR,
-      ACFE, Sophos, GDPR enforcement) scaled to the stated revenue/industry; validate against your own loss data before treating any figure as
+      ACFE, Sophos, GDPR enforcement) priced from the figures you supplied. The industry shown is a label and scales nothing. Validate against your own loss data before treating any figure as
       your organisation's actual risk. Scenario input exported alongside this report as <code>*.crq.json</code>.</p>
     {unrouted_html}
     {unevidenced_html}

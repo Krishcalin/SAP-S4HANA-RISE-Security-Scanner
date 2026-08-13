@@ -662,7 +662,14 @@ export interface TeamScore {
  *
  *  `pct_compliant` is measured over CHECKS THAT ACTUALLY RAN, not the whole
  *  catalogue — scoring against every check ever written would let a customer
- *  improve their score by supplying fewer exports. Null when nothing ran. */
+ *  improve their score by supplying fewer exports. Null when nothing ran.
+ *
+ *  IT IS A PASS RATE, NOT A COMPLIANCE SCORE, and the console must not present it
+ *  as one. It was rendered under a column headed "Compliant" with a green/amber/
+ *  red bar until it was noticed that the colour is severity-blind: sixteen passes
+ *  and four CRITICAL failures is eighty per cent and was drawn green. The name of
+ *  this field is now the only place the word "compliant" survives, and renaming
+ *  the column across the API would be a breaking change for one word. */
 export interface DomainScore {
   category: string | null
   checks_run: number

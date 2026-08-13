@@ -6,11 +6,11 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**363** check ids are written as literals in `modules/`, across **30** modules. A further **255** are built at runtime from shipped rule tables, giving **618** in total.
+**364** check ids are written as literals in `modules/`, across **30** modules. A further **255** are built at runtime from shipped rule tables, giving **619** in total.
 
 ## What this file does not claim
 
-**40 of the 363 titles and 15 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**40 of the 364 titles and 15 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -495,7 +495,7 @@ Category: RISE / BTP Security
 | `S4AUTHZ-007` | HIGH | Cloud Foundry privileged platform role over-assigned |
 | `S4AUTHZ-008` | MEDIUM | Birthright role collection auto-granted to all federated users |
 
-### `sap_hotnews` — 5 checks
+### `sap_hotnews` — 6 checks
 
 | Check | Severity | Title |
 |---|---|---|
@@ -504,6 +504,7 @@ Category: RISE / BTP Security
 | `HOTNEWS-002` | HIGH | Missing High-priority SAP Security Notes |
 | `HOTNEWS-003` | CRITICAL | Missing notes for actively-exploited SAP vulnerabilities |
 | `HOTNEWS-004` | HIGH | Critical SAP Notes only partially implemented |
+| `HOTNEWS-COVERAGE` | INFO | SAP note check ran against a curated subset, not the full patch history |
 
 ### `security_params` — 3 checks
 

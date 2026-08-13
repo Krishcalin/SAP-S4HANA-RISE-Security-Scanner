@@ -475,8 +475,8 @@ class PDFReportGenerator:
             "Annualized loss exposure from a FAIR (Factor Analysis of Information Risk) Monte Carlo "
             "simulation (%s iterations per scenario) for %s%s%s. Findings are not risks - they are "
             "evidence that shifts the frequency and magnitude factors of scoped SAP loss scenarios. "
-            "Loss magnitudes are modelled estimates from public benchmarks scaled to the stated "
-            "revenue/industry; validate before treating any figure as actual risk."
+            "Loss magnitudes are priced from the figures this organisation supplied; the industry "
+            "shown is a label and scales nothing. Validate before treating any figure as actual risk."
             % ("{:,}".format(fair.get("simulations", 0)), org.get("name", "the organization"),
                rev_txt, ("  ·  " + ind) if ind else ""),
             size=8.5, color=MUTED, leading=12, gap_after=14)

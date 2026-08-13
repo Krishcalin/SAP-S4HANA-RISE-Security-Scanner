@@ -217,9 +217,16 @@ class FAIREngine:
 
     def simulate_scenario(self, scenario: Dict[str, Any],
                           _findings: Optional[Sequence[Any]] = None,
-                          organization: Optional[Dict[str, Any]] = None
+                          _organization: Optional[Dict[str, Any]] = None
                           ) -> ScenarioResult:
         """Simulate one scenario.
+
+        `_organization` is accepted and ignored too, and the underscore now says
+        so. It was `organization` for months, which read as though the engine
+        scaled loss by revenue or industry. It never has: the name was the whole
+        of the evidence for an industry multiplier that does not exist, and the
+        catalogue, the HTML report, the PDF and the CLI help all described it.
+        Revenue scaling happens in `fair_adapter`, before the engine is called.
 
         `_findings` is accepted and ignored: calibration already happened in
         `fair_adapter.build_inputs`, which selected factor BANDS from the

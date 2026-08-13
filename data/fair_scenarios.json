@@ -5,7 +5,7 @@
     "fair_note": "A finding is not a risk. Findings are evidence that shifts a scenario's FAIR factors: prevention gaps -> frequency side (Resistance Strength / Contact Frequency / Probability of Action); detection & response gaps -> magnitude side (dwell-time cost). Factor ranges are SELECTED from qualitative signals (worst severity, exposed, exploited) - never computed by arithmetic on ordinal severities/CVSS.",
     "frequency_note": "Contact Frequency is the number of MEANINGFUL engagement opportunities per year for THIS scoped loss event (a capable adversary actually engaging this asset for this effect) - NOT raw probe/scan volume. CF x Probability-of-Action = Threat Event Frequency (attempts/yr); x Vulnerability = Loss Event Frequency (successful loss events/yr), which for a major compromise should land well under a few per year.",
     "currency": "USD",
-    "loss_ranges_are": "per single loss event (min / likely / max), before the engine's industry multiplier",
+    "loss_ranges_are": "per single loss event (min / likely / max). THERE IS NO INDUSTRY MULTIPLIER — this line used to claim one and the engine has never had one. Bands are scaled by the customer's revenue ratio ONLY when crq_parameters.json supplies figures; without them nothing is scaled and no currency total is presented.",
     "version": "1.1"
   },
 

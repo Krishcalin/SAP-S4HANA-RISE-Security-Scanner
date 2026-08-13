@@ -159,7 +159,7 @@ def main():
     parser.add_argument("--crq-revenue", type=float, default=None,
         help="Organization annual revenue (USD) for the FAIR analysis (default: illustrative $1B).")
     parser.add_argument("--crq-industry", default=None,
-        help="Industry for the FAIR loss multiplier (financial_services, healthcare, "
+        help="Industry LABEL for the FAIR report. It is printed and scales nothing — there is no industry multiplier in the engine and there never has been. One of: financial_services, healthcare, "
              "technology, retail, manufacturing, government, energy, education).")
     parser.add_argument("--crq-org-name", default=None, help="Organization name for the FAIR report.")
     parser.add_argument("--crq-inputs", default=None, metavar="FILE",

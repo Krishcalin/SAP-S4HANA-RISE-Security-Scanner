@@ -55,6 +55,18 @@ class SapHotNewsAuditor(BaseAuditor):
         "can be implemented", "undefined implementation state", "new", "downloaded",
     }
 
+    #: What this catalogue is, so the report can say it rather than imply
+    #: completeness. The discipline is borrowed from data/ecs_hardening_3250501.json,
+    #: which carries version/released/obtained — it existed in the repository and
+    #: was simply not applied here.
+    CATALOG_META = {
+        "curated_through": "2025-04",
+        "note": "A CURATED SUBSET of high-impact SAP HotNews and High notes, not "
+                "the full SAP Security Patch Day history. Absence of a finding "
+                "means none of the notes BELOW are missing — it is not a statement "
+                "that the estate is fully patched.",
+    }
+
     # Curated catalog of high-impact SAP HotNews / High Security Notes since 2020.
     # Fields: note, cve, cvss, priority ("HotNews"|"High"), component, released
     # ("YYYY-MM"), exploited (known in-the-wild / CISA KEV), title.
@@ -107,6 +119,13 @@ class SapHotNewsAuditor(BaseAuditor):
         # A note counts as "present" if it is fully addressed OR partially
         # implemented; partials are surfaced separately (they are not effective).
         present = applied | partial
+        # ALWAYS, BEFORE ANY RESULT. A clean HotNews section is the single most
+        # reassuring thing this product prints, and it was being printed off a
+        # curated subset whose newest entry predates the report by more than a
+        # year — with nothing anywhere saying so. "No missing notes from a list
+        # that stops in April 2025" and "you are patched" are different
+        # statements, and only the first one is ours to make.
+        self._report_catalogue_scope(catalog)
         self._report_missing(catalog, present, "HotNews", "HANDLED_HOTNEWS")
         self._report_missing(catalog, present, "High", "HANDLED_HIGH")
         # Exploited check uses fully-addressed only: a partial (incomplete) fix
@@ -231,6 +250,43 @@ class SapHotNewsAuditor(BaseAuditor):
         return f"{' / '.join(bits)}{tail}{title}"
 
     # -------------------------------------------------------------------- checks
+    def _report_catalogue_scope(self, catalog):
+        """Disclose what the note catalogue is and when it stops.
+
+        Emitted on EVERY run that has note data, whether or not anything is
+        missing, and it carries `degrades_coverage` so the release gate treats a
+        stale catalogue as a coverage problem rather than a clean bill.
+        """
+        meta = dict(self.CATALOG_META)
+        through = meta.get("curated_through", "unknown")
+        hotnews = sum(1 for e in catalog if e.get("priority") == "HotNews")
+        high = len(catalog) - hotnews
+        self.finding(
+            check_id="HOTNEWS-COVERAGE",
+            title="SAP note check ran against a curated subset, not the full patch history",
+            severity=self.SEVERITY_INFO,
+            category=self.CATEGORY,
+            description=(
+                f"This check compared the applied notes against {len(catalog)} "
+                f"curated entries ({hotnews} HotNews, {high} High), the newest "
+                f"released {through}. It is NOT the full SAP Security Patch Day "
+                f"history, and a clean result here means none of those {len(catalog)} "
+                f"is missing — not that the estate is fully patched. Notes released "
+                f"after {through}, and lower-priority notes at any date, were not "
+                f"assessed."),
+            affected_items=[f"catalogue of {len(catalog)} notes, curated through {through}"],
+            remediation=(
+                "Confirm patch status against SAP Support Portal / Maintenance "
+                "Planner for the periods this catalogue does not cover, and treat "
+                "this check as a floor rather than a clearance."),
+            references=["SAP Security Patch Day",
+                        "SAP Note 2871952 - Security Patch Day process"],
+            details={"catalogue_size": len(catalog),
+                     "curated_through": through,
+                     "hotnews": hotnews, "high": high,
+                     "degrades_coverage": True},
+        )
+
     def _report_missing(self, catalog, applied, priority, _cid):
         missing = [e for e in catalog
                    if e.get("priority") == priority and self._norm_note(e["note"]) not in applied]
