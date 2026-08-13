@@ -31,6 +31,9 @@ import type {
   CrqTrendPoint, Landscape,
 } from '../api/types'
 import { LossExceedance, RiskTrend } from '../components/CrqCharts'
+import {
+  UNPRICED_ACTION, UNPRICED_BODY, UNPRICED_HEADLINE, resultIsPriced,
+} from '../lib/pricing'
 import { useTitle } from '../lib/title'
 import { money } from './Risk'
 
@@ -169,10 +172,20 @@ export function CrqInputs() {
       <h1 className="text-[21px] font-semibold tracking-[-.01em] text-ink mb-1">
         Risk quantification
       </h1>
+      {/* THE PROMISE IS ONLY MADE WHEN IT IS BEING KEPT.
+          This sentence used to render unconditionally, and with no saved
+          revision the Recompute button below priced the catalogue's illustrative
+          $1bn manufacturer and showed the result directly beneath it. A claim
+          that the reader can see contradicted on the same screen is worse than
+          no claim. */}
       <p className="text-ink2 mb-5 max-w-[76ch]">
-        Open findings, priced in your currency using the FAIR model. Every figure
-        below is arithmetic on the numbers you supply — nothing here is a
-        benchmark, an industry average, or a number we invented.
+        {resultIsPriced(result)
+          ? 'Open findings, priced in your currency using the FAIR model. Every '
+            + 'figure below is arithmetic on the numbers you supply — nothing '
+            + 'here is a benchmark, an industry average, or a number we invented.'
+          : 'Answer as much of the question set below as you can, then Recompute. '
+            + 'Until you do, no currency figure is presented as this '
+            + 'organisation’s exposure.'}
       </p>
 
       {scapes && scapes.length > 1 && (
@@ -312,6 +325,39 @@ function Result({ result }: { result: CrqQuantifyResult }) {
   const p = result.portfolio
   const t = result.target_portfolio
   const priced = result.priced
+
+  // NO CUSTOMER FIGURES, NO CURRENCY TOTAL — the same rule the HTML and PDF
+  // reports obey. The components table below still renders, because "which of
+  // your exposures went unpriced" is exactly what this screen is for.
+  if (!resultIsPriced(result)) {
+    return (
+      <>
+        <h2 className={H2}>What this exposure is worth</h2>
+        <div className="banner banner-warn">
+          <strong>{UNPRICED_HEADLINE}</strong> {UNPRICED_BODY} {UNPRICED_ACTION}
+        </div>
+        <h2 className={H2}>What is still unpriced</h2>
+        <div className={TABLE_CARD}>
+          <table className="w-full border-collapse">
+            <thead>
+              <tr>
+                <th className={TH}>FAIR-MAM cost module</th>
+                <th className={TH}>What would price it</th>
+              </tr>
+            </thead>
+            <tbody>
+              {priced.unpriced.map((u) => (
+                <tr key={u.module} className="hover:bg-panel2">
+                  <td className={TD}>{u.module.replace(/_/g, ' ')}</td>
+                  <td className={`${TD} text-[12px] text-ink2`}>{u.needs}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </>
+    )
+  }
 
   return (
     <>

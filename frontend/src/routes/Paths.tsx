@@ -11,6 +11,7 @@ import { Link } from 'react-router'
 import { ApiError, paths } from '../api/client'
 import type { PathsOverview, RemediationOwner } from '../api/types'
 import { useTitle } from '../lib/title'
+import { UNPRICED_CELL } from '../lib/pricing'
 import { money } from './Risk'
 
 /**
@@ -237,7 +238,13 @@ function Body({ view }: { view: PathsOverview }) {
                 {/* The path ends at a currency figure. It is the SCENARIO's exposure,
                     not the path's own — a path is evidence that shifts a scenario,
                     never a loss in itself. */}
-                <td className={`${TD} text-right font-mono`}>{money(p.scenario_ale)}</td>
+                {/* An em dash, not $0. The exposure column carries the same figure the
+                    money guard governs elsewhere, and a path whose scenario was never
+                    priced has no exposure to show — which is not the same as an
+                    exposure of nothing. */}
+                <td className={`${TD} text-right font-mono`}>
+                  {p.scenario_ale ? money(p.scenario_ale) : UNPRICED_CELL}
+                </td>
                 <td className={`${TD} text-right font-mono text-[12px]`}>{p.finding_count}</td>
                 <td className={TD}><span className="pill st st-open">open</span></td>
               </tr>

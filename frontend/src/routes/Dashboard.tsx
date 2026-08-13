@@ -17,6 +17,7 @@ import { useTitle } from '../lib/title'
 // currency figure belongs to. A second copy here read identically today and
 // would drift from it and from the server on the first rounding change — which
 // is how a board pack and the dashboard beside it start disagreeing.
+import { isPriced } from '../lib/pricing'
 import { money } from './Risk'
 
 /**
@@ -145,7 +146,13 @@ export function Dashboard() {
         </div>
       </div>
 
-      {crq && crq.ale_p90 !== null && (
+      {/* isPriced GATES THIS, NOT JUST ale_p90 !== null.
+          A figure exists on every stored row; whether it was the CUSTOMER'S is a
+          different question, and the dashboard was answering the first while
+          appearing to answer the second. Unpriced, the pair is absent rather
+          than caveated — the same rule the reports obey, and a card nobody can
+          screenshot is the only caveat that survives being screenshotted. */}
+      {crq && crq.ale_p90 !== null && isPriced(crq) && (
         <div className={`${G2} mt-3.5`}>
           <div className={CARD}>
             <h3 className={CARD_TITLE}>Annualised loss exposure</h3>

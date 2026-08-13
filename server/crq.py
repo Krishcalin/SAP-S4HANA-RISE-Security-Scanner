@@ -409,6 +409,7 @@ def quantify_with_parameters(findings: List[Dict[str, Any]],
         from modules.fair_loss_model import build_loss_components
         return {"computed": False,
                 "reason": "no FAIR engine available",
+                "loss_model": {"applied": False},
                 "priced": build_loss_components(answers or {})}
 
     from modules.fair_loss_model import build_loss_components
@@ -425,6 +426,11 @@ def quantify_with_parameters(findings: List[Dict[str, Any]],
         # threaded out of the adapter because the adapter only needs the bands;
         # the screen needs the arithmetic in words.
         "priced": build_loss_components(answers or {}),
+        # THE WHOLE PROVENANCE, NOT JUST THE SCALE. The console had no way to ask
+        # "were these the customer's figures?" because only scale_factor was sent,
+        # and scale_factor is None both when nobody answered and when the customer
+        # happens to match the catalogue's revenue. `applied` is unambiguous.
+        "loss_model": summary.get("loss_model") or {"applied": False},
         "scale_factor": (summary.get("loss_model") or {}).get("scale_factor"),
         "simulations": simulations,
         "seed": seed,

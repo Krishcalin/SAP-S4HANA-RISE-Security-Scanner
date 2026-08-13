@@ -7,8 +7,14 @@
  */
 
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router'
 import { ApiError, risk } from '../api/client'
 import type { CrqScenario, RiskView } from '../api/types'
+import {
+  UNPRICED_ACTION, UNPRICED_BODY, UNPRICED_CELL, UNPRICED_HEADLINE,
+  isPriced,
+} from '../lib/pricing'
+import { RiskTrend } from '../components/CrqCharts'
 import { useTitle } from '../lib/title'
 
 /**
@@ -80,14 +86,10 @@ export function money(value: number | null | undefined): string {
   return `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
 }
 
-/** "08 Aug" — the axis label on the exposure series. `en-GB` for day-then-month,
- *  matching the template's `%d %b`. */
-function shortDate(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return '—'
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
-}
 
+const TABLE_CARD = 'rounded-lg border border-line bg-panel overflow-x-auto'
+const EMPTY = 'p-9 text-center text-ink2'
+const LINK = 'text-accent hover:underline'
 const CARD = 'rounded-lg border border-line bg-panel p-4'
 const CARD_H3 = 'text-[12px] font-semibold uppercase tracking-[.06em] text-ink3 mb-3'
 const KPI = 'text-[30px] font-semibold tracking-[-.02em] leading-[1.1]'
@@ -165,6 +167,54 @@ function Body({ view }: { view: RiskView }) {
   const target = obj(d.target_portfolio)
   const simulations = num(d.simulations)
   const exposureWeight = num(d.exposure_weight)
+
+  // NO CUSTOMER FIGURES, NO CURRENCY TOTAL. The same rule the HTML and PDF
+  // reports have obeyed since the report split was closed, and which this screen
+  // — the one whose whole purpose is the money — did not.
+  //
+  // Every stored row written before loss_model existed lands here, and that is
+  // correct: "we have no record of where this number came from" is not "it was
+  // the customer's". The routing and the scenario table below still render,
+  // because those are driven by findings and are real.
+  if (!isPriced(crq)) {
+    return (
+      <>
+        <div className="banner banner-warn">
+          <strong className="font-[650]">{UNPRICED_HEADLINE}</strong>{' '}
+          {UNPRICED_BODY}{' '}
+          <Link className={LINK} to="/crq">{UNPRICED_ACTION}</Link>
+        </div>
+        <h2 className={H2}>Scenarios matched to your findings</h2>
+        <p className="text-[12px] text-ink2 mb-2.5 max-w-[76ch]">
+          Scenario matching is real and independent of the money: it is driven by
+          your findings. Only the loss magnitude is unpriced.
+        </p>
+        <div className={TABLE_CARD}>
+          <table className="w-full border-collapse">
+            <thead>
+              <tr>
+                <th className={TH}>Scenario</th>
+                <th className={`${TH} text-right`}>Findings routed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {view.scenarios.map((s) => (
+                <tr key={s.id} className="hover:bg-panel2">
+                  <td className={TD}>{s.scenario_id ?? s.id}</td>
+                  <td className={`${TD} text-right font-mono`}>
+                    {s.input_finding_count ?? UNPRICED_CELL}
+                  </td>
+                </tr>
+              ))}
+              {view.scenarios.length === 0 && (
+                <tr><td className={EMPTY} colSpan={2}>No scenarios matched.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </>
+    )
+  }
 
   return (
     <>
@@ -250,7 +300,14 @@ function Body({ view }: { view: RiskView }) {
         </table>
       </div>
 
-      <ExposureSeries view={view} />
+      {/* THE SHARED TREND, NOT THIS SCREEN'S OWN.
+          ExposureSeries drew one continuous polyline through every run. Risk
+          moves for reasons that are not remediation — a revised revenue figure,
+          a changed simulation count, a dropped export that made checks self-skip
+          — and a line drawn straight through such a change asserts the two ends
+          are comparable. RiskTrend breaks the series wherever inputs_fingerprint
+          changes, which is the guard that existed on /crq and nowhere else. */}
+      <RiskTrend points={view.trend} />
 
       {organization !== null && (
         <>
@@ -269,7 +326,15 @@ function Body({ view }: { view: RiskView }) {
               ))}
               {exposureWeight !== null && (
                 <div className="contents">
-                  <dt className="text-ink3 text-[12px]">system criticality weight</dt>
+                  {/* RECORDED, NEVER APPLIED. server/ingest.py calls
+                      compute_and_store WITHOUT revenue=, so the weight is
+                      computed, stored, and multiplies nothing. It is kept
+                      because removing it would erase the audit trail of a
+                      number earlier versions displayed as a model input — but
+                      it is no longer labelled as one. */}
+                  <dt className="text-ink3 text-[12px]">
+                    system criticality weight <span className="text-ink3">(recorded, not applied)</span>
+                  </dt>
                   <dd className="m-0 font-mono text-[12px]">
                     {exposureWeight}{' '}
                     <span className="text-ink3">
@@ -307,42 +372,3 @@ function ScenarioRow({ s }: { s: CrqScenario }) {
   )
 }
 
-/**
- * Exposure per completed scan.
- *
- * Bars, not a line, and no chart library: the series is a handful of points and a
- * charting dependency for it would be the largest thing in the bundle. The only
- * arithmetic is `height = 110 * value / max`, which is a pixel scale — the figure
- * printed above every bar is the API's own, unrounded and unsummed.
- *
- * Hidden below two points, exactly as the template does: one bar is not a trend,
- * and drawing it as one invites a reading the data does not support.
- */
-function ExposureSeries({ view }: { view: RiskView }) {
-  if (view.trend.length <= 1) return null
-  const max = Math.max(...view.trend.map((t) => t.ale_p90 ?? 0))
-
-  return (
-    <>
-      <h2 className={H2}>Exposure over time</h2>
-      <div className={CARD}>
-        <div className="flex items-end gap-2 h-[150px] py-2 overflow-x-auto">
-          {view.trend.map((t) => (
-            <div key={t.run_id}
-                 className="flex flex-col items-center gap-1 min-w-[60px]">
-              <span className="text-[12px] font-mono text-ink3">{money(t.ale_p90)}</span>
-              <div className="w-[30px] rounded-t-[3px] bg-accent"
-                   style={{ height: max ? `${Math.round(110 * (t.ale_p90 ?? 0) / max)}px` : '2px' }}
-                   title={`run #${t.run_id}`} />
-              <span className="text-[10px] text-ink3">{shortDate(t.started_at)}</span>
-            </div>
-          ))}
-        </div>
-        <p className="text-[12px] text-ink3 mt-1.5 mb-0">
-          Annualised loss exposure at P90 per completed scan. This is the figure that
-          should fall as findings close — and the one to show a board.
-        </p>
-      </div>
-    </>
-  )
-}

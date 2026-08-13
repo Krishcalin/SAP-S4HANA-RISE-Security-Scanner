@@ -935,6 +935,11 @@ export interface CrqQuantifyResult {
   finding_count: number
   unrouted: number
   model_version?: number
+  /** Whether the loss figures were the CUSTOMER'S. Absent or false means the
+   *  shipped illustrative catalogue was used, and no currency total may be
+   *  presented as this organisation's exposure — see lib/pricing.ts. */
+  loss_model?: { applied?: boolean; priced_modules?: string[]
+                 unpriced?: string[]; scale_factor?: number | null } | null
   /** What produced this figure. modules/fair_provenance.py. */
   provenance?: {
     catalogue: { path: string; version: string | null; currency: string | null
