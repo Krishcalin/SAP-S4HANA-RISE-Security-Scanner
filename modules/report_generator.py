@@ -143,6 +143,7 @@ class ReportGenerator:
             risk_label, risk_color = "Low", "#16a34a"
 
         findings_html = self._render_findings()
+        domains_html = self._render_domains()
         coverage_html = self._render_coverage()
         compliance_html = self._render_compliance()
         fair_html = self._render_fair()
@@ -1022,6 +1023,12 @@ class ReportGenerator:
     </div>
   </div>
 
+  <!-- The twelve security domains — the buyer's own vocabulary, placed directly
+       after the raw category breakdown it re-expresses. Rendered bare, like the
+       sections below it: an empty wrapper div left behind when the section
+       returns "" would print as a stray rule across the page. -->
+  {domains_html}
+
   <!-- Compliance / Control-Framework Mapping -->
   {coverage_html}
     {csf_html}
@@ -1631,6 +1638,123 @@ window.addEventListener('beforeprint', () => {{
       not a clean result &mdash; it is an unexamined one. Every check that needed an export you
       did not supply self-skipped silently, so the sections above describe the part of the
       estate this scan could see. Supply the missing sources and re-run to widen it.</p>
+"""
+
+    def _render_domains(self) -> str:
+        """The twelve security domains, in the vocabulary the buyer arrived with.
+
+        THE SAME MODULE THE CONSOLE USES. modules/domains.py is stdlib-only and
+        imports nothing from server/ for exactly this reason: a report and a
+        screen that sort the same findings by two copies of the same rules will
+        eventually disagree, and the reader who notices will be the one holding
+        both in a meeting.
+
+        REACH AND STATE ARE BOTH PRINTED, and the distinction matters more on
+        paper than on screen — a printed page is passed to somebody who cannot
+        hover, click through, or ask. A domain this product does not do prints an
+        em dash and its reason, never a zero; a runtime domain prints the count
+        with the sentence that says what the count is and is not.
+        """
+        if not self.findings:
+            return ""
+        try:
+            from modules import domains
+        except Exception:                                # noqa: BLE001
+            return ""
+        rolled = domains.roll_up(self.findings, coverage=self.coverage)
+        tot = rolled["totals"]
+
+        reach_word = {domains.FULL: "fully assessed",
+                      domains.PARTIAL: "partly assessed",
+                      domains.CONFIG_ONLY: "configuration only",
+                      domains.NONE: "not covered"}
+        state_word = {domains.ASSESSED: ("dom-found", "findings"),
+                      domains.CLEAR: ("dom-clear", "no findings"),
+                      domains.NOT_SUPPLIED: ("dom-na", "export not supplied"),
+                      domains.NOT_ASSESSED: ("dom-na", "not assessed")}
+
+        cards = []
+        for d in rolled["domains"]:
+            covered = d["reach"] != domains.NONE
+            crit = d["counts"].get("CRITICAL", 0)
+            cls, text = state_word[d["state"]]
+            cards.append(
+                '<div class="dom-card dom-' + d["reach"] + '">'
+                '<div class="dom-name">' + html.escape(d["label"]) + "</div>"
+                '<div class="dom-big">' + (str(d["total"]) if covered else "&mdash;")
+                + ("" if not (covered and crit)
+                   else '<span class="dom-crit">' + str(crit) + " critical</span>")
+                + "</div>"
+                '<div class="dom-reach">' + reach_word[d["reach"]] + "</div>"
+                '<div class="dom-state ' + cls + '">' + text + "</div></div>")
+        cards_html = "".join(cards)
+
+        rows = []
+        for d in rolled["domains"]:
+            covered = d["reach"] != domains.NONE
+            # The qualifier, verbatim. A domain with a limit and no sentence
+            # explaining it is the tile that overclaims, and this table is where
+            # a reader who wants the caveat goes looking for it.
+            note = d.get("scope") or d.get("blurb") or ""
+            rows.append(
+                "<tr><td>" + html.escape(d["label"]) + "</td>"
+                '<td class="dom-reach-cell">' + reach_word[d["reach"]] + "</td>"
+                '<td class="num">' + (str(d["total"]) if covered else "&mdash;")
+                + "</td>"
+                '<td class="dom-why">' + html.escape(note) + "</td></tr>")
+        rows_html = "".join(rows)
+
+        unplaced = rolled["unplaced"]
+        if unplaced["total"]:
+            items = "".join(
+                "<tr><td>" + html.escape(name) + '</td><td class="num">' + str(n)
+                + '</td><td class="dom-why">'
+                + html.escape(unplaced["reasons"].get(name, "")) + "</td></tr>"
+                for name, n in unplaced["counts"].items())
+            unplaced_html = (
+                "<h3>Findings these twelve domains have no word for</h3>"
+                '<table class="fw-table"><thead><tr><th>Category</th>'
+                '<th class="num">Findings</th><th>Why it sits outside</th></tr>'
+                "</thead><tbody>" + items + "</tbody></table>"
+                '<p class="fair-note">' + html.escape(unplaced["note"]) + "</p>")
+        else:
+            unplaced_html = ""
+
+        return f"""
+    <style>
+      .dom-cards {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr)); gap:.7rem; margin:.8rem 0 1.2rem; }}
+      .dom-card {{ border:1px solid var(--border); border-left-width:4px; border-radius:8px; padding:.7rem .8rem; }}
+      .dom-full {{ border-left-color:#16a34a; }} .dom-partial {{ border-left-color:#0369a1; }}
+      .dom-config_only {{ border-left-color:#7c3aed; }}
+      .dom-none {{ border-left-color:var(--text-muted); border-left-style:dashed; }}
+      .dom-name {{ font-weight:600; font-size:.8rem; line-height:1.3; min-height:2.1em; }}
+      .dom-big {{ font-size:1.5rem; font-weight:700; margin-top:.3rem; }}
+      .dom-crit {{ font-size:.66rem; font-weight:600; color:var(--critical); margin-left:.4rem; }}
+      .dom-reach {{ font-size:.62rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin-top:.15rem; }}
+      .dom-state {{ display:inline-block; font-size:.66rem; font-weight:700; padding:.1rem .4rem; border-radius:4px; margin-top:.4rem; white-space:nowrap; }}
+      .dom-found {{ color:var(--text-muted); border:1px solid var(--border); }}
+      .dom-clear {{ color:#15803d; background:rgba(34,197,94,.13); }}
+      .dom-na {{ color:var(--text-muted); border:1px dashed var(--border); }}
+      .dom-reach-cell {{ font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); white-space:nowrap; }}
+      .dom-why {{ font-size:.7rem; color:var(--text-muted); }}
+    </style>
+    <h2>The twelve security domains</h2>
+    <div class="fair-sub">Your findings in the vocabulary an SAP security buyer already uses.
+      Each domain carries two facts that are easy to confuse and are not the same: what this
+      product can EVER see there, and what this scan found. {tot['placed']} of {tot['findings']}
+      findings are placed across {tot['assessable']} assessable domains, each counted once.</div>
+    <div class="dom-cards">{cards_html}</div>
+    <table class="fw-table">
+      <thead><tr><th>Domain</th><th>What we can see</th><th class="num">Findings</th><th>Scope</th></tr></thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+    {unplaced_html}
+    <p class="fair-note">This is a point-in-time configuration assessment. Where a domain names a
+      continuous activity &mdash; event monitoring, interface traffic, user behaviour &mdash; what
+      we contribute is an assessment of the configuration behind it, and the scope column says so
+      for each. A domain marked <em>not covered</em> shows a dash rather than a zero: it is a
+      boundary of this product, not a statement about your estate. There is no score and no
+      percentage here, for the same reason there is none anywhere else in this report.</p>
 """
 
     def _render_csf(self) -> str:

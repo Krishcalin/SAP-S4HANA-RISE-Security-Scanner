@@ -207,6 +207,7 @@ class PPTXReportGenerator:
         self._slide_exec()
         self._slide_priority()
         self._slide_categories()
+        self._slide_domains()
         self._slide_actions()
         # compliance mapping
         self._slide_compliance()
@@ -409,6 +410,67 @@ class PPTXReportGenerator:
             y += rh
         s.text(Inches(0.6), y + Inches(0.15), W - Inches(1.2), Inches(0.4),
                [_p("Top 8 of %d finding categories shown." % len(self.by_cat), 10, i=True, color=MUTED)])
+        self._footer(s)
+
+    def _slide_domains(self):
+        """The twelve domains, in the vocabulary the audience arrived with.
+
+        DIRECTLY AFTER "Findings by Area", because it answers the question that
+        slide provokes: a reader looking at "Network & Integration Layer: 32"
+        wants to know which of the twelve things on their checklist that is.
+
+        WHAT THIS SLIDE MUST NOT BECOME. Twelve numbers on a projector assert
+        twelve capabilities, and a deck is read further from its author than any
+        other artefact we produce — nobody in the room can hover over a tile. So
+        every line carries the reach word beside the count, the domain we do not
+        do carries a dash instead of a zero, and the sentence at the foot says
+        plainly that this is configuration rather than monitoring. A slide is
+        exactly where that qualifier gets dropped for space, so it is the one
+        thing here with a fixed position.
+        """
+        try:
+            from modules import domains
+        except Exception:                                # noqa: BLE001
+            return
+        rolled = domains.roll_up(self.findings, coverage=self.coverage)
+        reach_word = {domains.FULL: "fully assessed",
+                      domains.PARTIAL: "partly assessed",
+                      domains.CONFIG_ONLY: "configuration only",
+                      domains.NONE: "not covered"}
+
+        s = self._new()
+        W = self.w.W
+        self._heading(s, "Coverage in your words", "The Twelve Security Domains")
+
+        rows = rolled["domains"]
+        half = (len(rows) + 1) // 2
+        col_w = (W - Inches(1.2) - Inches(0.4)) / 2
+        for col, group in enumerate((rows[:half], rows[half:])):
+            x = Inches(0.6) + col * (col_w + Inches(0.4))
+            y = Inches(1.8)
+            for d in group:
+                covered = d["reach"] != domains.NONE
+                s.text(x, y, col_w - Inches(0.9), Inches(0.3),
+                       [_p(d["label"], 11, b=True, color=INK)])
+                s.text(x + col_w - Inches(0.9), y - Inches(0.02), Inches(0.85),
+                       Inches(0.3),
+                       [_p(str(d["total"]) if covered else "—", 13, b=True,
+                           color=INK if covered else MUTED, align="r")])
+                s.text(x, y + Inches(0.24), col_w - Inches(0.9), Inches(0.26),
+                       [_p(reach_word[d["reach"]], 8, color=MUTED)])
+                y += Inches(0.52)
+
+        note = ("Two facts per domain: the count is what this scan found, the "
+                "line beneath it is what this product can ever see there. Where a "
+                "domain names a continuous activity — event monitoring, interface "
+                "traffic, user behaviour — what we contribute is an assessment of "
+                "the configuration behind it. A dash is a boundary of this "
+                "product, not a clean result about your estate.")
+        if rolled["unplaced"]["total"]:
+            note += (" %d findings sit outside this vocabulary and are reported "
+                     "separately rather than dropped." % rolled["unplaced"]["total"])
+        s.text(Inches(0.6), Inches(4.95), W - Inches(1.2), Inches(1.0),
+               [_p(note, 9, color=SUB)])
         self._footer(s)
 
     def _slide_coverage(self):

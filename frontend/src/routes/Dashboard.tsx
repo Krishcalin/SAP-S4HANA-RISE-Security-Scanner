@@ -8,9 +8,10 @@
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { ApiError, csf, dashboard } from '../api/client'
+import { ApiError, csf, dashboard, domains } from '../api/client'
 import type {
-  CsfView, Dashboard as DashboardData, RemediationOwner, ScanRun, Severity,
+  CsfView, Dashboard as DashboardData, DomainsView, RemediationOwner, ScanRun,
+  SecurityDomain, Severity,
 } from '../api/types'
 import { useTitle } from '../lib/title'
 // The ONE transcription of server/app.py `_money`, exported from the screen the
@@ -40,6 +41,7 @@ export function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [error, setError] = useState('')
   const [csfView, setCsfView] = useState<CsfView | null>(null)
+  const [domainView, setDomainView] = useState<DomainsView | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -60,6 +62,18 @@ export function Dashboard() {
     csf()
       .then((v) => { if (!cancelled) setCsfView(v) })
       .catch(() => { /* strip stays hidden; see above */ })
+    return () => { cancelled = true }
+  }, [])
+
+  // The twelve domains, on the same terms as the CSF strip above: its own
+  // request, its own swallowed failure, and nothing rendered at all if it does
+  // not arrive. Twelve empty tiles would read as "nothing wrong in any domain",
+  // which is the one sentence modules/domains.py exists to prevent us saying.
+  useEffect(() => {
+    let cancelled = false
+    domains()
+      .then((v) => { if (!cancelled) setDomainView(v) })
+      .catch(() => { /* strip stays hidden */ })
     return () => { cancelled = true }
   }, [])
 
@@ -239,6 +253,49 @@ export function Dashboard() {
         </div>
       </div>
 
+      {/* THE TWELVE DOMAINS — the buyer's own vocabulary, above the framework
+          view, because it is the one a reader can match against the checklist in
+          their hand without translating anything first.
+
+          Two facts per tile, drawn differently on purpose: the count is what THIS
+          run found, and the rail down the edge is what this product can EVER see
+          in that domain. The domain we do not cover shows an em dash and is not a
+          link — a zero there would be a claim about the customer's estate, and
+          what we actually mean is a boundary of ours. */}
+      {domainView && (
+        <>
+          <h2 className={H2}>
+            Security domains
+            <Link className="ml-2.5 text-[12px] font-normal text-accent hover:underline"
+                  to="/domains">
+              All twelve, and what we see in each →
+            </Link>
+          </h2>
+          <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(166px,1fr))]">
+            {domainView.domains.map((d) => <DomainChip key={d.id} d={d} />)}
+          </div>
+          <p className="text-[12px] text-ink3 mt-2.5 max-w-[84ch]">
+            {domainView.totals.placed} of {domainView.totals.findings} open findings,
+            each counted once.{' '}
+            {reachCount(domainView, 'full')} of these domains are assessed in full,{' '}
+            {reachCount(domainView, 'partial')} in part,{' '}
+            {reachCount(domainView, 'config_only')} are continuous activities where
+            what we contribute is checking the configuration behind them, and{' '}
+            {reachCount(domainView, 'none')} we do not do at all. Each tile says
+            which it is.
+            {domainView.unplaced.total > 0 && (
+              <> {domainView.unplaced.total} finding
+                {domainView.unplaced.total === 1 ? '' : 's'} sit outside this
+                vocabulary entirely and{' '}
+                <Link className="text-accent hover:underline" to="/domains">
+                  are listed rather than dropped
+                </Link>.
+              </>
+            )}
+          </p>
+        </>
+      )}
+
       {/* NIST CSF 2.0 — the signal that these findings sit inside a framework a
           reader already trusts. Six tiles, one per Function, each a link into
           /csf/<function>. It is guarded on `csfView` for the reason the CRQ pair
@@ -375,6 +432,61 @@ export function Dashboard() {
       </div>
     </>
   )
+}
+
+/**
+ * One domain, at dashboard size.
+ *
+ * The count is deliberately NOT the biggest thing on the tile — twelve large
+ * numbers in a row invite comparison between domains that measure different
+ * things, and "Baselining 190 vs Patch 7" says nothing about which matters more.
+ * The reach rail and its word carry equal weight, because a reader who takes
+ * "44" under Security Event Monitoring for a monitoring result has been misled
+ * by us rather than by the number.
+ */
+function DomainChip({ d }: { d: SecurityDomain }) {
+  const covered = d.reach !== 'none'
+  const inner = (
+    <>
+      <div className="text-[12px] font-semibold text-ink leading-snug min-h-[2.4em]">
+        {d.label}
+      </div>
+      <div className="flex items-baseline gap-1.5 mt-1.5">
+        {covered
+          ? <span className="text-[22px] font-semibold tracking-[-.02em] leading-none">
+              {d.total}
+            </span>
+          : <span className="text-[22px] font-semibold leading-none text-ink3">&mdash;</span>}
+        {covered && (d.counts.CRITICAL ?? 0) > 0 && (
+          <span className="text-[11px] text-crit">{d.counts.CRITICAL} crit</span>
+        )}
+      </div>
+      <div className="dom-reach mt-1.5">{DOMAIN_REACH[d.reach] ?? d.reach}</div>
+    </>
+  )
+  const cls = `rounded-lg border border-line bg-panel p-3 dom-rail dom-rail-${d.reach}`
+  // Not a link when there is nothing behind it: a dead-end click reads as a
+  // broken screen rather than as an honest boundary.
+  if (!covered) return <div className={cls}>{inner}</div>
+  return (
+    <Link to={`/domains/${d.id}`} className={`${cls} block no-underline hover:bg-panel2`}>
+      {inner}
+    </Link>
+  )
+}
+
+const DOMAIN_REACH: Record<string, string> = {
+  full: 'fully assessed',
+  partial: 'partly assessed',
+  config_only: 'configuration only',
+  none: 'not covered',
+}
+
+/** Counted from the answer rather than written into the prose: "four of these are
+ *  configuration-only" is a sentence that goes stale the day a domain's reach is
+ *  revised, and nothing would fail when it did. */
+function reachCount(v: DomainsView, reach: string): number {
+  return v.domains.filter((d) => d.reach === reach).length
 }
 
 // ── the template's classes, as Tailwind ──────────────────────────────────────

@@ -231,12 +231,52 @@ def recent_runs(scope: Optional[Sequence[int]], limit: int = 10) -> List[Dict[st
 #  Findings                                                                   #
 # --------------------------------------------------------------------------- #
 
+def _domain_clause(where: List[str], params: List[Any], domain_id: str) -> None:
+    """Filter the queue to one of the twelve security domains.
+
+    THE RULES ARE NOT WRITTEN AGAIN HERE. modules/domains.py emits them from the
+    same table `domain_for` reads, and this function only compiles them — so a
+    prefix added to the taxonomy reaches the SQL without anyone remembering to
+    come here. Writing the membership rules a second time in SQL is precisely how
+    a filter and the tile above it start disagreeing about the same number.
+
+    `starts_with()` rather than LIKE: a prefix is data, and LIKE would give the
+    `%` and `_` in it a meaning nobody intended. The prefixes contain neither
+    today, which is exactly the kind of thing that stops being true quietly.
+    """
+    from modules import domains
+
+    terms = domains.match_terms(domain_id)
+    if not terms:
+        # A domain nothing can ever be in. The API refuses this before it gets
+        # here; a direct caller gets an empty result rather than the whole queue,
+        # because silently ignoring a filter shows more than was asked for.
+        where.append("false")
+        return
+    clauses: List[str] = []
+    for term in terms:
+        parts = ["cd.category = %s"]
+        params.append(term["category"])
+        include = term.get("starts_with") or ()
+        if include:
+            parts.append("(" + " OR ".join(
+                ["starts_with(f.check_id, %s)"] * len(include)) + ")")
+            params.extend(include)
+        exclude = term.get("not_starts_with") or ()
+        if exclude:
+            parts.append("NOT (" + " OR ".join(
+                ["starts_with(f.check_id, %s)"] * len(exclude)) + ")")
+            params.extend(exclude)
+        clauses.append("(" + " AND ".join(parts) + ")")
+    where.append("(" + " OR ".join(clauses) + ")")
+
+
 def list_findings(scope: Optional[Sequence[int]], system_id: Optional[int] = None,
                   state: Optional[str] = None, severity: Optional[str] = None,
                   team: Optional[str] = None, remediation_owner: Optional[str] = None,
                   tier: Optional[str] = None, category: Optional[str] = None,
                   assignee: Optional[str] = None, overdue: bool = False,
-                  page: int = 1) -> Dict[str, Any]:
+                  domain: Optional[str] = None, page: int = 1) -> Dict[str, Any]:
     where: List[str] = []
     params: List[Any] = []
     _scoped(where, params, scope)
@@ -261,6 +301,8 @@ def list_findings(scope: Optional[Sequence[int]], system_id: Optional[int] = Non
         where.append("f.assignee = %s"); params.append(assignee)
     if overdue:
         where.append("f.due_date IS NOT NULL AND f.due_date < CURRENT_DATE")
+    if domain:
+        _domain_clause(where, params, domain)
 
     w = " AND ".join(where)
     total = db.one(

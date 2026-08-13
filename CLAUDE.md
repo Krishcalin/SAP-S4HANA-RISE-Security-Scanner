@@ -416,7 +416,22 @@ target's current one. The audit log records the event and never the value.
 - **Report-side helpers (not auditors):** `risk_prioritizer.py` (P1–P4 tiering),
   `compliance_mapping.py` (category → framework controls), `pdf_writer.py` / `pptx_writer.py`
   (stdlib PDF / OOXML engines). Keep these in sync when a new **category** is introduced — add
-  it to `compliance_mapping.CATEGORY_THEMES` so its findings map to controls.
+  it to `compliance_mapping.CATEGORY_THEMES` so its findings map to controls, **and give it a
+  home in `modules/domains.py`** (a domain, or `UNPLACED_CATEGORIES` with the reason).
+  `tests/test_domains.py` fails on a category with neither.
+- **`modules/domains.py`** — the twelve buyer-facing security domains, used by the console
+  (`/domains`), the `?domain=` queue filter, the HTML report and the PPTX deck. **Two axes,
+  and they must not be collapsed:** `reach` is what the product can *ever* see in a domain
+  (author-time, same for every customer) and `state` is what a run produced. Merging them
+  cannot express a configuration-only domain that came back clean, which is a real and
+  sellable observation. One hard constraint, applied before any count is read: `reach == NONE`
+  ⇒ `state == NOT_ASSESSED`, so *Exploit and 0-Day Protection* can never print a zero.
+  Membership is a strict **partition** — one finding, one domain — and three categories are
+  split by check-id prefix, each with a `prefix_default` so an unmatched id cannot fall out of
+  the taxonomy silently (three did). The routing rules are emitted once by `match_terms()` and
+  compiled to SQL by `server/queries._domain_clause`; never write them a second time in SQL.
+  ⚠️ *Custom Code Security* is deliberately **not** called "Code Vulnerability Analyzer" —
+  that is SAP's own name for a separately licensed product.
 - **`modules/fair_adapter.py` + `data/fair_scenarios.json`** — optional FAIR cyber-risk
   quantification (`--crq`). The adapter maps findings onto **5 scoped SAP loss scenarios**,
   calibrates the FAIR factor ranges, emits the sibling CRQ engine's scenario JSON, and (if
@@ -711,10 +726,16 @@ Two edges worth knowing before you trust an exit code:
    references (SAP Note / CIS SAP / DSAG / SAP Security Baseline).
    **Pass `affected_objects` and `scope` on every finding** — names taken from the data, never
    invented; omit the object rather than fabricating a placeholder when a row lacks the field.
-   `server/coverage.py` derives your module's data sources by scanning for
-   `self.data.get("…")`, so the coverage manifest picks the module up automatically.
+   `modules/coverage.py` derives your module's data sources by scanning for
+   `self.data.get("…")`, and its finding **categories** the same way (literal
+   `category="…"` plus a `CATEGORY` class attribute), so both the coverage manifest and the
+   domain roll-up pick the module up automatically.
 2. **`sap_scanner.py`** — add the import, add the module key to the `--modules` `choices`
    list, add it to the `"all"` expansion list, and add an `if "<key>" in run_modules:` run block.
+   **Add the key to `coverage.CLI_MODULE_ALIASES` too.** The CLI's short names and the
+   manifest's module names are two vocabularies; `tests/test_coverage_cli_names.py` re-derives
+   the mapping from this dispatch and fails if they part. They parted once and every offline
+   report stamped all thirty modules `not_run` while carrying hundreds of their findings.
    **If any check of yours is deployment-mode dependent, pass `run_ctx` in the constructor** —
    most auditors are not given it, and a module that reasons about ECS without receiving the
    mode silently applies on-premise rules to a RISE system.

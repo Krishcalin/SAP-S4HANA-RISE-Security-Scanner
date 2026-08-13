@@ -9,11 +9,12 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import {
-  ApiError, assignFinding, bulkSetState, findings, saveView, systems, views,
+  ApiError, assignFinding, bulkSetState, domains as fetchDomains, findings,
+  saveView, systems, views,
 } from '../api/client'
 import type {
   BulkTransitionResult, FindingFilters, FindingPage, FindingState, PriorityTier,
-  RemediationOwner, SapSystem, SavedView, Severity,
+  RemediationOwner, SapSystem, SavedView, SecurityDomain, Severity,
 } from '../api/types'
 import { useSession } from '../lib/session'
 import { useTitle } from '../lib/title'
@@ -54,6 +55,7 @@ export function Findings() {
   const [sapSystems, setSapSystems] = useState<SapSystem[]>([])
   const [saved, setSaved] = useState<SavedView[]>([])
   const [selected, setSelected] = useState<number[]>([])
+  const [domainList, setDomainList] = useState<SecurityDomain[]>([])
 
   // The queue re-reads on any change to the query string, which is the whole of
   // its input. Selection is dropped with it: a checkbox for a row that is no
@@ -74,10 +76,21 @@ export function Findings() {
 
   // The filter vocabulary and the saved views are fetched once. A failure of
   // either leaves the queue itself usable, so neither raises a banner over it.
+  //
+  // The domain list comes from the SERVER's taxonomy rather than a constant here:
+  // a hard-coded twelve would keep offering a domain the server had renamed, or
+  // miss a thirteenth. The one domain this product does not assess is dropped —
+  // the server refuses to filter by it, and an option that can only produce an
+  // error is not a filter.
   useEffect(() => {
     let cancelled = false
     systems().then((s) => { if (!cancelled) setSapSystems(s) }).catch(() => {})
     views('findings').then((v) => { if (!cancelled) setSaved(v) }).catch(() => {})
+    fetchDomains()
+      .then((v) => {
+        if (!cancelled) setDomainList(v.domains.filter((d) => d.reach !== 'none'))
+      })
+      .catch(() => {})
     return () => { cancelled = true }
   }, [])
 
@@ -99,6 +112,7 @@ export function Findings() {
 
   const rows = page?.findings ?? []
   const allSelected = rows.length > 0 && selected.length === rows.length
+  const selectedDomain = domainList.find((d) => d.id === params.get('domain'))
 
   return (
     <>
@@ -127,6 +141,15 @@ export function Findings() {
       )}
 
       <div className="flex gap-2 flex-wrap items-center mb-3.5">
+        {/* First, because it is the widest cut and the one a reader arriving from
+            a domain tile is already thinking in. It is absent until the list
+            loads rather than rendered empty: a select offering only "Any domain"
+            looks like a product with no domains. */}
+        {domainList.length > 0 && (
+          <Select value={params.get('domain') ?? ''}
+                  onChange={(v) => setFilter('domain', v)} blank="Any domain"
+                  options={domainList.map((d) => [d.id, d.label])} />
+        )}
         <Select value={params.get('tier') ?? ''} onChange={(v) => setFilter('tier', v)}
                 blank="Any priority" options={TIERS.map((t) => [t, t])} />
         <Select value={params.get('system_id') ?? ''}
@@ -177,6 +200,18 @@ export function Findings() {
             </span>
           )}
         </div>
+      )}
+
+      {/* THE DOMAIN'S LIMIT TRAVELS WITH THE FILTER. A queue narrowed to
+          "Interface Traffic Monitoring" is one screen a reader can reach without
+          ever passing the tile that says we do not see traffic — and a filtered
+          queue is the thing people send each other, so it arrives with no
+          context at all. The qualifier is repeated here rather than assumed. */}
+      {selectedDomain?.scope && (
+        <p className="dom-scope mb-3.5 max-w-[80ch]">
+          <strong className="text-ink2">{selectedDomain.label}:</strong>{' '}
+          {selectedDomain.scope}
+        </p>
       )}
 
       {user.can_write && <SaveViewForm />}
@@ -580,6 +615,7 @@ function queryFrom(sp: URLSearchParams): FindingFilters {
     tier: (sp.get('tier') as PriorityTier) || null,
     category: sp.get('category') || null,
     assignee: sp.get('assignee') || null,
+    domain: sp.get('domain') || null,
     overdue: sp.get('overdue') === 'true',
     page: Number.isFinite(page) && page > 0 ? Math.floor(page) : 1,
   }

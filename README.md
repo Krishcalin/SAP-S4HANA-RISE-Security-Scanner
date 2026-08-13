@@ -206,6 +206,12 @@ product's clearest structural advantage, and a third service would forfeit it.
 - **Graph nodes** — the SAP objects named by findings are materialised as typed nodes, the
   substrate for the attack-path view.
 - **RBAC with per-system row scoping**, session auth, and an append-only audit log.
+- **Twelve security domains** — the findings re-expressed in the vocabulary an SAP security
+  buyer already uses, so an RFP checklist matches line for line. Each domain states **two**
+  things that are easy to confuse: what this product can *ever* see there, and what this scan
+  found. Four of the twelve name continuous activities we do not perform, and say so on the
+  tile rather than in a footnote; the one we do not cover at all shows a dash, never a zero.
+  `/domains`, `/domains/{id}`, and a `?domain=` filter on the triage queue.
 - **JSON API** rendering from the same query layer as the console, including a
   `changes since run N` endpoint.
 
@@ -1127,6 +1133,48 @@ Findings are ranked **P1 (fix now) → P4 (backlog)** by combining severity with
 
 Every category is mapped to control frameworks and rendered as a per-framework panel (flagged controls with severity counts) in the HTML and PDF, and as dedicated slides in the PPTX deck. **Eight frameworks**: **ISO/IEC 27001:2022** (Annex A), **NIST CSF 2.0**, **NIST SP 800-53 Rev 5**, **DORA** (Regulation (EU) 2022/2554), **CIS Controls v8**, **TISAX / VDA ISA**, **SOC 2** (Trust Services Criteria), and **EU GDPR**. All control IDs are verified against the published frameworks. DORA is mapped to named requirement areas rather than article numbers — an auditor reading a citation expects the sub-paragraph to say what we imply it says.
 
+### The twelve security domains
+
+The same findings, arranged in the vocabulary the SAP security market talks in, so a reader
+holding an RFP checklist can match them line for line. It appears on the dashboard, on
+`/domains` and `/domains/{id}` in the console, as a section of the HTML report and as a slide
+in the PPTX deck — all from one module (`modules/domains.py`), because a report and a screen
+that sort the same findings by two copies of the same rules eventually disagree.
+
+Every domain carries **two facts that are not the same question**:
+
+| | |
+|---|---|
+| **Reach** | What this product can *ever* see in that domain. A property of the product, fixed, identical for every customer. |
+| **State** | What *this* scan found: findings · no findings · export not supplied · not assessed. |
+
+That separation is the point. This is an offline, point-in-time **configuration** assessment,
+and four of the twelve domains name **continuous** activities — event monitoring, interface
+traffic, user behaviour, exploit protection. Twelve tiles each showing a number would assert
+twelve capabilities and four of them would be false, so the limit is printed beside the count
+rather than left to a footnote:
+
+| Domain | Reach | What that means here |
+|---|---|---|
+| Baselining and Benchmarking | fully assessed | |
+| Access and Authorization | fully assessed | |
+| Identity Security | fully assessed | |
+| Violation Management | fully assessed | SoD at permission level |
+| Custom Code Security | fully assessed | 133 rules over the ABAP/UI5 you export. **Not** SAP's Code Vulnerability Analyzer, which is a separately licensed SAP product — so the tile does not carry that name |
+| Security & Compliance Monitoring | partly assessed | point-in-time, and there is no compliance score |
+| Patch and Hotnews Management | partly assessed | a curated subset of high-impact Notes, with its size and cut-off stated |
+| Comprehensive Transport Security | partly assessed | the route and change control, not transport payloads |
+| Suspicious User Behaviour | partly assessed | a pattern library run **retrospectively** over the log window you export — not behavioural analytics, not live |
+| Security Event Monitoring | configuration only | whether the audit log *could* have recorded the answer. We do not monitor events |
+| Interface Traffic Monitoring | configuration only | destinations, gateway ACLs, exposed services. We do not see traffic |
+| Exploit and 0-Day Protection | **not covered** | a runtime capability needing an agent; we hold no connection. Prints a dash, never a zero |
+
+Membership is a strict partition — every finding lands in exactly one domain, so the tiles add
+up to the corpus rather than exceeding it. Findings the vocabulary has no word for (BTP,
+RISE shared-responsibility, resilience) are **listed with the reason** rather than dropped.
+There is no score, no percentage and no maturity rating: we see your findings, not your
+control environment.
+
 ### Detailed findings — knowledge base
 
 Every finding is rendered with an in-depth **Security Risk** explanation (what the weakness is, the concrete attack/abuse scenario, and the business/compliance impact) and a **numbered, step-by-step remediation procedure** naming the exact SAP transactions, reports, IMG paths, parameters and tables to change, how to verify the fix, and rollout cautions. This content lives in a bundled knowledge base (`data/finding_details.json`) keyed by check-id (with family-prefix fallback); where an entry is absent, the report falls back to the finding's own description and remediation, so the report is always complete.
@@ -1629,6 +1677,7 @@ SAP-S4HANA-RISE-Security-Scanner/
 - [x] Scan comparison mode (diff two scans) — run-over-run diff in the console, `GET /api/runs/{id}/diff` and `GET /api/findings/changes`
 - [x] CI/CD integration with exit codes — `--gate`, exit 0/1/2, see [Release Gate](#release-gate)
 - [x] Client-server tier: PostgreSQL persistence, RBAC with per-system row scoping, audit log
+- [x] Twelve security domains — the buyer's own vocabulary, each stating what we can see there as well as what we found (`/domains`, `?domain=` on the queue, report section, deck slide)
 - [x] Attack-path graph — templates instantiated from co-existing findings, with cuts and choke points
 - [x] SAP Note 3250501 — 92 of 92 mandatory ECS profile parameters, plus the configuration half
 - [x] Custom-code scanner (CVA) — 133 rules, statement lexer, intra-procedural taint analysis

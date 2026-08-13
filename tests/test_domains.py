@@ -220,6 +220,107 @@ def test_the_roll_up_reports_what_it_could_not_place():
     assert r["unplaced"]["reasons"]
 
 
+# ── the rules a query layer compiles ─────────────────────────────────────────
+#
+# server/queries.py filters the triage queue by domain, and the obvious way to do
+# that is to write the routing rules a second time as a WHERE clause. `match_terms`
+# exists so it does not have to; these tests are what make the two readings one.
+
+def _a_corpus():
+    """Every category, and every prefix, with an id that matches no prefix too."""
+    corpus = []
+    for cat in ComplianceMapper.CATEGORY_THEMES:
+        corpus.append(("ZZZ-000", cat))
+    for d in D.DOMAINS:
+        for cat, prefixes in (d.get("prefixes") or {}).items():
+            for prefix in prefixes:
+                corpus.append((prefix + "999", cat))
+    return corpus
+
+
+def test_the_terms_and_the_router_agree_on_every_prefix_in_the_taxonomy():
+    """THE INVARIANT THE SQL FILTER RESTS ON. If these two readings can differ,
+    a domain tile and the queue behind it report different numbers for the same
+    domain — and the reader who notices is holding both."""
+    for check_id, category in _a_corpus():
+        expected = D.domain_for(check_id, category)
+        matched = [d["id"] for d in D.DOMAINS
+                   if D.matches(check_id, category, D.match_terms(d["id"]))]
+        assert matched == ([expected] if expected else []), (check_id, category)
+
+
+def test_a_split_category_routes_its_default_through_the_terms_too():
+    assert D.matches("PARAM-MS/ACL_INFO", "System Trust & Standard Users",
+                     D.match_terms("interface"))
+    assert not D.matches("PARAM-MS/ACL_INFO", "System Trust & Standard Users",
+                         D.match_terms("identity"))
+
+
+def test_the_domain_we_do_not_assess_has_no_terms_at_all():
+    """Not "terms that match nothing" — none. A filter built from them selects
+    no rows by construction rather than by hoping the data is empty."""
+    assert D.match_terms("exploit") == []
+
+
+def test_an_unknown_domain_yields_no_terms():
+    assert D.match_terms("no-such-domain") == []
+
+
+# ── which modules feed a domain ──────────────────────────────────────────────
+
+def test_a_domain_reached_only_by_prefix_is_not_fed_by_a_category_sibling():
+    """THE OVER-ATTRIBUTION THAT REINSTATED THE CLAIM WE HAD JUST REMOVED.
+
+    `ecs_config_items` emits findings in "Security Audit Log Review" — audit-log
+    CONFIGURATION, which is Security Event Monitoring. By category alone it also
+    counted as a feeder of Suspicious User Behaviour, which owns only the
+    LREV-PAT pattern checks. So a scan with no audit-log EXPORT reported the
+    behaviour domain as clean, on the strength of a different module having read
+    the configuration.
+    """
+    by_category = {"ecs_config_items": ["Security Audit Log Review"],
+                   "log_review": ["Security Audit Log Review"]}
+    by_check_id = {"ecs_config_items": ["ECS-AUD-001"],
+                   "log_review": ["LREV-PAT-001", "LREV-SRC-001"]}
+    behaviour = D.feeders_for(D.by_id("user_behaviour"), by_category, by_check_id)
+    assert behaviour == {"log_review"}
+    events = D.feeders_for(D.by_id("event_monitoring"), by_category, by_check_id)
+    assert events == {"ecs_config_items", "log_review"}
+
+
+def test_the_behaviour_domain_is_not_clear_when_its_only_module_did_not_run():
+    """End to end, with a manifest shaped like the real one."""
+    manifest = {"modules": {"log_review": {"status": "skipped"},
+                            "ecs_config_items": {"status": "complete"},
+                            "user_auth_audit": {"status": "complete"}}}
+    rolled = D.roll_up([_f("USR-001", "User & Authorization")], coverage=manifest)
+    states = {d["id"]: d["state"] for d in rolled["domains"]}
+    assert states["user_behaviour"] == D.NOT_SUPPLIED
+    assert states["identity"] == D.ASSESSED
+
+
+def test_a_domain_whose_module_ran_and_found_nothing_is_clear_not_not_supplied():
+    """The other direction, and it matters just as much: telling a customer they
+    failed to send an export they did send is its own false statement."""
+    manifest = {"modules": {"log_review": {"status": "complete"},
+                            "user_auth_audit": {"status": "complete"}}}
+    rolled = D.roll_up([_f("USR-001", "User & Authorization")], coverage=manifest)
+    states = {d["id"]: d["state"] for d in rolled["domains"]}
+    assert states["user_behaviour"] == D.CLEAR
+
+
+def test_every_assessable_domain_can_be_tied_to_at_least_one_real_module():
+    """A domain with no feeder falls back to the coarse "did anything run?"
+    question, which is the behaviour this machinery replaced. If a rename breaks
+    the link, this fails rather than the report quietly getting vaguer."""
+    from modules.coverage import module_categories, module_check_ids
+    by_category, by_check_id = module_categories(), module_check_ids()
+    for d in D.DOMAINS:
+        if d["reach"] == D.NONE:
+            continue
+        assert D.feeders_for(d, by_category, by_check_id), d["id"]
+
+
 # ── no score, anywhere ───────────────────────────────────────────────────────
 
 def test_the_roll_up_publishes_no_score_or_percentage():

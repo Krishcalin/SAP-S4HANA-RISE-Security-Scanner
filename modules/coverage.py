@@ -107,6 +107,56 @@ RISE_MODULE_SCOPE: Dict[str, str] = {
     "basis_job_command": "in_scope",
 }
 
+#: The CLI's `--modules` vocabulary, mapped to the module file names this file
+#: keys on.
+#:
+#: THE BUG THIS CLOSES, WHICH RAN IN EVERY OFFLINE REPORT.
+#: `sap_scanner.py` names its modules "users", "params", "authz"; the manifest
+#: names them "user_auth_audit", "security_params", "abap_authorizations". It
+#: passed the former into `modules_run=`, every name failed the `mod not in ran`
+#: test, and ALL THIRTY modules were stamped `not_run` — in a report carrying 341
+#: findings produced by those very modules. It hid because the four summary cards
+#: count `modules_skipped` and not `modules_not_run`, so only the table underneath
+#: said it, thirty times, in a column nobody reads when the cards look fine.
+#:
+#: A mismatch of vocabularies cannot be caught by reading either side. So
+#: `build_manifest` REFUSES a `modules_run` list that names nothing it knows,
+#: rather than reporting a total blackout it would produce identically if the run
+#: really had done nothing — and tests/test_coverage_cli_names.py re-derives this
+#: table from sap_scanner.py's own dispatch so it cannot go stale in silence.
+CLI_MODULE_ALIASES: Dict[str, str] = {
+    "users": "user_auth_audit",
+    "params": "security_params",
+    "network": "network_services",
+    "rise": "rise_btp_checks",
+    "iam": "iam_advanced",
+    "btpcloud": "btp_cloud_surface",
+    "intglayer": "integration_layer",
+    "dataprot": "data_protection",
+    "snc": "snc_posture",
+    "ecsconfig": "ecs_config_items",
+    "codeinv": "code_inventory_report",
+    "resilience": "resilience_posture",
+    "codetrans": "code_transport",
+    "atc": "atc_import",
+    "cva": "abap_sast",
+    "logmon": "log_monitoring",
+    "logreview": "log_review",
+    "fiori": "fiori_ui",
+    "crypto": "crypto_posture",
+    "hanadb": "hana_db_security",
+    "hotnews": "sap_hotnews",
+    "authz": "abap_authorizations",
+    "systrust": "system_trust",
+    "baseline": "baseline_params",
+    "s4authz": "s4_business_authz",
+    "ara": "access_risk_analysis",
+    "jobcmd": "basis_job_command",
+    "grcac": "grc_access_control",
+    "rolegov": "role_governance",
+    "fincontrols": "financial_controls",
+}
+
 #: Logical sources a RISE customer cannot produce, because they are read from the
 #: operating system and RISE customers contractually never get OS access. Listing
 #: them as "missing" would be dishonest — the customer did not forget them, they
@@ -217,6 +267,85 @@ def all_logical_sources() -> List[str]:
     return sorted(DataLoader.FILE_MAP)
 
 
+@lru_cache(maxsize=1)
+def module_categories() -> Dict[str, List[str]]:
+    """{module file name: the finding categories it can produce}, from the code.
+
+    DERIVED FOR THE SAME REASON `module_sources` IS. The consumer is
+    modules/domains.py, which has to answer "did anything that could have found
+    something in this domain actually run?" — and the difference between "we
+    looked and found nothing" and "the export never arrived" is the whole point
+    of that question. A hand-written domain-to-module table would answer it
+    confidently and wrongly the first time somebody moved a check.
+
+    Two spellings, because the modules use two. Most pass a literal
+    `category="Fiori & UI Layer"`; fifteen carry a class attribute `CATEGORY` and
+    pass `category=self.CATEGORY`, which is invisible to a scan for literals —
+    the first version of this function missed exactly those fifteen, including
+    `log_review`, whose domain is the one most likely to be read as a monitoring
+    result if it were wrongly marked clean.
+    """
+    out: Dict[str, List[str]] = {}
+    for path in sorted(MODULES_DIR.glob("*.py")):
+        if path.stem in _NOT_AN_AUDITOR:
+            continue
+        src = path.read_text(encoding="utf-8")
+        # The SAME guard `module_sources` uses, and it is load-bearing rather
+        # than tidy: without it a rule table or a roll-up module joins the list
+        # of things a customer is told did not run. modules/coverage.py once
+        # listed ITSELF as an auditor for want of a filter.
+        if "BaseAuditor" not in src:
+            continue
+        tree = ast.parse(src, str(path))
+        found: Set[str] = set()
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.keyword) and node.arg == "category"
+                    and isinstance(node.value, ast.Constant)
+                    and isinstance(node.value.value, str)):
+                found.add(node.value.value)
+            elif (isinstance(node, ast.Assign)
+                  and isinstance(node.value, ast.Constant)
+                  and isinstance(node.value.value, str)
+                  and any(isinstance(t, ast.Name) and t.id == "CATEGORY"
+                          for t in node.targets)):
+                found.add(node.value.value)
+        out[path.stem] = sorted(found)
+    return out
+
+
+@lru_cache(maxsize=1)
+def module_check_ids() -> Dict[str, List[str]]:
+    """{module file name: the check ids written as literals in it}.
+
+    A COARSER QUESTION THAN docs/CHECKS_REFERENCE.md ANSWERS, on purpose. That
+    generator resolves wrapper signatures and positional arguments to enumerate
+    every check for a reader; this only needs enough to tell which modules can
+    produce a check id with a given PREFIX, because two of the twelve domains
+    share a category with a sibling and are separated only by prefix.
+
+    Ids built at runtime from rule tables are not literals and are not here. The
+    consumer treats a module with no matching literal as "cannot feed this
+    domain", so a missed id costs a NOT_SUPPLIED where CLEAR was right —
+    over-caution about what we saw, which is the safe direction for this file.
+    """
+    out: Dict[str, List[str]] = {}
+    for path in sorted(MODULES_DIR.glob("*.py")):
+        if path.stem in _NOT_AN_AUDITOR:
+            continue
+        src = path.read_text(encoding="utf-8")
+        if "BaseAuditor" not in src:
+            continue
+        tree = ast.parse(src, str(path))
+        found: Set[str] = set()
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.keyword) and node.arg == "check_id"
+                    and isinstance(node.value, ast.Constant)
+                    and isinstance(node.value.value, str)):
+                found.add(node.value.value)
+        out[path.stem] = sorted(found)
+    return out
+
+
 def build_manifest(data: Dict[str, Any],
                    modules_run: Optional[Iterable[str]] = None,
                    deployment_mode: str = "on_prem") -> Dict[str, Any]:
@@ -266,7 +395,21 @@ def build_manifest(data: Dict[str, Any],
         mods[mod] = entry
 
     if modules_run is not None:
-        ran = set(modules_run)
+        # Accept either vocabulary — the CLI's short names or this file's module
+        # names — and REFUSE a list that is neither. A name we do not recognise
+        # produces `not_run`, which is a real and reportable state; a list where
+        # NONE of them is recognised produces a total blackout indistinguishable
+        # from a run that genuinely did nothing, and that is the one outcome a
+        # coverage manifest must never invent. It ran that way for the whole life
+        # of the offline report.
+        ran = {CLI_MODULE_ALIASES.get(name, name) for name in modules_run}
+        if ran and not (ran & set(mods)):
+            raise ValueError(
+                "modules_run names nothing this manifest knows: "
+                + ", ".join(sorted(ran)[:5])
+                + ". Pass module names (user_auth_audit) or the CLI's short names "
+                  "(users); a list in a third vocabulary would report every module "
+                  "as not_run.")
         for mod, entry in mods.items():
             if mod not in ran and entry["status"] != "skipped":
                 # Ran-but-not-in-the-list means it was filtered out or it failed.

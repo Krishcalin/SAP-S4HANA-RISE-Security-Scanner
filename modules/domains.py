@@ -290,6 +290,70 @@ def domain_for(check_id: Optional[str],
     return None
 
 
+def match_terms(domain_id: str) -> List[Dict[str, Any]]:
+    """One domain's membership rules, in a form a query layer can compile.
+
+    WHY THIS EXISTS RATHER THAN A SECOND COPY IN SQL
+    A findings queue filtered by domain has to select rows in the database, and
+    the obvious way to do that is to write the routing rules again as a WHERE
+    clause. That is the failure this file has already met twice: a rule fixed in
+    one place and not its sibling. So the rules are emitted from the SAME data
+    `domain_for` reads, and `server/queries.py` compiles these terms mechanically
+    without knowing what a domain is.
+
+    Each term is a category plus optional prefix conditions, and a finding
+    belongs to the domain when ANY term matches it:
+
+        {"category": str,
+         "starts_with":     (...)  # check id must begin with one of these
+         "not_starts_with": (...)} # ...and with none of these
+
+    `matches()` below is the reference reading of a term, and a test asserts it
+    agrees with `domain_for` on every prefix in the taxonomy. An empty list means
+    no finding can ever be in this domain — which is true of exactly one of the
+    twelve, and it is a statement about the product, not about the data.
+    """
+    d = by_id(domain_id)
+    if d is None:
+        return []
+    terms: List[Dict[str, Any]] = [
+        {"category": cat, "starts_with": (), "not_starts_with": ()}
+        for cat in sorted(d.get("categories") or [])
+    ]
+    for cat, prefixes in sorted((d.get("prefixes") or {}).items()):
+        terms.append({"category": cat, "starts_with": tuple(prefixes),
+                      "not_starts_with": ()})
+    default = d.get("prefix_default")
+    if default:
+        # The default bucket is the category MINUS every prefix any domain
+        # claims in it — including this domain's own, which the term above
+        # already covers. Deriving the exclusion from the whole taxonomy rather
+        # than from a hand-written list is what keeps it correct when somebody
+        # adds a prefix to the OTHER domain in the split.
+        claimed = sorted({p for other in DOMAINS
+                          for p in (other.get("prefixes") or {}).get(default, [])})
+        terms.append({"category": default, "starts_with": (),
+                      "not_starts_with": tuple(claimed)})
+    return terms
+
+
+def matches(check_id: Optional[str], category: Optional[str],
+            terms: Sequence[Dict[str, Any]]) -> bool:
+    """Whether a finding satisfies any of `terms`. The reference reading."""
+    cid = check_id or ""
+    for t in terms:
+        if category != t.get("category"):
+            continue
+        include = t.get("starts_with") or ()
+        exclude = t.get("not_starts_with") or ()
+        if include and not any(cid.startswith(p) for p in include):
+            continue
+        if exclude and any(cid.startswith(p) for p in exclude):
+            continue
+        return True
+    return False
+
+
 def roll_up(findings: Sequence[Dict[str, Any]],
             coverage: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Sort findings into the twelve domains.
@@ -370,18 +434,80 @@ def _supplied_lookup(coverage: Optional[Dict[str, Any]]):
     Returns None when there is no manifest, and the caller then never reports
     NOT_SUPPLIED — claiming an export was missing without having checked would be
     the same class of error as claiming it was clean.
+
+    PER DOMAIN, NOT PER RUN. This began as "did anything at all run?", which is
+    only ever wrong in the reassuring direction: a scan with no audit-log export
+    ran twenty-nine other modules, so "Suspicious User Behaviour" came back CLEAR
+    — we looked and found nothing — about a log nobody supplied. The domain most
+    likely to be read as a monitoring result was the one making the claim.
+
+    The link from a domain to the modules that feed it is DERIVED from the code
+    (modules/coverage.module_categories), not declared here. A declared table
+    would be a second place for the same fact to be true, and this file already
+    carries one prefix table too many for comfort.
     """
     if not coverage or not isinstance(coverage.get("modules"), dict):
         return None
     ran = {name for name, info in coverage["modules"].items()
            if info.get("status") in ("complete", "degraded", "no_file_inputs")}
+    try:
+        from modules.coverage import module_categories, module_check_ids
+        by_category = module_categories()
+        by_check_id = module_check_ids()
+    except Exception:                                            # noqa: BLE001
+        # The manifest is still usable without the map; the fallback below is
+        # the coarse question this function used to ask.
+        by_category, by_check_id = {}, {}
 
     def supplied(domain: Dict[str, Any]) -> bool:
-        # Conservative: if we cannot tie a domain to a module, assume it ran.
-        # Over-reporting NOT_SUPPLIED would be its own false claim.
-        owned = set(domain.get("categories") or []) | set(domain.get("prefixes") or {})
-        if not owned:
-            return True
-        return bool(ran)
+        feeders = feeders_for(domain, by_category, by_check_id)
+        if not feeders:
+            # We cannot tie this domain to a module, so we cannot say its export
+            # was missing. Over-reporting NOT_SUPPLIED is its own false claim —
+            # it tells a customer they forgot something they did send.
+            return bool(ran) if by_category else True
+        return bool(feeders & ran)
 
     return supplied
+
+
+def feeders_for(domain: Dict[str, Any],
+                by_category: Dict[str, Sequence[str]],
+                by_check_id: Dict[str, Sequence[str]]) -> set:
+    """Which modules can produce a finding in this domain.
+
+    THE PREFIX TEST IS THE POINT OF THE SECOND ARGUMENT. Category alone is too
+    coarse where two domains share one: `ecs_config_items` emits findings in
+    "Security Audit Log Review" — audit-log configuration, which is Security
+    Event Monitoring — and by category alone it also counted as a feeder of
+    Suspicious User Behaviour, which owns only the LREV-PAT pattern checks in
+    that category. That single over-attribution reinstated the exact claim this
+    machinery exists to prevent: a scan with no audit-log EXPORT reported the
+    behaviour domain as clean, because a different module had read the audit-log
+    CONFIGURATION.
+
+    So a module owned by a category outright feeds the domain; a module reaching
+    the domain only through a prefix split must also carry a literal check id
+    with one of that domain's prefixes.
+    """
+    outright = set(domain.get("categories") or [])
+    prefixes: Dict[str, Sequence[str]] = domain.get("prefixes") or {}
+    default = domain.get("prefix_default")
+    found = set()
+    for module, categories in by_category.items():
+        cats = set(categories)
+        if cats & outright:
+            found.add(module)
+            continue
+        ids = by_check_id.get(module) or ()
+        for split_category, split_prefixes in prefixes.items():
+            if split_category in cats and any(
+                    cid.startswith(p) for cid in ids for p in split_prefixes):
+                found.add(module)
+                break
+        else:
+            # The default bucket of a split takes whatever matched no prefix, so
+            # a module emitting that category at all can land in it.
+            if default and default in cats:
+                found.add(module)
+    return found

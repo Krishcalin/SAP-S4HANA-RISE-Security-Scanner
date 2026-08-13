@@ -765,6 +765,10 @@ export interface FindingFilters {
   category?: string | null
   assignee?: string | null
   overdue?: boolean
+  /** One of the twelve security domains, by id. The server refuses an unknown
+   *  one and refuses the domain it does not assess, rather than answering the
+   *  first with the whole queue and the second with an empty one. */
+  domain?: string | null
   page?: number
 }
 

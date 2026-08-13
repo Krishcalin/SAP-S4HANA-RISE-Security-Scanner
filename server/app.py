@@ -55,7 +55,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import Scope
 
 from server import analytics, auth, crq, db, graph, ingest, queries, sapcontent
-from modules import nist_csf, platforms
+from modules import domains, nist_csf, platforms
 #: SESSION_COOKIE is imported but not USED here any more — the routes that set and
 #: cleared it were the Jinja form's sign-in and sign-out, and the SPA uses
 #: /api/auth/login and /api/auth/logout instead. It stays as a deliberate
@@ -654,7 +654,8 @@ def api_findings(user: Dict[str, Any] = Depends(current_user),
                  severity: Optional[str] = None, team: Optional[str] = None,
                  owner: Optional[str] = None, tier: Optional[str] = None,
                  category: Optional[str] = None, assignee: Optional[str] = None,
-                 overdue: bool = False, page: int = 1):
+                 overdue: bool = False, domain: Optional[str] = None,
+                 page: int = 1):
     """The triage queue.
 
     THE FILTER LIST IS THE CONSOLE'S, IN FULL. It was once a strict subset —
@@ -664,12 +665,27 @@ def api_findings(user: Dict[str, Any] = Depends(current_user),
     is now the only reader of `list_findings`, so the subset could not come back
     by accident; the parameters stay because an integrator wants exactly the
     filters an analyst has.
+
+    `domain` IS REFUSED RATHER THAN IGNORED when it names nothing we assess. An
+    unknown value silently dropped would answer a narrow question with the whole
+    queue; and the one domain this product does not do would answer it with an
+    empty one, which reads as "nothing wrong there" — the single claim
+    modules/domains.py exists to prevent.
     """
+    if domain is not None:
+        definition = domains.by_id(domain)
+        if definition is None:
+            raise HTTPException(status_code=400, detail="no such domain")
+        if definition["reach"] == domains.NONE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{definition['label']} is not assessed by this product, "
+                       "so the queue cannot be filtered by it")
     return queries.list_findings(auth.scope_for(user), system_id=system_id,
                                  state=state, severity=severity, team=team,
                                  remediation_owner=owner, tier=tier,
                                  category=category, assignee=assignee,
-                                 overdue=overdue, page=page)
+                                 overdue=overdue, domain=domain, page=page)
 
 
 @app.get("/api/findings/changes")
@@ -1125,7 +1141,6 @@ def api_domains(user: Dict[str, Any] = Depends(current_user)):
     remove — each comes back with a REACH (what we can ever see) and a STATE
     (what this run found), and the two are not the same question.
     """
-    from modules import domains
     scope = auth.scope_for(user)
     findings = queries.findings_for_domains(scope)
     return domains.roll_up(findings)
@@ -1139,7 +1154,6 @@ def api_domain(domain_id: str,
     404 on an unknown id rather than an empty shell: an empty domain page is what
     a real domain with no findings looks like, and the two must not be confused.
     """
-    from modules import domains
     definition = domains.by_id(domain_id)
     if definition is None:
         raise HTTPException(status_code=404, detail="no such domain")

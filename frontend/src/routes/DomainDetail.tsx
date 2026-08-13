@@ -126,7 +126,13 @@ function Body({ d }: { d: SecurityDomain }) {
               .join(' · ') || 'no categories'}
           </p>
 
-          <h2 className={H2}>Findings</h2>
+          <h2 className={H2}>
+            Findings
+            <Link className="ml-2.5 text-[12px] font-normal text-accent hover:underline"
+                  to={`/findings?domain=${encodeURIComponent(d.id)}`}>
+              Open in the triage queue →
+            </Link>
+          </h2>
           <div className={TABLE_CARD}>
             <table className="w-full border-collapse">
               <thead>
@@ -166,8 +172,10 @@ function Body({ d }: { d: SecurityDomain }) {
             </table>
             {findings.length >= 500 && (
               <p className="text-[12px] text-ink3 px-3.5 py-2.5 m-0">
-                Showing the first 500 by severity. The full set is on{' '}
-                <Link className={LINK} to="/findings">Findings</Link>.
+                Showing the first 500 by severity. The full set is in{' '}
+                <Link className={LINK} to={`/findings?domain=${encodeURIComponent(d.id)}`}>
+                  the triage queue
+                </Link>, which pages through all {d.total}.
               </p>
             )}
           </div>
