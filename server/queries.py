@@ -547,9 +547,15 @@ def bulk_transition(finding_ids: Sequence[int], to_state: str, actor: str,
 #: Only these keys may be stored in a view. An allowlist rather than a passthrough:
 #: stored filters are replayed into the query layer, so accepting arbitrary keys
 #: would let a saved view smuggle in a parameter nothing validated.
+#: `domain` is here for the allowlist's OWN stated reason, not despite it. The
+#: rule is that a stored filter must be one something validates, and this is the
+#: most validated of the lot — server/app.py refuses an unknown domain and
+#: refuses the one we do not assess, before the query layer sees it. Omitted, a
+#: saved link to one domain silently replayed as the whole ~600-finding queue,
+#: which is the failure the allowlist exists to prevent, arriving by the other door.
 VIEW_FILTER_KEYS = frozenset({
     "system_id", "state", "severity", "team", "owner", "tier", "category",
-    "assignee", "overdue", "days",
+    "assignee", "overdue", "days", "domain",
 })
 
 
@@ -644,6 +650,40 @@ def findings_for_crq(scope: Optional[Sequence[int]],
         "JOIN check_definition cd ON cd.check_id = f.check_id "
         "LEFT JOIN sap_system s ON s.id = f.system_id "
         f"WHERE {' AND '.join(where)}", params)
+
+
+def latest_coverage(scope: Optional[Sequence[int]]) -> Optional[Dict[str, Any]]:
+    """The coverage manifests behind the findings a reader can currently see.
+
+    WHY THIS EXISTS. `findings_for_domains` answers "what is open"; a roll-up over
+    it also has to answer "what did we fail to look at", and without this the
+    answer defaulted to "nothing" — every unsupplied domain rendered as *assessed,
+    and nothing found*, which is the one sentence modules/domains.py exists to
+    stop the product saying. The manifest was being written on every upload
+    (server/ingest.py) and read by nothing.
+
+    ONE RUN PER SYSTEM — THE LATEST COMPLETE ONE — BECAUSE THAT IS WHAT THE OPEN
+    FINDINGS REFLECT. A finding is resolved by the SCANNER not observing it again,
+    so the open set is a statement about each system's most recent complete run;
+    pairing it with an older run's coverage would describe a different scan than
+    the one the numbers came from. An in-flight or failed run is excluded for the
+    same reason: it has no manifest worth trusting.
+
+    The merge across systems is a UNION, and modules/coverage.merge_manifests
+    argues that choice at length. Returns None when the caller's scope contains no
+    complete run at all, and `roll_up` then declines to claim anything was
+    missing — an unchecked claim of absence is as false as an unchecked claim of
+    cleanliness.
+    """
+    where = ["r.status = 'complete'"]
+    params: List[Any] = []
+    _scoped(where, params, scope, "r.system_id")
+    rows = db.query(
+        f"SELECT DISTINCT ON (r.system_id) r.system_id, r.coverage "
+        f"FROM scan_run r WHERE {' AND '.join(where)} "
+        f"ORDER BY r.system_id, r.started_at DESC", params)
+    from modules.coverage import merge_manifests
+    return merge_manifests(row["coverage"] for row in rows)
 
 
 def findings_for_domains(scope: Optional[Sequence[int]]) -> List[Dict[str, Any]]:

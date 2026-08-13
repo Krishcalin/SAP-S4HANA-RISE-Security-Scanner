@@ -346,6 +346,64 @@ def module_check_ids() -> Dict[str, List[str]]:
     return out
 
 
+#: Module statuses that mean the module ACTUALLY RAN, best first.
+#:
+#: Ordered because `merge_manifests` has to pick one status per module across
+#: several runs, and the order is the answer to "how much did we see". Anything
+#: not listed here — `skipped`, `not_run` — means we did not look, and a domain
+#: fed only by such modules must report NOT_SUPPLIED rather than CLEAR.
+RAN_STATUSES = ("complete", "degraded", "no_file_inputs")
+
+_STATUS_RANK = {name: i for i, name in enumerate(RAN_STATUSES)}
+
+
+def merge_manifests(manifests: Iterable[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Fold several runs' manifests into one, taking the BEST status per module.
+
+    WHY A UNION, AND WHY THAT IS THE CONSERVATIVE DIRECTION
+    The console rolls findings up across every system a reader can see, not one
+    run — so the question "was this domain's export supplied?" has to be answered
+    over the same set. A module counts as having run if it ran for ANY system in
+    scope, because a finding from any of those systems can land in the domain.
+
+    The opposite rule (intersection) would report NOT_SUPPLIED for a domain that
+    was assessed perfectly well on four systems out of five, which tells a
+    customer they forgot an export they did send. Both directions of error are
+    lies; this one is the smaller and the recoverable one, since the per-run
+    coverage page still shows the gap system by system.
+
+    Returns None for an empty sequence: with nothing to read we cannot say an
+    export was missing, and claiming so unchecked is the same class of error as
+    claiming it was clean.
+    """
+    modules: Dict[str, Dict[str, Any]] = {}
+    merged = 0
+    for manifest in manifests:
+        if not isinstance(manifest, dict):
+            continue
+        entries = manifest.get("modules")
+        if not isinstance(entries, dict):
+            continue
+        merged += 1
+        for name, entry in entries.items():
+            if not isinstance(entry, dict):
+                continue
+            current = modules.get(name)
+            if current is None or _rank(entry) < _rank(current):
+                modules[name] = entry
+    if not merged:
+        return None
+    # The run count travels with the merge because the result describes several
+    # scans and no longer answers "which system was this?" — a reader (or a future
+    # caller) must not mistake it for one run's manifest.
+    return {"modules": modules, "merged_run_count": merged}
+
+
+def _rank(entry: Dict[str, Any]) -> int:
+    """Lower is better. Anything that did not run sorts behind everything that did."""
+    return _STATUS_RANK.get(entry.get("status"), len(RAN_STATUSES))
+
+
 def build_manifest(data: Dict[str, Any],
                    modules_run: Optional[Iterable[str]] = None,
                    deployment_mode: str = "on_prem") -> Dict[str, Any]:

@@ -129,6 +129,118 @@ def test_the_domain_filter_composes_with_the_others(client):
     assert critical <= everything
 
 
+@pg
+def test_the_domain_view_reads_the_stored_coverage_manifest(client):
+    """THE DEFECT THIS FILE MISSED THE FIRST TIME.
+
+    `roll_up` grew a `coverage=` parameter, `modules/domains.py` was tested with
+    it, the console grew a chip for the state it produces, the offline deck
+    passed it — and the two server routes did not. So NOT_SUPPLIED was
+    unreachable through the API, and a domain whose feeding module never ran
+    rendered as "assessed, and nothing found": the exact sentence this taxonomy
+    exists to stop the product saying, on the screen built to enforce it.
+
+    Every unit test still passed, because they all called `roll_up` directly. The
+    assertion that would have caught it is this one — the ROUTE reads the
+    manifest — so it is made at the route.
+    """
+    from unittest.mock import patch
+
+    from server import queries
+
+    # A manifest in which nothing ran. Whatever the corpus holds, no assessable
+    # domain may claim to have looked at it.
+    nothing_ran = {"modules": {"log_review": {"status": "skipped"},
+                               "user_auth_audit": {"status": "skipped"}}}
+    with patch.object(queries, "latest_coverage", return_value=nothing_ran):
+        rolled = client.get("/api/domains").json()
+    states = {d["id"]: d["state"] for d in rolled["domains"]}
+    assessable = [d for d in rolled["domains"] if d["reach"] != domains.NONE]
+    assert assessable, "no assessable domains to check"
+    for d in assessable:
+        if d["total"] == 0:
+            assert d["state"] == domains.NOT_SUPPLIED, (
+                f"{d['id']} reported {d['state']} for a run in which no module ran")
+    assert states["exploit"] == domains.NOT_ASSESSED
+
+
+@pg
+def test_a_domain_page_agrees_with_its_tile_about_being_assessed(client):
+    """A tile and the page behind it disagreeing is worse than either being
+    wrong alone — the reader who clicks through is the one who notices."""
+    rolled = client.get("/api/domains").json()
+    for entry in rolled["domains"]:
+        page = client.get(f"/api/domains/{entry['id']}").json()
+        assert page["state"] == entry["state"], entry["id"]
+        assert page["total"] == entry["total"], entry["id"]
+
+
+@pg
+def test_the_manifest_is_absent_rather_than_invented_when_no_run_completed(client):
+    """Claiming an export was missing without having checked is the same class of
+    error as claiming it was clean. With no complete run in scope there is
+    nothing to read, and the roll-up must not report NOT_SUPPLIED."""
+    from unittest.mock import patch
+
+    from server import queries
+
+    with patch.object(queries, "latest_coverage", return_value=None):
+        rolled = client.get("/api/domains").json()
+    assert not any(d["state"] == domains.NOT_SUPPLIED for d in rolled["domains"])
+
+
+@pg
+def test_a_saved_view_keeps_its_domain_filter(client):
+    """Dropped from the allowlist, a saved one-domain link silently replayed as
+    the whole queue — a view showing far more than the person who saved it
+    intended, which is precisely what the allowlist is for."""
+    slug = f"dom-{os.urandom(3).hex()}"
+    saved = client.post("/api/views", json={"name": "One domain", "slug": slug,
+                                            "kind": "findings", "description": ""},
+                        headers={"Referer": "http://testserver/findings?domain=identity"})
+    assert saved.status_code in (200, 201), saved.text
+    view = client.get(f"/api/views/{slug}").json()
+    assert view["filters"].get("domain") == "identity", view["filters"]
+    client.delete(f"/api/views/{slug}")
+
+
+def test_the_ran_statuses_have_one_definition():
+    """modules/domains.py used to carry its own copy of the three statuses that
+    mean a module ran. Two spellings of that tuple is two chances for one of them
+    to drift into calling a skipped module 'ran'."""
+    import inspect
+
+    from modules import coverage, domains as dom
+    source = inspect.getsource(dom._supplied_lookup)
+    assert "RAN_STATUSES" in source
+    assert coverage.RAN_STATUSES == ("complete", "degraded", "no_file_inputs")
+
+
+def test_merging_manifests_takes_the_best_status_per_module():
+    """A union across systems: a module counts as having run if it ran for ANY
+    system in scope, because a finding from any of them can land in the domain.
+    The opposite rule tells a customer they forgot an export they did send."""
+    from modules.coverage import merge_manifests
+
+    merged = merge_manifests([
+        {"modules": {"log_review": {"status": "skipped"},
+                     "user_auth_audit": {"status": "complete"}}},
+        {"modules": {"log_review": {"status": "degraded"}}},
+    ])
+    assert merged["modules"]["log_review"]["status"] == "degraded"
+    assert merged["modules"]["user_auth_audit"]["status"] == "complete"
+
+
+def test_merging_nothing_returns_nothing_rather_than_an_empty_manifest():
+    """An empty manifest says "no module ran", which over an empty sequence is a
+    claim nobody checked. None says "we do not know", and the roll-up declines to
+    report NOT_SUPPLIED on it."""
+    from modules.coverage import merge_manifests
+
+    assert merge_manifests([]) is None
+    assert merge_manifests([{}, {"modules": "not a dict"}]) is None
+
+
 def test_the_compiled_clause_has_one_parameter_per_placeholder():
     """No database needed, and it catches the classic composition bug: a clause
     whose params drift out of step with its placeholders does not fail loudly —

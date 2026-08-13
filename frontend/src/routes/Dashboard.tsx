@@ -14,6 +14,8 @@ import type {
   SecurityDomain, Severity,
 } from '../api/types'
 import { useTitle } from '../lib/title'
+// The four domain states, worded once. Exported by the screen that owns them.
+import { stateChip } from './Domains'
 // The ONE transcription of server/app.py `_money`, exported from the screen the
 // currency figure belongs to. A second copy here read identically today and
 // would drift from it and from the server on the first rounding change — which
@@ -446,6 +448,13 @@ export function Dashboard() {
  */
 function DomainChip({ d }: { d: SecurityDomain }) {
   const covered = d.reach !== 'none'
+  // A ZERO IS NOT SELF-EXPLANATORY, which is the whole argument of this feature.
+  // "0" under a domain means either "assessed, nothing found" or "the export
+  // never arrived", and the tile has to say which — so the state chip is drawn
+  // here and not only on /domains. It is the same `stateChip` that screen uses,
+  // imported rather than re-derived: two spellings of these four states is two
+  // chances to word the reassuring one wrongly.
+  const chip = stateChip(d)
   const inner = (
     <>
       <div className="text-[12px] font-semibold text-ink leading-snug min-h-[2.4em]">
@@ -462,6 +471,9 @@ function DomainChip({ d }: { d: SecurityDomain }) {
         )}
       </div>
       <div className="dom-reach mt-1.5">{DOMAIN_REACH[d.reach] ?? d.reach}</div>
+      {d.state !== 'assessed' && (
+        <span className={`csf-state ${chip.cls} mt-1.5 inline-block`}>{chip.text}</span>
+      )}
     </>
   )
   const cls = `rounded-lg border border-line bg-panel p-3 dom-rail dom-rail-${d.reach}`

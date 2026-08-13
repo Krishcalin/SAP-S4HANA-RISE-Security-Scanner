@@ -1140,10 +1140,18 @@ def api_domains(user: Dict[str, Any] = Depends(current_user)):
     nothing wrong in it, which is the ambiguity modules/domains.py exists to
     remove — each comes back with a REACH (what we can ever see) and a STATE
     (what this run found), and the two are not the same question.
+
+    THE MANIFEST IS PASSED, AND THAT IS NOT OPTIONAL. Without it `roll_up` cannot
+    distinguish "we looked and found nothing" from "the export never arrived",
+    and falls back to the first — so a domain whose only feeding module never ran
+    rendered as *assessed, and nothing found*. The state existed in the module,
+    the chip existed in the console, and the argument was missing here; the
+    offline deck passed it and the console did not, so the same run said two
+    different things depending on which artefact you read.
     """
     scope = auth.scope_for(user)
     findings = queries.findings_for_domains(scope)
-    return domains.roll_up(findings)
+    return domains.roll_up(findings, coverage=queries.latest_coverage(scope))
 
 
 @app.get("/api/domains/{domain_id}")
@@ -1159,7 +1167,10 @@ def api_domain(domain_id: str,
         raise HTTPException(status_code=404, detail="no such domain")
     scope = auth.scope_for(user)
     findings = queries.findings_for_domains(scope)
-    rolled = domains.roll_up(findings)
+    # Same manifest as /api/domains, for the same reason — and because a tile and
+    # the page behind it disagreeing about whether a domain was assessed is worse
+    # than either being wrong alone.
+    rolled = domains.roll_up(findings, coverage=queries.latest_coverage(scope))
     entry = next(d for d in rolled["domains"] if d["id"] == domain_id)
     entry["findings"] = [
         f for f in findings
