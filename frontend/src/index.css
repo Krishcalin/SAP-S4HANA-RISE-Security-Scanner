@@ -156,6 +156,29 @@ body {
 .csf-card-clear        { border-color:rgba(34,197,94,.35); }
 .csf-card-not_assessed { border-style:dashed; opacity:.72; }
 
+/* ── The twelve security domains ─────────────────────────────────────────────
+   TWO AXES, TWO VOCABULARIES, AND THEY MUST NOT LOOK ALIKE.
+
+   `reach` is what the product can ever see and never changes; `state` is what a
+   run found. A reader who cannot tell them apart will read "config only" as a
+   result and "clear" as a capability.
+
+   So reach is a small uppercase RAIL on the tile's left edge — a property of the
+   thing, like a material — and state is a worded pill, the same vocabulary the
+   CSF view already uses. `none` is DASHED and grey: "we do not do this" is not a
+   failure and must never render red, or a buyer reads a product boundary as a
+   security problem in their estate. */
+.dom-rail { border-left:3px solid var(--line); }
+.dom-rail-full        { border-left-color:#22c55e; }
+.dom-rail-partial     { border-left-color:#38bdf8; }
+.dom-rail-config_only { border-left-color:#8b5cf6; }
+.dom-rail-none        { border-left-color:var(--ink-faint); border-left-style:dashed; }
+
+.dom-reach { font-size:10px; font-weight:700; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--ink-dim); }
+
+.dom-scope { font-size:11.5px; color:var(--ink-dim); line-height:1.45; }
+
 /* ── Brand ───────────────────────────────────────────────────────────────────
    THE ARTWORK'S OWN FIELD, AND WHY IT IS A CSS COLOUR TOO.
    The lockup is navy "Monitor" + WHITE "Risk" on blue #6cc2fb. Both inks were

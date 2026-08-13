@@ -602,3 +602,26 @@ def findings_for_crq(scope: Optional[Sequence[int]],
         "JOIN check_definition cd ON cd.check_id = f.check_id "
         "LEFT JOIN sap_system s ON s.id = f.system_id "
         f"WHERE {' AND '.join(where)}", params)
+
+
+def findings_for_domains(scope: Optional[Sequence[int]]) -> List[Dict[str, Any]]:
+    """Open findings shaped for the domain roll-up.
+
+    Carries check_id as well as category because three categories are SPLIT
+    between domains by check-id prefix — an audit-log pattern belongs to a
+    different domain than an audit-log configuration check, and the category
+    alone cannot tell them apart.
+    """
+    where = ["f.state NOT IN ('resolved','false_positive')"]
+    params: List[Any] = []
+    _scoped(where, params, scope)
+    return db.query(
+        "SELECT f.id, f.check_id, f.severity, cd.category, cd.title, "
+        "       s.sid, s.client AS system_client "
+        "FROM finding f "
+        "JOIN check_definition cd ON cd.check_id = f.check_id "
+        "LEFT JOIN sap_system s ON s.id = f.system_id "
+        f"WHERE {' AND '.join(where)} "
+        "ORDER BY CASE f.severity WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1 "
+        "         WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 ELSE 4 END, f.check_id",
+        params)

@@ -38,11 +38,11 @@
 import type {
   AccountInfo, AssignResult, BulkTransitionResult, ChangesSince, Coverage,
   CrqControlsView, CrqParametersView, CrqQuantifyResult, CrqTrendPoint,
-  CsfFunctionView, CsfView, Dashboard, FindingDetail, FindingFilters,
-  FindingHistory, FindingPage, GeneratedPassword, Health, Journey, Landscape,
-  Me, PathView, PathsOverview, ResolvedView, RiskView, RunDiff, SapSystem,
-  SaveViewResult, SavedView, ScanRun, TotpConfirmed, TotpEnrolment,
-  TotpStatus, TransitionResult, UploadResult
+  CsfFunctionView, CsfView, Dashboard, DomainsView, FindingDetail,
+  FindingFilters, FindingHistory, FindingPage, GeneratedPassword, Health,
+  Journey, Landscape, Me, PathView, PathsOverview, ResolvedView, RiskView,
+  RunDiff, SapSystem, SaveViewResult, SavedView, ScanRun, SecurityDomain,
+  TotpConfirmed, TotpEnrolment, TotpStatus, TransitionResult, UploadResult
 } from './types'
 
 /** Same-origin by default: FastAPI serves this bundle and the API. The override
@@ -472,4 +472,12 @@ export function crqControls(landscapeId: number): Promise<CrqControlsView> {
 }
 export function crqTrend(limit = 12): Promise<{ points: CrqTrendPoint[] }> {
   return get<{ points: CrqTrendPoint[] }>(`/crq/trend?limit=${limit}`)
+}
+
+// ══ The twelve security domains ═════════════════════════════════════════════
+export function domains(): Promise<DomainsView> {
+  return get<DomainsView>('/domains')
+}
+export function domain(id: string): Promise<SecurityDomain> {
+  return get<SecurityDomain>(`/domains/${encodeURIComponent(id)}`)
 }

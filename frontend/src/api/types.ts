@@ -993,3 +993,43 @@ export interface CrqControlsView {
   severity_weights: Record<string, number>
   total_findings: number
 }
+
+// ── The twelve security domains ─────────────────────────────────────────────
+
+/** What the product can EVER see in a domain. Fixed at author time, identical on
+ *  every customer and every run. modules/domains.py. */
+export type DomainReach = 'full' | 'partial' | 'config_only' | 'none'
+
+/** What THIS run produced. Varies per scan. NOT the same question as reach —
+ *  collapsing the two loses a real cell: a configuration-only domain that came
+ *  back clean. */
+export type DomainState = 'assessed' | 'clear' | 'not_supplied' | 'not_assessed'
+
+export interface SecurityDomain {
+  id: string
+  /** The buyer's word, verbatim. The honesty lives in `scope`. */
+  label: string
+  reach: DomainReach
+  /** The limit, rendered directly under the label and never omitted when set. */
+  scope: string | null
+  blurb: string | null
+  state: DomainState
+  total: number
+  counts: Record<string, number>
+  categories: string[]
+  /** Only on the per-domain response. */
+  findings?: { id: number; check_id: string; severity: string; title: string
+               category: string; sid: string | null }[]
+  categories_detail?: string[]
+}
+
+export interface DomainsView {
+  domains: SecurityDomain[]
+  unplaced: {
+    counts: Record<string, number>
+    total: number
+    reasons: Record<string, string>
+    note: string
+  }
+  totals: { domains: number; assessable: number; findings: number; placed: number }
+}

@@ -12,6 +12,7 @@ import {
   CircleDollarSign,
   Landmark,
   LayoutDashboard,
+  LayoutGrid,
   ShieldCheck,
   TrendingUp,
   Upload,
@@ -56,6 +57,7 @@ export const NAV_MAIN: NavItem[] = [
   // sits in the main list rather than under a reports submenu.
   { to: '/risk', label: 'Risk ($)', icon: CircleDollarSign },
   { to: '/coverage', label: 'Coverage', icon: ShieldCheck },
+  { to: '/domains', label: 'Domains', icon: LayoutGrid },
   { to: '/crq', label: 'Quantify risk', icon: Calculator },
   { to: '/csf', label: 'NIST CSF', icon: Landmark },
   { to: '/upload', label: 'Upload', icon: Upload, minRole: 'analyst' },

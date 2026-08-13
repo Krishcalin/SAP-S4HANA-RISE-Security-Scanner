@@ -1110,6 +1110,52 @@ def api_crq_trend(user: Dict[str, Any] = Depends(current_user), limit: int = 12)
     return {"points": crq.trend(auth.scope_for(user), limit=max(2, min(limit, 60)))}
 
 
+
+# ── The twelve security domains ──────────────────────────────────────────────
+#  Literal path before the parameterised one, as everywhere else in this file.
+
+
+@app.get("/api/domains")
+def api_domains(user: Dict[str, Any] = Depends(current_user)):
+    """Open findings sorted into the twelve domains a buyer recognises.
+
+    Returns all twelve ALWAYS, including the one this product does not do. A
+    domain missing from the answer would be indistinguishable from a domain with
+    nothing wrong in it, which is the ambiguity modules/domains.py exists to
+    remove — each comes back with a REACH (what we can ever see) and a STATE
+    (what this run found), and the two are not the same question.
+    """
+    from modules import domains
+    scope = auth.scope_for(user)
+    findings = queries.findings_for_domains(scope)
+    return domains.roll_up(findings)
+
+
+@app.get("/api/domains/{domain_id}")
+def api_domain(domain_id: str,
+               user: Dict[str, Any] = Depends(current_user)):
+    """One domain, with the findings that landed in it.
+
+    404 on an unknown id rather than an empty shell: an empty domain page is what
+    a real domain with no findings looks like, and the two must not be confused.
+    """
+    from modules import domains
+    definition = domains.by_id(domain_id)
+    if definition is None:
+        raise HTTPException(status_code=404, detail="no such domain")
+    scope = auth.scope_for(user)
+    findings = queries.findings_for_domains(scope)
+    rolled = domains.roll_up(findings)
+    entry = next(d for d in rolled["domains"] if d["id"] == domain_id)
+    entry["findings"] = [
+        f for f in findings
+        if domains.domain_for(f.get("check_id"), f.get("category")) == domain_id
+    ][:500]
+    entry["categories_detail"] = sorted({
+        f.get("category") for f in entry["findings"] if f.get("category")})
+    return entry
+
+
 #  detail.
 #
 #  ANYTHING ADDED BELOW THIS LINE IS UNREACHABLE. New routes go above it.
