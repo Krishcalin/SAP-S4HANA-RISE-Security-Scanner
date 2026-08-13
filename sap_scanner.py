@@ -758,14 +758,22 @@ def main():
             f for f in fair_findings
             if (f.get("details") or {}).get("degrades_coverage")]
 
+        # ...AND THE MANIFEST ARMS IT TOO. The per-finding mark catches a module
+        # that ran and knew it could not see everything; it cannot catch a module
+        # that never ran, because such a module emits nothing — and nothing is
+        # what the gate reads as "clean". The rule itself lives in
+        # release_gate.coverage_reasons, beside the rule it completes.
+        coverage_reasons = release_gate.coverage_reasons(coverage_manifest)
+
         result = release_gate.evaluate(
             fair_findings,
             policy=policy,
             baseline=baseline,
             scope=scope,
-            degraded=bool(degraded_findings),
+            degraded=bool(degraded_findings) or bool(coverage_reasons),
             degraded_detail=" ".join(
-                str(f.get("description", "")) for f in degraded_findings).strip())
+                [str(f.get("description", "")) for f in degraded_findings]
+                + coverage_reasons).strip())
 
         print(release_gate.render(result))
         if args.gate_json:

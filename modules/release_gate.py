@@ -190,6 +190,53 @@ def write_baseline(findings: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
     return {"version": 1, "count": len(prints), "fingerprints": prints}
 
 
+def coverage_reasons(manifest: Optional[Dict[str, Any]]) -> List[str]:
+    """Why this scan's coverage cannot support a pass — Rule 4's other half.
+
+    `evaluate(degraded=...)` has always been the fail-closed input, and the
+    scanner armed it from findings that MARK THEMSELVES as degrading coverage.
+    That catches a module which ran and knew it could not see everything. It
+    cannot catch a module that never ran at all, because such a module emits
+    nothing — and nothing is exactly what the gate reads as "clean".
+
+    Reproduced before this existed: `--modules users --gate` against a baseline
+    accepting its nine findings printed "29 were not executed" and then "RELEASE
+    GATE: PASS", exit 0. A build shipped on one module out of thirty, and the
+    machine reading that exit code has no other signal to consult.
+
+    WHY `not_run` AND `skipped` BUT NOT `degraded`. A degraded module DID look,
+    at part of its input. On a complete sample_data run eleven modules are
+    degraded and none is skipped or not-run, so arming on degraded would return
+    cannot_assess for every realistic upload — and a gate that always blocks gets
+    switched off wholesale, taking the real signal with it. The precise
+    per-module form of "I saw less than everything" is the `degrades_coverage`
+    mark the scanner already reads.
+
+    A manifest that could not be built is fail-closed: not knowing what we saw is
+    not the same as having seen it.
+
+    Returns an empty list when coverage does not block. Lives here rather than in
+    sap_scanner.py so the rule is testable and sits beside the rule it completes.
+    """
+    if manifest is None:
+        return ["The coverage manifest could not be built, so this scan cannot "
+                "say how much of the estate it saw."]
+    modules = manifest.get("modules")
+    if not isinstance(modules, dict):
+        return ["The coverage manifest carries no module detail, so this scan "
+                "cannot say which checks executed."]
+    blind = sorted(name for name, info in modules.items()
+                   if isinstance(info, dict)
+                   and info.get("status") in ("not_run", "skipped"))
+    if not blind:
+        return []
+    listed = ", ".join(blind[:6])
+    more = len(blind) - 6
+    return [f"{len(blind)} module(s) produced no findings because they did not "
+            f"run: {listed}{f' and {more} more' if more > 0 else ''}. Their "
+            f"checks did not execute, so their silence is not a result."]
+
+
 def load_baseline(path: Path) -> Set[str]:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     if isinstance(data, dict):

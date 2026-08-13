@@ -476,3 +476,97 @@ def test_the_gate_is_stdlib_only():
                 assert a.name.split(".")[0] in allowed, a.name
         elif isinstance(node, ast.ImportFrom):
             assert (node.module or "").split(".")[0] in allowed, node.module
+
+
+# ── a module that never ran cannot vouch for anything ────────────────────────
+#
+# THE FALSE GREEN THIS CLOSES. `evaluate(degraded=...)` was armed only from
+# findings that MARK THEMSELVES as degrading coverage — which catches a module
+# that ran and knew it could not see everything, and cannot catch a module that
+# never ran, because such a module emits nothing at all. Nothing is what the gate
+# reads as "clean".
+#
+# Reproduced against the shipped CLI before the fix: `--modules users --gate`
+# with a baseline accepting its nine findings printed "29 were not executed" and
+# then "RELEASE GATE: PASS", exit 0. Of every place in this product for that bug
+# to live, a CI exit code is the worst — the reader is a machine with no other
+# signal to consult.
+
+def test_a_module_that_never_ran_arms_the_gate():
+    reasons = rg.coverage_reasons(
+        {"modules": {"users": {"status": "complete"},
+                     "abap_sast": {"status": "not_run"}}})
+    assert reasons
+    assert "abap_sast" in reasons[0]
+
+
+def test_a_module_with_no_input_supplied_arms_the_gate():
+    reasons = rg.coverage_reasons(
+        {"modules": {"log_review": {"status": "skipped"}}})
+    assert reasons
+    assert "log_review" in reasons[0]
+
+
+def test_a_manifest_that_could_not_be_built_arms_the_gate():
+    """Fail-closed. Not knowing what we saw is not the same as having seen it,
+    and the scanner tolerates a manifest failure precisely so the scan is not
+    lost — which must not quietly become a pass."""
+    assert rg.coverage_reasons(None)
+    assert rg.coverage_reasons({})
+
+
+def test_a_degraded_module_does_not_arm_the_gate():
+    """WHY THIS RESTRAINT IS DELIBERATE. A degraded module DID look, at part of
+    its input. A complete run over sample_data has eleven degraded modules and
+    none skipped or not-run, so arming on degraded would return cannot_assess for
+    every realistic upload — and a gate that always blocks gets switched off
+    wholesale, taking the real signal with it. The precise per-module form of "I
+    saw less than everything" is the `degrades_coverage` mark the scanner already
+    reads, and `test_degraded_coverage_reaches_the_gate_from_the_scanner` holds
+    that wiring in place."""
+    assert rg.coverage_reasons(
+        {"modules": {"a": {"status": "degraded"},
+                     "b": {"status": "complete"},
+                     "c": {"status": "no_file_inputs"}}}) == []
+
+
+def test_the_reason_names_the_modules_rather_than_counting_them():
+    """"29 modules did not run" tells an engineer to go and look; the names tell
+    them where. Truncated, because thirty names in a CI log is a wall."""
+    manifest = {"modules": {f"mod_{i:02d}": {"status": "not_run"} for i in range(9)}}
+    reason = rg.coverage_reasons(manifest)[0]
+    assert "mod_00" in reason
+    assert "and 3 more" in reason
+
+
+def test_a_blind_scan_cannot_pass_even_with_everything_baselined():
+    """End to end through evaluate(): Rule 4 is checked before any finding is
+    looked at, so a baseline accepting the lot cannot buy a green."""
+    findings = [finding("USR-001", "HIGH")]
+    baseline = {rg.fingerprint(findings[0])}
+    reasons = rg.coverage_reasons({"modules": {"x": {"status": "not_run"}}})
+    result = rg.evaluate(findings, baseline=baseline,
+                                   degraded=bool(reasons),
+                                   degraded_detail=" ".join(reasons))
+    assert result.decision == "cannot_assess"
+    assert result.exit_code == rg.EXIT_CANNOT_ASSESS
+
+
+def test_the_operator_can_still_opt_out_deliberately():
+    """A targeted pipeline that gates on one module is a legitimate pattern. The
+    policy key already existed for it; this rule composes with it rather than
+    overriding it, because a rule with no escape hatch is a rule people delete."""
+    reasons = rg.coverage_reasons({"modules": {"x": {"status": "not_run"}}})
+    result = rg.evaluate([], policy={"block_on_degraded_coverage": False},
+                                   degraded=bool(reasons),
+                                   degraded_detail=" ".join(reasons))
+    assert result.exit_code == rg.EXIT_PASS
+
+
+def test_the_scanner_arms_the_gate_from_the_manifest():
+    """The wiring, not just the rule. The rule existing and nothing calling it is
+    the shape of the defect it replaces."""
+    src = (ROOT / "sap_scanner.py").read_text(encoding="utf-8")
+    gate_block = src[src.index("# ── Release gate ─", src.index("SCAN COMPLETE")):]
+    assert "release_gate.coverage_reasons(coverage_manifest)" in gate_block
+    assert "or bool(coverage_reasons)" in gate_block
