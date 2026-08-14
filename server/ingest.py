@@ -544,6 +544,13 @@ def store_run(conn: psycopg.Connection, run_id: int, landscape_id: int,
         # UNKNOWN counts as "could have seen", so an unprovable case resolves
         # exactly as it did before this rule existed — see
         # modules/coverage.look_verdict on why each caller states this choice.
+        #
+        # AND NO require_complete HERE, deliberately. A degraded module ran on
+        # part of its input; treating that as blind would freeze most of the
+        # backlog open on any realistic upload (a complete sample_data run has
+        # eleven degraded modules) and quietly delete the mitigation journey.
+        # The claim-side roll-ups make the opposite choice for the opposite
+        # reason, and look_verdict argues both.
         category = category_of.get(finding_id)
         if not category:
             return True

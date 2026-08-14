@@ -460,7 +460,8 @@ def roll_up(findings: Sequence[Dict[str, Any]],
         # each caller states this choice rather than inheriting it.
         feeders = _modules_feeding(entry["id"], assessable, mapper)
         entry["status"] = (NOT_SUPPLIED
-                           if look_verdict(feeders, coverage) == UNSUPPLIED
+                           if look_verdict(feeders, coverage,
+                                           require_complete=True) == UNSUPPLIED
                            else CLEAR)
 
     functions: List[Dict[str, Any]] = []

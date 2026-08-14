@@ -258,7 +258,8 @@ def _empty_state(function_id: str, category_themes: Dict[str, List[str]],
     # UNKNOWN counts as CLEAR — see modules/coverage.look_verdict.
     from .coverage import UNSUPPLIED, look_verdict
     feeders = modules_for_categories(feeding)
-    return (NOT_SUPPLIED if look_verdict(feeders, manifest) == UNSUPPLIED
+    return (NOT_SUPPLIED
+            if look_verdict(feeders, manifest, require_complete=True) == UNSUPPLIED
             else CLEAR)
 
 

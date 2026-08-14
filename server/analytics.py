@@ -383,6 +383,9 @@ def _score_rows(observed: Dict[str, int], failing: Dict[str, int],
         # So UNKNOWN means "no rate" here — unless this tenant has actually
         # observed a check in the category, which is direct evidence of a look
         # and outranks the absence of a manifest.
+        # Loose on `degraded` as well: a pass rate is a proportion that degrades
+        # gracefully, not a binary reassurance, so marking most categories
+        # unassessed would empty this screen without making it more honest.
         verdict = look_verdict(modules_for_categories([category]), coverage)
         if verdict == UNKNOWN:
             assessed = n_observed > 0

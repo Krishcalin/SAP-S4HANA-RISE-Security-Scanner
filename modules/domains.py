@@ -459,7 +459,8 @@ def _supplied_lookup(coverage: Optional[Dict[str, Any]]):
         # checked tells a customer they forgot something they did send, which is
         # the opposite error and the one they cannot act on.
         feeders = feeders_for(domain, by_category, by_check_id)
-        return look_verdict(feeders, coverage) != UNSUPPLIED
+        return look_verdict(feeders, coverage,
+                            require_complete=True) != UNSUPPLIED
 
     return supplied
 

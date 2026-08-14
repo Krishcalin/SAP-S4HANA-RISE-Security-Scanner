@@ -252,3 +252,64 @@ def test_the_resolver_returns_three_answers_not_two():
     assert coverage.look_verdict({"a"}, {"modules": {"a": {"status": "skipped"}}}) \
         == coverage.UNSUPPLIED
     assert len({coverage.LOOKED, coverage.UNSUPPLIED, coverage.UNKNOWN}) == 3
+
+
+# ── a module that ran on half its input ──────────────────────────────────────
+#
+# `degraded` means the module executed and one of several exports was missing.
+# Whether that counts as "looked" depends on what the caller does with the
+# answer, and the two answers are deliberately different — see
+# modules/coverage.look_verdict. These tests hold BOTH directions, because the
+# split is only defensible while each half stays where it was put.
+
+DEGRADED = {"modules": {
+    "log_review": {"status": "degraded", "sources_missing": ["security_audit_log"]},
+    "user_auth_audit": {"status": "complete", "sources_missing": []},
+}}
+
+
+def test_a_half_fed_module_cannot_support_a_clean_claim():
+    """THE WORKED EXAMPLE THE FILE ITSELF USES, which stayed broken until now.
+
+    Drop security_audit_log.csv from an otherwise full upload. `log_review` runs
+    degraded; it is the sole feeder of Suspicious User Behaviour, and that domain
+    rendered CLEAR — "we looked and found nothing" — about a log nobody supplied.
+    """
+    from modules import domains
+
+    states = {d["id"]: d["state"]
+              for d in domains.roll_up([], coverage=DEGRADED)["domains"]}
+    assert states["user_behaviour"] == domains.NOT_SUPPLIED
+    # And a domain whose feeder ran COMPLETE is still allowed to be clean.
+    assert states["identity"] == domains.CLEAR
+
+
+def test_the_resolution_guard_still_resolves_for_a_half_fed_module():
+    """THE OTHER DIRECTION, AND IT MATTERS AS MUCH. A complete sample_data run
+    has eleven degraded modules. Applying the strict rule here would freeze most
+    of the backlog open and quietly delete the mitigation journey — a worse
+    defect than the one the strict rule fixes, and a much quieter one."""
+    from modules.coverage import UNSUPPLIED, look_verdict
+
+    assert look_verdict({"log_review"}, DEGRADED) != UNSUPPLIED
+    assert look_verdict({"log_review"}, DEGRADED, require_complete=True) == UNSUPPLIED
+
+
+def test_the_release_gate_does_not_block_on_a_degraded_module():
+    """Same reasoning, sharper consequence: a gate that returns cannot_assess on
+    every realistic upload gets switched off wholesale, taking the real signal
+    with it."""
+    from modules import release_gate
+
+    assert release_gate.coverage_reasons(DEGRADED) == []
+
+
+def test_a_module_with_no_inputs_at_all_is_not_treated_as_starved():
+    """`no_file_inputs` has nothing missing because it needs nothing. It must
+    satisfy the strict rule too, or a module that legitimately reads no export
+    would permanently report its domain as unsupplied."""
+    from modules.coverage import LOOKED, look_verdict
+
+    manifest = {"modules": {"abap_sast": {"status": "no_file_inputs",
+                                          "sources_missing": []}}}
+    assert look_verdict({"abap_sast"}, manifest, require_complete=True) == LOOKED

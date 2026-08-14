@@ -456,18 +456,28 @@ RAN_STATUSES = ("complete", "degraded", "no_file_inputs")
 _STATUS_RANK = {name: i for i, name in enumerate(RAN_STATUSES)}
 
 
-def ran_modules(manifest: Optional[Dict[str, Any]]) -> Optional[Set[str]]:
+def ran_modules(manifest: Optional[Dict[str, Any]],
+                require_complete: bool = False) -> Optional[Set[str]]:
     """The modules that actually executed, or None when we cannot tell.
 
     None is not an empty set and the difference is the whole point: an empty set
     means nothing ran, None means nobody checked. A caller that receives None must
     not report anything as unsupplied — claiming an export was missing without
     having looked is the same class of error as claiming it was clean.
+
+    `require_complete` asks the STRICTER question: did this module see all of its
+    input? A `degraded` module ran on part of what it needed, and whether that
+    counts as "looked" depends entirely on what the caller does with the answer —
+    see look_verdict, which is where the two readings are argued and where each
+    caller chooses.
     """
     if not manifest or not isinstance(manifest.get("modules"), dict):
         return None
-    return {name for name, info in manifest["modules"].items()
-            if isinstance(info, dict) and info.get("status") in RAN_STATUSES}
+    return {
+        name for name, info in manifest["modules"].items()
+        if isinstance(info, dict) and info.get("status") in RAN_STATUSES
+        and not (require_complete and info.get("sources_missing"))
+    }
 
 
 #: The three answers to "did anything that feeds this actually look?".
@@ -480,7 +490,8 @@ UNSUPPLIED = "not_supplied"
 UNKNOWN = "unknown"
 
 
-def look_verdict(feeders: Set[str], manifest: Optional[Dict[str, Any]]) -> str:
+def look_verdict(feeders: Set[str], manifest: Optional[Dict[str, Any]],
+                 require_complete: bool = False) -> str:
     """Whether anything that can produce a thing actually ran, in one place.
 
     WHY THIS IS ONE FUNCTION AND NOT FIVE COPIES.
@@ -503,6 +514,31 @@ def look_verdict(feeders: Set[str], manifest: Optional[Dict[str, Any]]) -> str:
       UNKNOWN      no manifest, or nothing ties this to a module. We cannot prove
                    a look and we cannot prove its absence.
 
+    A `degraded` MODULE IS THE SECOND PLACE THE CALLERS DIVERGE, and it is the
+    same shape of decision. Such a module ran on part of its input:
+
+      * the CLAIM side — the domain tiles, the CSF Categories, the FAIR-CAM
+        control functions — passes `require_complete=True`, because those three
+        publish the sentence "we looked and found nothing". Drop
+        security_audit_log.csv from an otherwise full upload and `log_review`
+        comes back degraded; it is the sole feeder of Suspicious User Behaviour,
+        and that domain rendered CLEAR about a log nobody supplied. A false
+        reassurance is the one error a customer acts on.
+
+      * the CONSEQUENCE side — the resolution guard and the release gate — does
+        not, and deliberately. A complete sample_data run has ELEVEN degraded
+        modules, so the strict rule there would freeze most of the backlog open
+        and return cannot_assess on nearly every realistic upload. A gate that
+        always blocks gets switched off wholesale, taking the real signal with
+        it, and a resolution that never fires deletes the mitigation journey.
+
+      * the PASS RATE keeps the loose rule too: it is a proportion that degrades
+        gracefully rather than a binary reassurance, and marking most categories
+        unassessed would empty the screen without making it more honest.
+
+    Neither reading is the "correct" one. The costs are asymmetric in opposite
+    directions, and the asymmetry is the argument.
+
     Callers differ on what UNKNOWN means for them, legitimately, and each states
     its choice at the call site:
 
@@ -517,7 +553,7 @@ def look_verdict(feeders: Set[str], manifest: Optional[Dict[str, Any]]) -> str:
     Both are right for their screen. Neither may be inferred from the other,
     which is why this returns three values and not a bool.
     """
-    ran = ran_modules(manifest)
+    ran = ran_modules(manifest, require_complete=require_complete)
     if ran is None:
         return UNKNOWN
     if not feeders:
