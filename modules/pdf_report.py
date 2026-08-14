@@ -26,6 +26,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from modules.pdf_writer import PDFWriter
 from modules.finding_kb import FindingKB
 from modules.compliance_mapping import ComplianceMapper
+from modules import posture_score
 
 
 # ── palette (print-friendly) ──
@@ -45,6 +46,10 @@ SEV_COLOR = {
     "LOW": (0.09, 0.50, 0.20),
     "INFO": (0.02, 0.41, 0.63),
 }
+#: Posture band -> colour, keyed by the band names modules/posture_score.py
+#: derives. Same hues as the severities they are anchored to.
+_BAND_COLOR = {"Critical": SEV_COLOR["CRITICAL"], "High": SEV_COLOR["HIGH"],
+               "Medium": SEV_COLOR["MEDIUM"], "Low": SEV_COLOR["LOW"]}
 SEV_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
 
 
@@ -127,24 +132,30 @@ class PDFReportGenerator:
         # THE POSTURE SCORE DESCRIBES THE ESTATE, so it counts the estate —
         # see the same note in modules/report_generator.py. The severity counts
         # above it stay on the listed findings, which is what they are labelled as.
-        _est = {}
-        for f in self.full_findings:
-            _est[f["severity"]] = _est.get(f["severity"], 0) + 1
-        self.risk_score = min(100, _est.get("CRITICAL", 0) * 25
-                              + _est.get("HIGH", 0) * 10
-                              + _est.get("MEDIUM", 0) * 4
-                              + _est.get("LOW", 0) * 1)
-        self.risk_label, self.risk_col = self._risk_band(self.risk_score)
-
-    @staticmethod
-    def _risk_band(score: int):
-        if score >= 75:
-            return "Critical", SEV_COLOR["CRITICAL"]
-        if score >= 50:
-            return "High", SEV_COLOR["HIGH"]
-        if score >= 25:
-            return "Medium", SEV_COLOR["MEDIUM"]
-        return "Low", SEV_COLOR["LOW"]
+        # AND IT IS A DENSITY OVER WHAT WAS ASSESSED, not a total that clamped at
+        # 100 on any real estate and improved when the customer supplied less.
+        # modules/posture_score.py carries the arithmetic and the reasoning.
+        scored = posture_score.score_with_scope(self.full_findings, self.coverage)
+        if scored is None:
+            self.risk_score, self.risk_label = None, "Not scored"
+            self.risk_col = MUTED
+            self.risk_note = (
+                "No coverage manifest, so how many checks ran is unknown and "
+                "there is nothing to score against."
+                if coverage is None else
+                "No module completed a check in this scan, so there is nothing "
+                "to score against; see the coverage section.")
+            self.risk_scope = ""
+        else:
+            self.risk_score, self.risk_label, assessed = scored
+            self.risk_col = _BAND_COLOR[self.risk_label]
+            self.risk_note = posture_score.ANCHOR
+            # The posture card has vertical room for two lines at 6.2pt, so the
+            # SCOPE sentence goes to the coverage section instead of being
+            # silently clipped out of the bottom of the box. Same information,
+            # full width, and next to the table that explains which modules ran
+            # on partial input.
+            self.risk_scope = posture_score.scope_note(assessed)
 
     def _tier_of(self, f):
         return self._prio_by_id.get(id(f))
@@ -247,12 +258,21 @@ class PDFReportGenerator:
         w.rect(self.ML, y2 - box_h, lw, box_h, fill=WHITE, stroke=RULE, line_width=0.8)
         w.rect(self.ML, y2 - 4, lw, 4, fill=self.risk_col)
         w.text(self.ML + 16, y2 - 26, "OVERALL RISK", font="HB", size=8, color=MUTED)
-        score = str(self.risk_score)
+        score = "n/a" if self.risk_score is None else str(self.risk_score)
         w.text(self.ML + 16, y2 - 74, score, font="HB", size=46, color=self.risk_col)
-        w.text(self.ML + 20 + w.string_width(score, "HB", 46), y2 - 74, "/100",
-               font="H", size=12, color=FAINT)
-        w.text(self.ML + 16, y2 - 96, self.risk_label.upper() + " RISK POSTURE",
+        if self.risk_score is not None:
+            w.text(self.ML + 20 + w.string_width(score, "HB", 46), y2 - 74, "/100",
+                   font="H", size=12, color=FAINT)
+        w.text(self.ML + 16, y2 - 92,
+               self.risk_label.upper() + (" RISK POSTURE" if self.risk_score is not None else ""),
                font="HB", size=9, color=self.risk_col)
+        # The anchor. A score nobody can interpret is decoration, and this one is
+        # a density rather than a percentage, so the reader is told what 100 and
+        # 40 would mean rather than being left to assume it is "% secure".
+        ny = y2 - 103
+        for line in w.wrap(self.risk_note, "H", 6.2, lw - 32):
+            w.text(self.ML + 16, ny, line, font="H", size=6.2, color=FAINT)
+            ny -= 8
 
         # right: severity counts grid
         gx = self.ML + lw + 14
@@ -305,8 +325,14 @@ class PDFReportGenerator:
             return
 
         counts = manifest.get("counts", {})
-        self._para(manifest.get("summary", ""), size=9, color=INK, leading=13,
-                   gap_after=10)
+        summary = manifest.get("summary", "")
+        if self.risk_scope:
+            # Ties the headline number to this section. The posture score is a
+            # statement about the assessed portion, and a conditional figure
+            # printed without its condition invites two reports over different
+            # coverage to be compared as equals.
+            summary = (summary + "  " + self.risk_scope).strip()
+        self._para(summary, size=9, color=INK, leading=13, gap_after=10)
         # `not_run` is its own figure. It counted for nothing here while the table
         # below stamped it on every module of a filtered run, so the line and the
         # list disagreed about the same scan.

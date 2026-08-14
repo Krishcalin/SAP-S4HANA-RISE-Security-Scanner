@@ -19,6 +19,14 @@ from typing import Dict, List, Any, Optional
 
 from modules.finding_kb import FindingKB
 from modules.compliance_mapping import ComplianceMapper
+from modules import posture_score
+
+
+#: Posture band -> colour. The bands themselves are derived in
+#: modules/posture_score.py from the severity weights, so the three report
+#: formats cannot disagree about what a number means.
+_RISK_COLOUR = {"Critical": "#dc2626", "High": "#ea580c",
+                "Medium": "#d97706", "Low": "#16a34a"}
 
 
 class ReportGenerator:
@@ -161,19 +169,42 @@ class ReportGenerator:
         # The severity CARDS keep counting the filtered list. They are a
         # breakdown of what is listed below them, they are labelled as such, and
         # the notice above the grid reconciles the two.
-        est = {}
-        for f in self.full_findings:
-            est[f["severity"]] = est.get(f["severity"], 0) + 1
-        risk_score = min(100, est.get("CRITICAL", 0) * 25 + est.get("HIGH", 0) * 10
-                         + est.get("MEDIUM", 0) * 4 + est.get("LOW", 0) * 1)
-        if risk_score >= 75:
-            risk_label, risk_color = "Critical", "#dc2626"
-        elif risk_score >= 50:
-            risk_label, risk_color = "High", "#ea580c"
-        elif risk_score >= 25:
-            risk_label, risk_color = "Medium", "#d97706"
+        # AND IT IS A DENSITY, NOT A TOTAL. `min(100, crit*25 + high*10 + ...)`
+        # reached 3693 on the reference estate, so it pinned at 100 and could not
+        # move while a customer remediated; and it FELL when they supplied fewer
+        # exports, because fewer modules ran and so found less. Both are fixed by
+        # dividing by what was assessed — modules/posture_score.py, where the
+        # bands are derived from the same severity weights, so the anchor printed
+        # under the ring is arithmetic rather than an opinion.
+        scored = posture_score.score_with_scope(self.full_findings, self.coverage)
+        if scored is None:
+            # No manifest, so nothing to divide by. A number here would be the
+            # same error the rest of this report exists to avoid.
+            risk_score, risk_caption = 0, "Not scored"
+            risk_color, risk_num = "#64748b", "&mdash;"
+            # TWO DIFFERENT ABSENCES, AND THEY ARE NOT THE SAME SENTENCE. A
+            # missing manifest means we cannot say what ran; a manifest in which
+            # no module ran means we can, and the answer is nothing. Printing
+            # "no coverage manifest" over a report that contains a full coverage
+            # section reads as a bug and teaches the reader to discount the page.
+            risk_note = ("No coverage manifest, so how many checks ran is unknown "
+                         "and there is nothing to score against. The severity "
+                         "counts beside this are still exact."
+                         if self.coverage is None else
+                         "No module completed a check in this scan, so there is "
+                         "nothing to score against. See the coverage section for "
+                         "which modules ran and why. The severity counts beside "
+                         "this are still exact.")
         else:
-            risk_label, risk_color = "Low", "#16a34a"
+            risk_score, risk_label, assessed = scored
+            risk_caption = html.escape(risk_label) + " Risk"
+            risk_color = _RISK_COLOUR[risk_label]
+            risk_num = str(risk_score)
+            # The anchor AND the condition. The score describes the assessed
+            # portion, and a conditional number printed without its condition is
+            # how two reports over different coverage get compared as equals.
+            risk_note = html.escape(
+                posture_score.ANCHOR + " " + posture_score.scope_note(assessed))
 
         findings_html = self._render_findings()
         filter_html = self._render_filter_notice()
@@ -453,6 +484,15 @@ class ReportGenerator:
     letter-spacing: 0.09em;
     padding: 0.45rem 1rem;
     border-radius: 999px;
+  }}
+
+  .risk-note {{
+    font-size: 0.66rem;
+    line-height: 1.45;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 0.65rem;
+    max-width: 15rem;
   }}
 
   /* Severity Cards */
@@ -1024,11 +1064,12 @@ class ReportGenerator:
             stroke-linecap="round"/>
         </svg>
         <div class="score-text">
-          <div class="score-number">{risk_score}</div>
+          <div class="score-number">{risk_num}</div>
           <div class="score-label">Risk Score</div>
         </div>
       </div>
-      <div class="risk-level">{risk_label} Risk</div>
+      <div class="risk-level">{risk_caption}</div>
+      <div class="risk-note">{risk_note}</div>
     </div>
 
     <div class="severity-grid">

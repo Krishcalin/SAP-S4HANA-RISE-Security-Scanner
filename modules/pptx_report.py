@@ -22,6 +22,7 @@ from typing import Dict, List, Any, Optional
 from modules.pptx_writer import PPTXWriter, Inches
 from modules.compliance_mapping import ComplianceMapper
 from modules.finding_kb import FindingKB
+from modules import posture_score
 
 # ── palette (matches the HTML/PDF report) ──
 NAVY = "0B2138"
@@ -35,6 +36,10 @@ BORDER = "E2E8F0"
 WHITE = "FFFFFF"
 LTBLUE = "9DC3E6"
 SEV = {"CRITICAL": "DC2626", "HIGH": "EA580C", "MEDIUM": "B45309", "LOW": "15803D"}
+#: Posture band -> colour, keyed by the band names modules/posture_score.py
+#: derives from the severity weights.
+_BAND_COLOR = {"Critical": SEV["CRITICAL"], "High": SEV["HIGH"],
+               "Medium": SEV["MEDIUM"], "Low": SEV["LOW"]}
 TIER = {"P1": "DC2626", "P2": "EA580C", "P3": "B45309", "P4": "15803D"}
 _TIER_RANK = {"P1": 0, "P2": 1, "P3": 2, "P4": 3}
 _SEV_RANK = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
@@ -129,14 +134,23 @@ class PPTXReportGenerator:
         # THE POSTURE SCORE DESCRIBES THE ESTATE, so it counts the estate —
         # see the same note in modules/report_generator.py. The severity counts
         # above it stay on the listed findings, which is what they are labelled as.
-        _est = {}
-        for f in self.full_findings:
-            _est[f["severity"]] = _est.get(f["severity"], 0) + 1
-        self.risk_score = min(100, _est.get("CRITICAL", 0) * 25
-                              + _est.get("HIGH", 0) * 10
-                              + _est.get("MEDIUM", 0) * 4
-                              + _est.get("LOW", 0) * 1)
-        self.risk_label, self.risk_color = self._band(self.risk_score)
+        # DENSITY OVER WHAT WAS ASSESSED — see modules/posture_score.py. The old
+        # total clamped at 100 on any real estate and fell when less was supplied.
+        scored = posture_score.score_with_scope(self.full_findings, self.coverage)
+        if scored is None:
+            self.risk_score, self.risk_label = None, "Not scored"
+            self.risk_color = "64748B"
+            self.risk_note = (
+                "No coverage manifest \u2014 how many checks ran is unknown, so "
+                "there is nothing to score against."
+                if coverage is None else
+                "No module completed a check in this scan \u2014 see the "
+                "coverage slide.")
+        else:
+            self.risk_score, self.risk_label, assessed = scored
+            self.risk_color = _BAND_COLOR[self.risk_label]
+            self.risk_note = (posture_score.ANCHOR + " "
+                              + posture_score.scope_note(assessed))
 
         if priorities is None:
             try:
@@ -156,16 +170,6 @@ class PPTXReportGenerator:
         except Exception:
             self.tier_meta = {}
         self.compliance = ComplianceMapper(self.full_findings).assess()
-
-    @staticmethod
-    def _band(score):
-        if score >= 75:
-            return "Critical", SEV["CRITICAL"]
-        if score >= 50:
-            return "High", SEV["HIGH"]
-        if score >= 25:
-            return "Medium", SEV["MEDIUM"]
-        return "Low", SEV["LOW"]
 
     def _tier_of(self, f):
         return self._prio.get(id(f))
@@ -335,10 +339,16 @@ class PPTXReportGenerator:
         s.text(rc_x, rc_y + Inches(0.3), rc_w, Inches(0.35),
                [_p("OVERALL RISK SCORE", 11, b=True, color="9DB2C6", align="ctr")])
         s.text(rc_x, rc_y + Inches(0.72), rc_w, Inches(1.2),
-               [_p("%d" % self.risk_score, 66, b=True, color=WHITE, align="ctr")])
-        s.text(rc_x, rc_y + Inches(1.9), rc_w, Inches(0.5),
-               [_p("%s RISK  ·  out of 100" % self.risk_label.upper(), 13, b=True,
-                   color=self.risk_color, align="ctr")])
+               [_p("n/a" if self.risk_score is None else "%d" % self.risk_score,
+                   66, b=True, color=WHITE, align="ctr")])
+        s.text(rc_x, rc_y + Inches(1.78), rc_w, Inches(0.35),
+               [_p(self.risk_label.upper()
+                   + ("  ·  out of 100" if self.risk_score is not None else ""),
+                   13, b=True, color=self.risk_color, align="ctr")])
+        # The anchor, so the number is interpretable. It is a density, not a
+        # percentage of anything, and a slide is exactly where that gets assumed.
+        s.text(rc_x + Inches(0.2), rc_y + Inches(2.12), rc_w - Inches(0.4), Inches(0.5),
+               [_p(self.risk_note, 8, color="9DB2C6", align="ctr")])
         # severity cards (right, 2x2)
         gx = Inches(4.35)
         gw = W - gx - Inches(0.6)

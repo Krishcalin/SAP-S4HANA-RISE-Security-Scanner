@@ -58,6 +58,27 @@ FULL = [
      "category": "Data Protection & Privacy", "description": "d", "affected_items": []},
 ]
 SHOWN = [f for f in FULL if f["severity"] == "CRITICAL"]
+
+#: A manifest saying two modules ran, so the posture score HAS a denominator.
+#:
+#: WITHOUT THIS THE TEST BELOW PASSED FOR THE WRONG REASON. The score became a
+#: density over checks-that-ran (modules/posture_score.py), which is unavailable
+#: when nothing says what ran — so both sides of `filtered == whole` were None
+#: and the assertion held over two absences. That is the seventh time in this
+#: codebase a test has stopped measuring the thing it names while still passing,
+#: and it is the same shape as the defect the file exists to prevent: an empty
+#: result rendering as agreement.
+#: THE KEYS ARE MODULE NAMES, NOT CLI NAMES. `build_manifest` normalises `users`
+#: to `user_auth_audit` before writing the manifest, so a fixture keyed on the
+#: short names describes modules that do not exist: every check-id lookup misses
+#: and the denominator collapses to "checks that produced findings", under which
+#: every check found something and the score is 100 by construction. The same
+#: two-vocabularies-one-dict mistake as tests/test_posture_score.py's first
+#: fixture, made twice on the same afternoon.
+SCORED = {"modules": {"user_auth_audit": {"status": "complete",
+                                          "sources_missing": []},
+                      "btp_cloud_surface": {"status": "complete",
+                                            "sources_missing": []}}}
 META = {"scan_time": "2026-01-01", "severity_filter": "CRITICAL"}
 
 
@@ -184,9 +205,9 @@ def test_an_unfiltered_report_says_nothing_about_filters(tmp_path):
 def test_the_posture_score_does_not_move_when_the_display_is_filtered(generator):
     """It sits under the words "Risk Score" and a one-word posture. That is a
     claim about the systems, not about this page's selection."""
-    filtered = generator(SHOWN, META, full_findings=FULL)
+    filtered = generator(SHOWN, META, full_findings=FULL, coverage=SCORED)
     whole = generator(FULL, {"scan_time": "2026-01-01", "severity_filter": "ALL"},
-                      full_findings=FULL)
+                      full_findings=FULL, coverage=SCORED)
     if generator is ReportGenerator:
         # The HTML computes it inside generate(); compare the rendered figure.
         import tempfile
@@ -197,9 +218,18 @@ def test_the_posture_score_does_not_move_when_the_display_is_filtered(generator)
                 with contextlib.redirect_stdout(io.StringIO()):
                     gen.generate(str(out))
                 page = out.read_text(encoding="utf-8")
-                scores.append(re.search(r'class="score-number"[^>]*>(\d+)', page).group(1))
+                found = re.search(r'class="score-number"[^>]*>(\d+)', page)
+                assert found, "no number rendered, so the comparison proves nothing"
+                scores.append(found.group(1))
         assert scores[0] == scores[1], scores
     else:
+        # A REAL NUMBER ON BOTH SIDES. `None == None` is not evidence that a
+        # filter left the score alone; it is evidence there was no score.
+        assert whole.risk_score is not None, "no denominator, so nothing measured"
+        # ...and a denominator big enough that the score is not pinned at the
+        # clamp, where every input compares equal and the test proves nothing.
+        assert whole.risk_score < 100, \
+            "score is saturated at the clamp; the comparison cannot discriminate"
         assert filtered.risk_score == whole.risk_score
         assert filtered.risk_label == whole.risk_label
 
