@@ -202,3 +202,45 @@ def test_neither_printed_table_can_draw_the_unexamined_as_clean():
     source = (ROOT / "modules" / "report_generator.py").read_text(encoding="utf-8")
     assert source.count('"not_supplied"') >= 2
     assert source.count("export not supplied") >= 2
+
+
+# ── the console must not contradict itself about a Category ──────────────────
+
+def test_the_csf_function_page_buckets_on_the_fact_not_on_one_reason():
+    """THE CONTRADICTION THIS CLOSES.
+
+    /csf/<fn> filtered on `not_assessed` alone, so a Category in the newer
+    `not_supplied` state was filed under the heading "Assessed here" and told the
+    reader "Assessed, and this run produced no findings against it" — while
+    displaying the dashed "Export not supplied" chip an inch above it. The
+    product contradicted itself inside one card, and the HTML report for the same
+    run printed an em dash and the opposite sentence.
+
+    Two states, two reasons, one fact: there is no number here. The page buckets
+    on the fact.
+
+    A TEXTUAL ASSERTION, AND A PLACEHOLDER. There is no frontend test runner yet,
+    which is exactly why this defect reached a shipped bundle. When vitest lands
+    this becomes a render test over the four states and this function should be
+    deleted rather than kept alongside it.
+    """
+    page = (ROOT / "frontend" / "src" / "routes" / "CsfFunction.tsx").read_text(
+        encoding="utf-8")
+    assert "const unmeasured = (status: CsfStatus)" in page, \
+        "the page decides this inline again"
+    assert "status === 'not_assessed' || status === 'not_supplied'" in page
+    # The clean sentence and the finding count must both sit behind the predicate.
+    assert "{!unmeasured(cat.status) && (" in page
+    assert "{unmeasured(cat.status) ? (" in page
+    assert "Not assessed in this scan" in page, "no section for the new state"
+
+
+def test_the_console_and_the_report_agree_about_an_unsupplied_category():
+    """They disagreed for one run: the page said "Assessed, and this run produced
+    no findings", the HTML report said "No module feeding this Category ran".
+    Both are generated from the same roll-up."""
+    page = (ROOT / "frontend" / "src" / "routes" / "CsfFunction.tsx").read_text(
+        encoding="utf-8")
+    report = (ROOT / "modules" / "report_generator.py").read_text(encoding="utf-8")
+    for artefact in (page, report):
+        assert "No module feeding this Category ran" in artefact

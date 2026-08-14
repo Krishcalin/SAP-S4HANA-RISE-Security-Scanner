@@ -160,6 +160,10 @@ body {
 /* Category cards carry the same distinction at block level. */
 .csf-card-clear        { border-color:rgba(34,197,94,.35); }
 .csf-card-not_assessed { border-style:dashed; opacity:.72; }
+/* Dashed like not_assessed because both mean "no measurement here". Its
+   own selector rather than an alias: they answer different questions and
+   will want to look different the moment somebody has a better idea. */
+.csf-card-not_supplied { border-style:dashed; opacity:.72; }
 
 /* ── The twelve security domains ─────────────────────────────────────────────
    TWO AXES, TWO VOCABULARIES, AND THEY MUST NOT LOOK ALIKE.

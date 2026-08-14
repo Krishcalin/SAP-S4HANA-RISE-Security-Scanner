@@ -14,7 +14,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
 
 import { ApiError, csfFunction } from '../api/client'
-import type { CsfCategory, CsfFunctionView } from '../api/types'
+import type { CsfCategory, CsfFunctionView, CsfStatus } from '../api/types'
 import { useTitle } from '../lib/title'
 import { statusLabel } from './Csf'
 import { Landmark } from 'lucide-react'
@@ -63,9 +63,25 @@ export function CsfFunction() {
   )
 }
 
+/** A Category we have no measurement for, whichever reason applies.
+ *
+ *  THE BUG THIS NAMES. The page bucketed on `not_assessed` alone, so a Category
+ *  in the newer `not_supplied` state was filed under "Assessed here" and told
+ *  the reader "Assessed, and this run produced no findings against it" — while
+ *  displaying the dashed "Export not supplied" chip an inch above. The product
+ *  contradicted itself inside one card, and the HTML report for the same run
+ *  printed an em dash and the opposite sentence.
+ *
+ *  Two states, two reasons, one fact: there is no number here. Bucketing on the
+ *  fact rather than on one of the reasons is what stops the next state doing
+ *  this again. */
+const unmeasured = (status: CsfStatus) =>
+  status === 'not_assessed' || status === 'not_supplied'
+
 function Body({ view }: { view: CsfFunctionView }) {
   const notAssessed = view.categories.filter((c) => c.status === 'not_assessed')
-  const assessed = view.categories.filter((c) => c.status !== 'not_assessed')
+  const notSupplied = view.categories.filter((c) => c.status === 'not_supplied')
+  const assessed = view.categories.filter((c) => !unmeasured(c.status))
   return (
     <>
       <div className="flex items-center gap-2.5 mb-1">
@@ -90,10 +106,14 @@ function Body({ view }: { view: CsfFunctionView }) {
           <div className={`${KPI} text-ink`}>
             {view.categories_assessed}<span className="text-ink3 text-[19px]"> / {view.categories_total}</span>
           </div>
+          {/* Both kinds of absence, named separately: one is a boundary of the
+              product, the other is a missing upload the customer can fix. */}
           <div className={KPI_NOTE}>
-            {notAssessed.length === 0
-              ? 'all of them are within reach of an export'
-              : `${notAssessed.length} outside this product’s evidence`}
+            {notAssessed.length > 0 && `${notAssessed.length} outside this product’s evidence`}
+            {notAssessed.length > 0 && notSupplied.length > 0 && ' · '}
+            {notSupplied.length > 0 && `${notSupplied.length} awaiting an export`}
+            {notAssessed.length === 0 && notSupplied.length === 0
+              && 'all of them are within reach of an export'}
           </div>
         </div>
         <div className={CARD}>
@@ -118,6 +138,21 @@ function Body({ view }: { view: CsfFunctionView }) {
       <div className="grid gap-3.5">
         {assessed.map((c) => <CategoryCard key={c.id} cat={c} />)}
       </div>
+
+      {notSupplied.length > 0 && (
+        <>
+          <h2 className={H2}>Not assessed in this scan</h2>
+          <p className="text-[13px] text-ink2 mb-2.5 max-w-[80ch]">
+            These Categories are within reach of an SAP export — nothing that
+            feeds them ran in the scans you can see, so their absence of findings
+            is unexamined rather than clean. Supplying the missing exports and
+            re-running is all it takes.
+          </p>
+          <div className="grid gap-3.5">
+            {notSupplied.map((c) => <CategoryCard key={c.id} cat={c} />)}
+          </div>
+        </>
+      )}
 
       {notAssessed.length > 0 && (
         <>
@@ -152,7 +187,7 @@ function CategoryCard({ cat }: { cat: CsfCategory }) {
         <span className="font-mono text-[12px] font-semibold text-ink">{cat.id}</span>
         <span className="text-[13px] font-semibold text-ink">{cat.name}</span>
         <span className={`csf-state csf-state-${cat.status}`}>{statusLabel(cat.status)}</span>
-        {cat.status !== 'not_assessed' && (
+        {!unmeasured(cat.status) && (
           <span className="ml-auto font-mono text-[13px] text-ink">
             {cat.total} finding{cat.total === 1 ? '' : 's'}
           </span>
@@ -160,9 +195,13 @@ function CategoryCard({ cat }: { cat: CsfCategory }) {
       </div>
       <p className="text-[12px] text-ink2 leading-snug mb-2.5 max-w-[80ch]">{cat.description}</p>
 
-      {cat.status === 'not_assessed' ? (
+      {unmeasured(cat.status) ? (
         <p className="text-[12px] text-ink3 border-t border-line pt-2.5 m-0">
-          <strong className="text-ink2">Why there is nothing here: </strong>{cat.reason}
+          <strong className="text-ink2">Why there is nothing here: </strong>
+          {cat.status === 'not_supplied'
+            ? 'No module feeding this Category ran in the scans you can see, so '
+              + 'the absence of findings here is unexamined rather than clean.'
+            : cat.reason}
         </p>
       ) : (
         <>
