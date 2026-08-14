@@ -196,8 +196,10 @@ product's clearest structural advantage, and a third service would forfeit it.
 ### What the server adds over the CLI
 
 - **Mitigation journey** — re-upload the same exports over time; each finding is classified
-  *new · persisting · resolved · regressed*, with age, assignee, due date and MTTR. A finding
+  *new · persisting · resolved · regressed · unexamined*, with age, assignee, due date and MTTR. A finding
   that comes back re-opens the **same row** with its history intact rather than appearing as new.
+  *Unexamined* is the fifth because it has to be: a run that could not observe a finding leaves it
+  open and says so, rather than reporting a remediation that never happened.
 - **Coverage manifest** — *"you supplied 105 of 123 sources; 10 modules ran with incomplete
   input; 1 source is not obtainable in RISE at all."* Without it a partial upload produces a
   clean-looking report over a fraction of the estate.
@@ -1190,7 +1192,7 @@ How it stays methodologically honest:
 - **A finding is not a risk.** Findings are treated as *evidence that shifts the FAIR factors* of a small set of scoped SAP loss scenarios (internet-facing RCE→ransomware, SoD/financial-controls→payment fraud, privileged/standard-user takeover, HANA data exfiltration→GDPR breach, interface/integration→lateral movement) — never assigned their own dollar figure and summed.
 - **Calibration is range-selection, not arithmetic on CVSS.** The worst open *prevention* finding selects a Resistance-Strength band; the scanner's existing `exposed`/`exploited` signals select the Contact-Frequency and Probability-of-Action bands. Logging/monitoring gaps aren't a scenario — they set a **dwell-time loss multiplier** (weak detection ⇒ longer dwell ⇒ larger loss, per FAIR-CAM).
 - **Correct aggregation.** The portfolio ALE is the element-wise Monte-Carlo sum of the independent per-scenario loss distributions — *never* a sum of percentiles.
-- **Report filters never move the number.** The quantification always runs on the **complete** finding set, so a display `--severity` filter can't change the dollar figure.
+- **Report filters never move a claim about the estate.** `--severity` decides what is LISTED, never what was found. The FAIR figure, the risk-posture score, the NIST CSF roll-up, the FAIR-CAM control map and the compliance mapping are all computed on the **complete** finding set; the finding tables, severity cards and P1–P4 queue obey the filter, which is what the flag is for. Where the two disagree the report says so, in print and on the deck's title slide. *(This was FAIR-only until 2026-08-14: on `--severity HIGH` a CSF Category with real MEDIUM findings rendered the green “no findings” chip, and the headline posture moved from 100/100 Critical to 50/100 High with no change in the data.)*
 - **Honest by construction.** Loss magnitudes are **priced from figures you supply** in `crq_parameters.json`; without them **no currency total is presented as your exposure** — the shipped catalogue is calibrated to an illustrative $1bn manufacturer and printing its losses under your name would be a fabrication. The report says which components came from your answers and which went unpriced, and the scenario input is exported alongside as `*.crq.json`.
 
 The Monte-Carlo engine is **bundled** (`modules/crq_engine.py`, standard library only), so `--crq` produces an actual number on a plain checkout. It is deliberately **last** in the lookup order, so `--crq-engine`, the `CRQ_ENGINE` env var and a sibling [Cyber-Risk-Quantification](https://github.com/Krishcalin/Cyber-Risk-Quantification) checkout all still take precedence. If no engine resolves at all, the scanner still exports the `*.crq.json` scenario input so you can quantify it standalone — there is **no hard dependency** on the sibling repo.
@@ -1736,7 +1738,7 @@ SESSION_SECRET=$(python -c "import secrets;print(secrets.token_urlsafe(48))") \
     python -m pytest -q
 ```
 
-CI (GitHub Actions, `.github/workflows/tests.yml`) runs **six jobs** on every push and pull request:
+CI (GitHub Actions, `.github/workflows/tests.yml`) runs **seven jobs** on every push and pull request:
 
 | Job | What it proves |
 |---|---|
@@ -1744,16 +1746,25 @@ CI (GitHub Actions, `.github/workflows/tests.yml`) runs **six jobs** on every pu
 | `purity` | Walks the AST of `modules/` and `sap_scanner.py` and rejects any non-stdlib import — the charter enforced mechanically rather than remembered |
 | `sap-content` | Re-derives `data/sap_baseline_requirements.json` from SAP's published policy repository and fails on drift; the coverage page is measured against that catalogue, so a stale copy misreports coverage |
 | `brand-assets` | Re-derives `server/static/*` from the master artwork and fails if the committed files drift |
-| `server` | The full suite against **PostgreSQL 16**, schema applied **twice** (idempotency is the upgrade path), a scan seeded *before* pytest so data-dependent suites actually execute, and a guard that **fails the build if more than one test skips** |
+| `image` | Builds the runtime image, scans it for known vulnerabilities, and proves it **runs as a non-root user** on a **read-only** root filesystem under the compose hardening — the evidence a customer's security team asks for first |
+| `schema-upgrade` | Builds a database from the **previous** `schema.sql`, puts rows in it, applies the current one three times, and proves the rows survived and the constraints actually moved — the upgrade path, exercised rather than assumed |
+| `server` | The full suite against **PostgreSQL 16**, schema applied **twice** (idempotency is the upgrade path), a scan seeded *before* pytest so data-dependent suites actually execute, a guard that **fails the build if more than one test skips**, and `npm test` — the console's own render tests |
 
 That last guard is load-bearing. Before it existed, `pytest -q` ran the database-backed suites,
 they skipped for want of `DB_DSN`, and the job went green having verified none of the journey,
 none of the analytics and none of the HTTP layer. A suite that silently skips is worse than one
 that does not exist, because it *looks* verified.
 
-⚠️ [`docs/CHECKS_REFERENCE.md`](docs/CHECKS_REFERENCE.md) is the least current file in the repo —
-it is generated from the code by `tools/build_checks_reference.py` and CI fails if it drifts, so it cannot fall behind the modules again.
-added since. Trust the code, and the module tables above, over that document.
+[`docs/CHECKS_REFERENCE.md`](docs/CHECKS_REFERENCE.md) is **generated** from the code by
+`tools/build_checks_reference.py`, and CI re-runs the generator and fails on any difference — so
+it cannot fall behind the modules. It is the one document in this repository that is checked
+against the source on every push, which makes it the one to trust when a count here and a count
+there disagree. It also states plainly what it does *not* claim: 40 of the 364 titles and 15 of
+the severities vary at runtime and are rendered as *varies* rather than frozen to one example.
+
+*(This paragraph used to open "is the least current file in the repo" and then explain why it
+could not fall behind — a half-applied edit that survived long enough to warn readers away from
+the most current document in the project.)*
 
 <sub>[↑ Contents](#contents)</sub>
 

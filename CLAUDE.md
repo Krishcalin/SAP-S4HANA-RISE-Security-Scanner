@@ -419,6 +419,46 @@ target's current one. The audit log records the event and never the value.
   it to `compliance_mapping.CATEGORY_THEMES` so its findings map to controls, **and give it a
   home in `modules/domains.py`** (a domain, or `UNPLACED_CATEGORIES` with the reason).
   `tests/test_domains.py` fails on a category with neither.
+- **THE FOUR STATES, AND THE ONE FUNCTION THAT DECIDES BETWEEN THEM.** Read this before
+  touching any roll-up. Every view that summarises findings — domains, NIST CSF, FAIR-CAM, the
+  trend pass rate, the resolution guard, the release gate — must distinguish four sentences,
+  and no two of them may render alike:
+
+  | state | means | who it belongs to |
+  |---|---|---|
+  | `assessed` | we looked and found something | — |
+  | `clear` | we looked and found nothing | — |
+  | `not_supplied` | we would have looked; the export never arrived | **the customer** — they can fix it |
+  | `not_assessed` | we do not do this, on any run | **us** — a product boundary |
+
+  The rule the whole product turns on: **"we could not look" must never render as "we looked
+  and found nothing."** Nearly every defect fixed on 2026-08-13/14 was one instance of that
+  sentence, in a different screen.
+
+  `modules/coverage.look_verdict(feeders, manifest, require_complete=False)` is the ONLY place
+  that decides. It returns three answers — `LOOKED`, `UNSUPPLIED`, `UNKNOWN` — because
+  collapsing UNKNOWN into either proof is how five hand-written copies of `bool(feeders & ran)`
+  drifted apart, one of them publishing 28 categories at 100% over an empty database.
+  `tests/test_derivations_match_the_corpus.py` asserts the predicate is evaluated in exactly one
+  place and that all five consumers route through it. **Do not re-derive it.**
+
+  Two axes of caller choice, each stated at the call site rather than inherited:
+  * **UNKNOWN** — the finding-facing callers treat it as *looked* (claiming an export was missing
+    unchecked tells a customer they forgot something they did send); the pass rate treats it as
+    *no rate* (its denominator comes from the code, so treating UNKNOWN as looked divides it by
+    itself).
+  * **`degraded`** — the CLAIM side (domains, CSF, FAIR-CAM) passes `require_complete=True`,
+    because those three publish "we looked and found nothing"; the CONSEQUENCE side (the
+    resolution guard, the release gate) does not, because a complete `sample_data` run has
+    eleven degraded modules and the strict rule there would freeze the backlog and block every
+    build.
+
+  The category→module map is DERIVED from the source (`coverage.module_categories`,
+  `module_check_ids`, `check_catalogue`), and `tests/test_derivations_match_the_corpus.py`
+  holds it against what the auditors actually emit. It reads three spellings of a category
+  declaration; a module using a fourth would vanish from it silently and every consumer would
+  read the gap as *assume it ran*. **If that test fails, the derivation is wrong, not the test.**
+
 - **`modules/domains.py`** — the twelve buyer-facing security domains, used by the console
   (`/domains`, the dashboard strip), the `?domain=` queue filter and one PPTX slide.
   ⚠️ **The HTML and PDF reports carry no domain section, by decision (2026-08-13)** — they are
@@ -450,7 +490,10 @@ target's current one. The audit log records the event and never the value.
     Contact-Frequency / Probability-of-Action bands. Logging/monitoring findings are **not** a
     scenario — they set a **dwell-time loss multiplier** on the dwell-sensitive loss components.
   - *Report filters must not move the number.* FAIR always runs on the **complete** finding set
-    (`fair_findings` captured before the `--severity` display filter).
+    (`fair_findings` captured before the `--severity` display filter, and passed to all
+    three report generators as `full_findings` — the CSF, FAIR-CAM, compliance and
+    domain roll-ups and the posture score all read it, because they describe the estate
+    rather than the selection).
   - *No hard dependency on the sibling repo.* If the engine isn't found, still export the
     `*.crq.json` and degrade gracefully (summary = None).
   - *Routing lives in the catalog.* When you add a **new module**, add its `check_id` prefix (or
@@ -543,9 +586,35 @@ every run writes a manifest saying what it could not reach.
 | `config.py` | Env-only settings. `DB_DSN` and `SESSION_SECRET` have **no defaults** and `validate()` runs at startup, so a deployment that forgets them fails loudly rather than running on a value published in this repo. |
 | `spa/` | The compiled console. Build output, gitignored, produced by the `Dockerfile`'s first stage — never edited, never committed. |
 
+**The console is tested, not only type-checked.** `cd frontend && npm test` runs vitest +
+jsdom + testing-library; CI runs it in the `server` job. It exists because `tsc --noEmit`
+proves the code COMPILES and says nothing about what the screen SAYS — two defects shipped
+through that gap in one day, a CSF Category filed under "Assessed here" while showing the
+"Export not supplied" chip, and `pct_compliant ?? 0` turning an unscanned category into the
+customer's worst-performing area. `??` is invisible to a type-checker by design.
+**Assert the SENTENCES A READER SEES**, not state names: `expect(document.body)
+.toMakeNoCleanClaim()` (in `src/test/setup.ts`) fails if a screen rendered from an
+unassessed fixture says "no findings", "assessed, and", "fully assessed" or "100%".
+⚠️ **Build fixtures from `api/types.ts` and never cast them.** `as CsfFunctionView`
+suppresses the check and hides a real mismatch; a fixture that lies about the wire shape
+tests a screen the product does not have. All three of the first fixtures written here were
+wrong in that way.
+
 **Invariants to preserve in the server tier:**
-- *A finding row is never deleted.* "Resolved" is the **absence of an observation in the latest
-  run**. That is what lets a regression re-open the same row with its age and assignee intact.
+- *A finding row is never deleted.* "Resolved" is the **absence of an observation by a run that
+  could have made one**. That is what lets a regression re-open the same row with its age and
+  assignee intact.
+  ⚠️ **The second half of that sentence is new and load-bearing.** It used to read "the absence of
+  an observation in the latest run", full stop — and that is exactly the defect `3e0e00e` fixed:
+  send fewer exports than last time and every finding from the missing ones was marked resolved,
+  reason "not observed in this run", actor "scanner". A remediation that never happened, written
+  into the journey the product is sold on and propagated into MTTR, the burndown and the
+  attack-path closure counts. `server/ingest.store_run` now takes the coverage manifest and leaves
+  a candidate OPEN when no module that could have produced it ran; the count comes back as
+  `RunDiff.unexamined`. **The limit, stated:** this catches a module that was `skipped` or
+  `not_run`, not one that ran `degraded` — per-finding source provenance does not exist to say
+  which half of a partial input a finding came from, and treating degraded as blind would freeze
+  most of the backlog open.
 - *Degrade, never drop.* A module that raises is recorded with its traceback and the run
   continues. Losing 29 modules because the 30th hit a bad row is far worse than an incomplete
   run that says it is incomplete.
