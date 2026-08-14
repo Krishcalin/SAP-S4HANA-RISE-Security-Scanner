@@ -336,6 +336,15 @@ def cmd_scan(args: argparse.Namespace) -> int:
           f"{result['nodes']} graph nodes")
     print(f"  new {diff.get('new',0)} · persisting {diff.get('persisting',0)} · "
           f"resolved {diff.get('resolved',0)} · regressed {diff.get('regressed',0)}")
+    # WHAT THIS RUN DECLINED TO SAY, on the same line of sight as what it said.
+    # A finding left open because its module never executed is neither resolved
+    # nor persisting; reporting only the four states above would present it as
+    # persisting, which is a claim this run cannot make.
+    if diff.get("unexamined"):
+        print(f"  {diff['unexamined']} finding(s) left open: no module that "
+              f"could have observed them ran in this scan.")
+    if diff.get("resolution_skipped"):
+        print(f"  {diff['resolution_skipped']}")
     if cov.get("summary"):
         print(f"  coverage: {cov['summary']}")
     failed = [n for n, m in result.get("module_status", {}).items()

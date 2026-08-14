@@ -195,8 +195,14 @@ def test_a_saved_view_keeps_its_domain_filter(client):
     the whole queue — a view showing far more than the person who saved it
     intended, which is precisely what the allowlist is for."""
     slug = f"dom-{os.urandom(3).hex()}"
-    saved = client.post("/api/views", json={"name": "One domain", "slug": slug,
-                                            "kind": "findings", "description": ""},
+    # FORM DATA, NOT JSON, and the filters come off the Referer rather than the
+    # body — "save this view" means "save what I am looking at". The first
+    # version of this test posted JSON and 422'd, and it skipped locally for
+    # want of a database, so it asserted nothing until the suite was run against
+    # one.
+    saved = client.post("/api/views",
+                        data={"name": "One domain", "slug": slug,
+                              "kind": "findings", "description": ""},
                         headers={"Referer": "http://testserver/findings?domain=identity"})
     assert saved.status_code in (200, 201), saved.text
     view = client.get(f"/api/views/{slug}").json()

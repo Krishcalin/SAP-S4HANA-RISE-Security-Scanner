@@ -146,21 +146,120 @@ def test_a_finding_that_disappears_is_resolved_not_deleted(database, landscape, 
     before = database.one(
         "SELECT count(*) AS n FROM finding WHERE landscape_id = %s", (landscape,))["n"]
 
-    # Scan a bundle with one export removed: its findings should resolve.
+    # Scan a bundle with the profile-parameter export removed. It is the ONLY
+    # input of baseline_params, security_params and snc_posture, so all three
+    # come back `skipped` — the module could not look at all, which is the case
+    # this test is about. (Removing an export that a module shares with others
+    # leaves it `degraded`; see the note on the assertion below.)
     partial = tmp_path / "partial"
     shutil.copytree(SAMPLE, partial)
-    (partial / "users.csv").unlink()
+    for name in ("security_params.csv", "rsparam.csv", "profile_params.csv"):
+        target = partial / name
+        if target.exists():
+            target.unlink()
     result = _scan(database, landscape, system, partial)
 
-    assert result["diff"]["resolved"] > 0
+    # THIS ASSERTION WAS INVERTED, AND IT ENCODED THE DEFECT.
+    #
+    # It used to require `resolved > 0` for a bundle with users.csv REMOVED. But
+    # deleting an export does not remediate anything: `user_auth_audit` had no
+    # input, did not run, and the findings it can no longer see are unobserved
+    # rather than fixed. Marking them resolved wrote a remediation that never
+    # happened into MTTR, the burndown and the attack-path closure counts.
+    #
+    # A run may only resolve what it could have observed. Those findings now stay
+    # open and are counted separately, and the row count still proves nothing was
+    # deleted — which is what this test was always really about.
+    assert result["diff"]["unexamined"] > 0, (
+        "removing an export resolved its findings; that is a remediation that "
+        "never happened")
     after = database.one(
         "SELECT count(*) AS n FROM finding WHERE landscape_id = %s", (landscape,))["n"]
     assert after >= before, "findings were DELETED rather than resolved; history is lost"
 
-    resolved = database.one(
-        "SELECT count(*) AS n FROM finding WHERE landscape_id = %s AND state = 'resolved'",
-        (landscape,))["n"]
-    assert resolved == result["diff"]["resolved"]
+    still_open = database.one(
+        "SELECT count(*) AS n FROM finding f JOIN check_definition cd "
+        "ON cd.check_id = f.check_id WHERE f.landscape_id = %s "
+        "AND cd.category = %s AND f.state NOT IN ('resolved','false_positive')",
+        (landscape, "Security Baseline Parameters"))["n"]
+    assert still_open > 0, "findings from the module that could not run were closed"
+
+
+@pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")
+def test_the_rule_is_not_a_blanket_freeze(database, landscape, system, tmp_path):
+    """WITHHOLDING MUST STAY NARROW.
+
+    A rule that withheld every resolution would freeze the backlog open for ever
+    and quietly delete the mitigation journey the product is sold on — a worse
+    defect than the one it fixes, and a much quieter one. Removing one module's
+    only input must leave every OTHER module's resolutions working.
+    """
+    _scan(database, landscape, system)
+    partial = tmp_path / "partial2"
+    shutil.copytree(SAMPLE, partial)
+    for name in ("security_params.csv", "rsparam.csv", "profile_params.csv",
+                 "client_settings.csv"):
+        target = partial / name
+        if target.exists():
+            target.unlink()
+    result = _scan(database, landscape, system, partial)
+    assert result["diff"]["resolved"] > 0, (
+        "no finding resolved at all; the withholding rule has become a freeze")
+
+
+@pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")
+def test_a_finding_a_running_module_stops_seeing_is_still_resolved(database, landscape,
+                                                                   system):
+    """The other half, and the half that must not regress.
+
+    Withholding resolution when a module did not run must not become withholding
+    it always — that would freeze every finding open for ever and quietly delete
+    the mitigation journey the product is sold on. With a manifest saying the
+    module DID run, a finding it no longer reports is resolved exactly as before.
+    """
+    from server import db, ingest
+    finding = {"check_id": "USR-001", "title": "t", "severity": "HIGH",
+               "category": "User & Authorization", "description": "d",
+               "affected_items": [], "subject": [{"type": "user", "name": "BOB"}]}
+    ran = {"modules": {"user_auth_audit": {"status": "complete"}}}
+    with db.connection() as conn:
+        r1 = conn.execute(
+            "INSERT INTO scan_run (landscape_id, system_id, status) "
+            "VALUES (%s,%s,'complete') RETURNING id", (landscape, system)).fetchone()["id"]
+        ingest.store_run(conn, r1, landscape, system, [finding], "PRD", "100",
+                         coverage=ran)
+        r2 = conn.execute(
+            "INSERT INTO scan_run (landscape_id, system_id, status) "
+            "VALUES (%s,%s,'complete') RETURNING id", (landscape, system)).fetchone()["id"]
+        d2 = ingest.store_run(conn, r2, landscape, system, [], "PRD", "100",
+                              coverage=ran)
+        conn.commit()
+    assert len(d2.resolved) == 1
+    assert d2.unexamined == []
+
+
+@pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")
+def test_without_a_manifest_resolution_behaves_exactly_as_before(database, landscape,
+                                                                 system):
+    """We do not withhold a resolution on a suspicion. No manifest means nobody
+    checked which modules ran, and a caller that passes none keeps the old
+    behaviour rather than acquiring a new claim."""
+    from server import db, ingest
+    finding = {"check_id": "USR-002", "title": "t", "severity": "HIGH",
+               "category": "User & Authorization", "description": "d",
+               "affected_items": [], "subject": [{"type": "user", "name": "ANN"}]}
+    with db.connection() as conn:
+        r1 = conn.execute(
+            "INSERT INTO scan_run (landscape_id, system_id, status) "
+            "VALUES (%s,%s,'complete') RETURNING id", (landscape, system)).fetchone()["id"]
+        ingest.store_run(conn, r1, landscape, system, [finding], "PRD", "100")
+        r2 = conn.execute(
+            "INSERT INTO scan_run (landscape_id, system_id, status) "
+            "VALUES (%s,%s,'complete') RETURNING id", (landscape, system)).fetchone()["id"]
+        d2 = ingest.store_run(conn, r2, landscape, system, [], "PRD", "100")
+        conn.commit()
+    assert len(d2.resolved) == 1
+    assert d2.unexamined == []
 
 
 @pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")

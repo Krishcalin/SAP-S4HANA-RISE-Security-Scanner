@@ -44,6 +44,8 @@ from psycopg.types.json import Jsonb
 
 from server import db
 from server.coverage import build_manifest
+from modules.coverage import modules_for_categories as coverage_modules_for
+from modules.coverage import ran_modules as coverage_ran
 from server.identity import extract_nodes, fingerprint_finding
 
 log = logging.getLogger(__name__)
@@ -108,14 +110,28 @@ class RunDiff:
     persisting: List[int] = field(default_factory=list)
     resolved: List[int] = field(default_factory=list)
     regressed: List[int] = field(default_factory=list)
+    #: Findings left OPEN because no module that could have observed them ran.
+    #: They are neither resolved nor persisting: this run has nothing to say
+    #: about them, and saying nothing is the only honest option.
+    unexamined: List[int] = field(default_factory=list)
     #: Set when the run carried no system, so nothing could be resolved. STATED
     #: rather than implied — the same discipline as the coverage manifest, which
     #: exists because a silently partial result looks exactly like a clean one.
     resolution_skipped: Optional[str] = None
 
-    def as_counts(self) -> Dict[str, int]:
-        return {"new": len(self.new), "persisting": len(self.persisting),
-                "resolved": len(self.resolved), "regressed": len(self.regressed)}
+    def as_counts(self) -> Dict[str, Any]:
+        # `unexamined` and `resolution_skipped` are part of the answer, not
+        # commentary on it. Both were computed and then dropped here — the caller
+        # stores as_counts() and nothing else — so a run that deliberately
+        # resolved nothing was indistinguishable from one that found nothing to
+        # resolve. That is this file's own stated failure mode, one level up.
+        counts: Dict[str, Any] = {
+            "new": len(self.new), "persisting": len(self.persisting),
+            "resolved": len(self.resolved), "regressed": len(self.regressed),
+            "unexamined": len(self.unexamined)}
+        if self.resolution_skipped:
+            counts["resolution_skipped"] = self.resolution_skipped
+        return counts
 
 
 def bundle_sha(data_dir: Path) -> str:
@@ -291,13 +307,18 @@ def store_run(conn: psycopg.Connection, run_id: int, landscape_id: int,
               system_id: Optional[int], findings: List[Dict[str, Any]],
               default_sid: Optional[str] = None,
               default_client: Optional[str] = None,
-              enrichment: Optional[Dict[int, Dict[str, Any]]] = None) -> RunDiff:
+              enrichment: Optional[Dict[int, Dict[str, Any]]] = None,
+              coverage: Optional[Dict[str, Any]] = None) -> RunDiff:
     """Persist a run's findings and compute the diff against what was open before.
 
     `enrichment` maps `id(finding)` to the priority / ownership / SLA values from
     `server.enrich.enrich`. Passing None stores findings without a tier, which is
     valid but leaves the console unable to sort by priority — the CLI path and the
     tests both supply it.
+
+    `coverage` is the manifest for this run. Without it, every previously-open
+    finding not seen again is resolved — including ones whose module never
+    executed. See the sweep at the foot of this function.
 
     Runs inside the caller's transaction so that a failure leaves no half-stored
     run behind.
@@ -313,6 +334,18 @@ def store_run(conn: psycopg.Connection, run_id: int, landscape_id: int,
             "SELECT id, fingerprint FROM finding "
             "WHERE landscape_id = %s AND system_id IS NOT DISTINCT FROM %s "
             "AND state NOT IN ('resolved', 'false_positive')",
+            (landscape_id, system_id)).fetchall()
+    }
+    # The CATEGORY of each candidate, because the resolution sweep below needs
+    # it: a run may only resolve what it could have observed, and the category is
+    # what ties a stored finding to the modules that produce it.
+    category_of = {
+        r["id"]: r["category"]
+        for r in conn.execute(
+            "SELECT f.id, cd.category FROM finding f "
+            "LEFT JOIN check_definition cd ON cd.check_id = f.check_id "
+            "WHERE f.landscape_id = %s AND f.system_id IS NOT DISTINCT FROM %s "
+            "AND f.state NOT IN ('resolved', 'false_positive')",
             (landscape_id, system_id)).fetchall()
     }
 
@@ -482,8 +515,52 @@ def store_run(conn: psycopg.Connection, run_id: int, landscape_id: int,
             "resolved. Attach it to a system to track remediation across runs.")
         return diff
 
+    # A RUN MAY ONLY RESOLVE WHAT IT COULD HAVE OBSERVED.
+    #
+    # The guard above stops an unscoped run resolving another system's findings.
+    # This stops a scoped run resolving findings whose module never executed —
+    # the same sentence one level down, and the case the guard's own comment
+    # describes ("a partial upload must never silently resolve a system it did
+    # not look at") without being able to enforce.
+    #
+    # It happens on an ordinary upload: send fewer exports than last time and
+    # every finding from the missing ones is marked resolved, reason "not
+    # observed in this run", actor "scanner". That is a remediation that never
+    # happened, written into the journey this product is sold on, and it
+    # propagates into MTTR, the burndown and the attack-path closure counts.
+    #
+    # BY CATEGORY, NOT BY CHECK ID. coverage.module_check_ids() collects only
+    # literal ids, so every rule-table check (ABAP-*, ATC-*) would be invisible
+    # to a check-id mapping and would resolve regardless. Category reaches all of
+    # them. It is coarser — a category with two producing modules resolves when
+    # either ran — and coarse in the SAFE direction: the residual error is a
+    # resolution we allowed, which is the status quo, never one we invented.
+    #
+    # With no manifest nothing changes: `ran` is None and every candidate
+    # resolves exactly as before. We do not withhold a resolution on a suspicion.
+    ran = coverage_ran(coverage)
+    feeders_cache: Dict[str, set] = {}
+
+    def could_have_seen(finding_id: int) -> bool:
+        if ran is None:
+            return True
+        category = category_of.get(finding_id)
+        if not category:
+            return True                      # untieable: resolve as before
+        if category not in feeders_cache:
+            feeders_cache[category] = coverage_modules_for([category])
+        feeders = feeders_cache[category]
+        # No producing module found means we cannot claim this run was blind.
+        return not feeders or bool(feeders & ran)
+
     for fp, finding_id in previously_open.items():
         if fp in seen_now:
+            continue
+        if not could_have_seen(finding_id):
+            # Left open, deliberately. A missed resolution is visible — the
+            # finding simply stays open — whereas a wrong one destroys history
+            # silently, and this file has already made that trade once.
+            diff.unexamined.append(finding_id)
             continue
         conn.execute(
             "UPDATE finding SET state = 'resolved', resolved_at = now(), "
@@ -598,7 +675,8 @@ def scan_directory(data_dir: Path, landscape_id: int, system_id: Optional[int],
                                 destination_hosts(data))
 
             diff = store_run(conn, run_id, landscape_id, system_id, findings,
-                             default_sid, default_client, enrichment)
+                             default_sid, default_client, enrichment,
+                             coverage=manifest)
             node_count = store_graph_nodes(conn, run_id, landscape_id, system_id,
                                            findings, default_sid)
             queue_notifications(conn, run_id, landscape_id, diff)
