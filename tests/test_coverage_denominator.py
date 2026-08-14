@@ -74,3 +74,46 @@ def test_the_console_no_longer_calls_it_the_reference_dataset():
     page = (ROOT / "frontend" / "src" / "routes" / "Coverage.tsx").read_text(encoding="utf-8")
     assert "written into the scanner" in page
     assert "observed_checks" in page
+
+
+# ── an unmeasured category has no pass rate ──────────────────────────────────
+
+def test_a_fresh_install_does_not_report_every_category_as_fully_passing():
+    """THE REGRESSION, AND IT WAS INTRODUCED BY THE FIX ABOVE.
+
+    Moving the denominator off the findings table was right. Defaulting
+    `assessed = True` when no coverage manifest was supplied was not: over an
+    empty database the code-derived denominator then divided by itself and
+    published 28 categories at 100% — a fresh deployment, or a demo, claiming a
+    perfect pass rate over a system nobody had scanned.
+
+    That is the inversion the whole product exists to prevent, arriving through
+    the door that had just been opened to prevent it.
+    """
+    from server import analytics
+
+    catalogue_categories = {c for c in __import__(
+        "modules.coverage", fromlist=["check_catalogue"]).check_catalogue().values()}
+    assert len(catalogue_categories) > 20, "fixture no longer exercises the breadth"
+
+    # The arithmetic, isolated from the database: nothing observed, no manifest.
+    rows = analytics._score_rows(  # type: ignore[attr-defined]
+        observed={}, failing={}, coverage=None)
+    assert rows, "no rows produced"
+    assert all(r["pct_compliant"] is None for r in rows), \
+        "a category nobody scanned reported a pass rate"
+    assert all(r["assessed"] is False for r in rows)
+
+
+def test_a_category_this_tenant_has_observed_is_still_scored_without_a_manifest():
+    """The other direction. An older run stored no manifest, and its findings are
+    still real evidence — refusing to score them would be its own false claim."""
+    from server import analytics
+
+    rows = analytics._score_rows(  # type: ignore[attr-defined]
+        observed={"User & Authorization": 9}, failing={"User & Authorization": 4},
+        coverage=None)
+    scored = [r for r in rows if r["pct_compliant"] is not None]
+    assert len(scored) == 1
+    assert scored[0]["category"] == "User & Authorization"
+    assert scored[0]["assessed"] is True

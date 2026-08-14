@@ -310,8 +310,6 @@ def domain_scorecard(scope: Optional[Sequence[int]],
     catalogue, so the denominator is a floor. `checks_known` is returned so a
     caller can say so rather than implying completeness.
     """
-    from modules.coverage import check_catalogue, modules_for_categories, ran_modules
-
     clause, params = _scope(scope)
     failing_rows = db.query(
         f"""
@@ -343,6 +341,21 @@ def domain_scorecard(scope: Optional[Sequence[int]],
         """, list(params))
     observed = {r["category"]: r["n"] for r in observed_rows}
 
+    return _score_rows(observed=observed, failing=failing, coverage=coverage)
+
+
+def _score_rows(observed: Dict[str, int], failing: Dict[str, int],
+                coverage: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The scorecard arithmetic, with no database in it.
+
+    EXTRACTED BECAUSE THE DEFECT IT NOW GUARDS COULD NOT BE REACHED BY A TEST.
+    Every path into this logic ran through a PostgreSQL query, so the 191 tests
+    that skip without a DSN were the only ones that could see it — and none of
+    them exercised the empty-database case, which is the one that published 28
+    categories at 100%.
+    """
+    from modules.coverage import check_catalogue, modules_for_categories, ran_modules
+
     catalogue = check_catalogue()
     per_category: Dict[str, int] = {}
     for category in catalogue.values():
@@ -355,8 +368,19 @@ def domain_scorecard(scope: Optional[Sequence[int]],
     ran = ran_modules(coverage)
     out: List[Dict[str, Any]] = []
     for category, known in sorted(per_category.items()):
-        assessed = True
-        if ran is not None:
+        n_observed = observed.get(category, 0)
+        if ran is None:
+            # NO MANIFEST MEANS NOBODY CHECKED WHAT RAN, and the first version of
+            # this defaulted that to `assessed = True`. Over an empty database the
+            # code-derived denominator then divided by itself: 28 categories at
+            # 100% "compliant" on a fresh install or a demo — the precise
+            # inversion the rest of this product exists to prevent, arriving
+            # through the door that had just been opened to prevent it.
+            #
+            # Without a manifest, the only categories we can prove were assessed
+            # are the ones this tenant has actually observed a check in.
+            assessed = n_observed > 0
+        else:
             feeders = modules_for_categories([category])
             assessed = not feeders or bool(feeders & ran)
         n_failing = failing.get(category, 0)
