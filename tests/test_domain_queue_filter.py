@@ -212,14 +212,29 @@ def test_a_saved_view_keeps_its_domain_filter(client):
 
 def test_the_ran_statuses_have_one_definition():
     """modules/domains.py used to carry its own copy of the three statuses that
-    mean a module ran. Two spellings of that tuple is two chances for one of them
-    to drift into calling a skipped module 'ran'."""
-    import inspect
+    mean a module ran, and this test pinned the import that fixed it.
 
-    from modules import coverage, domains as dom
-    source = inspect.getsource(dom._supplied_lookup)
-    assert "RAN_STATUSES" in source
+    THE IMPORT HAS SINCE MOVED — `look_verdict` owns the question now, and
+    domains.py asks it rather than answering it — so the assertion is written
+    against the property instead: exactly one function reads the tuple, and the
+    tuple says what it always said.
+    """
+    import ast
+
+    from modules import coverage
+
     assert coverage.RAN_STATUSES == ("complete", "degraded", "no_file_inputs")
+
+    readers = set()
+    for path in sorted((ROOT / "modules").glob("*.py")) + \
+            sorted((ROOT / "server").glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and node.id == "RAN_STATUSES":
+                readers.add(path.name)
+    assert readers == {"coverage.py"}, (
+        f"the ran-status tuple is read outside the one function that owns it: "
+        f"{sorted(readers)}")
 
 
 def test_merging_manifests_takes_the_best_status_per_module():

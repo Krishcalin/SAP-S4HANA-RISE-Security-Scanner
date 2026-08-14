@@ -192,3 +192,63 @@ def test_a_scan_that_ran_nothing_leaves_no_domain_looking_clean(corpus):
     clear_fns = [f["id"] for f in cam["functions"] if f["status"] == fair_cam.CLEAR]
     assert not clear_fns, (
         f"control functions reported clear on a scan that ran nothing: {clear_fns}")
+
+
+# ── the honesty predicate is one site, not five ──────────────────────────────
+
+def test_only_one_place_decides_whether_something_was_looked_at():
+    """`bool(feeders & ran)` was written out five times and the five had already
+    drifted: one defaulted the no-manifest case to "assessed" and published 28
+    categories at 100% over an empty database.
+
+    A convention five files agree to follow is not a rule. This asserts the
+    intersection appears in exactly one function — the rest call it.
+    """
+    import ast
+
+    # READ THE AST, NOT THE TEXT. The first version of this grepped for the
+    # expression and stripped `#` comments — and then flagged the DOCSTRING in
+    # look_verdict that explains why the function exists. That is the fifth time
+    # in this codebase a textual check has matched prose written to prevent the
+    # very thing it was looking for. A rule about what the CODE does has to be
+    # asked of the code.
+    hits = []
+    for path in sorted((ROOT / "modules").glob("*.py")) + \
+            sorted((ROOT / "server").glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitAnd)
+                    and {getattr(node.left, "id", None),
+                         getattr(node.right, "id", None)} == {"feeders", "ran"}):
+                hits.append(f"{path.name}:{node.lineno}")
+    assert len(hits) == 1, (
+        f"the honesty predicate is evaluated in more than one place: {hits}")
+    assert hits[0].startswith("coverage.py"), hits
+
+
+@pytest.mark.parametrize("module_name", [
+    "modules/domains.py", "modules/nist_csf.py", "modules/fair_cam.py",
+    "server/ingest.py", "server/analytics.py",
+])
+def test_every_consumer_goes_through_the_resolver(module_name):
+    """And each states what it does with UNKNOWN at the call site, because the
+    four finding-facing callers and the one rate-facing caller answer that
+    question differently and both are right."""
+    source = (ROOT / module_name).read_text(encoding="utf-8")
+    assert "look_verdict" in source, f"{module_name} decides this itself"
+    assert "UNKNOWN" in source or "UNSUPPLIED" in source
+
+
+def test_the_resolver_returns_three_answers_not_two():
+    """UNKNOWN is not a synonym for either proof. Collapsing it to a bool is how
+    the five copies drifted in the first place."""
+    from modules import coverage
+
+    assert coverage.look_verdict({"a"}, None) == coverage.UNKNOWN
+    assert coverage.look_verdict(set(), {"modules": {"a": {"status": "complete"}}}) \
+        == coverage.UNKNOWN
+    assert coverage.look_verdict({"a"}, {"modules": {"a": {"status": "complete"}}}) \
+        == coverage.LOOKED
+    assert coverage.look_verdict({"a"}, {"modules": {"a": {"status": "skipped"}}}) \
+        == coverage.UNSUPPLIED
+    assert len({coverage.LOOKED, coverage.UNSUPPLIED, coverage.UNKNOWN}) == 3

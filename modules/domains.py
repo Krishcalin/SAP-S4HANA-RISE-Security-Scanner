@@ -448,30 +448,18 @@ def _supplied_lookup(coverage: Optional[Dict[str, Any]]):
     """
     if not coverage or not isinstance(coverage.get("modules"), dict):
         return None
-    try:
-        from modules.coverage import (
-            RAN_STATUSES, module_categories, module_check_ids,
-        )
-        ran_statuses = RAN_STATUSES
-        by_category = module_categories()
-        by_check_id = module_check_ids()
-    except Exception:                                            # noqa: BLE001
-        # The manifest is still usable without the map; the fallback below is
-        # the coarse question this function used to ask.
-        ran_statuses = ("complete", "degraded", "no_file_inputs")
-        by_category, by_check_id = {}, {}
-
-    ran = {name for name, info in coverage["modules"].items()
-           if isinstance(info, dict) and info.get("status") in ran_statuses}
+    from modules.coverage import (
+        UNSUPPLIED, look_verdict, module_categories, module_check_ids,
+    )
+    by_category = module_categories()
+    by_check_id = module_check_ids()
 
     def supplied(domain: Dict[str, Any]) -> bool:
+        # UNKNOWN counts as looked. Claiming an export was missing without having
+        # checked tells a customer they forgot something they did send, which is
+        # the opposite error and the one they cannot act on.
         feeders = feeders_for(domain, by_category, by_check_id)
-        if not feeders:
-            # We cannot tie this domain to a module, so we cannot say its export
-            # was missing. Over-reporting NOT_SUPPLIED is its own false claim —
-            # it tells a customer they forgot something they did send.
-            return bool(ran) if by_category else True
-        return bool(feeders & ran)
+        return look_verdict(feeders, coverage) != UNSUPPLIED
 
     return supplied
 

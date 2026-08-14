@@ -44,8 +44,8 @@ from psycopg.types.json import Jsonb
 
 from server import db
 from server.coverage import build_manifest
+from modules.coverage import UNSUPPLIED, look_verdict
 from modules.coverage import modules_for_categories as coverage_modules_for
-from modules.coverage import ran_modules as coverage_ran
 from server.identity import extract_nodes, fingerprint_finding
 
 log = logging.getLogger(__name__)
@@ -538,20 +538,18 @@ def store_run(conn: psycopg.Connection, run_id: int, landscape_id: int,
     #
     # With no manifest nothing changes: `ran` is None and every candidate
     # resolves exactly as before. We do not withhold a resolution on a suspicion.
-    ran = coverage_ran(coverage)
     feeders_cache: Dict[str, set] = {}
 
     def could_have_seen(finding_id: int) -> bool:
-        if ran is None:
-            return True
+        # UNKNOWN counts as "could have seen", so an unprovable case resolves
+        # exactly as it did before this rule existed — see
+        # modules/coverage.look_verdict on why each caller states this choice.
         category = category_of.get(finding_id)
         if not category:
-            return True                      # untieable: resolve as before
+            return True
         if category not in feeders_cache:
             feeders_cache[category] = coverage_modules_for([category])
-        feeders = feeders_cache[category]
-        # No producing module found means we cannot claim this run was blind.
-        return not feeders or bool(feeders & ran)
+        return look_verdict(feeders_cache[category], coverage) != UNSUPPLIED
 
     for fp, finding_id in previously_open.items():
         if fp in seen_now:

@@ -55,8 +55,8 @@ from .compliance_mapping import ComplianceMapper
 # Imported under short names because both are used inside roll_up() and the long
 # spellings would push its already dense lines past readability. Same module,
 # same derivation the domain and coverage views use.
+from .coverage import UNSUPPLIED, look_verdict
 from .coverage import modules_for_categories as coverage_modules_for
-from .coverage import ran_modules as coverage_ran
 
 
 # ── Functions ────────────────────────────────────────────────────────────────
@@ -453,18 +453,15 @@ def roll_up(findings: Sequence[Dict[str, Any]],
     # nothing that feeds it ran, in which case we did not. "We looked and found
     # nothing" and "the export never arrived" are different sentences and only
     # one of them is reassuring.
-    ran = coverage_ran(coverage)
     for entry in per_category.values():
         if entry["status"] != ASSESSED or entry["total"] != 0:
             continue
-        if ran is None:
-            entry["status"] = CLEAR
-            continue
+        # UNKNOWN counts as CLEAR — see modules/coverage.look_verdict for why
+        # each caller states this choice rather than inheriting it.
         feeders = _modules_feeding(entry["id"], assessable, mapper)
-        # No feeder found means we cannot tie the Category to a module, so we
-        # cannot say its export was missing. Over-reporting NOT_SUPPLIED tells a
-        # customer they forgot something they did send.
-        entry["status"] = CLEAR if (not feeders or (feeders & ran)) else NOT_SUPPLIED
+        entry["status"] = (NOT_SUPPLIED
+                           if look_verdict(feeders, coverage) == UNSUPPLIED
+                           else CLEAR)
 
     functions: List[Dict[str, Any]] = []
     for fn_id in FUNCTION_ORDER:

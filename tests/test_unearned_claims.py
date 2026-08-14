@@ -122,11 +122,23 @@ def test_the_pass_rate_is_still_measured_over_checks_that_ran():
     """
     source = (ROOT / "server" / "analytics.py").read_text(encoding="utf-8")
     assert "pct_compliant" in source
-    # The denominator is narrowed by what actually ran, and a category nothing
-    # assessed reports no percentage rather than a flattering or a damning one.
-    assert "ran_modules" in source
-    assert "modules_for_categories" in source
-    assert '"assessed": False' in source
+
+    # ASSERTED BY RUNNING IT, not by grepping for the helper of the day. This
+    # test has now been rewritten twice because it named an implementation: first
+    # a SQL fragment, then the two functions the scorecard imported before
+    # `look_verdict` took the question over. The property has not changed once.
+    from server.analytics import _score_rows
+
+    nothing_scanned = _score_rows(observed={}, failing={}, coverage=None)
+    assert nothing_scanned, "no rows produced"
+    assert all(r["pct_compliant"] is None for r in nothing_scanned), \
+        "a category nobody scanned was given a pass rate"
+
+    starved = {"modules": {"user_auth_audit": {"status": "complete"}}}
+    partial = _score_rows(observed={}, failing={}, coverage=starved)
+    unassessed = [r for r in partial if not r["assessed"]]
+    assert unassessed, "supplying one module out of thirty scored every category"
+    assert all(r["pct_compliant"] is None for r in unassessed)
 
 
 # ── 3. the note catalogue that stopped in April 2025 ─────────────────────────

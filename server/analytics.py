@@ -354,7 +354,9 @@ def _score_rows(observed: Dict[str, int], failing: Dict[str, int],
     them exercised the empty-database case, which is the one that published 28
     categories at 100%.
     """
-    from modules.coverage import check_catalogue, modules_for_categories, ran_modules
+    from modules.coverage import (
+        UNKNOWN, UNSUPPLIED, check_catalogue, look_verdict, modules_for_categories,
+    )
 
     catalogue = check_catalogue()
     per_category: Dict[str, int] = {}
@@ -365,24 +367,27 @@ def _score_rows(observed: Dict[str, int], failing: Dict[str, int],
         # real; a runtime-built family is exactly that case.
         per_category[category] = max(per_category.get(category, 0), n)
 
-    ran = ran_modules(coverage)
     out: List[Dict[str, Any]] = []
     for category, known in sorted(per_category.items()):
         n_observed = observed.get(category, 0)
-        if ran is None:
-            # NO MANIFEST MEANS NOBODY CHECKED WHAT RAN, and the first version of
-            # this defaulted that to `assessed = True`. Over an empty database the
-            # code-derived denominator then divided by itself: 28 categories at
-            # 100% "compliant" on a fresh install or a demo — the precise
-            # inversion the rest of this product exists to prevent, arriving
-            # through the door that had just been opened to prevent it.
-            #
-            # Without a manifest, the only categories we can prove were assessed
-            # are the ones this tenant has actually observed a check in.
+        # THIS SCREEN READS UNKNOWN DIFFERENTLY FROM EVERY OTHER CALLER, and the
+        # difference is deliberate rather than drift.
+        #
+        # The finding-facing roll-ups treat UNKNOWN as "looked", because claiming
+        # an export was missing unchecked is the worse error there. A PASS RATE
+        # cannot do that: its denominator comes from the code, so treating
+        # UNKNOWN as looked divides that denominator by itself and publishes 28
+        # categories at 100% over an empty database. It did, on a fresh install,
+        # until b6cd27c.
+        #
+        # So UNKNOWN means "no rate" here — unless this tenant has actually
+        # observed a check in the category, which is direct evidence of a look
+        # and outranks the absence of a manifest.
+        verdict = look_verdict(modules_for_categories([category]), coverage)
+        if verdict == UNKNOWN:
             assessed = n_observed > 0
         else:
-            feeders = modules_for_categories([category])
-            assessed = not feeders or bool(feeders & ran)
+            assessed = verdict != UNSUPPLIED
         n_failing = failing.get(category, 0)
         if not assessed:
             out.append({"category": category, "checks_known": known,

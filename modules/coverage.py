@@ -470,6 +470,65 @@ def ran_modules(manifest: Optional[Dict[str, Any]]) -> Optional[Set[str]]:
             if isinstance(info, dict) and info.get("status") in RAN_STATUSES}
 
 
+#: The three answers to "did anything that feeds this actually look?".
+#:
+#: LOOKED and NOT_SUPPLIED are proofs. UNKNOWN is the absence of one, and it is a
+#: THIRD answer rather than a synonym for either — which is the whole reason this
+#: function exists.
+LOOKED = "looked"
+UNSUPPLIED = "not_supplied"
+UNKNOWN = "unknown"
+
+
+def look_verdict(feeders: Set[str], manifest: Optional[Dict[str, Any]]) -> str:
+    """Whether anything that can produce a thing actually ran, in one place.
+
+    WHY THIS IS ONE FUNCTION AND NOT FIVE COPIES.
+
+    `bool(feeders & ran)` was written out five times — modules/domains.py,
+    modules/nist_csf.py, modules/fair_cam.py, server/ingest.py and
+    server/analytics.py — and the five had already drifted apart on the case
+    where `manifest` is None. One of them defaulted that to "assessed", divided a
+    code-derived denominator by itself over an empty database, and published 28
+    security categories at 100% compliant on a fresh install. The predicate is
+    the product's central honesty rule; it should be one auditable site rather
+    than a convention five files agree to follow.
+
+    THE THREE ANSWERS ARE NOT TWO. A caller that collapses UNKNOWN into either
+    proof is making a claim it cannot support:
+
+      LOOKED       a module that feeds this ran. Report what was found.
+      UNSUPPLIED   we know which modules feed this and NONE of them ran. This is
+                   the only answer that authorises "the export never arrived".
+      UNKNOWN      no manifest, or nothing ties this to a module. We cannot prove
+                   a look and we cannot prove its absence.
+
+    Callers differ on what UNKNOWN means for them, legitimately, and each states
+    its choice at the call site:
+
+      * the finding-facing roll-ups (domains, CSF, FAIR-CAM, the resolution
+        guard) treat UNKNOWN as LOOKED, because claiming an export was missing
+        without having checked tells a customer they forgot something they did
+        send;
+      * server/analytics.py's pass rate treats UNKNOWN as "no rate", because its
+        denominator comes from the code and dividing it by itself asserts a
+        perfect score over a system nobody scanned.
+
+    Both are right for their screen. Neither may be inferred from the other,
+    which is why this returns three values and not a bool.
+    """
+    ran = ran_modules(manifest)
+    if ran is None:
+        return UNKNOWN
+    if not feeders:
+        # Nothing ties this to a module. tests/test_derivations_match_the_corpus.py
+        # makes that impossible for a category any auditor actually emits, so it
+        # now means "genuinely outside the product" rather than "the derivation
+        # has a hole" — but it is still not a proof of absence.
+        return UNKNOWN
+    return LOOKED if (feeders & ran) else UNSUPPLIED
+
+
 def modules_for_categories(categories: Iterable[str]) -> Set[str]:
     """Which auditor modules can produce a finding in any of these categories.
 

@@ -242,24 +242,24 @@ def functions_for_theme(theme: str) -> Dict[str, float]:
 
 
 def _empty_state(function_id: str, category_themes: Dict[str, List[str]],
-                 ran: Optional[set], modules_for_categories) -> str:
+                 manifest: Optional[Dict[str, Any]], modules_for_categories) -> str:
     """CLEAR or NOT_SUPPLIED for a reachable function with no findings.
 
     A function is reached by THEMES and a finding reaches a theme through its own
     category, so the categories feeding a function are those whose themes reach
     it — the same two hops the CSF view walks, at the same resolution.
     """
-    if ran is None:
-        return CLEAR
     themes = {theme for theme, entry in THEME_FUNCTIONS.items()
               if function_id in (entry[0] or {})}
     if not themes:
         return CLEAR
     feeding = {cat for cat, cat_themes in category_themes.items()
                if themes & set(cat_themes)}
+    # UNKNOWN counts as CLEAR — see modules/coverage.look_verdict.
+    from .coverage import UNSUPPLIED, look_verdict
     feeders = modules_for_categories(feeding)
-    # Untieable to a module means we cannot say the evidence was missing.
-    return CLEAR if (not feeders or (feeders & ran)) else NOT_SUPPLIED
+    return (NOT_SUPPLIED if look_verdict(feeders, manifest) == UNSUPPLIED
+            else CLEAR)
 
 
 def classify(findings: Sequence[Dict[str, Any]],
@@ -283,8 +283,7 @@ def classify(findings: Sequence[Dict[str, Any]],
     if category_themes is None:
         from .compliance_mapping import ComplianceMapper
         category_themes = ComplianceMapper.CATEGORY_THEMES
-    from .coverage import modules_for_categories, ran_modules
-    ran = ran_modules(coverage)
+    from .coverage import modules_for_categories
 
     per_function: Dict[str, Dict[str, Any]] = {
         fid: {"id": fid, "name": FUNCTIONS[fid][0], "domain": FUNCTIONS[fid][1],
@@ -354,7 +353,7 @@ def classify(findings: Sequence[Dict[str, Any]],
             # nobody examined.
             "status": (NOT_ASSESSED if fid in UNREACHABLE_FUNCTIONS
                        else (ASSESSED if e["findings"] > 0
-                             else _empty_state(fid, category_themes, ran,
+                             else _empty_state(fid, category_themes, coverage,
                                                modules_for_categories))),
             "reason": UNREACHABLE_FUNCTIONS.get(fid),
         })
