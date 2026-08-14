@@ -599,3 +599,107 @@ def test_the_pipeline_persists_the_diff_it_computes():
     source = (ROOT / "server" / "ingest.py").read_text(encoding="utf-8")
     assert "diff = %s" in source
     assert "Jsonb(diff.as_counts())" in source
+
+
+@pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")
+def test_an_unscoped_run_does_not_rewrite_another_findings_identity(database,
+                                                                    landscape):
+    """THE IRREVERSIBLE HALF OF A GUARD THAT ONLY REFUSED THE RECOVERABLE ONE.
+
+    `system_id` is optional on /api/upload, and every query here scopes with
+    `system_id IS NOT DISTINCT FROM %s` — which, for NULL, matches every OTHER
+    system-less finding in the landscape. The resolution sweep has always refused
+    to act on that basis. `_rebase` did not: it ran 130 lines earlier and
+    rewrote finding IDENTITY over the same over-broad pool, so an unscoped upload
+    could adopt an unrelated finding's row — same landscape, same check id, same
+    basis, no system to tell them apart.
+
+    A resolution is undone by the next scan observing the finding again. A
+    rewritten fingerprint is not: the row now claims to be a different finding
+    and nothing records what it was.
+    """
+    from server import db, ingest
+
+    first = {"check_id": "USR-090", "title": "t", "severity": "HIGH",
+             "category": "User & Authorization", "description": "d",
+             "affected_items": [], "subject": [{"type": "user", "name": "ALPHA"}]}
+    second = dict(first, subject=[{"type": "user", "name": "BETA"}])
+
+    with db.connection() as conn:
+        r1 = conn.execute(
+            "INSERT INTO scan_run (landscape_id, status) "
+            "VALUES (%s,'complete') RETURNING id", (landscape,)).fetchone()["id"]
+        ingest.store_run(conn, r1, landscape, None, [first], "PRD", "100")
+        r2 = conn.execute(
+            "INSERT INTO scan_run (landscape_id, status) "
+            "VALUES (%s,'complete') RETURNING id", (landscape,)).fetchone()["id"]
+        diff = ingest.store_run(conn, r2, landscape, None, [second], "PRD", "100")
+        conn.commit()
+
+    # BETA is a new finding, not ALPHA wearing its name.
+    assert len(diff.new) == 1, "the second finding adopted the first one's row"
+    rows = database.query(
+        "SELECT f.id, f.subject FROM finding f WHERE f.landscape_id = %s "
+        "AND f.check_id = 'USR-090' ORDER BY f.id", (landscape,))
+    assert len(rows) == 2, "one row means an identity was overwritten"
+    # And the guard it was always paired with still holds.
+    assert diff.resolution_skipped
+    assert diff.resolved == []
+
+
+@pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")
+def test_a_scoped_run_still_rebases(database, landscape, system):
+    """The control. Rebasing exists because a reworded check would otherwise
+    orphan a finding's age and assignee; disabling it everywhere would be a
+    worse defect than the one being fixed."""
+    from server import db, ingest
+
+    legacy = {"check_id": "USR-091", "title": "t", "severity": "HIGH",
+              "category": "User & Authorization", "description": "d",
+              "affected_items": [], "subject": [{"type": "user", "name": "GAMMA"}]}
+    with db.connection() as conn:
+        r1 = conn.execute(
+            "INSERT INTO scan_run (landscape_id, system_id, status) "
+            "VALUES (%s,%s,'complete') RETURNING id",
+            (landscape, system)).fetchone()["id"]
+        ingest.store_run(conn, r1, landscape, system, [legacy], "PRD", "100")
+        conn.commit()
+    before = database.one(
+        "SELECT count(*) AS n FROM finding WHERE landscape_id = %s "
+        "AND check_id = 'USR-091'", (landscape,))["n"]
+    assert before == 1
+
+
+@pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")
+def test_a_run_that_resolved_nothing_reports_nothing_resolved(database, landscape,
+                                                              system):
+    """IT REPORTED THE SUM OF EVERYTHING EVER RESOLVED BEFORE IT.
+
+    `run_diff` asked for `state='resolved' AND last_seen_run < run_id`, and the
+    resolution UPDATE never touches `last_seen_run` — so every past resolution
+    satisfied it for every later run. The "Resolved" tile grew monotonically for
+    the life of the landscape and had nothing to do with the run on screen.
+    """
+    from server import db, ingest, queries
+
+    finding = {"check_id": "USR-092", "title": "t", "severity": "HIGH",
+               "category": "User & Authorization", "description": "d",
+               "affected_items": [], "subject": [{"type": "user", "name": "DELTA"}]}
+    ran = {"modules": {"user_auth_audit": {"status": "complete",
+                                           "sources_missing": []}}}
+    runs = []
+    with db.connection() as conn:
+        for payload in ([finding], [], []):
+            run = conn.execute(
+                "INSERT INTO scan_run (landscape_id, system_id, status) "
+                "VALUES (%s,%s,'complete') RETURNING id",
+                (landscape, system)).fetchone()["id"]
+            ingest.store_run(conn, run, landscape, system, payload, "PRD", "100",
+                             coverage=ran)
+            runs.append(run)
+        conn.commit()
+
+    _first, resolving, quiet = runs
+    assert queries.run_diff(resolving, None)["resolved"] == 1
+    assert queries.run_diff(quiet, None)["resolved"] == 0, \
+        "a run that resolved nothing inherited the previous run's resolution"

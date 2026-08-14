@@ -478,16 +478,38 @@ def run_diff(run_id: int, scope: Optional[Sequence[int]]) -> Dict[str, Any]:
     persisting = db.one(
         f"SELECT count(*) AS n FROM finding f WHERE {' AND '.join(where)}", params)["n"]
 
-    where, params = ["f.state = 'resolved'", "f.last_seen_run < %s"], [run_id]
+    # COUNTED FROM THE TRANSITIONS, NOT INFERRED FROM THE ROW.
+    #
+    # This asked for `state = 'resolved' AND last_seen_run < run_id`, and the
+    # resolution UPDATE never touches `last_seen_run` — so EVERY past resolution
+    # satisfied it for EVERY later run. The "Resolved" tile on a run page grew
+    # monotonically for the life of the landscape and had nothing to do with the
+    # run being looked at: a scan that resolved nothing still reported the sum of
+    # everything ever resolved before it.
+    #
+    # `finding_transition` records `scan_run_id` on the row it writes, so the
+    # exact answer was already stored. Same root cause as the burndown fixed in
+    # dc6f74b: `last_seen_run` means "last observed", it stopped implying "still
+    # open" when resolution became conditional, and the queries that read it as a
+    # date never noticed.
+    where, params = ["ft.scan_run_id = %s", "ft.to_state = 'resolved'"], [run_id]
     _scoped(where, params, scope)
     resolved = db.one(
-        f"SELECT count(*) AS n FROM finding f WHERE {' AND '.join(where)}", params)["n"]
+        f"SELECT count(DISTINCT ft.finding_id) AS n FROM finding_transition ft "
+        f"JOIN finding f ON f.id = ft.finding_id "
+        f"WHERE {' AND '.join(where)}", params)["n"]
 
-    where, params = ["f.regression_count > 0", "f.last_seen_run = %s"], [run_id]
+    # The same correction, for the same reason: `regression_count > 0` is a
+    # lifetime total, so a finding that regressed once was reported as regressing
+    # in every run that observed it afterwards.
+    where, params = ["ft.scan_run_id = %s", "ft.from_state = 'resolved'",
+                     "ft.to_state = 'open'"], [run_id]
     _scoped(where, params, scope)
     regressed = db.query(
-        f"SELECT f.id, f.check_id, f.severity, f.regression_count, cd.title "
-        f"FROM finding f JOIN check_definition cd ON cd.check_id = f.check_id "
+        f"SELECT DISTINCT f.id, f.check_id, f.severity, f.regression_count, cd.title "
+        f"FROM finding_transition ft "
+        f"JOIN finding f ON f.id = ft.finding_id "
+        f"JOIN check_definition cd ON cd.check_id = f.check_id "
         f"WHERE {' AND '.join(where)}", params)
 
     # WHAT THE RUN CONCLUDED, which the finding rows cannot say.

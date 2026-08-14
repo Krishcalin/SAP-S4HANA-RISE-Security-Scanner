@@ -570,3 +570,70 @@ def test_the_scanner_arms_the_gate_from_the_manifest():
     gate_block = src[src.index("# ── Release gate ─", src.index("SCAN COMPLETE")):]
     assert "release_gate.coverage_reasons(coverage_manifest)" in gate_block
     assert "or bool(coverage_reasons)" in gate_block
+
+
+# ── the scope file the README tells you to write ─────────────────────────────
+#
+# THE DOCUMENTED INVOCATION WAS THE ONE THAT DISARMED THE GATE.
+#
+#     --gate-scope transport-objects.json
+#
+# `load_scope` split that file line by line, so a JSON document parsed into
+# "object names" like `{`, `"objects":` and `]`. None matched anything, Rule 2
+# narrowed the verdict to zero findings, and a CRITICAL SQL-injection finding in
+# ZCL_A exited 0. Measured, before and after, on the same file:
+#
+#     OLD -> ['"OBJECTS": [', '"ZCL_A",', '"ZPROG_B"', ']', '{', '}']   pass, exit 0
+#     NEW -> ['ZCL_A', 'ZPROG_B']                                      blocked, exit 1
+
+def test_a_json_scope_names_the_objects_and_not_the_punctuation(tmp_path):
+    p = tmp_path / "transport-objects.json"
+    p.write_text(json.dumps({"objects": ["ZCL_A", "ZPROG_B"]}), encoding="utf-8")
+    assert rg.load_scope(p) == {"ZCL_A", "ZPROG_B"}
+
+
+def test_a_bare_json_list_is_accepted_too(tmp_path):
+    p = tmp_path / "scope.json"
+    p.write_text(json.dumps(["zcl_a", " zprog_b "]), encoding="utf-8")
+    assert rg.load_scope(p) == {"ZCL_A", "ZPROG_B"}
+
+
+def test_the_line_format_still_works(tmp_path):
+    """It was the only format that worked, and it must not stop working."""
+    p = tmp_path / "scope.txt"
+    p.write_text("# objects in TR001\nZCL_A\nzprog_b  # a comment\n", encoding="utf-8")
+    assert rg.load_scope(p) == {"ZCL_A", "ZPROG_B"}
+
+
+def test_a_scope_that_names_nothing_is_refused_not_obeyed(tmp_path):
+    """THE MORE IMPORTANT HALF. A scope matching nothing narrows the gate to
+    nothing and would pass every build. Silently scoping to zero is
+    indistinguishable from a transport that touches nothing, and only one of
+    those should let a build through — so it raises, and sap_scanner.py's
+    handler turns that into EXIT_CANNOT_ASSESS, which is Rule 4's answer."""
+    for name, body in (("empty.json", "[]"),
+                       ("empty-obj.json", '{"objects": []}'),
+                       ("comments.txt", "# nothing here\n\n"),
+                       ("unknown-shape.json", '{"transports": {"TR1": []}}')):
+        p = tmp_path / name
+        p.write_text(body, encoding="utf-8")
+        with pytest.raises(ValueError) as excinfo:
+            rg.load_scope(p)
+        assert "named no objects" in str(excinfo.value), name
+
+
+def test_a_scoped_gate_still_blocks_a_finding_the_transport_touches(tmp_path):
+    """End to end: the point of scoping is to judge what changed, and that only
+    works if the scope reaches the findings."""
+    p = tmp_path / "transport-objects.json"
+    p.write_text(json.dumps({"objects": ["ZCL_A"]}), encoding="utf-8")
+    result = rg.evaluate([finding(obj="ZCL_A")], scope=rg.load_scope(p))
+    assert result.decision == "blocked"
+    assert result.exit_code == rg.EXIT_BLOCKED
+
+
+def test_a_scoped_gate_still_ignores_a_finding_it_did_not_touch(tmp_path):
+    p = tmp_path / "transport-objects.json"
+    p.write_text(json.dumps({"objects": ["ZCL_UNRELATED"]}), encoding="utf-8")
+    result = rg.evaluate([finding(obj="ZCL_A")], scope=rg.load_scope(p))
+    assert result.exit_code == rg.EXIT_PASS

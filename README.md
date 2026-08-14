@@ -1106,7 +1106,7 @@ python sap_scanner.py --data-dir ./exports --gate --gate-baseline gate-baseline.
 Four rules, each drawn from a specific way gates get switched off in practice:
 
 - **Judge the delta, not the backlog.** A gate that fails on pre-existing findings is disabled in a week.
-- **Judge only what the transport touches.** `--gate-scope` narrows the verdict to the objects under change.
+- **Judge only what the transport touches.** `--gate-scope` narrows the verdict to the objects under change. The file may be a JSON list, a JSON object with an `objects` list, or one object name per line with `#` comments. A scope file naming nothing is **refused** (`exit 2`, cannot-assess) rather than obeyed — narrowing the gate to nothing would pass every build.
 - **Never block on what the customer cannot fix.** In RISE, a `ticket_to_sap` finding is not the developer's to resolve, and failing their build for it teaches them to bypass the gate.
 - **Never fail open.** Degraded coverage is exit **2**, never a pass — an unassessable build must not look like a clean one.
 

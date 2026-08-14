@@ -126,3 +126,95 @@ def test_an_unrecognised_name_beside_real_ones_is_still_reported_as_not_run():
     manifest = build_manifest({}, modules_run=["users", "no_such_module"])
     assert manifest["modules"]["user_auth_audit"]["status"] != "not_run"
     assert manifest["counts"]["modules_not_run"] > 0
+
+
+# ── the stdlib-only job's exclusion list ─────────────────────────────────────
+
+def test_the_ignore_list_is_derived_and_not_written_down():
+    """It was eighteen `--ignore=` lines maintained by hand, under a comment
+    saying "This list rotted once already". By the time it was replaced it had
+    rotted twice: eleven test files imported `server` and were not listed,
+    passing only because the modules they happened to import were
+    dependency-free. That is not a job that passes, it is a job that has not
+    failed yet."""
+    workflow = (ROOT / ".github" / "workflows" / "tests.yml").read_text(encoding="utf-8")
+    assert "--ignore=tests/" not in workflow, \
+        "the exclusion list has been hardcoded again; it will rot again"
+    assert "tools.stdlib_only_ignores" in workflow
+
+
+def test_the_derivation_finds_the_suites_that_need_the_server_tier():
+    from tools.stdlib_only_ignores import unavailable_here
+
+    found = unavailable_here()
+    # A representative few, each for a different reason.
+    assert "tests/test_api_auth.py" in found          # fastapi.testclient
+    assert "tests/test_integration_ingest.py" in found  # psycopg
+    assert "tests/test_graph_paths.py" in found       # server.graph -> psycopg
+
+
+def test_the_stdlib_pure_server_suites_still_run_on_every_python():
+    """THE CARVE-OUT A NAIVE RULE WOULD HAVE DESTROYED.
+
+    server/totp.py and server/qr.py import only the standard library, so their
+    suites run in the matrix job as well as the server one — 86 tests of the
+    RFC 6238 core and the ISO/IEC 18004 encoder against published vectors, on
+    five Pythons. "Ignore anything importing server" would have thrown that away
+    silently.
+    """
+    from tools.stdlib_only_ignores import unavailable_here
+
+    found = unavailable_here()
+    assert "tests/test_totp.py" not in found
+    assert "tests/test_qr.py" not in found
+
+
+def test_an_import_inside_a_fixture_counts():
+    """It does not break COLLECTION, which is why the first version of the
+    derivation ignored it — and it does break the TEST. Measured in a
+    pytest-only virtualenv: the module-level rule left 28 failures and 13
+    errors."""
+    from tools.stdlib_only_ignores import unavailable_here
+
+    # This suite's only server import is `from server import ingest`, inside a
+    # fixture — and in the package form, which names the package rather than the
+    # submodule and needed resolving to be seen at all.
+    assert "tests/test_derivations_match_the_corpus.py" in unavailable_here()
+
+
+def test_the_derivation_needs_nothing_the_job_does_not_have():
+    """It runs inside the job it configures, so a third-party import here would
+    be a bootstrap failure with a confusing message.
+
+    ASKED AS "IS IT DECLARED", NOT "IS IT STDLIB". The first version of this used
+    `sys.stdlib_module_names`, which arrived in Python 3.10 — in a test about a
+    3.8-to-3.12 matrix. tests/test_python_matrix.py caught it, which is exactly
+    what that file exists for; what it could not catch was the same call in the
+    TOOL itself, which would have crashed the job on two interpreters.
+    """
+    from tools.stdlib_only_ignores import THIRD_PARTY
+
+    tree = ast.parse((ROOT / "tools" / "stdlib_only_ignores.py").read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        names = ([a.name for a in node.names] if isinstance(node, ast.Import)
+                 else ([node.module or ""] if isinstance(node, ast.ImportFrom) else []))
+        for name in names:
+            assert name.split(".")[0] not in THIRD_PARTY, name
+
+
+def test_every_declared_dependency_is_known_to_the_derivation():
+    """The import-name map is the one hand-written thing left, so it is held
+    against requirements.txt: a fifth runtime dependency cannot be added without
+    appearing there, and the derivation cannot silently stop recognising one."""
+    import re
+
+    from tools.stdlib_only_ignores import DECLARED_IMPORT_NAMES
+
+    declared = set()
+    for line in (ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines():
+        line = line.split("#", 1)[0].strip()
+        if line:
+            declared.add(re.split(r"[\[<>=!]", line, 1)[0].strip())
+    assert declared == set(DECLARED_IMPORT_NAMES), (
+        f"requirements.txt and the import-name map disagree: "
+        f"{declared ^ set(DECLARED_IMPORT_NAMES)}")

@@ -69,38 +69,32 @@ jobs:
       # still fails this job, which is the boundary it exists to defend — and the
       # `purity` job enforces that boundary structurally over modules/ regardless.
       #
-      # WHEN YOU ADD A TEST THAT TOUCHES server/, ADD IT HERE. This list rotted once
-      # already, and the failure mode is the loud one: the matrix job goes red for a
-      # reason that has nothing to do with the change that tripped it.
+      # THE LIST IS DERIVED, NOT WRITTEN DOWN, and that is the whole point.
+      #
+      # It used to be eighteen `--ignore=` lines maintained by hand, under a
+      # comment reading "WHEN YOU ADD A TEST THAT TOUCHES server/, ADD IT HERE.
+      # This list rotted once already." By the time it was replaced it had rotted
+      # twice: ELEVEN test files imported `server` and were not listed, passing
+      # only because the modules they happened to import were dependency-free.
+      # That is not a job that passes, it is a job that has not failed yet.
+      #
+      # tools/stdlib_only_ignores.py answers the real question — "does running
+      # this test require a package this job does not install?" — by following
+      # each test's imports transitively through server/. It is deliberately
+      # conservative about WHERE it looks: an import inside a fixture does not
+      # break collection but does break the test, which cost two rounds of
+      # measurement to establish.
+      #
+      # It also preserves the carve-out a naive rule would have destroyed:
+      # server/totp.py and server/qr.py import only the standard library, so
+      # tests/test_totp.py and tests/test_qr.py still run HERE as well as in the
+      # server job — 86 tests of the RFC 6238 core and the ISO/IEC 18004 encoder
+      # against published vectors, on every Python in the matrix.
+      #
+      # Verified in a pytest-only virtualenv before this replaced the list:
+      # 2174 passed, 11 skipped, nothing failed.
       - name: Run scanner tests
-        run: |
-          pytest -q \
-            --ignore=tests/test_integration_ingest.py \
-            --ignore=tests/test_integration_journey.py \
-            --ignore=tests/test_http_console.py \
-            --ignore=tests/test_graph_paths.py \
-            --ignore=tests/test_spa_mount.py \
-            --ignore=tests/test_api_auth.py \
-            --ignore=tests/test_account.py \
-            --ignore=tests/test_crq_trend.py \
-            --ignore=tests/test_api_finding_detail.py \
-            --ignore=tests/test_code_finding_console.py \
-            --ignore=tests/test_branding.py \
-            --ignore=tests/test_enrich.py \
-            --ignore=tests/test_sapcontent.py \
-            --ignore=tests/test_sod_deferral.py \
-            --ignore=tests/test_snc_overlap.py \
-            --ignore=tests/test_totp_auth.py \
-            --ignore=tests/test_cli_totp.py \
-            --ignore=tests/test_systems_api.py
-        # NOT ignored, deliberately: tests/test_totp.py and tests/test_qr.py.
-        # server/totp.py and server/qr.py import only the standard library, so
-        # both suites run HERE as well as in the server job — 86 tests of the
-        # cryptographic core and the QR encoder against the RFC 6238 and
-        # ISO/IEC 18004 published vectors, on every Python in the matrix. If a
-        # future change makes either module reach for psycopg, this job goes red,
-        # which is the correct outcome: neither has any business touching a
-        # database.
+        run: pytest -q $(python -m tools.stdlib_only_ignores)
 
       - name: Smoke-run the scanner (all modules over sample_data)
         env:

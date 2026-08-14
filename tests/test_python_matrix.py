@@ -77,20 +77,42 @@ def _matrix_floor() -> tuple:
 
 
 def _ignored_by_cli_job() -> set:
-    """The test files the `cli` job explicitly skips, read from the workflow.
+    """The test files the `cli` job skips, from the tool that computes them.
 
-    Derived rather than repeated: a hardcoded copy would drift from the job the
-    moment somebody added an --ignore, and it would drift silently in the
-    direction of checking fewer files.
+    IT USED TO GREP THE WORKFLOW FOR `--ignore=`, and that stopped working the
+    moment the list became derived: with no literal flags left, the regex matched
+    a single BACKTICK out of a comment reading "it used to be eighteen
+    `--ignore=` lines", and `assert _ignored_by_cli_job()` was satisfied by
+    punctuation. The guard-on-the-guard passed while the guard measured nothing.
+
+    That is the fourth time in this codebase a textual check has read prose about
+    the thing instead of the thing, and the third time in one working day. It now
+    calls the same function the job calls, so the two cannot disagree at all —
+    there is nothing left to parse.
     """
-    text = WORKFLOW.read_text(encoding="utf-8")
-    return {Path(m).name for m in re.findall(r"--ignore=(\S+)", text)}
+    from tools.stdlib_only_ignores import unavailable_here
+
+    return {Path(name).name for name in unavailable_here()}
 
 
 def _files_the_cli_job_runs():
+    """Every file the job EXECUTES, not merely every test it collects.
+
+    WHY THIS IS WIDER THAN IT WAS. The job runs the whole scanner core and, since
+    the ignore list became derived, a tool of its own — `pytest -q $(python -m
+    tools.stdlib_only_ignores)`. Only `tests/` was ever checked.
+
+    So `tools/stdlib_only_ignores.py` was written using `sys.stdlib_module_names`
+    — 3.10+, in a 3.8 matrix — and this file caught the identical call in the
+    TEST beside it while being structurally blind to the tool the job needs in
+    order to start. A file that crashes the runner is worse than a test that
+    fails inside it, and that is the sixth appearance of that one attribute here.
+    """
     ignored = _ignored_by_cli_job()
-    return sorted(p for p in (ROOT / "tests").glob("test_*.py")
-                  if p.name not in ignored)
+    tests = [p for p in (ROOT / "tests").glob("test_*.py") if p.name not in ignored]
+    core = [p for directory in ("modules", "collect", "tools")
+            for p in (ROOT / directory).glob("*.py")]
+    return sorted(tests + core + [ROOT / "sap_scanner.py"])
 
 
 def test_the_workflow_still_declares_a_matrix_this_test_can_read():
@@ -99,9 +121,23 @@ def test_the_workflow_still_declares_a_matrix_this_test_can_read():
     nothing — which is the failure mode it was written to prevent."""
     floor = _matrix_floor()
     assert floor < (3, 12), f"parsed an implausible matrix floor: {floor}"
-    assert _ignored_by_cli_job(), "no --ignore entries parsed from the workflow"
-    assert len(_files_the_cli_job_runs()) > 20, \
-        "implausibly few test files matched; the derivation has broken"
+
+    # NAMED FILES, not "something truthy". The previous version asserted only
+    # that the ignored set was non-empty, and a stray backtick satisfied it.
+    ignored = _ignored_by_cli_job()
+    assert len(ignored) > 5, f"implausibly few files ignored: {sorted(ignored)}"
+    assert all(name.endswith(".py") for name in ignored), sorted(ignored)
+    assert "test_api_auth.py" in ignored, \
+        "a suite that plainly needs fastapi is not being skipped"
+
+    checked = {p.name for p in _files_the_cli_job_runs()}
+    assert len(checked) > 60, "implausibly few files matched"
+    # The three kinds this must cover, one witness each.
+    assert "test_domains.py" in checked, "tests are not being checked"
+    assert "coverage.py" in checked, "the scanner core is not being checked"
+    assert "stdlib_only_ignores.py" in checked, \
+        "the tool the job runs to start is not being checked"
+    assert not (checked & ignored), "a skipped suite is being checked anyway"
 
 
 @pytest.mark.parametrize("path", _files_the_cli_job_runs(),

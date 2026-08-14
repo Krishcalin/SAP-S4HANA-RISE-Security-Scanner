@@ -267,13 +267,63 @@ def load_policy(path: Optional[Path]) -> Dict[str, Any]:
 
 
 def load_scope(path: Path) -> Set[str]:
-    """Object names a transport touches — one per line, `#` comments allowed."""
-    out: Set[str] = set()
-    for line in Path(path).read_text(encoding="utf-8").splitlines():
-        name = line.split("#", 1)[0].strip()
-        if name:
-            out.add(name.upper())
-    return out
+    """Object names a transport touches. JSON or one-per-line.
+
+    THE README HAS ALWAYS ADVERTISED THE FORMAT THIS COULD NOT READ:
+
+        --gate-scope transport-objects.json
+
+    and this function split that file line by line. A JSON document parsed into
+    "object names" like `{`, `"objects":` and `[`, none of which match anything,
+    so Rule 2 narrowed the gate to ZERO findings in scope and it exited 0. The
+    documented invocation of the release gate was the one that disarmed it, and
+    the reader is a build pipeline with no other signal to consult.
+
+    `load_baseline` two functions above has tried JSON first since it was
+    written; this is the same fix, in the sibling that was missed.
+
+    AN EMPTY SCOPE IS AN ERROR, NOT A DECISION — the more important half.
+
+    Whatever the format, a scope file that yields no names at all now raises.
+    Silently scoping to nothing is indistinguishable from a transport that
+    touches nothing, and only one of those should let a build through: the
+    caller in sap_scanner.py catches ValueError and exits EXIT_CANNOT_ASSESS,
+    which is Rule 4's answer to "we could not tell". A gate that fails open on a
+    malformed input is worse than no gate, because it does it silently and on
+    every build.
+    """
+    raw = Path(path).read_text(encoding="utf-8")
+    names: Set[str] = set()
+
+    try:
+        data: Any = json.loads(raw)
+    except ValueError:
+        data = None                       # not JSON; the line format is legal too
+
+    if isinstance(data, list):
+        names = {str(x).strip().upper() for x in data if str(x).strip()}
+    elif isinstance(data, dict):
+        # `objects` is what the README's example carries. The others are what a
+        # person reasonably writes instead; accepting them costs nothing and a
+        # rejected synonym looks exactly like a broken gate.
+        for key in ("objects", "scope", "names", "transport_objects"):
+            value = data.get(key)
+            if isinstance(value, list):
+                names = {str(x).strip().upper() for x in value if str(x).strip()}
+                break
+    elif data is None:
+        for line in raw.splitlines():
+            name = line.split("#", 1)[0].strip()
+            if name:
+                names.add(name.upper())
+
+    if not names:
+        raise ValueError(
+            f"{path} named no objects. A scope that matches nothing narrows the "
+            f"gate to nothing and would pass every build, so it is refused "
+            f"rather than obeyed. Expected one object name per line, a JSON "
+            f'list, or a JSON object with an "objects" list.')
+    return names
 
 
 # --------------------------------------------------------------------------- #

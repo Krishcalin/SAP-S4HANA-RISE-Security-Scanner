@@ -326,6 +326,26 @@ def store_run(conn: psycopg.Connection, run_id: int, landscape_id: int,
     _upsert_check_definitions(conn, findings)
     enrichment = enrichment or {}
 
+    # AN UNSCOPED RUN CANNOT SAFELY TOUCH ANOTHER SYSTEM'S ROWS, AND THAT
+    # DECISION HAS TO BE MADE BEFORE ANYTHING WRITES.
+    #
+    # `system_id` is optional on /api/upload, and every query in this function
+    # scopes with `system_id IS NOT DISTINCT FROM %s` — which, for NULL, matches
+    # every OTHER system-less finding in the landscape, whatever produced it.
+    # The resolution sweep at the foot of this function has always refused to
+    # act on that basis.
+    #
+    # `_rebase` did not. It ran 130 lines EARLIER and rewrote finding IDENTITY
+    # over the same over-broad pool, so an unscoped BTP upload could adopt a
+    # Cloud ALM finding's row: same landscape, same check id, same basis, no
+    # system to tell them apart. We were refusing the recoverable half and
+    # performing the irreversible one — a resolution is undone by the next scan
+    # observing the finding again, a rewritten fingerprint is not, because the
+    # row now claims to be a different finding and nothing records what it was.
+    #
+    # So the decision is made once, here, and both halves read it.
+    unscoped = system_id is None
+
     # What was open for this system before this run. Compared by fingerprint, so
     # a finding matches itself regardless of how its wording or severity moved.
     previously_open = {
@@ -378,7 +398,11 @@ def store_run(conn: psycopg.Connection, run_id: int, landscape_id: int,
             "WHERE landscape_id = %s AND fingerprint = %s",
             (landscape_id, fp)).fetchone()
 
-        if row is None:
+        if row is None and not unscoped:
+            # See `unscoped` above: with no system, the candidate pool spans
+            # every system-less finding in the landscape, so a match proves
+            # nothing about identity. A missed rebase costs a finding its age;
+            # a wrong one gives it somebody else's.
             row = _rebase(conn, rebase_pool, cid, basis, fp, previously_open)
 
         en = enrichment.get(id(f), {})
@@ -509,7 +533,11 @@ def store_run(conn: psycopg.Connection, run_id: int, landscape_id: int,
     # is visible — the finding simply stays open — whereas a wrong one destroys
     # history silently. When runs carry a platform (see the coverage roadmap),
     # this guard should narrow to that rather than disappear.
-    if system_id is None:
+    #
+    # THE SAME DECISION ALSO DISABLES IDENTITY REBASING, at the top of this
+    # function. It did not, for a while: this guard refused the recoverable half
+    # while `_rebase` performed the irreversible one 130 lines earlier.
+    if unscoped:
         diff.resolution_skipped = (
             "This upload was not attached to a system, so nothing was marked "
             "resolved. Attach it to a system to track remediation across runs.")
