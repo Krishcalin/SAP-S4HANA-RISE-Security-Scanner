@@ -314,6 +314,58 @@ def module_categories() -> Dict[str, List[str]]:
 
 
 @lru_cache(maxsize=1)
+def check_catalogue() -> Dict[str, str]:
+    """{check id: finding category}, for every check written as a literal.
+
+    WHY A THIRD DERIVATION AND NOT A FOURTH TABLE. `module_categories` answers
+    "what can this module produce" and `module_check_ids` answers "what ids does
+    it write"; neither can say which of a module's categories a given id belongs
+    to, and several modules emit more than one. A per-category DENOMINATOR needs
+    exactly that pairing — how many checks exist in this category, including the
+    ones that have never failed.
+
+    Paired within a single call, which is what makes it precise: `check_id=` and
+    `category=` are keyword arguments of the same `finding(...)` call, so they
+    are read off the same AST node rather than correlated by position. A call
+    passing `category=self.CATEGORY` is resolved through the class attribute, the
+    spelling fifteen modules use.
+
+    Checks built at runtime from rule tables are not literals and are not here.
+    The consumer treats the result as a floor and says so.
+    """
+    out: Dict[str, str] = {}
+    for path in sorted(MODULES_DIR.glob("*.py")):
+        if path.stem in _NOT_AN_AUDITOR:
+            continue
+        src = path.read_text(encoding="utf-8")
+        if "BaseAuditor" not in src:
+            continue
+        tree = ast.parse(src, str(path))
+        class_category: Optional[str] = None
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Assign)
+                    and isinstance(node.value, ast.Constant)
+                    and isinstance(node.value.value, str)
+                    and any(isinstance(x, ast.Name) and x.id == "CATEGORY"
+                            for x in node.targets)):
+                class_category = node.value.value
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            kwargs = {k.arg: k.value for k in node.keywords if k.arg}
+            cid_node, cat_node = kwargs.get("check_id"), kwargs.get("category")
+            if not (isinstance(cid_node, ast.Constant)
+                    and isinstance(cid_node.value, str)):
+                continue
+            if isinstance(cat_node, ast.Constant) and isinstance(cat_node.value, str):
+                out[cid_node.value] = cat_node.value
+            elif (isinstance(cat_node, ast.Attribute)
+                  and cat_node.attr == "CATEGORY" and class_category):
+                out[cid_node.value] = class_category
+    return out
+
+
+@lru_cache(maxsize=1)
 def module_check_ids() -> Dict[str, List[str]]:
     """{module file name: the check ids written as literals in it}.
 

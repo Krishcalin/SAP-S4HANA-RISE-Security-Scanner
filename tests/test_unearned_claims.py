@@ -113,10 +113,20 @@ def test_the_pass_rate_has_no_severity_blind_traffic_light():
 def test_the_pass_rate_is_still_measured_over_checks_that_ran():
     """The number is defensible and was NOT deleted. Scoring against the whole
     catalogue would let a customer improve their score by supplying fewer
-    exports, which is the trap the server-side comment already names."""
+    exports, which is the trap the server-side comment already names.
+
+    THIS TEST USED TO ASSERT A SQL FRAGMENT — `"DISTINCT ran.check_id" in
+    source` — which pinned the implementation rather than the property, and went
+    red the moment the denominator was fixed to something better. It now asserts
+    what it was always protecting: that supplying less cannot score more.
+    """
     source = (ROOT / "server" / "analytics.py").read_text(encoding="utf-8")
     assert "pct_compliant" in source
-    assert "DISTINCT ran.check_id" in source
+    # The denominator is narrowed by what actually ran, and a category nothing
+    # assessed reports no percentage rather than a flattering or a damning one.
+    assert "ran_modules" in source
+    assert "modules_for_categories" in source
+    assert '"assessed": False' in source
 
 
 # ── 3. the note catalogue that stopped in April 2025 ─────────────────────────

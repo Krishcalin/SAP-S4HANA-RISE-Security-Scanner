@@ -284,40 +284,106 @@ def team_scorecard(scope: Optional[Sequence[int]]) -> List[Dict[str, Any]]:
         """, params)
 
 
-def domain_scorecard(scope: Optional[Sequence[int]]) -> List[Dict[str, Any]]:
-    """Percentage-compliant per finding category — the number an exec repeats.
+def domain_scorecard(scope: Optional[Sequence[int]],
+                     coverage: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    """Pass rate per finding category — the number an exec repeats.
 
-    "Compliant" is measured over CHECKS THAT ACTUALLY RAN for the systems in
-    scope, not over the whole catalogue. Scoring against every check ever written
-    would let a customer improve their score by supplying fewer exports, which is
-    the exact opposite of the incentive we want.
+    THE DENOMINATOR USED TO BE THE FINDINGS THEMSELVES, which made this a closure
+    rate wearing a pass rate's name. Both CTEs read `finding`, so `ran` meant
+    "checks that have failed at some point": a category where three of forty
+    checks ever produced a finding had a denominator of three, a first-time
+    customer read 0%, and a category whose export was never supplied vanished
+    from the table altogether rather than appearing as unassessed.
+
+    Now the denominator comes from the CODE — `coverage.check_catalogue()` pairs
+    each literal check id with its category — narrowed to the modules that
+    actually ran for the systems in scope. That keeps the incentive the old
+    docstring described and could not deliver: supplying fewer exports removes
+    checks from the denominator AND marks the category unassessed, so it cannot
+    buy a better number.
+
+    `pct` is None, never 0, for a category nothing assessed. Zero is a measured
+    result and this is the absence of one — the distinction the whole product
+    turns on.
+
+    Checks built at runtime from rule tables are not literals and are not in the
+    catalogue, so the denominator is a floor. `checks_known` is returned so a
+    caller can say so rather than implying completeness.
     """
+    from modules.coverage import check_catalogue, modules_for_categories, ran_modules
+
     clause, params = _scope(scope)
-    return db.query(
+    failing_rows = db.query(
         f"""
-        WITH ran AS (
-            SELECT DISTINCT cd.category, f.check_id
-            FROM finding f JOIN check_definition cd ON cd.check_id = f.check_id
-            WHERE {clause}
-        ),
-        failing AS (
-            SELECT DISTINCT cd.category, f.check_id
-            FROM finding f JOIN check_definition cd ON cd.check_id = f.check_id
-            WHERE f.state NOT IN ('resolved','false_positive') AND {clause}
-        )
-        SELECT ran.category,
-               count(DISTINCT ran.check_id)                       AS checks_run,
-               count(DISTINCT failing.check_id)                   AS checks_failing,
-               round(100.0 * (count(DISTINCT ran.check_id) - count(DISTINCT failing.check_id))
-                     / NULLIF(count(DISTINCT ran.check_id), 0), 0) AS pct_compliant
-        FROM ran LEFT JOIN failing
-               ON failing.category = ran.category AND failing.check_id = ran.check_id
-        GROUP BY ran.category ORDER BY pct_compliant NULLS LAST
-        """, list(params) + list(params))
+        SELECT cd.category, count(DISTINCT f.check_id) AS n
+        FROM finding f JOIN check_definition cd ON cd.check_id = f.check_id
+        WHERE f.state NOT IN ('resolved','false_positive') AND {clause}
+        GROUP BY cd.category
+        """, list(params))
+    failing = {r["category"]: r["n"] for r in failing_rows}
+
+    # THE DENOMINATOR IS A UNION, and the first version of this was not.
+    #
+    # `check_catalogue()` reads check ids written as LITERALS. Roughly 255 more
+    # are built at runtime from shipped rule tables (ABAP-*, ATC-*), so a
+    # code-only denominator produced "3 checks known, 18 failing" for Code &
+    # Transport Security — a floor smaller than the thing it bounds, and a pass
+    # rate clamped at 0% by arithmetic rather than by evidence.
+    #
+    # So: every check the code declares in this category, PLUS every check this
+    # tenant has actually observed in it. The first half is what fixed the
+    # original defect — checks that have never failed now count — and the second
+    # half keeps the number coherent for checks the catalogue cannot see.
+    observed_rows = db.query(
+        f"""
+        SELECT cd.category, count(DISTINCT f.check_id) AS n
+        FROM finding f JOIN check_definition cd ON cd.check_id = f.check_id
+        WHERE {clause}
+        GROUP BY cd.category
+        """, list(params))
+    observed = {r["category"]: r["n"] for r in observed_rows}
+
+    catalogue = check_catalogue()
+    per_category: Dict[str, int] = {}
+    for category in catalogue.values():
+        per_category[category] = per_category.get(category, 0) + 1
+    for category, n in observed.items():
+        # A category the code declares nothing in but this tenant has seen is
+        # real; a runtime-built family is exactly that case.
+        per_category[category] = max(per_category.get(category, 0), n)
+
+    ran = ran_modules(coverage)
+    out: List[Dict[str, Any]] = []
+    for category, known in sorted(per_category.items()):
+        assessed = True
+        if ran is not None:
+            feeders = modules_for_categories([category])
+            assessed = not feeders or bool(feeders & ran)
+        n_failing = failing.get(category, 0)
+        if not assessed:
+            out.append({"category": category, "checks_known": known,
+                        "checks_failing": n_failing, "pct_compliant": None,
+                        "assessed": False})
+            continue
+        passing = max(0, known - n_failing)
+        out.append({"category": category, "checks_known": known,
+                    "checks_failing": n_failing,
+                    "pct_compliant": round(100.0 * passing / known) if known else None,
+                    "assessed": True})
+    # Worst first, with the unassessed after the measured ones: a category we did
+    # not look at is not the worst performer, it is not a performer at all.
+    out.sort(key=lambda r: (r["pct_compliant"] is None,
+                            r["pct_compliant"] if r["pct_compliant"] is not None else 0))
+    return out
 
 
-def journey_summary(scope: Optional[Sequence[int]], days: int = 180) -> Dict[str, Any]:
-    """One call for the trend screen."""
+def journey_summary(scope: Optional[Sequence[int]], days: int = 180,
+                    coverage: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """One call for the trend screen.
+
+    `coverage` reaches `domain_scorecard`, which needs it to tell a category it
+    assessed and found clean from one it never looked at.
+    """
     return {
         "sla": sla_status(scope),
         "aging": aging_buckets(scope),
@@ -326,5 +392,5 @@ def journey_summary(scope: Optional[Sequence[int]], days: int = 180) -> Dict[str
         "backlog_by_tier": backlog_by_tier(scope),
         "technical_debt": technical_debt(scope),
         "teams": team_scorecard(scope),
-        "domains": domain_scorecard(scope),
+        "domains": domain_scorecard(scope, coverage=coverage),
     }

@@ -295,20 +295,24 @@ function Body({ j }: { j: Journey }) {
         </table>
       </div>
 
-      <h2 className={H2}>Compliance by domain</h2>
+      <h2 className={H2}>Pass rate by finding category</h2>
       <div className={TABLE_CARD}>
         <table className="w-full border-collapse">
           <thead>
             <tr>
               <th className={TH}>Category</th>
               <th className={`${TH} w-[36%]`}>Checks passing</th>
-              <th className={`${TH} text-right`}>Checks run</th>
+              <th className={`${TH} text-right`}>Checks</th>
               <th className={`${TH} text-right`}>Failing</th>
             </tr>
           </thead>
           <tbody>
             {j.domains.map((d) => {
-              const pct = d.pct_compliant ?? 0
+              // A CATEGORY NOTHING ASSESSED HAS NO PERCENTAGE, and `?? 0` turned
+              // that into the worst possible score — a category whose export was
+              // never supplied rendered as 0% and sorted to the top of the table
+              // as the customer's biggest problem.
+              const pct = d.pct_compliant
               // NOT A TRAFFIC LIGHT, AND NOT CALLED "COMPLIANT".
               //
               // Two separate problems, and only one of them was the word. The
@@ -336,15 +340,19 @@ function Body({ j }: { j: Journey }) {
                       )}
                   </td>
                   <td className={TD}>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 h-1.5 rounded-[3px] bg-panel2 overflow-hidden">
-                        <i className="block h-full"
-                           style={{ width: `${pct}%`, background: fill }} />
+                    {pct === null ? (
+                      <span className="csf-state csf-state-not_supplied">not assessed</span>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1.5 rounded-[3px] bg-panel2 overflow-hidden">
+                          <i className="block h-full"
+                             style={{ width: `${pct}%`, background: fill }} />
+                        </div>
+                        <span className="font-mono text-[12px] w-[38px] text-right">{pct}%</span>
                       </div>
-                      <span className="font-mono text-[12px] w-[38px] text-right">{pct}%</span>
-                    </div>
+                    )}
                   </td>
-                  <td className={`${TD} text-right font-mono text-ink2`}>{d.checks_run}</td>
+                  <td className={`${TD} text-right font-mono text-ink2`}>{d.checks_known}</td>
                   <td className={`${TD} text-right font-mono`}>{d.checks_failing}</td>
                 </tr>
               )

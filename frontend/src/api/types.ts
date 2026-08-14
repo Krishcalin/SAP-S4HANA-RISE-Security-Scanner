@@ -672,9 +672,18 @@ export interface TeamScore {
  *  the column across the API would be a breaking change for one word. */
 export interface DomainScore {
   category: string | null
-  checks_run: number
+  /** How many checks EXIST in this category, read from the scanner's source —
+   *  not how many have failed here. The old field counted the latter and called
+   *  it the former, so a category where three of forty checks had ever produced
+   *  a finding had a denominator of three. A floor: rule-table checks are built
+   *  at runtime and are not literals, so they are not counted. */
+  checks_known: number
   checks_failing: number
+  /** Null, never 0, when nothing assessed this category. Zero is a measured
+   *  result and this is the absence of one. */
   pct_compliant: number | null
+  /** False when no module feeding this category ran for the systems in scope. */
+  assessed: boolean
 }
 
 /** server/analytics.py `journey_summary` — one call for the trend screen. */
@@ -710,7 +719,14 @@ export interface Coverage {
   beyond_baseline: string[]
   note: string
   meta: Record<string, unknown>
+  /** Check ids written as literals in the scanner. A property of the
+   *  PRODUCT: the same on every install, and it does not move when a
+   *  customer's findings close. */
   our_checks: number
+  /** How many of our checks have ever produced a finding in THIS tenant.
+   *  A fact about the estate, not about the product — and the number this
+   *  screen used to publish as though it were the second. */
+  observed_checks: number
 }
 
 // ── saved views ─────────────────────────────────────────────────────────────

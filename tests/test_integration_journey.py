@@ -176,16 +176,26 @@ def test_provider_bound_work_is_reported_separately(database, landscape, system)
 def test_domain_score_is_over_checks_that_ran_not_the_catalogue(database, landscape,
                                                                 system):
     """Scoring against every check ever written would let a customer improve their
-    score by supplying FEWER exports."""
+    score by supplying FEWER exports.
+
+    THE DENOMINATOR MOVED, AND THIS TEST HAD PINNED THE OLD ONE. `checks_run`
+    counted checks that had ever produced a FINDING, so a category where three
+    of forty checks had ever failed had a denominator of three and a first-time
+    customer read 0%. It is now `checks_known`, read from the scanner's source
+    and narrowed to the modules that ran — which is what this docstring always
+    claimed and the implementation never did.
+    """
     from server import analytics
     _scan(database, landscape, system)
     domains = analytics.domain_scorecard(_scope(database, system))
     assert domains
     for d in domains:
-        assert d["checks_run"] > 0
-        assert d["checks_failing"] <= d["checks_run"], \
-            "more checks failing than ran — the score denominator is wrong"
-        assert 0 <= (d["pct_compliant"] or 0) <= 100
+        assert d["checks_known"] > 0
+        assert d["checks_failing"] <= d["checks_known"], \
+            "more checks failing than exist — the score denominator is wrong"
+        if d["pct_compliant"] is not None:
+            assert 0 <= d["pct_compliant"] <= 100
+            assert d["assessed"] is True
 
 
 @pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")
@@ -358,3 +368,39 @@ def test_rescanning_does_not_overwrite_a_humans_assignment(database, landscape, 
     row = database.one("SELECT assignee, owning_team FROM finding WHERE id=%s", (fid,))
     assert row["assignee"] == "alice"
     assert row["owning_team"] == "basis"
+
+
+@pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")
+def test_a_category_nothing_assessed_reports_no_percentage(database, landscape, system):
+    """Zero is a measured result; this is the absence of one.
+
+    With a manifest saying only one module ran, every other category comes back
+    with pct None rather than 0 — which the console used to coerce with `?? 0`,
+    rendering an unsupplied export as the customer's worst-performing area and
+    sorting it to the top of the table.
+    """
+    from server import analytics
+    _scan(database, landscape, system)
+    one_module = {"modules": {"user_auth_audit": {"status": "complete"}}}
+    domains = analytics.domain_scorecard(_scope(database, system), coverage=one_module)
+    unassessed = [d for d in domains if not d["assessed"]]
+    assert unassessed, "no category was marked unassessed on a one-module manifest"
+    for d in unassessed:
+        assert d["pct_compliant"] is None, d["category"]
+
+
+@pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")
+def test_supplying_less_cannot_produce_a_better_score(database, landscape, system):
+    """The incentive the docstring has always described, asserted for the first
+    time. A category whose module did not run must not appear as better."""
+    from server import analytics
+    _scan(database, landscape, system)
+    scope = _scope(database, system)
+    everything = {d["category"]: d for d in analytics.domain_scorecard(scope)}
+    starved = {d["category"]: d for d in analytics.domain_scorecard(
+        scope, coverage={"modules": {"user_auth_audit": {"status": "complete"}}})}
+    improved = [c for c, d in starved.items()
+                if d["pct_compliant"] is not None
+                and everything.get(c, {}).get("pct_compliant") is not None
+                and d["pct_compliant"] > everything[c]["pct_compliant"]]
+    assert not improved, f"supplying fewer exports raised the score for {improved}"

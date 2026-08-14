@@ -446,12 +446,33 @@ def api_coverage(user: Dict[str, Any] = Depends(current_user)):
     provenance (which Baseline version, and the unit warning that comes with it)
     alongside the numbers, and a coverage percentage without its provenance is a
     claim an auditor cannot check.
+
+    THE DENOMINATOR COMES FROM THE CODE, NOT FROM THE DATABASE, and the docstring
+    above was true of the intent and false of the implementation. It read
+    `check_definition`, whose only writer is server/ingest.py inserting a row per
+    check id SEEN IN A FINDING. Nothing seeds that table. So a check that ran and
+    PASSED did not exist, and the screen published its requirement under a
+    heading calling the omission "a deliberate scope decision, not an oversight".
+
+    Two consequences, both bad in the reassuring direction: a fresh install
+    reported 0 of 38 Baseline requirements and 0 checks beyond it, and a customer
+    whose posture IMPROVED lost coverage on the page as their findings closed.
+    From the code it is 14 of 38 and 199 beyond, on any install, at any time.
+
+    The database figure is still worth having and is returned beside it under its
+    own name: `observed_checks` is how many of our checks have ever produced a
+    finding in THIS tenant, which is a fact about the estate rather than about
+    the product.
     """
-    check_ids = [r["check_id"] for r in db.query("SELECT check_id FROM check_definition")]
+    from modules.coverage import module_check_ids
+
+    check_ids = sorted({cid for ids in module_check_ids().values() for cid in ids})
+    observed = db.one("SELECT count(*) AS n FROM check_definition")["n"]
     cat = sapcontent.load_catalogue()
     return {**sapcontent.coverage(check_ids, cat),
             "meta": cat.get("_meta", {}),
-            "our_checks": len(check_ids)}
+            "our_checks": len(check_ids),
+            "observed_checks": observed}
 
 
 @app.post("/api/views")
@@ -508,7 +529,11 @@ def api_bulk_state(finding_ids: str = Form(...), state: str = Form(...),
 @app.get("/api/trend")
 def api_trend(days: int = 180, user: Dict[str, Any] = Depends(current_user)):
     """The mitigation journey — answers "is it getting better" without an export."""
-    return analytics.journey_summary(auth.scope_for(user), days)
+    scope = auth.scope_for(user)
+    # The manifest, so a category nothing assessed reports no percentage
+    # rather than 0% — the same distinction /api/csf and /api/domains make.
+    return analytics.journey_summary(scope, days,
+                                     coverage=queries.latest_coverage(scope))
 
 
 # --------------------------------------------------------------------------- #

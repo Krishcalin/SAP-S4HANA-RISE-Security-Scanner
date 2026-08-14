@@ -114,7 +114,16 @@ function Body({ cov }: { cov: CoverageView }) {
         <div className={CARD}>
           <h3 className={CARD_H3}>Our checks</h3>
           <div className={KPI}>{cov.our_checks}</div>
-          <div className={KPI_NOTE}>emitted on the reference dataset</div>
+          {/* "emitted on the reference dataset" described the OLD number, which
+              came from check_definition — a table written only when a check
+              produces a finding. It fell as a customer's posture improved. This
+              one is read from the scanner's own source and never moves. */}
+          <div className={KPI_NOTE}>
+            written into the scanner
+            {typeof cov.observed_checks === 'number' && (
+              <> &middot; {cov.observed_checks} have produced a finding here</>
+            )}
+          </div>
         </div>
         <div className={CARD}>
           <h3 className={CARD_H3}>SAP requirements covered</h3>
