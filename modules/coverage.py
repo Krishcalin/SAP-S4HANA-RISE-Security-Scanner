@@ -298,19 +298,52 @@ def module_categories() -> Dict[str, List[str]]:
             continue
         tree = ast.parse(src, str(path))
         found: Set[str] = set()
-        for node in ast.walk(tree):
-            if (isinstance(node, ast.keyword) and node.arg == "category"
-                    and isinstance(node.value, ast.Constant)
-                    and isinstance(node.value.value, str)):
-                found.add(node.value.value)
-            elif (isinstance(node, ast.Assign)
-                  and isinstance(node.value, ast.Constant)
-                  and isinstance(node.value.value, str)
-                  and any(isinstance(t, ast.Name) and t.id == "CATEGORY"
-                          for t in node.targets)):
-                found.add(node.value.value)
+        found |= _declared_categories(tree)
         out[path.stem] = sorted(found)
     return out
+
+
+def _declared_categories(tree: ast.AST) -> Set[str]:
+    """Every finding category a module declares, in all THREE spellings it uses.
+
+    THE THIRD ONE COST 7% OF A RUN. The first version read `category="..."`
+    keyword arguments and the `CATEGORY = "..."` class attribute, and missed
+    `modules/security_params.py` entirely — it carries category names as VALUES
+    inside a parameter table:
+
+        "gw/acl_mode": {"severity": "HIGH", "category": "Gateway Security", ...}
+
+    Ten of its categories went unclaimed and six could be tied to no module at
+    all, so `modules_for_categories()` returned an empty set for Password Policy,
+    Login Security, RFC Security, Gateway Security, Transport Security and
+    Development Controls. Every consumer reads an empty set as "assume it ran",
+    which is the safe default for an unknown and a silent failure for a known:
+    twenty-four findings could never be NOT_SUPPLIED and were resolved by runs
+    that had not looked at them.
+
+    A heuristic over source text can only see the spellings it anticipates, so
+    tests/test_derivations_match_the_corpus.py holds this function to what the
+    auditors actually emit rather than to what it thinks they might.
+    """
+    found: Set[str] = set()
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.keyword) and node.arg == "category"
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)):
+            found.add(node.value.value)
+        elif (isinstance(node, ast.Assign)
+              and isinstance(node.value, ast.Constant)
+              and isinstance(node.value.value, str)
+              and any(isinstance(t, ast.Name) and t.id == "CATEGORY"
+                      for t in node.targets)):
+            found.add(node.value.value)
+        elif isinstance(node, ast.Dict):
+            for key, value in zip(node.keys, node.values):
+                if (isinstance(key, ast.Constant) and key.value == "category"
+                        and isinstance(value, ast.Constant)
+                        and isinstance(value.value, str)):
+                    found.add(value.value)
+    return found
 
 
 @lru_cache(maxsize=1)
@@ -362,6 +395,20 @@ def check_catalogue() -> Dict[str, str]:
             elif (isinstance(cat_node, ast.Attribute)
                   and cat_node.attr == "CATEGORY" and class_category):
                 out[cid_node.value] = class_category
+        # A dict literal carrying both keys is the third spelling — see
+        # _declared_categories. Paired inside ONE dict for the same reason the
+        # keyword form is paired inside one Call: correlating them any other way
+        # would guess.
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Dict):
+                continue
+            pairs = {k.value: v for k, v in zip(node.keys, node.values)
+                     if isinstance(k, ast.Constant) and isinstance(k.value, str)}
+            cid_node, cat_node = pairs.get("check_id"), pairs.get("category")
+            if (isinstance(cid_node, ast.Constant) and isinstance(cid_node.value, str)
+                    and isinstance(cat_node, ast.Constant)
+                    and isinstance(cat_node.value, str)):
+                out.setdefault(cid_node.value, cat_node.value)
     return out
 
 
