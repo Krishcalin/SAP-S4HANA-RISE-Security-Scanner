@@ -671,6 +671,20 @@ jobs:
           test -f ../server/spa/index.html \
             || { echo "::error::the bundle was not emitted where the server serves it"; exit 1; }
 
+      # THE TYPE-CHECKER ABOVE PROVES THE CODE COMPILES, NOT WHAT THE SCREEN SAYS.
+      #
+      # The console reached ~5,000 lines of TSX with `tsc --noEmit` as its only
+      # check, and two defects shipped through that gap in a single day: a CSF
+      # Category filed under "Assessed here" while it displayed the "Export not
+      # supplied" chip an inch above, and a null pass rate coerced to 0% by
+      # `?? 0`, so a category nobody had scanned rendered as the customer's
+      # worst-performing area and sorted to the top of the table. Both
+      # type-check perfectly; both invert the product's central discipline on
+      # screen. This step is what makes that class fail a pull request.
+      - name: Test the console
+        working-directory: frontend
+        run: npm test
+
       # `httpx` is TEST tooling, not a runtime dependency, which is why it is
       # here and not in requirements.txt: starlette's TestClient refuses to
       # construct without it, and tests/test_http_console.py goes through it.

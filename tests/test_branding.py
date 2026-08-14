@@ -110,7 +110,12 @@ def test_every_screen_sets_a_tab_title():
     the kind of loss a migration makes invisibly.
     """
     missing = []
-    for path in sorted((SRC / "routes").glob("*.tsx")) + [SRC / "components" / "Login.tsx"]:
+    screens = [p for p in sorted((SRC / "routes").glob("*.tsx"))
+               # A *.test.tsx file sits beside the screen it renders and is not
+               # one. Added when the console gained a test runner; without this
+               # every new render test would "fail to set a tab title".
+               if not p.name.endswith(".test.tsx")]
+    for path in screens + [SRC / "components" / "Login.tsx"]:
         if "useTitle(" not in path.read_text(encoding="utf-8"):
             missing.append(path.relative_to(ROOT).as_posix())
     assert not missing, f"no useTitle() call in: {', '.join(missing)}"

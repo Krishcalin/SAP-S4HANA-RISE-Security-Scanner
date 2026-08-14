@@ -1142,7 +1142,11 @@ def api_crq_controls(landscape_id: int,
     from modules import fair_cam
     scope = auth.scope_for(user)
     findings = queries.findings_for_crq(scope, landscape_id)
-    return fair_cam.classify(findings, coverage=queries.latest_coverage(scope))
+    # BOTH SIDES NARROWED BY THE SAME LANDSCAPE. `findings_for_crq` takes it
+    # above; a manifest spanning every landscape would let a module that ran
+    # elsewhere vouch for this one.
+    return fair_cam.classify(
+        findings, coverage=queries.latest_coverage(scope, landscape_id))
 
 
 @app.get("/api/crq/trend")

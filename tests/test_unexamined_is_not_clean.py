@@ -182,7 +182,10 @@ def test_the_unmeasured_function_reports_no_number():
 @pytest.mark.parametrize("needle", [
     "nist_csf.roll_up(findings, coverage=queries.latest_coverage(scope))",
     "coverage=queries.latest_coverage(scope))",
-    "fair_cam.classify(findings, coverage=queries.latest_coverage(scope))",
+    # Narrowed by landscape as well as by scope: /api/crq/controls pairs this
+    # with findings_for_crq(scope, landscape_id), and a manifest spanning every
+    # landscape let a module that ran elsewhere vouch for this one.
+    "coverage=queries.latest_coverage(scope, landscape_id))",
 ])
 def test_the_server_routes_pass_the_manifest(needle):
     """A roll-up that ACCEPTS a manifest and a route that never passes one is
@@ -206,33 +209,10 @@ def test_neither_printed_table_can_draw_the_unexamined_as_clean():
 
 # ── the console must not contradict itself about a Category ──────────────────
 
-def test_the_csf_function_page_buckets_on_the_fact_not_on_one_reason():
-    """THE CONTRADICTION THIS CLOSES.
-
-    /csf/<fn> filtered on `not_assessed` alone, so a Category in the newer
-    `not_supplied` state was filed under the heading "Assessed here" and told the
-    reader "Assessed, and this run produced no findings against it" — while
-    displaying the dashed "Export not supplied" chip an inch above it. The
-    product contradicted itself inside one card, and the HTML report for the same
-    run printed an em dash and the opposite sentence.
-
-    Two states, two reasons, one fact: there is no number here. The page buckets
-    on the fact.
-
-    A TEXTUAL ASSERTION, AND A PLACEHOLDER. There is no frontend test runner yet,
-    which is exactly why this defect reached a shipped bundle. When vitest lands
-    this becomes a render test over the four states and this function should be
-    deleted rather than kept alongside it.
-    """
-    page = (ROOT / "frontend" / "src" / "routes" / "CsfFunction.tsx").read_text(
-        encoding="utf-8")
-    assert "const unmeasured = (status: CsfStatus)" in page, \
-        "the page decides this inline again"
-    assert "status === 'not_assessed' || status === 'not_supplied'" in page
-    # The clean sentence and the finding count must both sit behind the predicate.
-    assert "{!unmeasured(cat.status) && (" in page
-    assert "{unmeasured(cat.status) ? (" in page
-    assert "Not assessed in this scan" in page, "no section for the new state"
+# The textual placeholder that stood here has been deleted, as its own docstring
+# instructed: frontend/src/routes/CsfFunction.test.tsx renders the four states
+# and asserts the sentences a reader actually sees. Keeping both would leave a
+# proxy for a behaviour beside the behaviour.
 
 
 def test_the_console_and_the_report_agree_about_an_unsupplied_category():

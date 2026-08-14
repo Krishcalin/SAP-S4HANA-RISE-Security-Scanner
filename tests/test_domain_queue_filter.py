@@ -284,3 +284,37 @@ def test_a_domain_with_no_terms_selects_nothing_rather_than_everything():
     _domain_clause(where, params, "exploit")
     assert where == ["false"]
     assert params == []
+
+
+@pg
+def test_a_manifest_never_spans_a_landscape_its_findings_do_not(client):
+    """A CALLER THAT NARROWS ONE SIDE MUST NARROW BOTH.
+
+    /api/crq/fair-cam pairs `findings_for_crq(scope, landscape_id)` — one
+    landscape — with `latest_coverage`. Without the landscape the manifest was a
+    union over every landscape the reader could see, so a module that ran in
+    landscape B counted as having looked at landscape A: a control function fed
+    only by an export A never supplied reported CLEAR on the strength of a scan
+    of a different estate.
+    """
+    from server import db, queries
+
+    landscapes = db.query("SELECT id FROM landscape ORDER BY id")
+    if len(landscapes) < 2:
+        pytest.skip("needs two landscapes to tell the union from the narrowing")
+    everything = queries.latest_coverage(None)
+    first = queries.latest_coverage(None, landscapes[0]["id"])
+    if everything is None:
+        pytest.skip("no complete run to narrow")
+    # Narrowing can only ever see the same modules or fewer, never more.
+    assert first is None or set(first["modules"]) <= set(everything["modules"])
+
+
+def test_the_fair_cam_route_narrows_both_sides_by_the_same_landscape():
+    """The wiring, not the query. A landscape-aware helper nobody passes a
+    landscape to is the shape of the defect it replaces."""
+    source = (ROOT / "server" / "app.py").read_text(encoding="utf-8")
+    block = source[source.index("def api_crq_controls("):]
+    block = block[:block.index("@app.get", 10)]
+    assert "findings_for_crq(scope, landscape_id)" in block
+    assert "latest_coverage(scope, landscape_id)" in block

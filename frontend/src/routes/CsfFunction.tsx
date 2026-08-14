@@ -130,9 +130,18 @@ function Body({ view }: { view: CsfFunctionView }) {
 
       <h2 className={H2}>Assessed here</h2>
       {assessed.length === 0 && (
+        /* TWO DIFFERENT EMPTY STATES, and the original said the first one about
+           both. A Function whose Categories are all `not_supplied` IS assessable
+           from an SAP export — the export simply was not supplied — so telling
+           the reader none of it "can be assessed" is false, and false in the
+           direction that stops them fixing it. */
         <div className="banner banner-info">
-          None of this Function&rsquo;s Categories can be assessed from an SAP
-          configuration export. See below for what each one asks and why.
+          {notSupplied.length > 0
+            ? <>Nothing that feeds this Function&rsquo;s Categories ran in the scans
+                you can see, so none of them has a result yet. They are assessable
+                from an SAP export &mdash; see below for which are waiting on one.</>
+            : <>None of this Function&rsquo;s Categories can be assessed from an SAP
+                configuration export. See below for what each one asks and why.</>}
         </div>
       )}
       <div className="grid gap-3.5">

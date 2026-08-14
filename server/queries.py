@@ -652,7 +652,8 @@ def findings_for_crq(scope: Optional[Sequence[int]],
         f"WHERE {' AND '.join(where)}", params)
 
 
-def latest_coverage(scope: Optional[Sequence[int]]) -> Optional[Dict[str, Any]]:
+def latest_coverage(scope: Optional[Sequence[int]],
+                    landscape_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
     """The coverage manifests behind the findings a reader can currently see.
 
     WHY THIS EXISTS. `findings_for_domains` answers "what is open"; a roll-up over
@@ -674,10 +675,23 @@ def latest_coverage(scope: Optional[Sequence[int]]) -> Optional[Dict[str, Any]]:
     complete run at all, and `roll_up` then declines to claim anything was
     missing — an unchecked claim of absence is as false as an unchecked claim of
     cleanliness.
+
+    `landscape_id` NARROWS THE UNION TO MATCH ITS FINDINGS, and a caller that
+    narrows one side must narrow both. /api/crq/fair-cam pairs
+    `findings_for_crq(scope, landscape_id)` — one landscape — with this manifest,
+    and without the parameter the union spanned EVERY landscape the reader can
+    see. A module that ran in landscape B then counted as having looked at
+    landscape A, so a control function fed only by an export A never supplied
+    reported CLEAR on the strength of a scan of a different estate. Same false
+    reassurance as everywhere else in this file, arriving through a join nobody
+    tightened.
     """
     where = ["r.status = 'complete'"]
     params: List[Any] = []
     _scoped(where, params, scope, "r.system_id")
+    if landscape_id is not None:
+        where.append("r.landscape_id = %s")
+        params.append(landscape_id)
     rows = db.query(
         f"SELECT DISTINCT ON (r.system_id) r.system_id, r.coverage "
         f"FROM scan_run r WHERE {' AND '.join(where)} "
