@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
+import { ShieldHalf } from 'lucide-react'
 import { ApiError, csf, dashboard, domains } from '../api/client'
 import type {
   CsfView, Dashboard as DashboardData, DomainsView, RemediationOwner, ScanRun,
@@ -98,7 +99,26 @@ export function Dashboard() {
         <img src="/static/monitorrisk-logo.png" width={1100} height={401} alt="" />
       </div>
 
-      <h1 className="text-[21px] font-semibold tracking-[-.01em] mb-1">Security posture</h1>
+      {/* The house page title: 24px, extrabold, full-strength ink, and an accent
+          glyph at 22px — the treatment the sibling CNAPP console uses on every
+          screen. Its brand name is deliberately not written here; tests/
+          test_spa_mount.py forbids that string anywhere in this bundle, and it
+          is right to, because a stray brand reaches production inside a comment
+          exactly as easily as inside a heading.
+
+          `text-ink` is set explicitly rather than inherited — it resolves to
+          #1c2128 on light and #e6edf3 on dark, so "black" here means "the
+          strongest ink this theme has", never a literal black that would vanish
+          on the dark console.
+
+          ShieldHalf, not ShieldCheck: the latter is already the Coverage nav
+          icon and reusing it would blur two different screens. The half shield
+          also happens to be the honest glyph for this product — a security
+          posture assembled from the part of the estate a customer exported. */}
+      <h1 className="text-2xl font-extrabold tracking-tight text-ink mb-1 flex items-center gap-2">
+        <ShieldHalf size={22} className="text-accent" />
+        Security posture
+      </h1>
       <p className="text-ink2 mb-5">
         Open findings across {systems.length} system{systems.length === 1 ? '' : 's'}.
       </p>
