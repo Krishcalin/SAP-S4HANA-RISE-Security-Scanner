@@ -224,6 +224,20 @@ def build_inputs(priorities: List[Any], catalog: Dict[str, Any],
         # Only MEDIUM/HIGH/CRITICAL have distinct bands; LOW/INFO/NONE fall back
         # to 'hardened' (a minor gap barely moves control strength) - and the
         # meta label reflects the band ACTUALLY used, not the raw severity.
+        #
+        # TWO CASES USED TO COLLAPSE INTO ONE HERE, and only one of them is a
+        # modelling judgement. "The worst thing we found was LOW, so control
+        # strength barely moves" is defensible. "We routed NOTHING to this
+        # scenario" is not the same statement at all — it prices the customer at
+        # the fully-hardened band, which makes as-is equal to target, which
+        # means the scenario contributes exactly zero to "reducible by
+        # remediation" while sitting in the portfolio as if it had been assessed.
+        # Measured with `--modules users --crq`: four of five scenarios.
+        #
+        # The band cannot honestly be moved — inventing a weaker one would be
+        # inventing evidence — so it is MARKED instead, and every renderer that
+        # shows "Findings routed: 0" now has something true to put beside it.
+        unexamined = not routed
         band_key = worst if worst in rs_bands else "hardened"
         rs_asis = rs_bands[band_key]
         rs_target = rs_bands["hardened"]
@@ -267,6 +281,10 @@ def build_inputs(priorities: List[Any], catalog: Dict[str, Any],
             "finding_count": len(routed), "worst_severity": worst,
             "exposed": exposed, "exploited": exploited,
             "rs_band": band_key,
+            #: No finding reached this scenario, so its as-is posture is the
+            #: hardened band by default rather than by observation. The figure is
+            #: a floor, not a measurement, and the reports say so.
+            "unexamined": unexamined,
         })
 
     asis = {"organization": org, "scenarios": asis_scenarios}
@@ -510,6 +528,7 @@ def run(findings: List[Dict[str, Any]], priorities: List[Any],
         sc["worst_severity"] = mm.get("worst_severity", "NONE")
         sc["exposed"] = mm.get("exposed", False)
         sc["exploited"] = mm.get("exploited", False)
+        sc["unexamined"] = mm.get("unexamined", False)
     reducible_p90 = max(0.0, asis["portfolio"]["ale_p90"] - target["portfolio"]["ale_p90"])
     reducible_mean = max(0.0, asis["portfolio"]["mean_ale"] - target["portfolio"]["mean_ale"])
     out["summary"] = {

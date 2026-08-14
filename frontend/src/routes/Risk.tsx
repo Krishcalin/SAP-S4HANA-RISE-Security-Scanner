@@ -356,6 +356,11 @@ function Body({ view }: { view: RiskView }) {
 function ScenarioRow({ s }: { s: CrqScenario }) {
   const exploited = s.detail.exploited === true
   const exposed = s.detail.exposed === true
+  // A "0" in the findings column has two meanings and only one of them is good
+  // news. Nothing routed here means the scenario is priced at the fully-hardened
+  // band by default — as-is equals target, so it adds nothing to the reducible
+  // figure — which is a floor, not a measurement of a well-defended scenario.
+  const unexamined = s.detail.unexamined === true
   return (
     <tr className="hover:bg-panel2">
       <td className={`${TD} font-mono text-[12px]`}>{s.scenario_id}</td>
@@ -366,7 +371,15 @@ function ScenarioRow({ s }: { s: CrqScenario }) {
       <td className={`${TD} text-[12px]`}>
         {exploited && <span className="pill sev-CRITICAL">exploited</span>}{' '}
         {exposed && <span className="pill sev-HIGH">exposed</span>}
-        {!exploited && !exposed && <span className="text-ink3">—</span>}
+        {unexamined && (
+          <span className="csf-state csf-state-not_supplied"
+                title="No finding was routed to this scenario, so it is priced at
+                       the hardened band by default and contributes nothing to the
+                       reducible figure.">
+            nothing routed
+          </span>
+        )}
+        {!exploited && !exposed && !unexamined && <span className="text-ink3">—</span>}
       </td>
     </tr>
   )

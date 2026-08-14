@@ -12,10 +12,15 @@ detection-deficiency loss multiplier, the emitted CRQ scenario-JSON contract,
 graceful degradation when the CRQ engine is absent, and - when the sibling CRQ
 engine is locatable - a real end-to-end simulation.
 """
+import pathlib
+
 import pytest
 
 from modules import fair_adapter as fa
 from modules.risk_prioritizer import RiskPrioritizer
+
+#: The repository root, for the wiring assertions at the foot of this file.
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 def _prio(findings):
@@ -253,3 +258,63 @@ def test_money_format_tier_boundaries_no_1000_prefix():
         pdf_s = PDFReportGenerator._money(v)
         assert html_s == expected, (v, html_s)
         assert pdf_s == expected, (v, pdf_s)
+
+
+# ── a scenario nothing reached is not a well-defended scenario ───────────────
+
+def test_a_scenario_with_nothing_routed_is_marked_unexamined():
+    """THE FALSE COMFORT THIS CLOSES.
+
+    `_worst([])` returns "NONE", which is not a key in the resistance-strength
+    bands, so the band fell back to `hardened` — the TARGET posture. As-is then
+    equalled target, the scenario contributed exactly nothing to "reducible by
+    remediation", and it sat in the portfolio priced as though it had been
+    assessed and found strong. Measured with `--modules users --crq`: four of
+    the five scenarios.
+
+    The band cannot honestly be moved: inventing a weaker one would be inventing
+    evidence we do not have. So the fallback is MARKED, and every surface that
+    prints "Findings routed: 0" now has something true to put beside it.
+    """
+    built = fa.build_inputs(_prio([_f("USR-001", "User & Authorization")]),
+                            CATALOG, CATALOG["organization_default"])
+    by_id = {m["id"]: m for m in built["meta"]}
+    unexamined = [m for m in by_id.values() if m["unexamined"]]
+    assert unexamined, "no scenario was marked, so the fixture routes to all five"
+    for m in unexamined:
+        assert m["finding_count"] == 0
+        assert m["rs_band"] == "hardened"
+
+
+def test_a_scenario_with_findings_is_never_marked_unexamined():
+    """The flag is about evidence, not about severity. A LOW finding still falls
+    back to the hardened band — that is a defensible modelling judgement about
+    control strength — and it is not the same statement as having looked at
+    nothing."""
+    built = fa.build_inputs(_prio([_f("USR-001", "User & Authorization", "LOW")]),
+                            CATALOG, CATALOG["organization_default"])
+    for m in built["meta"]:
+        if m["finding_count"] > 0:
+            assert not m["unexamined"], m["id"]
+            assert m["rs_band"] == "hardened"      # LOW still falls back...
+            assert m["worst_severity"] == "LOW"    # ...but we know why
+
+
+def test_the_flag_survives_into_the_scenario_summary():
+    """It is computed in build_inputs and read by the reports off the summary. A
+    diagnostic that stops at the adapter boundary is one nothing can render —
+    which is how modules/coverage.py spent its first release."""
+    source = (ROOT / "modules" / "fair_adapter.py").read_text(encoding="utf-8")
+    assert 'sc["unexamined"] = mm.get("unexamined", False)' in source
+
+
+def test_every_surface_that_prints_the_zero_also_prints_the_reason():
+    """The HTML report, the stored scenario detail and the console row. A zero in
+    a findings column has two meanings and only one of them is good news."""
+    html_src = (ROOT / "modules" / "report_generator.py").read_text(encoding="utf-8")
+    assert 'sc.get("unexamined")' in html_src
+    assert "priced at the hardened band" in html_src
+    crq_src = (ROOT / "server" / "crq.py").read_text(encoding="utf-8")
+    assert '"unexamined": sc.get("unexamined")' in crq_src
+    console = (ROOT / "frontend" / "src" / "routes" / "Risk.tsx").read_text(encoding="utf-8")
+    assert "s.detail.unexamined === true" in console

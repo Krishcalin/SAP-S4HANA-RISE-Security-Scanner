@@ -222,7 +222,13 @@ def compute_and_store(conn, run_id: int, landscape_id: int,
                     "finding_count": sc.get("finding_count"),
                     "worst_severity": sc.get("worst_severity"),
                     "exposed": sc.get("exposed"),
-                    "exploited": sc.get("exploited")})))
+                    "exploited": sc.get("exploited"),
+                    # Nothing was routed here, so the as-is posture is the
+                    # hardened band by default rather than by observation: the
+                    # figure is a floor, and it contributes nothing to the
+                    # reducible total. Stored so the console can say so beside
+                    # the zero it already prints.
+                    "unexamined": sc.get("unexamined")})))
 
     return {"computed": True, "engine_found": True, "unrouted": unrouted,
             "input_finding_count": input_count,

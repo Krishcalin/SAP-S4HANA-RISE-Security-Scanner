@@ -1410,6 +1410,12 @@ window.addEventListener('beforeprint', () => {{
             fc = sc.get("finding_count")
             fc_txt = f'{fc}' if fc is not None else "—"
             flags = []
+            # FIRST IN THE LIST, because it qualifies every other number on the
+            # row. A scenario nothing was routed to is priced at the hardened
+            # band by default, so its figure is a floor rather than a
+            # measurement — and it contributes nothing to the reducible total.
+            if sc.get("unexamined"):
+                flags.append("nothing routed - priced at the hardened band")
             if sc.get("exposed"):
                 flags.append("exposed")
             if sc.get("exploited"):
