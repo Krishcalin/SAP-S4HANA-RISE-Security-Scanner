@@ -6,11 +6,11 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**364** check ids are written as literals in `modules/`, across **30** modules. A further **255** are built at runtime from shipped rule tables, giving **619** in total.
+**365** check ids are written as literals in `modules/`, across **30** modules. A further **255** are built at runtime from shipped rule tables, giving **620** in total.
 
 ## What this file does not claim
 
-**40 of the 364 titles and 15 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**41 of the 365 titles and 15 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -153,7 +153,7 @@ Category: BTP Cloud Attack Surface
 | `CODE-INV-004` | INFO | Custom code whose reachability could not be determined |
 | `CODE-INV-005` | INFO | Custom-code inventory carries no usable execution data |
 
-### `code_transport` — 21 checks
+### `code_transport` — 22 checks
 
 Category: Code & Transport Security
 
@@ -173,6 +173,7 @@ Category: Code & Transport Security
 | `CODE-MOD-001` | MEDIUM | Unregistered SAP standard modifications |
 | `CODE-MOD-002` | CRITICAL | Modifications to SAP security-critical standard programs |
 | `CODE-MOD-003` | LOW | Stale SAP modifications (5+ years old) |
+| `CODE-STMT-001` | HIGH | *varies* — Dangerous ABAP statement: … |
 | `CODE-SYSCHG-001` | CRITICAL | SE06 global system change option is 'Modifiable' (production changeable) |
 | `CODE-SYSCHG-002` | HIGH | Individual namespaces / software components left modifiable in production |
 | `CODE-TMS-001` | CRITICAL | Transport routes allow direct dev-to-production delivery |

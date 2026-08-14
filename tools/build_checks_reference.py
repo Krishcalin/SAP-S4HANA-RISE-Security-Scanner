@@ -52,8 +52,12 @@ TARGET = ROOT / "docs" / "CHECKS_REFERENCE.md"
 
 #: Calls that emit a finding. The three wrappers forward `check_id` positionally,
 #: which is why a naive grep for `finding(` undercounts the catalogue.
-EMITTERS = {"finding", "_emit", "_flag", "_coverage_finding",
-            "_finding_for_unset_parameter"}
+# THE EMITTER VOCABULARY AND THE SIGNATURE READER NOW LIVE IN
+# modules/coverage.py, because the scanner needs them too: its posture-score
+# denominator was blind to every positionally-passed check id. Imported rather
+# than duplicated so the document and the score cannot disagree about what a
+# check is.
+from modules.coverage import EMITTERS, wrapper_signatures        # noqa: E402,F401
 
 #: BaseAuditor's severity constants, resolved so `self.SEVERITY_HIGH` reads as
 #: HIGH rather than as an unresolvable attribute.
@@ -121,32 +125,6 @@ class Check:
     def sort_key(self) -> Tuple[str, str]:
         m = re.match(r"^([A-Z0-9]+(?:-[A-Z]+)*)-(\d+)$", self.check_id or "")
         return (m.group(1), m.group(2).zfill(4)) if m else (self.check_id or "", "")
-
-
-def wrapper_signatures() -> Dict[str, List[str]]:
-    """Positional parameter names for each emitter, READ FROM ITS OWN `def`.
-
-    The wrappers forward positionally — `_emit("AUTH-001", "title", SEVERITY, …)`
-    — so a keyword-only reader finds nothing and renders sixteen checks as
-    "varies / varies", which is noise dressed as documentation.
-
-    Derived rather than hardcoded because a hardcoded order is a second copy of
-    the signature, and the day somebody inserts a parameter the table silently
-    starts reporting the description as the title. Read the def, and it cannot
-    drift.
-    """
-    sigs: Dict[str, List[str]] = {}
-    for path in sorted((ROOT / "modules").glob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            if node.name not in EMITTERS:
-                continue
-            names = [a.arg for a in node.args.args if a.arg != "self"]
-            if names and node.name not in sigs:
-                sigs[node.name] = names
-    return sigs
 
 
 def collect_literal_checks() -> List[Check]:

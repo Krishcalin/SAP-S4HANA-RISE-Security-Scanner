@@ -473,12 +473,252 @@ def module_check_ids() -> Dict[str, List[str]]:
         tree = ast.parse(src, str(path))
         found: Set[str] = set()
         for node in ast.walk(tree):
-            if (isinstance(node, ast.keyword) and node.arg == "check_id"
-                    and isinstance(node.value, ast.Constant)
-                    and isinstance(node.value.value, str)):
-                found.add(node.value.value)
+            if isinstance(node, ast.keyword) and node.arg == "check_id":
+                value = _const_str(node.value)
+                if value:
+                    found.add(value)
         out[path.stem] = sorted(found)
     return out
+
+
+def _const_str(node: Any) -> Optional[str]:
+    """The string a node evaluates to, if that is knowable without running it.
+
+    `ast.Constant` is the obvious case. The other is an f-string carrying no
+    placeholders — `f"CODE-STMT-001"` — which is a plain string to every reader
+    except a parser, where it is a `JoinedStr` and matches nothing. That one
+    stray `f` hid a check id from the coverage derivation, the score denominator
+    and the generated reference simultaneously, and nothing reported a problem
+    because every consumer treats an id it cannot see as an id that does not
+    exist.
+
+    An f-string with real placeholders returns None: its value is not knowable
+    here, and guessing would put a template where an id belongs.
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr) and node.values and all(
+            isinstance(v, ast.Constant) and isinstance(v.value, str)
+            for v in node.values):
+        return "".join(v.value for v in node.values)
+    return None
+
+
+#: The methods that RAISE a finding. `finding(...)` is BaseAuditor's; the rest
+#: are per-module wrappers that forward to it.
+EMITTERS = {"finding", "_emit", "_flag", "_coverage_finding",
+            "_finding_for_unset_parameter"}
+
+
+@lru_cache(maxsize=1)
+def wrapper_signatures() -> Dict[str, List[str]]:
+    """Positional parameter names for each emitter, READ FROM ITS OWN `def`.
+
+    The wrappers forward positionally — `_emit("AUTH-001", "title", SEVERITY, …)`
+    — so a keyword-only reader finds nothing at all. That is how 28 check ids
+    that a real scan emits every time, the whole `AUTH-` and `BASELINE-` sets,
+    were invisible to `module_check_ids`.
+
+    Derived rather than hardcoded because a hardcoded order is a second copy of
+    the signature, and the day somebody inserts a parameter the reader silently
+    starts collecting the title as the check id. Read the def, and it cannot
+    drift.
+
+    Shared with tools/build_checks_reference.py, which had this first and is now
+    the consumer: two readers of the same signatures could disagree, and the one
+    that documents the product disagreeing with the one that scores it is a
+    particularly bad pair to let drift.
+    """
+    sigs: Dict[str, List[str]] = {}
+    for path in sorted(MODULES_DIR.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if node.name not in EMITTERS:
+                continue
+            names = [a.arg for a in node.args.args if a.arg != "self"]
+            if names and node.name not in sigs:
+                sigs[node.name] = names
+    return sigs
+
+
+@lru_cache(maxsize=1)
+def positional_check_ids() -> Dict[str, List[str]]:
+    """{module: check ids passed POSITIONALLY to an emitter}.
+
+    The other half of `module_check_ids`, which reads `check_id=` keywords only.
+    Neither is complete on its own; `all_check_ids` is the union.
+    """
+    sigs = wrapper_signatures()
+    out: Dict[str, List[str]] = {}
+    for path in sorted(MODULES_DIR.glob("*.py")):
+        if path.stem in _NOT_AN_AUDITOR:
+            continue
+        src = path.read_text(encoding="utf-8")
+        if "BaseAuditor" not in src:
+            continue
+        found: Set[str] = set()
+        for node in ast.walk(ast.parse(src, str(path))):
+            if not isinstance(node, ast.Call) or not node.args:
+                continue
+            fn = (node.func.attr if isinstance(node.func, ast.Attribute)
+                  else getattr(node.func, "id", None))
+            names = sigs.get(fn or "")
+            if not names or names[0] != "check_id":
+                continue
+            value = _const_str(node.args[0])
+            if value:
+                found.add(value)
+        if found:
+            out[path.stem] = sorted(found)
+    return out
+
+
+def runtime_check_families() -> List[Dict[str, Any]]:
+    """The check ids built at RUNTIME from shipped rule tables, per module.
+
+    WHY THIS EXISTS AT ALL. Every other derivation in this file reads the source
+    with `ast`, because the source is the authority and parsing it cannot be
+    fooled by a stale table. These five families cannot be read that way: the ids
+    do not appear as literals anywhere, they are composed from rows of a table
+    (`PARAM-` + a parameter name, `ABAP-` + a rule id). AST parsing sees nothing,
+    which is why `module_check_ids` has always been a floor about 255 ids short.
+
+    RESOLVED BY IMPORTING THE TABLES, NOT BY PARSING THEM, for the same reason
+    the reference generator does it that way: the table is the authority, and a
+    second reading of it could disagree with the first.
+
+    WHAT THE SHORTFALL COST. A denominator that cannot see a check until the
+    check FAILS is not a denominator, it is a tally of failures. It made
+    `posture_score` fall when a scan discovered more problems — 120 new LOW
+    findings moved sample_data from 38 to 29 with nothing remediated — because an
+    unseen id joined the denominator only on failure, diluting a mean it had not
+    previously been part of. It also left `domains.py` unable to attribute a
+    runtime finding to the module that raised it.
+
+    NO try/except HERE, DELIBERATELY. This is the third time that rule is written
+    down in this codebase and the reason has not changed: the reference
+    generator's first version wrapped these imports, guessed two class names
+    wrong, and silently shipped a catalogue missing 37 ids while printing a
+    success line. A family that cannot be resolved must break the run. Silence
+    here would restore precisely the undercount this function exists to end.
+    """
+    from modules.abap_sast import (ALL_ABAP_SAST_RULES, ALL_BTP_CONFIG_RULES,
+                                   ALL_JS_RULES)
+    from modules.access_risk_analysis import AccessRiskAnalysisAuditor
+    from modules.atc_import import AtcImportAuditor
+    from modules.iam_advanced import AdvancedIamAuditor
+    from modules.security_params import SecurityParamAuditor
+
+    def _ids(table: Any, key: str, prefix: str = "") -> List[str]:
+        """The ids as the AUDITOR EMITS THEM, prefix and all.
+
+        The tables hold bare keys — `BASIS-01`, `AUTHCHK` — while the auditors
+        raise `ARA-BASIS-01` and `ATC-AUTHCHK` (access_risk_analysis.py:846,
+        atc_import.py:238, iam_advanced.py:490). Enumerating the bare keys would
+        fill the denominator with ids no finding can ever match: the count would
+        look right and every one of them would be a check that could never be
+        observed to pass or fail. `abap_sast` is the exception whose table
+        already carries the `ABAP-` prefix, so it takes no second one.
+        """
+        rows = table.values() if isinstance(table, dict) else table
+        out = []
+        for row in rows:
+            value = row.get(key) if isinstance(row, dict) else row
+            if value:
+                out.append(prefix + str(value))
+        return out
+
+    params = SecurityParamAuditor({}, {}).effective_rules()
+    families: List[Dict[str, Any]] = [
+        {
+            "module": "security_params",
+            "pattern": "PARAM-<parameter name>",
+            "ids": sorted("PARAM-" + name for name in params),
+            "source": "modules/security_params.py — BASELINE + ECS_RULES",
+            "note": "One id per judged profile parameter. `PARAM-000`, "
+                    "`PARAM-MISSING` and `PARAM-MISSING-OTHER` are fixed ids and "
+                    "appear in the literal table.",
+        },
+        {
+            # THREE TABLES, NOT ONE. The JavaScript and BTP-descriptor rules emit
+            # into the SAME `ABAP-` namespace as the ABAP/UI5 set. Reading only
+            # the first undercounted the catalogue by 15, invisibly, because 118
+            # is a plausible-looking number.
+            "module": "abap_sast",
+            "pattern": "ABAP-<rule id>",
+            "ids": sorted(set(_ids(ALL_ABAP_SAST_RULES, "id")
+                              + _ids(ALL_JS_RULES, "id")
+                              + _ids(ALL_BTP_CONFIG_RULES, "id"))),
+            "source": ("modules/abap_sast.py — ALL_ABAP_SAST_RULES (%d) + "
+                       "ALL_JS_RULES (%d) + ALL_BTP_CONFIG_RULES (%d)"
+                       % (len(ALL_ABAP_SAST_RULES), len(ALL_JS_RULES),
+                          len(ALL_BTP_CONFIG_RULES))),
+            "note": "Custom-code scan rules. All three tables emit into the same "
+                    "`ABAP-` namespace: ABAP/UI5, JavaScript, and BTP descriptors.",
+        },
+        {
+            "module": "access_risk_analysis",
+            "pattern": "ARA-<risk id>",
+            "ids": sorted(set(_ids(AccessRiskAnalysisAuditor.RULESET,
+                                   "risk_id", "ARA-"))),
+            "source": "modules/access_risk_analysis.py — RULESET",
+            "note": "Segregation-of-duties and critical-access risks, extendable "
+                    "by a customer's own `ara_ruleset.json`.",
+        },
+        {
+            "module": "atc_import",
+            "pattern": "ATC-<family>",
+            "ids": sorted(set(_ids(AtcImportAuditor.FAMILIES,
+                                   "family", "ATC-"))),
+            "source": "modules/atc_import.py — FAMILIES",
+            "note": "ABAP Test Cockpit finding families, imported from an ATC "
+                    "export.",
+        },
+        {
+            "module": "iam_advanced",
+            "pattern": "IAM-<sod rule>",
+            "ids": sorted(set(_ids(AdvancedIamAuditor.DEFAULT_SOD_RULES,
+                                   "rule_id", "IAM-"))),
+            "source": "modules/iam_advanced.py — DEFAULT_SOD_RULES",
+            "note": "Conflicting-duty pairs.",
+        },
+    ]
+
+    empty = [f["pattern"] for f in families if not f["ids"]]
+    if empty:
+        raise RuntimeError(
+            "runtime check families resolved to zero entries: %s. A family with "
+            "no members is a broken table reference, not an empty table — fix "
+            "the source rather than carrying on without it." % (empty,))
+    return families
+
+
+@lru_cache(maxsize=1)
+def all_check_ids() -> Dict[str, List[str]]:
+    """{module file name: every check id it can raise}, literals AND runtime.
+
+    The complete answer, where `module_check_ids` is the cheap floor. Use this
+    wherever the count is a DENOMINATOR — a denominator that grows only when a
+    check fails is not measuring what it claims to. `module_check_ids` remains
+    the right call for questions about the source text itself.
+
+    Three sources, because a check id is written three different ways:
+      * `check_id="X"` as a keyword          -> module_check_ids
+      * `_emit("X", ...)` positionally       -> positional_check_ids
+      * composed from a rule table at runtime -> runtime_check_families
+
+    Missing any one of them produces the same failure in a different disguise: a
+    check the denominator cannot see until it fails, which makes discovering a
+    problem look like an improvement.
+    """
+    out = {name: set(ids) for name, ids in module_check_ids().items()}
+    for name, ids in positional_check_ids().items():
+        out.setdefault(name, set()).update(ids)
+    for family in runtime_check_families():
+        out.setdefault(family["module"], set()).update(family["ids"])
+    return {name: sorted(ids) for name, ids in out.items()}
 
 
 #: Module statuses that mean the module ACTUALLY RAN, best first.

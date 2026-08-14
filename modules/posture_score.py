@@ -51,18 +51,20 @@ Bounded, and measured on sample_data by removing each of the 108 exports in turn
 
     counting degraded modules' unrun checks   61 of 108 lowered it, by up to 4
     not counting them, per-finding             3 of 108, by up to 3
-    not counting them, per-check (current)    14 of 108, by 1-2
+    not counting them, per-check              14 of 108, by 1-2
+    ...with the denominator complete           3 of 108, by 1-2   (current)
 
-The middle row looks best on count alone and is the wrong choice: per-FINDING
-scoring is what let a single check firing on 500 users contribute 500 findings'
-worth against one check of denominator, which both concentrated the leverage and
-made the ANCHOR below false. The current row spreads a smaller effect wider and
-is the only one where the anchor is literally true.
+The second row looks as good as the last on count alone and is the wrong choice:
+per-FINDING scoring is what let a single check firing on 500 users contribute 500
+findings' worth against one check of denominator, which both concentrated the
+leverage and made the ANCHOR below false.
 
 What IS eliminated is the large, systematic version of the incentive: a module
 that ran on partial input no longer contributes the checks it never got to run.
 Before that fix a 20-of-108-file upload scored 9 against the full estate's 36 —
-a whole band better for supplying less.
+a whole band better for supplying less. The three that remain are files feeding
+checks well above the estate's average, which is the arithmetic above and not a
+mechanism anybody can remove.
 
 THE BANDS ARE THE WEIGHTS, NOT A JUDGEMENT. Every threshold is "what would this
 score if every check that ran found one finding of this severity":
@@ -82,30 +84,20 @@ instead. Inventing a denominator here would be the same error as every other one
 this codebase has spent two days removing: a confident number over an absence of
 evidence.
 
-KNOWN DEFECT, NOT YET FIXED: DISCOVERING MORE CAN LOWER IT.
+DISCOVERING MORE USED TO LOWER IT. FIXED BY ENUMERATION.
 
-A check built at runtime from a rule table is invisible unless it FAILS — there
-is no literal id for `check_catalogue` to find — so it joins the denominator only
-on failure. A newly discovered finding on such a check therefore adds a below-
-average item to a mean, and the mean falls. Measured on sample_data:
+A check that only becomes countable by failing is not a denominator, and 78 of
+the 333 ids a real scan emits were exactly that: composed at runtime from a rule
+table, or passed positionally to an emitter wrapper, and invisible to a reader
+that looked for `check_id=` keywords. A newly discovered finding on such a check
+added a below-average item to a mean that had never included it, so the mean
+fell — 120 new LOW findings took sample_data from 38 to 29 with nothing
+remediated, the old formula's failure in the opposite direction.
 
-    baseline                            38
-    + 10 new LOW findings on unseen checks   37
-    + 30                                     35
-    +120                                     29
-
-Nothing was remediated. The estate got worse and the number improved by nine
-points, which is the same failure as the old formula in the opposite direction.
-It is not visible on a single finding (rounding absorbs it) and it is the reason
-this note exists rather than a caveat in the docstring's optimistic half.
-
-THE FIX IS ENUMERATION, NOT PROVENANCE. The 255 runtime checks are built from
-rule tables shipped in this repository — that is where docs/CHECKS_REFERENCE.md
-gets 619 from. `check_catalogue()` stops at literals by choice, not necessity.
-Counting rule-table rows per module makes the denominator complete and
-independent of what was found, which closes this and shrinks the withholding
-residue above at the same time, because a degraded module would then have a
-knowable check count instead of an observed one.
+`coverage.all_check_ids()` now unions all three ways a check id is written, and
+every id the auditors emit over the sample data is enumerable before the scan
+runs. Discovering more can no longer lower the score: 88 real checks that ran
+and did not fail, newly failed, move it 33 -> 34.
 
 THIS IS NOT A COMPLIANCE PERCENTAGE. It is findings per check weighted by
 severity, and it has no upper meaning beyond the anchor above.
@@ -178,13 +170,13 @@ def assessed_check_count(coverage: Optional[Dict[str, Any]],
     None for "we cannot tell" and an empty set for "nothing ran"; both mean there
     is nothing to divide by, and the two must not be allowed to diverge here.
     """
-    from modules.coverage import module_check_ids, ran_modules
+    from modules.coverage import all_check_ids, ran_modules
 
     if not ran_modules(coverage):
         return None
     intact = ran_modules(coverage, require_complete=True) or set()
     declared = {cid for module in intact
-                for cid in module_check_ids().get(module, ())}
+                for cid in all_check_ids().get(module, ())}
     total = declared | {c for c in observed if c}
     return len(total) or None
 

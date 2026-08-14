@@ -372,7 +372,7 @@ class CodeTransportAuditor(BaseAuditor):
         for stmt, items in dangerous.items():
             risk = self.DANGEROUS_STATEMENTS[stmt]
             self.finding(
-                check_id=f"CODE-STMT-001",
+                check_id="CODE-STMT-001",
                 title=f"Dangerous ABAP statement: {stmt}",
                 severity=self.SEVERITY_HIGH,
                 category="Code & Transport Security",
