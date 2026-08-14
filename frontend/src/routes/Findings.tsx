@@ -148,30 +148,30 @@ export function Findings() {
             loads rather than rendered empty: a select offering only "Any domain"
             looks like a product with no domains. */}
         {domainList.length > 0 && (
-          <Select value={params.get('domain') ?? ''}
+          <Select label="Filter by security domain" value={params.get('domain') ?? ''}
                   onChange={(v) => setFilter('domain', v)} blank="Any domain"
                   options={domainList.map((d) => [d.id, d.label])} />
         )}
-        <Select value={params.get('tier') ?? ''} onChange={(v) => setFilter('tier', v)}
-                blank="Any priority" options={TIERS.map((t) => [t, t])} />
-        <Select value={params.get('system_id') ?? ''}
+        <Select label="Filter by priority tier" value={params.get('tier') ?? ''}
+                onChange={(v) => setFilter('tier', v)} blank="Any priority" options={TIERS.map((t) => [t, t])} />
+        <Select label="Filter by SAP system" value={params.get('system_id') ?? ''}
                 onChange={(v) => setFilter('system_id', v)} blank="All systems"
                 options={sapSystems.map((s) => [
                   String(s.id), `${s.label} (${s.tier})`,
                 ])} />
-        <Select value={params.get('severity') ?? ''}
+        <Select label="Filter by severity" value={params.get('severity') ?? ''}
                 onChange={(v) => setFilter('severity', v)} blank="Any severity"
                 options={SEVERITIES.map((s) => [s, s])} />
         {/* "Open (default)" is not a no-op label: with no state filter the query
             hides resolved AND false-positive findings, which is not the same as
             state = open. */}
-        <Select value={params.get('state') ?? ''} onChange={(v) => setFilter('state', v)}
-                blank="Open (default)"
+        <Select label="Filter by lifecycle state" value={params.get('state') ?? ''}
+                onChange={(v) => setFilter('state', v)} blank="Open (default)"
                 options={STATES.map((s) => [s, s.replace(/_/g, ' ')])} />
-        <Select value={params.get('owner') ?? ''} onChange={(v) => setFilter('owner', v)}
-                blank="Any owner" options={OWNER_FILTER} />
-        <Select value={params.get('team') ?? ''} onChange={(v) => setFilter('team', v)}
-                blank="Any team" options={TEAMS.map((t) => [t, t.replace(/_/g, ' ')])} />
+        <Select label="Filter by remediation owner" value={params.get('owner') ?? ''}
+                onChange={(v) => setFilter('owner', v)} blank="Any owner" options={OWNER_FILTER} />
+        <Select label="Filter by owning team" value={params.get('team') ?? ''}
+                onChange={(v) => setFilter('team', v)} blank="Any team" options={TEAMS.map((t) => [t, t.replace(/_/g, ' ')])} />
         <label className="text-[12px] text-ink2 flex items-center gap-1.5">
           <input type="checkbox" checked={params.get('overdue') === 'true'}
                  onChange={(e) => setFilter('overdue', e.target.checked ? 'true' : '')} />
@@ -587,16 +587,33 @@ function SaveViewForm() {
 
 // ── plumbing ─────────────────────────────────────────────────────────────────
 
-function Select({ value, onChange, blank, options }: {
+function Select({ label, value, onChange, blank, options }: {
+  /** What this control filters. REQUIRED, not optional — seven of these sit in a
+   *  row on the screen this product is operated from all day, and every one of
+   *  them was an unlabelled combo box. A screen reader announced seven
+   *  consecutive "combo box"es whose only distinguishing text was the currently
+   *  selected value, so the difference between the severity filter and the team
+   *  filter was audible only if you had already changed one of them.
+   *
+   *  It is `aria-label` rather than a visible <label> because the blank option
+   *  already carries the name visually ("Any severity"), and adding a second
+   *  copy above each control would double the height of the filter row without
+   *  telling a sighted reader anything new. Making the prop required is the
+   *  point: an optional one would be omitted by the next person in a hurry, and
+   *  this is the eighth control's problem, not the seventh's. */
+  label: string
   value: string
   onChange: (v: string) => void
   blank: string
   options: [string, string][]
 }) {
   return (
-    <select className="field w-auto" value={value} onChange={(e) => onChange(e.target.value)}>
+    <select className="field w-auto" aria-label={label} value={value}
+            onChange={(e) => onChange(e.target.value)}>
       <option value="">{blank}</option>
-      {options.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+      {options.map(([v, optionLabel]) => (
+        <option key={v} value={v}>{optionLabel}</option>
+      ))}
     </select>
   )
 }

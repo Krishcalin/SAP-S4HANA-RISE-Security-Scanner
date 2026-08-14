@@ -129,7 +129,22 @@ class ComplianceMapper:
         "Audit Logging": ["logging-monitoring"],
         "Role Design & Governance": ["access-control", "sod", "change-management"],
         "Gateway Security": ["network-security", "secure-config"],
-        "Transport Security": ["change-management", "secure-development"],
+        # TRANSPORT AS IN TLS, NOT AS IN THE CHANGE AND TRANSPORT SYSTEM.
+        #
+        # The name is a false friend in an SAP context and it mapped as one: the
+        # only two checks in this category are `icm/HTTP/redirect_0` and
+        # `icm/HTTPS/verify_client`, both Internet Communication Manager
+        # settings. They were cited against change-management and
+        # secure-development themes — so a weak TLS setting reached an auditor
+        # under ISO A.8.28 "Secure coding", A.8.31 "Separation of development,
+        # test and production" and A.8.32 "Change management", none of which it
+        # is evidence about, while reaching A.8.24 "Use of cryptography" and
+        # GDPR Art. 32 not at all.
+        #
+        # This is the failure mode the note at the head of this file already
+        # records once: a mapping that is confidently wrong is worse than one
+        # that is absent, because the reader has no reason to check it.
+        "Transport Security": ["cryptography", "network-security", "secure-config"],
         "Development Controls": ["change-management", "secure-development"],
         "Security Parameters": ["secure-config"],
         # iam_advanced.py — firefighter/emergency access, role expiry, access

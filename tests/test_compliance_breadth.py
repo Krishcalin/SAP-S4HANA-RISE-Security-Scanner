@@ -557,3 +557,39 @@ def test_each_flagged_control_names_the_themes_it_was_flagged_through():
     for control in result["controls"]:
         assert control["themes"], f"{control['id']} names no theme"
         assert set(control["themes"]) <= labels, control["themes"]
+
+
+def test_a_tls_setting_is_not_cited_as_a_change_management_control():
+    """"Transport Security" is a FALSE FRIEND in an SAP context, and it mapped as
+    one. Its only two checks are `icm/HTTP/redirect_0` and
+    `icm/HTTPS/verify_client` — Internet Communication Manager settings, i.e. TLS
+    — and they were mapped to change-management and secure-development themes.
+
+    So a weak TLS setting reached an auditor under ISO A.8.28 "Secure coding",
+    A.8.31 "Separation of development, test and production" and A.8.32 "Change
+    management", and never reached A.8.24 "Use of cryptography" at all. A mapping
+    that is confidently wrong is worse than one that is absent: the reader has no
+    reason to check it.
+    """
+    from modules.compliance_mapping import ComplianceMapper
+
+    themes = set(ComplianceMapper.CATEGORY_THEMES["Transport Security"])
+    assert "cryptography" in themes
+    assert "change-management" not in themes
+    assert "secure-development" not in themes
+
+    controls = set()
+    for framework in ComplianceMapper.FRAMEWORKS:
+        for theme, entries in (framework.get("themes") or {}).items():
+            if theme in themes:
+                controls |= {f"{framework['id']}:{c}" for c, _label in entries}
+    assert "iso27001:A.8.24" in controls, "a TLS finding must reach 'Use of cryptography'"
+    assert "iso27001:A.8.32" not in controls, "and must not reach 'Change management'"
+
+
+def test_the_category_that_really_is_about_transports_still_maps_to_change():
+    """The Change and Transport System has its own category, and this fix must
+    not have moved it: SE06/SCC4/STMS evidence IS change-management evidence."""
+    from modules.compliance_mapping import ComplianceMapper
+
+    assert "change-management" in ComplianceMapper.CATEGORY_THEMES["Change Management"]
