@@ -183,6 +183,29 @@ def burndown(scope: Optional[Sequence[int]], limit: int = 24) -> List[Dict[str, 
     Per RUN rather than per calendar day, because the backlog only changes when a
     scan observes it. A daily series over weekly scans would draw six flat days and
     one cliff, implying activity on days nothing was measured.
+
+    "OPEN AFTER RUN R" IS NOT "OBSERVED BY RUN R", AND IT USED TO BE.
+
+    Every series here counted `f.last_seen_run = r.id`. That was a serviceable
+    proxy while every open finding was observed by every run — and 3e0e00e ended
+    that: a run may now only resolve what it could have observed, so a finding
+    whose module did not execute is left OPEN with its `last_seen_run` still
+    pointing at an older run. It takes an early `continue` past every writer of
+    that column.
+
+    So on precisely the run the withholding rule was written for, the backlog
+    bar, the CRITICAL overlay and the P1/P2 series all fell by the number of
+    findings the run had declined to examine — while the Findings queue went on
+    showing them open. Two screens, one estate, different numbers, and the
+    reassuring one was the chart.
+
+    The definition is now the honest one: a finding is open after R if it had
+    been seen by R and was not resolved at or before R. Resolution is already
+    dated (`resolved_at`), and first observation is dated through the run that
+    made it, so neither needs a column that does not exist.
+
+    `new` still keys on `first_seen_run`, which genuinely means "this run saw it
+    first" and was never affected.
     """
     clause, params = _scope(scope, "r.system_id")
     return db.query(
@@ -195,15 +218,28 @@ def burndown(scope: Optional[Sequence[int]], limit: int = 24) -> List[Dict[str, 
         )
         SELECT r.id AS run_id, r.started_at,
                count(f.id) FILTER (WHERE f.first_seen_run = r.id)          AS new,
-               count(f.id) FILTER (WHERE f.last_seen_run  = r.id)          AS open_after,
-               count(f.id) FILTER (WHERE f.last_seen_run = r.id
+               count(f.id) FILTER (WHERE open_after_this_run)              AS open_after,
+               count(f.id) FILTER (WHERE open_after_this_run
                                      AND f.severity = 'CRITICAL')          AS critical,
-               count(f.id) FILTER (WHERE f.last_seen_run = r.id
+               count(f.id) FILTER (WHERE open_after_this_run
                                      AND f.priority_tier = 'P1')           AS p1,
-               count(f.id) FILTER (WHERE f.last_seen_run = r.id
+               count(f.id) FILTER (WHERE open_after_this_run
                                      AND f.priority_tier = 'P2')           AS p2
         FROM runs r
-        LEFT JOIN finding f ON f.last_seen_run = r.id OR f.first_seen_run = r.id
+        LEFT JOIN LATERAL (
+            SELECT f.id, f.severity, f.priority_tier, f.first_seen_run,
+                   -- Seen by this run or an earlier one, and not resolved by the
+                   -- time this run started. A finding the run could not observe
+                   -- satisfies both and stays in the backlog, which is the point.
+                   (fr.started_at <= r.started_at
+                    AND f.state <> 'false_positive'
+                    AND (f.resolved_at IS NULL OR f.resolved_at > r.started_at))
+                       AS open_after_this_run
+            FROM finding f
+            JOIN scan_run fr ON fr.id = f.first_seen_run
+            WHERE f.system_id IS NOT DISTINCT FROM r.system_id
+              AND fr.started_at <= r.started_at
+        ) f ON true
         GROUP BY r.id, r.started_at
         ORDER BY r.started_at
         """, list(params) + [limit])

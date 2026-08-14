@@ -404,3 +404,93 @@ def test_supplying_less_cannot_produce_a_better_score(database, landscape, syste
                 and everything.get(c, {}).get("pct_compliant") is not None
                 and d["pct_compliant"] > everything[c]["pct_compliant"]]
     assert not improved, f"supplying fewer exports raised the score for {improved}"
+
+
+@pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")
+def test_the_burndown_keeps_a_finding_the_run_could_not_examine(database, landscape,
+                                                                system):
+    """A WITHHELD FINDING IS STILL IN THE BACKLOG, and the chart used to drop it.
+
+    Every series in `burndown` counted `f.last_seen_run = r.id` — "observed by
+    this run". That was a serviceable proxy while every open finding was observed
+    by every run, and 3e0e00e ended it: a run may only resolve what it could have
+    observed, so a finding whose module did not execute is left open with its
+    `last_seen_run` still pointing at an older run.
+
+    So on exactly the run the withholding rule was written for, the backlog bar,
+    the CRITICAL overlay and the P1/P2 series all fell by the number of findings
+    the run declined to examine — while the Findings queue went on showing them
+    open. Two screens, one estate, different numbers, and the reassuring one was
+    the chart.
+    """
+    from server import analytics, db, ingest
+
+    finding = {"check_id": "LREV-PAT-001", "title": "t", "severity": "CRITICAL",
+               "category": "Security Audit Log Review", "description": "d",
+               "affected_items": [], "subject": [{"type": "user", "name": "ZED"}]}
+    ran = {"modules": {"log_review": {"status": "complete", "sources_missing": []}}}
+    starved = {"modules": {"log_review": {"status": "skipped"}}}
+
+    with db.connection() as conn:
+        r1 = conn.execute(
+            "INSERT INTO scan_run (landscape_id, system_id, status, started_at) "
+            "VALUES (%s,%s,'complete', now() - interval '2 days') RETURNING id",
+            (landscape, system)).fetchone()["id"]
+        ingest.store_run(conn, r1, landscape, system, [finding], "PRD", "100",
+                         coverage=ran)
+        # The second run cannot see the audit log at all, so it must neither
+        # resolve the finding nor drop it from the backlog.
+        r2 = conn.execute(
+            "INSERT INTO scan_run (landscape_id, system_id, status, started_at) "
+            "VALUES (%s,%s,'complete', now() - interval '1 day') RETURNING id",
+            (landscape, system)).fetchone()["id"]
+        d2 = ingest.store_run(conn, r2, landscape, system, [], "PRD", "100",
+                              coverage=starved)
+        conn.commit()
+
+    assert len(d2.unexamined) == 1, "the guard did not withhold; fixture is wrong"
+    assert d2.resolved == []
+
+    series = {row["run_id"]: row for row in analytics.burndown(_scope(database, system))}
+    assert r2 in series, "the second run is missing from the burndown entirely"
+    assert series[r2]["open_after"] >= 1, (
+        "the backlog dropped a finding the run could not examine — the chart and "
+        "the findings queue now disagree about the same estate")
+    assert series[r2]["critical"] >= 1, "the CRITICAL overlay dropped it too"
+
+
+@pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")
+def test_the_burndown_still_drops_a_finding_that_was_genuinely_resolved(database,
+                                                                        landscape,
+                                                                        system):
+    """The other direction. Withholding must not become never-closing: a finding
+    a run COULD see and did not report is resolved, and must leave the backlog on
+    that run rather than lingering for ever."""
+    from server import analytics, db, ingest
+
+    finding = {"check_id": "USR-007", "title": "t", "severity": "HIGH",
+               "category": "User & Authorization", "description": "d",
+               "affected_items": [], "subject": [{"type": "user", "name": "ADA"}]}
+    ran = {"modules": {"user_auth_audit": {"status": "complete", "sources_missing": []}}}
+
+    with db.connection() as conn:
+        r1 = conn.execute(
+            "INSERT INTO scan_run (landscape_id, system_id, status, started_at) "
+            "VALUES (%s,%s,'complete', now() - interval '2 hours') RETURNING id",
+            (landscape, system)).fetchone()["id"]
+        ingest.store_run(conn, r1, landscape, system, [finding], "PRD", "100",
+                         coverage=ran)
+        r2 = conn.execute(
+            "INSERT INTO scan_run (landscape_id, system_id, status, started_at) "
+            "VALUES (%s,%s,'complete', now() - interval '1 hour') RETURNING id",
+            (landscape, system)).fetchone()["id"]
+        d2 = ingest.store_run(conn, r2, landscape, system, [], "PRD", "100",
+                              coverage=ran)
+        conn.commit()
+
+    assert len(d2.resolved) == 1, "the module ran; the finding should have resolved"
+    series = {row["run_id"]: row for row in analytics.burndown(_scope(database, system))}
+    ids = [f for f in d2.resolved]
+    assert ids
+    # It was open after r1 and gone after r2.
+    assert series[r1]["open_after"] >= 1
