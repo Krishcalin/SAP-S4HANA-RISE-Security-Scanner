@@ -14,6 +14,8 @@ import {
 import type { Landscape, SapSystem, UploadResult } from '../api/types'
 import { useSession } from '../lib/session'
 import { useTitle } from '../lib/title'
+// Aliased: this module already exports a component called `Upload`.
+import { Upload as UploadIcon } from 'lucide-react'
 
 /**
  * Upload an export bundle and start a scan.
@@ -144,7 +146,8 @@ export function Upload() {
   if (!user.can_write) {
     return (
       <div className="max-w-2xl">
-        <h1 className="mb-1 text-[21px] font-semibold tracking-tight text-ink">
+        <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
+          <UploadIcon size={22} className="text-accent shrink-0" />
           Upload an export bundle
         </h1>
         <div className="banner banner-info">
@@ -160,7 +163,8 @@ export function Upload() {
 
   return (
     <div>
-      <h1 className="mb-1 text-[21px] font-semibold tracking-tight text-ink">
+      <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
+        <UploadIcon size={22} className="text-accent shrink-0" />
         Upload an export bundle
       </h1>
       <p className="mb-5 text-ink2">

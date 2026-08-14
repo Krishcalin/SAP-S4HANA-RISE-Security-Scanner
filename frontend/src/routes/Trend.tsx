@@ -11,6 +11,7 @@ import { Link, useSearchParams } from 'react-router'
 import { ApiError, trend } from '../api/client'
 import type { BurndownPoint, Journey } from '../api/types'
 import { useTitle } from '../lib/title'
+import { TrendingUp } from 'lucide-react'
 
 /**
  * The mitigation journey — ported from server/templates/trend.html. It answers
@@ -90,7 +91,8 @@ export function Trend() {
 
   return (
     <>
-      <h1 className="text-[21px] font-semibold tracking-tight text-ink mb-1">
+      <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
+        <TrendingUp size={22} className="text-accent shrink-0" />
         Mitigation journey
       </h1>
       <p className="text-ink2 mb-4">

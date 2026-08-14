@@ -11,6 +11,7 @@ import { Link, Navigate, useParams } from 'react-router'
 import { ApiError, view } from '../api/client'
 import type { ResolvedView } from '../api/types'
 import { useTitle } from '../lib/title'
+import { BookmarkX } from 'lucide-react'
 
 /**
  * A saved view: /v/:slug — the durable, permission-scoped URL per audience.
@@ -105,7 +106,8 @@ export function SavedView() {
   if (failure) {
     return (
       <div className="max-w-xl">
-        <h1 className="mb-1 text-[21px] font-semibold tracking-tight text-ink">
+        <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
+          <BookmarkX size={22} className="text-accent shrink-0" />
           {failure.kind === 'missing' ? 'No such saved view' : 'Could not open that view'}
         </h1>
         {failure.kind === 'missing' ? (

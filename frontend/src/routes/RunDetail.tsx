@@ -12,6 +12,7 @@ import { ApiError, cancelRun, run as fetchRun, runDiff as fetchDiff } from '../a
 import type { RunDiff, RunStatus, ScanRun } from '../api/types'
 import { useSession } from '../lib/session'
 import { useTitle } from '../lib/title'
+import { ScanLine } from 'lucide-react'
 
 /**
  * One scan run: what it found, what it could not see, and — while it is still
@@ -304,7 +305,8 @@ export function RunDetail() {
   if (!valid) {
     return (
       <div className="max-w-2xl">
-        <h1 className="mb-1 text-[21px] font-semibold tracking-tight text-ink">Scan run</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
+        <ScanLine size={22} className="text-accent shrink-0" />Scan run</h1>
         <div className="banner banner-bad">
           <strong>{id}</strong> is not a run id.
         </div>
@@ -315,7 +317,8 @@ export function RunDetail() {
   if (loadError) {
     return (
       <div className="max-w-2xl">
-        <h1 className="mb-1 text-[21px] font-semibold tracking-tight text-ink">
+        <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
+          <ScanLine size={22} className="text-accent shrink-0" />
           Scan run #{runId}
         </h1>
         <div className="banner banner-bad" role="alert">{loadError.message}</div>
@@ -359,7 +362,8 @@ export function RunDetail() {
 
   return (
     <div>
-      <h1 className="mb-1 text-[21px] font-semibold tracking-tight text-ink">
+      <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
+        <ScanLine size={22} className="text-accent shrink-0" />
         Scan run #{r.id}
       </h1>
       <p className="mb-5 text-ink2">

@@ -27,6 +27,7 @@ import { Link } from 'react-router'
 import { ApiError, domains as fetchDomains } from '../api/client'
 import type { DomainReach, DomainsView, SecurityDomain } from '../api/types'
 import { useTitle } from '../lib/title'
+import { LayoutGrid } from 'lucide-react'
 
 const CARD = 'rounded-lg border border-line bg-panel p-4'
 const KPI = 'text-[30px] font-semibold tracking-[-.02em] leading-[1.1]'
@@ -70,7 +71,8 @@ export function Domains() {
 
   return (
     <>
-      <h1 className="text-[21px] font-semibold tracking-[-.01em] text-ink mb-1">
+      <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
+        <LayoutGrid size={22} className="text-accent shrink-0" />
         Security domains
       </h1>
       <p className="text-ink2 mb-5 max-w-[80ch]">

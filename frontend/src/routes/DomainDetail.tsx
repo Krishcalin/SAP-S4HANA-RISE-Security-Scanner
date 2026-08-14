@@ -13,6 +13,7 @@ import { ApiError, domain as fetchDomain } from '../api/client'
 import type { SecurityDomain } from '../api/types'
 import { useTitle } from '../lib/title'
 import { stateChip } from './Domains'
+import { LayoutGrid } from 'lucide-react'
 
 const CARD = 'rounded-lg border border-line bg-panel p-4'
 const CARD_H3 = 'text-[12px] font-semibold uppercase tracking-[.06em] text-ink3 mb-3'
@@ -77,7 +78,8 @@ function Body({ d }: { d: SecurityDomain }) {
   return (
     <>
       <div className="flex flex-wrap items-center gap-2.5 mb-1">
-        <h1 className="text-[21px] font-semibold tracking-[-.01em] text-ink">
+        <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2">
+          <LayoutGrid size={22} className="text-accent shrink-0" />
           {d.label}
         </h1>
         <span className={`csf-state ${chip.cls}`}>{chip.text}</span>

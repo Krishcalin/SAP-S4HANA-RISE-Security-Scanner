@@ -17,6 +17,7 @@ import { ApiError, csfFunction } from '../api/client'
 import type { CsfCategory, CsfFunctionView } from '../api/types'
 import { useTitle } from '../lib/title'
 import { statusLabel } from './Csf'
+import { Landmark } from 'lucide-react'
 
 const CARD = 'rounded-lg border border-line bg-panel p-4'
 const CARD_H3 = 'text-[12px] font-semibold uppercase tracking-[.06em] text-ink3 mb-3'
@@ -69,7 +70,8 @@ function Body({ view }: { view: CsfFunctionView }) {
     <>
       <div className="flex items-center gap-2.5 mb-1">
         <span className={`csf csf-${view.id}`}>{view.id}</span>
-        <h1 className="text-[21px] font-semibold tracking-[-.01em] text-ink uppercase">
+        <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 uppercase">
+          <Landmark size={22} className="text-accent shrink-0" />
           {view.name}
         </h1>
       </div>

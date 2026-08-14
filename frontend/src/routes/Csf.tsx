@@ -19,6 +19,7 @@ import { Link } from 'react-router'
 import { ApiError, csf } from '../api/client'
 import type { CsfFunctionView, CsfStatus, CsfView } from '../api/types'
 import { useTitle } from '../lib/title'
+import { Landmark } from 'lucide-react'
 
 const CARD = 'rounded-lg border border-line bg-panel p-4'
 const CARD_H3 = 'text-[12px] font-semibold uppercase tracking-[.06em] text-ink3 mb-3'
@@ -69,7 +70,8 @@ export function Csf() {
 
   return (
     <>
-      <h1 className="text-[21px] font-semibold tracking-[-.01em] text-ink mb-1">
+      <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
+        <Landmark size={22} className="text-accent shrink-0" />
         NIST Cybersecurity Framework 2.0
       </h1>
       <p className="text-ink2 mb-5">

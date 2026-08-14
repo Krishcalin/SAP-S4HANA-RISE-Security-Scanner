@@ -18,6 +18,7 @@ import type {
 } from '../api/types'
 import { useSession } from '../lib/session'
 import { useTitle } from '../lib/title'
+import { CircleAlert } from 'lucide-react'
 
 /**
  * The triage queue — ported from server/templates/findings.html, and the screen
@@ -116,7 +117,8 @@ export function Findings() {
 
   return (
     <>
-      <h1 className="text-[21px] font-semibold tracking-[-.01em] mb-1">Findings</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
+        <CircleAlert size={22} className="text-accent shrink-0" />Findings</h1>
       <p className="text-ink2 mb-5">
         {page && `${page.total} finding${page.total === 1 ? '' : 's'}. `}
         Every finding type — parameters, authorizations, SoD, HANA, BTP, code and

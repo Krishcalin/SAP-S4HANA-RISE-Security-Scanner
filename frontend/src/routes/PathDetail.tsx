@@ -12,6 +12,7 @@ import { ApiError, path as fetchPath } from '../api/client'
 import type { PathFinding, PathHop, PathView, RemediationOwner } from '../api/types'
 import { useTitle } from '../lib/title'
 import { money } from './Risk'
+import { Waypoints } from 'lucide-react'
 
 /**
  * One attack path with its evidence — ported from server/templates/path_detail.html.
@@ -125,7 +126,8 @@ function Body({ view }: { view: PathView }) {
 
   return (
     <>
-      <h1 className="text-[21px] font-semibold tracking-tight text-ink mb-1">
+      <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
+        <Waypoints size={22} className="text-accent shrink-0" />
         <span className={`pill sev-${path.severity ?? 'INFO'}`}>{path.severity}</span>{' '}
         {d.name}
       </h1>

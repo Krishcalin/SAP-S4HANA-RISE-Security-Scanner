@@ -13,6 +13,7 @@ import type { PathsOverview, RemediationOwner } from '../api/types'
 import { useTitle } from '../lib/title'
 import { UNPRICED_CELL } from '../lib/pricing'
 import { money } from './Risk'
+import { Waypoints } from 'lucide-react'
 
 /**
  * Attack paths — ported from server/templates/paths.html.
@@ -83,7 +84,8 @@ export function Paths() {
 
   return (
     <>
-      <h1 className="text-[21px] font-semibold tracking-tight text-ink mb-1">
+      <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
+        <Waypoints size={22} className="text-accent shrink-0" />
         Attack paths
       </h1>
       <p className="text-ink2 mb-5">

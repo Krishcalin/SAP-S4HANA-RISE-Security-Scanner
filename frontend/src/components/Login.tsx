@@ -10,6 +10,7 @@ import { useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { ApiError, login } from '../api/client'
 import { useTitle } from '../lib/title'
+import { LogIn } from 'lucide-react'
 
 /**
  * Sign-in.
@@ -95,7 +96,8 @@ export default function Login() {
     <div className="auth">
       <div className="auth-form">
         <div>
-          <h1 className="text-[21px] font-semibold tracking-tight text-ink mb-1">Sign in</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
+        <LogIn size={22} className="text-accent shrink-0" />Sign in</h1>
           <p className="text-ink2 mb-5 text-[13px]">
             SAP threat, vulnerability and GRC posture — assessed offline, tracked
             to closure.

@@ -12,6 +12,7 @@ import { TotpPanel } from '../components/TotpPanel'
 import { useSession } from '../lib/session'
 import { useTitle } from '../lib/title'
 import type { AccountInfo, GeneratedPassword } from '../api/types'
+import { UserCog } from 'lucide-react'
 
 /**
  * Your account: your own password, and — for an admin — issuing a new one to
@@ -145,7 +146,8 @@ export function Account() {
   if (loadError) {
     return (
       <div className="max-w-xl">
-        <h1 className="mb-1 text-[21px] font-semibold tracking-tight text-ink">Your account</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
+        <UserCog size={22} className="text-accent shrink-0" />Your account</h1>
         <div className="banner banner-bad" role="alert">{loadError}</div>
       </div>
     )
@@ -159,7 +161,8 @@ export function Account() {
 
   return (
     <>
-      <h1 className="mb-1 text-[21px] font-semibold tracking-tight text-ink">Your account</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
+        <UserCog size={22} className="text-accent shrink-0" />Your account</h1>
       <p className="mb-5 text-[13px] text-ink2">
         {user.display_name} · {user.role}
       </p>

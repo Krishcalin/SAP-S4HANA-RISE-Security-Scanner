@@ -36,6 +36,7 @@ import {
 } from '../lib/pricing'
 import { useTitle } from '../lib/title'
 import { money } from './Risk'
+import { Calculator } from 'lucide-react'
 
 const CARD = 'rounded-lg border border-line bg-panel p-4'
 const CARD_H3 = 'text-[12px] font-semibold uppercase tracking-[.06em] text-ink3 mb-3'
@@ -169,7 +170,8 @@ export function CrqInputs() {
 
   return (
     <>
-      <h1 className="text-[21px] font-semibold tracking-[-.01em] text-ink mb-1">
+      <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
+        <Calculator size={22} className="text-accent shrink-0" />
         Risk quantification
       </h1>
       {/* THE PROMISE IS ONLY MADE WHEN IT IS BEING KEPT.

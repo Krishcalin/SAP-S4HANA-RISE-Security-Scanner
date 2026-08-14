@@ -8,6 +8,7 @@
 
 import { Link, useLocation } from 'react-router'
 import { useTitle } from '../lib/title'
+import { SearchX } from 'lucide-react'
 
 /**
  * The catch-all. The only file in routes/ that belongs to the shell.
@@ -35,7 +36,8 @@ export function NotFound() {
   const { pathname } = useLocation()
   return (
     <div className="max-w-xl">
-      <h1 className="text-[21px] font-semibold tracking-tight text-ink mb-1">
+      <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
+        <SearchX size={22} className="text-accent shrink-0" />
         Page not found
       </h1>
       <p className="text-ink2 text-[13px] mb-4">

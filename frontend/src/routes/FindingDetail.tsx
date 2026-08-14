@@ -14,6 +14,7 @@ import {
 import type { FindingDetail as Finding, FindingHistory } from '../api/types'
 import { useSession } from '../lib/session'
 import { useTitle } from '../lib/title'
+import { CircleAlert } from 'lucide-react'
 
 /**
  * One finding in full — ported from server/templates/finding_detail.html.
@@ -89,7 +90,8 @@ export function FindingDetail() {
         <Link className="text-accent" to="/findings">← Findings</Link>
       </p>
 
-      <h1 className="text-[21px] font-semibold tracking-[-.01em] mb-1">
+      <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
+        <CircleAlert size={22} className="text-accent shrink-0" />
         <span className={`pill sev-${finding.severity ?? 'INFO'} mr-2 align-middle`}>
           {finding.severity ?? 'INFO'}
         </span>

@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import { ApiError, coverage } from '../api/client'
 import type { Coverage as CoverageView, Severity } from '../api/types'
 import { useTitle } from '../lib/title'
+import { ShieldCheck } from 'lucide-react'
 
 /**
  * The published check catalogue and its coverage of SAP's own Security Baseline —
@@ -83,7 +84,8 @@ export function Coverage() {
 
   return (
     <>
-      <h1 className="text-[21px] font-semibold tracking-tight text-ink mb-1">
+      <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
+        <ShieldCheck size={22} className="text-accent shrink-0" />
         Check catalogue and control coverage
       </h1>
       <p className="text-ink2 mb-5">
