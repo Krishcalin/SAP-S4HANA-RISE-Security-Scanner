@@ -248,6 +248,7 @@ def module_sources() -> Dict[str, List[str]]:
             continue
         if "BaseAuditor" not in src:
             continue                      # a helper module, not an auditor
+        tree = ast.parse(src, str(path))
         keys = set(_DATA_GET.findall(src)) | _sources_via_helper(src)
         # FILTERED AGAINST WHAT THE LOADER ACTUALLY KNOWS, and this is not
         # belt-and-braces. The accessor analysis collects literals passed to a
@@ -258,8 +259,43 @@ def module_sources() -> Dict[str, List[str]]:
         # dangerous direction of error: it manufactures coverage gaps that are not
         # real, and a manifest that cries wolf gets ignored.
         keys &= set(all_logical_sources())
+        # AND THE INPUTS THAT ARE NOT FILES. `abap_sast` reads an unpacked
+        # abapGit DIRECTORY named by --abap-src, through a class attribute:
+        #
+        #     SOURCE_KEY = "abap_source_dir"
+        #     root = self.data.get(self.SOURCE_KEY)
+        #
+        # The literal scan above cannot see `self.data.get(<variable>)`, and the
+        # key is not one of DataLoader's file sources, so it was filtered out
+        # twice over. The module therefore declared NO inputs at all, came back
+        # `no_file_inputs` on every run, and counted as having looked — so
+        # Custom Code Security could never report NOT_SUPPLIED and the resolution
+        # guard could never withhold one of its findings. 133 rules' worth of
+        # coverage was structurally invisible to the honesty machinery, while the
+        # module's own docstring said "the coverage manifest states the absence".
+        keys |= _source_key_attributes(tree)
         out[path.stem] = sorted(keys)
     return out
+
+
+def _source_key_attributes(tree: ast.AST) -> Set[str]:
+    """Logical inputs declared as `SOURCE_KEY = "..."` on the auditor class.
+
+    Kept OUT of `all_logical_sources()` deliberately: that set is the denominator
+    a customer is measured against ("106 of 123 sources supplied"), and a
+    directory nobody was asked to supply does not belong in it. It is an input
+    for the purpose of deciding whether a module looked, and not a file the
+    customer forgot.
+    """
+    found: Set[str] = set()
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Assign)
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)
+                and any(isinstance(x, ast.Name) and x.id == "SOURCE_KEY"
+                        for x in node.targets)):
+            found.add(node.value.value)
+    return found
 
 
 def all_logical_sources() -> List[str]:
@@ -653,18 +689,39 @@ def build_manifest(data: Dict[str, Any],
     missing = [k for k in absent if k not in set(unreachable)]
 
     supplied_set = set(supplied)
+    # A non-file input counts as supplied when it is present in `data` at all —
+    # sap_scanner.py puts --abap-src there under the module's own SOURCE_KEY.
+    # These deliberately do NOT join `known`, so the "N of 123 sources" figure a
+    # customer is measured against does not move.
+    non_file = {s for keys in module_sources().values() for s in keys
+                if s not in set(known)}
+    supplied_set |= {s for s in non_file if data.get(s)}
+
     mods: Dict[str, Dict[str, Any]] = {}
     for mod, needs in module_sources().items():
         have = [s for s in needs if s in supplied_set]
         lack = [s for s in needs if s not in supplied_set]
         if not needs:
-            # NOT "skipped". A module with no file inputs did not fail to receive
-            # anything — `abap_sast` reads an unpacked abapGit directory supplied
-            # with --abap-src, which is not one of the loader's logical sources.
-            # Reporting it as skipped would tell a customer they had forgotten an
-            # export that does not exist, and would understate coverage by a
-            # module that may have run perfectly well.
+            # A module that reads nothing at all. It cannot fail to receive
+            # anything, so it is neither skipped nor starved.
             status = "no_file_inputs"
+        elif not have and all(n in non_file for n in needs):
+            # NOT "skipped", AND NOT "no_file_inputs" EITHER. The module has an
+            # OPTIONAL input that nobody asked for — `--abap-src` names a
+            # directory, and omitting it is a choice rather than a forgotten
+            # export.
+            #
+            # The distinction is the one modules/abap_sast.py argues for itself:
+            # "if 'you did not ask me to look' armed the gate, every scan that
+            # omits one optional input would come back cannot_assess and the
+            # signal would be worth nothing. The coverage manifest states the
+            # absence." So it is stated here and nowhere else — this status is
+            # outside RAN_STATUSES, so the claim-side roll-ups report
+            # NOT_SUPPLIED and the resolution guard withholds; and it is not one
+            # of the statuses release_gate.coverage_reasons arms on, so a
+            # pipeline that does not scan code is not blocked by not scanning
+            # code.
+            status = "not_requested"
         elif not have:
             status = "skipped"
         elif lack:
@@ -714,6 +771,8 @@ def build_manifest(data: Dict[str, Any],
         "modules_degraded": sum(1 for m in mods.values() if m["status"] == "degraded"),
         "modules_skipped": sum(1 for m in mods.values() if m["status"] == "skipped"),
         "modules_not_run": sum(1 for m in mods.values() if m["status"] == "not_run"),
+        "modules_not_requested": sum(1 for m in mods.values()
+                                     if m["status"] == "not_requested"),
     }
 
     return {

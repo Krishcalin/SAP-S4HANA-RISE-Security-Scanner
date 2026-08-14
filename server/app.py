@@ -697,6 +697,15 @@ def api_findings(user: Dict[str, Any] = Depends(current_user),
     empty one, which reads as "nothing wrong there" — the single claim
     modules/domains.py exists to prevent.
     """
+    # An unknown state is REFUSED rather than answered with an empty queue. The
+    # `state` filter replaces the default resolved/false-positive guard, so a
+    # value that matches nothing hides everything — and 200 with an empty list is
+    # indistinguishable from a clean estate.
+    if state is not None and state not in queries.FINDING_STATES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"no such state; expected one of "
+                   f"{', '.join(sorted(queries.FINDING_STATES))}")
     if domain is not None:
         definition = domains.by_id(domain)
         if definition is None:

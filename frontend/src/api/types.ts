@@ -389,6 +389,15 @@ export interface RunDiff {
     regression_count: number; title: string
   }[]
   regressed_count: number
+  /** Findings this run left OPEN because no module that could have observed them
+   *  ran. Not derivable from the finding rows — such a finding looks exactly
+   *  like one that persisted — so it comes from what the run recorded.
+   *
+   *  NULL, NEVER 0, for a run stored before `scan_run.diff` existed: it did not
+   *  withhold nothing, it did not measure. Draw no tile rather than a zero. */
+  unexamined: number | null
+  /** Set when the run carried no system, so nothing could be resolved at all. */
+  resolution_skipped: string | null
 }
 
 /** server/app.py `api_upload`. `note` is non-null when the bundle is byte-identical

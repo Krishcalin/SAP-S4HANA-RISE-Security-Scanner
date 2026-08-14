@@ -128,21 +128,50 @@ def test_a_required_source_is_always_one_the_loader_knows():
     module read as permanently degraded. Over-reporting requirements is the more
     dangerous direction: it manufactures coverage gaps that are not real."""
     known = set(coverage.all_logical_sources())
+    # ...OR A DECLARED NON-FILE INPUT. `abap_sast` reads a DIRECTORY named by
+    # --abap-src (`SOURCE_KEY = "abap_source_dir"`), which is a real input and
+    # deliberately not one of the loader's file sources — putting it in
+    # all_logical_sources() would move the "N of 123 sources supplied" figure a
+    # customer is measured against, for a directory nobody asked them to send.
+    #
+    # The guard this test exists for is unchanged: a literal that is NEITHER a
+    # loader source NOR a declared SOURCE_KEY — "DDIC", the case that started it
+    # — still fails here.
+    import ast
+
+    declared = set()
+    for path in sorted((ROOT / "modules").glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+        declared |= coverage._source_key_attributes(tree)
+    allowed = known | declared
     for module, needs in coverage.module_sources().items():
-        unknown = sorted(set(needs) - known)
-        assert not unknown, f"{module} requires sources the loader cannot supply: {unknown}"
+        unknown = sorted(set(needs) - allowed)
+        assert not unknown, f"{module} requires sources nothing can supply: {unknown}"
 
 
 def test_a_module_with_no_file_inputs_is_not_reported_as_skipped():
     """`abap_sast` reads an abapGit directory given with --abap-src, which is not
     one of the loader's logical sources. Calling that "skipped" tells a customer
-    they forgot an export that does not exist."""
+    they forgot an export that does not exist.
+
+    THE STATUS MOVED, THE RULE DID NOT. It used to be `no_file_inputs` — which
+    also meant "counts as having looked", so Custom Code Security could never
+    report NOT_SUPPLIED and the resolution guard could never withhold one of its
+    findings. It is now `not_requested`: still not "skipped", still not arming
+    the release gate, but outside RAN_STATUSES so the claim-side roll-ups can
+    tell the truth about 133 rules nobody was asked to run.
+    """
     from modules.data_loader import DataLoader
     import contextlib, io
+    from modules import release_gate
     with contextlib.redirect_stdout(io.StringIO()):
         data = DataLoader(FIXTURE).load_all()
     manifest = coverage.build_manifest(data)
-    assert manifest["modules"]["abap_sast"]["status"] == "no_file_inputs"
+    status = manifest["modules"]["abap_sast"]["status"]
+    assert status == "not_requested"
+    assert status != "skipped", "a customer would be told they forgot an export"
+    assert release_gate.coverage_reasons(
+        {"modules": {"abap_sast": {"status": status}}}) == [],         "not being asked to scan code must not block a build"
 
 
 # --------------------------------------------------------------------------- #

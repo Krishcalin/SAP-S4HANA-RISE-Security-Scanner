@@ -497,7 +497,29 @@ export function RunDetail() {
             <Kpi label="Resolved" value={diff.resolved} tone="text-ok" />
             <Kpi label="Regressed" value={diff.regressed_count} tone="text-high"
                  note="resolved before, back again" />
+            {/* ONLY WHEN THE RUN MEASURED IT. A run stored before scan_run.diff
+                existed returns null, and a fifth tile reading 0 would tell a
+                reader it withheld nothing when in fact nobody counted. */}
+            {typeof diff.unexamined === 'number' && diff.unexamined > 0 && (
+              <Kpi label="Unexamined" value={diff.unexamined}
+                   note="left open — no module could observe them" />
+            )}
           </div>
+          {/* The sentence that answers "why did nothing close this week?" — the
+              question the mitigation journey exists to answer, and the one the
+              four tiles above could not. */}
+          {typeof diff.unexamined === 'number' && diff.unexamined > 0 && (
+            <div className="banner banner-info">
+              <strong>{diff.unexamined} finding{diff.unexamined === 1 ? '' : 's'} were
+              left open rather than resolved.</strong> No module that could have
+              observed them ran in this scan, so this run has nothing to say about
+              them — which is not the same as their being fixed. Supply the missing
+              exports and re-run to close them properly.
+            </div>
+          )}
+          {diff.resolution_skipped && (
+            <div className="banner banner-warn">{diff.resolution_skipped}</div>
+          )}
           {diff.new_count === 0 && diff.regressed_count === 0 && r.status === 'complete' && (
             <p className="mt-3 text-[13px] text-ink2">
               Nothing new and nothing regressed in this run — read the coverage

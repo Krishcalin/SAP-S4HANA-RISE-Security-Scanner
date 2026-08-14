@@ -319,9 +319,10 @@ class PDFReportGenerator:
                counts.get("modules_not_run", 0), counts.get("sources_empty", 0)),
             size=8.5, color=MUTED, leading=12, gap_after=12)
 
-        order = {"not_run": 0, "skipped": 1, "degraded": 2,
-                 "no_file_inputs": 3, "complete": 4}
+        order = {"not_run": 0, "skipped": 1, "not_requested": 2, "degraded": 3,
+                 "no_file_inputs": 4, "complete": 5}
         label = {"complete": "complete", "degraded": "partial input",
+                 "not_requested": "not requested",
                  "skipped": "no input supplied", "not_run": "not executed",
                  "no_file_inputs": "needs no export"}
         for name, info in sorted(manifest.get("modules", {}).items(),
@@ -646,6 +647,17 @@ class PDFReportGenerator:
             nlines = self.w.wrap(sc.get("name", sc.get("id", "")), "HB", 8, name_w) or [""]
             tc = str(sc.get("threat_community", "")).replace("_", " ")
             flags = []
+            # FIRST, because it qualifies every other number on the row. A
+            # scenario nothing was routed to is priced at the fully-hardened band
+            # BY DEFAULT rather than by observation, so its figure is a floor and
+            # it contributes nothing to the reducible total. The HTML said so
+            # from the start; this is the artefact the file itself calls "what
+            # goes to an auditor", and it printed $987K with no marker at all.
+            if sc.get("unexamined"):
+                # SHORT, because `_fit` truncates this line to the name column
+                # and a long marker is silently cut in half. The sentence that
+                # explains it goes under the table, where it has room.
+                flags.append("nothing routed")
             if sc.get("exposed"):
                 flags.append("exposed")
             if sc.get("exploited"):
@@ -656,7 +668,10 @@ class PDFReportGenerator:
             if ri % 2 == 0:
                 self.w.rect(self.ML, self.y - row_h, self.cw, row_h, fill=LIGHT)
             fc = sc.get("finding_count")
-            rcell(x_find, 42, str(fc) if fc is not None else "-", INK)
+            # A dash rather than "0": the count is not a measurement here.
+            rcell(x_find, 42,
+                  "-" if (sc.get("unexamined") or fc is None) else str(fc),
+                  MUTED if sc.get("unexamined") else INK)
             rcell(x_mean, 74, self._money(sc.get("mean_ale")), INK)
             rcell(x_p90, 74, self._money(sc.get("ale_p90")), INK)
             sev = str(sc.get("severity", "LOW")).upper()
@@ -670,6 +685,14 @@ class PDFReportGenerator:
                 self.w.text(x_name, ay, self._fit(sub, "H", 7, name_w), font="H", size=7, color=MUTED)
             self.y -= row_h
         self.y -= 6
+        if any(sc.get("unexamined") for sc in scns):
+            n = sum(1 for sc in scns if sc.get("unexamined"))
+            self._para(
+                "%d scenario(s) are marked \"nothing routed\": no finding reached them, so their "
+                "as-is posture is the fully-hardened band BY DEFAULT rather than by observation. "
+                "Their figures are a floor, not a measurement, and they contribute nothing to the "
+                "amount shown as reducible by remediation." % n,
+                size=7.5, color=MUTED, leading=11, gap_after=6)
         self._para(
             "Portfolio ALE aggregates the per-scenario loss distributions by Monte Carlo (per-iteration "
             "sum of independent scenarios) - never by summing percentiles. The full scenario input is "

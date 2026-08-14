@@ -313,3 +313,75 @@ def test_a_module_with_no_inputs_at_all_is_not_treated_as_starved():
     manifest = {"modules": {"abap_sast": {"status": "no_file_inputs",
                                           "sources_missing": []}}}
     assert look_verdict({"abap_sast"}, manifest, require_complete=True) == LOOKED
+
+
+# ── an input that is not a file is still an input ────────────────────────────
+
+def test_a_module_reading_a_directory_declares_it():
+    """`abap_sast` reads an unpacked abapGit DIRECTORY named by --abap-src,
+    through a class attribute rather than a literal:
+
+        SOURCE_KEY = "abap_source_dir"
+        root = self.data.get(self.SOURCE_KEY)
+
+    The literal scan cannot see `self.data.get(<variable>)`, and the key is not
+    one of DataLoader's file sources, so it was filtered out twice over. The
+    module declared NO inputs at all.
+    """
+    from modules.coverage import module_sources
+
+    assert module_sources()["abap_sast"] == ["abap_source_dir"]
+
+
+def test_a_non_file_input_does_not_move_the_customers_denominator():
+    """"106 of 123 logical sources supplied" is the figure a customer is measured
+    against. A directory nobody was asked to supply does not belong in it."""
+    from modules.coverage import all_logical_sources
+
+    assert "abap_source_dir" not in all_logical_sources()
+
+
+def test_an_optional_input_nobody_asked_for_is_not_a_forgotten_export():
+    """THE FIFTH STATUS, and why it is not `skipped`.
+
+    modules/abap_sast.py argues it in its own words: "if 'you did not ask me to
+    look' armed the gate, every scan that omits one optional input would come
+    back cannot_assess and the signal would be worth nothing. The coverage
+    manifest states the absence."
+    """
+    from modules.coverage import build_manifest, RAN_STATUSES
+    from modules import release_gate
+
+    absent = build_manifest({}, modules_run=["cva"])
+    assert absent["modules"]["abap_sast"]["status"] == "not_requested"
+    # Outside RAN_STATUSES, so the claim-side roll-ups and the resolution guard
+    # both treat it as "did not look"...
+    assert "not_requested" not in RAN_STATUSES
+    # ...and NOT one of the statuses the gate arms on, so a pipeline that does
+    # not scan code is not blocked by not scanning code. Asserted on a manifest
+    # containing ONLY this module: `build_manifest(modules_run=["cva"])` leaves
+    # the other twenty-nine `not_run`, which the gate arms on for its own good
+    # reasons and which would mask what this line is about.
+    assert release_gate.coverage_reasons(
+        {"modules": {"abap_sast": {"status": "not_requested"}}}) == []
+
+    supplied = build_manifest({"abap_source_dir": "./modules"}, modules_run=["cva"])
+    assert supplied["modules"]["abap_sast"]["status"] == "complete"
+
+
+def test_custom_code_security_can_finally_report_that_nobody_looked():
+    """THE CONSEQUENCE. `no_file_inputs` counts as having looked, so abap_sast
+    vouched for the whole domain single-handed on every run — Custom Code
+    Security could never reach NOT_SUPPLIED however starved its other feeders
+    were. 133 rules' worth of coverage, structurally invisible."""
+    from modules import domains
+    from modules.coverage import module_categories, module_check_ids
+
+    feeders = domains.feeders_for(domains.by_id("custom_code"),
+                                  module_categories(), module_check_ids())
+    assert "abap_sast" in feeders
+    starved = {"modules": {m: {"status": "skipped"} for m in feeders}}
+    starved["modules"]["abap_sast"] = {"status": "not_requested"}
+    state = {d["id"]: d["state"]
+             for d in domains.roll_up([], coverage=starved)["domains"]}
+    assert state["custom_code"] == domains.NOT_SUPPLIED

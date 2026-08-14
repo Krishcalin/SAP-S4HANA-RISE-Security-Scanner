@@ -1675,9 +1675,10 @@ window.addEventListener('beforeprint', () => {{
         # `order` it fell to the default 9 and sorted BELOW "complete", so the
         # one state meaning "this module never looked" sat at the bottom of a
         # table read top-down.
-        order = {"not_run": 0, "skipped": 1, "degraded": 2,
-                 "no_file_inputs": 3, "complete": 4}
+        order = {"not_run": 0, "skipped": 1, "not_requested": 2, "degraded": 3,
+                 "no_file_inputs": 4, "complete": 5}
         label = {"complete": ("cov-complete", "complete"),
+                 "not_requested": ("cov-skipped", "not requested"),
                  "degraded": ("cov-degraded", "partial input"),
                  "skipped": ("cov-skipped", "no input supplied"),
                  "not_run": ("cov-skipped", "not executed"),

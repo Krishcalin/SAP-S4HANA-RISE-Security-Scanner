@@ -536,3 +536,66 @@ def test_a_scoped_upload_still_resolves_normally(database, landscape, system):
     row = database.one("SELECT state FROM finding WHERE landscape_id = %s",
                        (landscape,))
     assert row["state"] == "resolved"
+
+
+@pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")
+def test_the_run_records_what_it_declined_to_resolve(database, landscape, system):
+    """WHAT THE RUN CONCLUDED, WHICH THE FINDING ROWS CANNOT SAY.
+
+    A finding left open because no module could observe it looks, row by row,
+    exactly like one that persisted. The difference is a property of the RUN, and
+    nothing recorded it — so `unexamined` reached the CLI and stopped there, and
+    the console could show the corrected backlog without being able to answer
+    "why did nothing close this week?".
+    """
+    from server import db, ingest, queries
+
+    finding = {"check_id": "LREV-PAT-003", "title": "t", "severity": "HIGH",
+               "category": "Security Audit Log Review", "description": "d",
+               "affected_items": [], "subject": [{"type": "user", "name": "IVY"}]}
+    ran = {"modules": {"log_review": {"status": "complete", "sources_missing": []}}}
+    starved = {"modules": {"log_review": {"status": "skipped"}}}
+
+    with db.connection() as conn:
+        r1 = conn.execute(
+            "INSERT INTO scan_run (landscape_id, system_id, status) "
+            "VALUES (%s,%s,'complete') RETURNING id", (landscape, system)).fetchone()["id"]
+        ingest.store_run(conn, r1, landscape, system, [finding], "PRD", "100",
+                         coverage=ran)
+        r2 = conn.execute(
+            "INSERT INTO scan_run (landscape_id, system_id, status) "
+            "VALUES (%s,%s,'complete') RETURNING id", (landscape, system)).fetchone()["id"]
+        d2 = ingest.store_run(conn, r2, landscape, system, [], "PRD", "100",
+                              coverage=starved)
+        # scan_directory persists this; store_run is called directly here, so
+        # write it the same way the pipeline does.
+        from psycopg.types.json import Jsonb
+        conn.execute("UPDATE scan_run SET diff = %s WHERE id = %s",
+                     (Jsonb(d2.as_counts()), r2))
+        conn.commit()
+
+    assert len(d2.unexamined) == 1
+    assert d2.as_counts()["unexamined"] == 1
+    assert queries.run_diff(r2, None)["unexamined"] == 1
+
+
+@pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")
+def test_a_run_that_never_measured_it_reports_null_not_nought(database, landscape,
+                                                              system):
+    """A scan stored before scan_run.diff existed did not withhold nothing — it
+    did not measure. Zero would tell a reader the run examined everything, which
+    is the same false reassurance in a new place, so the column defaults to '{}'
+    and this returns None."""
+    from server import db, queries
+
+    run = db.one("INSERT INTO scan_run (landscape_id, system_id, status) "
+                 "VALUES (%s,%s,'complete') RETURNING id", (landscape, system))["id"]
+    assert queries.run_diff(run, None)["unexamined"] is None
+
+
+def test_the_pipeline_persists_the_diff_it_computes():
+    """The wiring. A count computed, returned and never stored is the shape of
+    the defect this replaces — it is what `unexamined` was for a day."""
+    source = (ROOT / "server" / "ingest.py").read_text(encoding="utf-8")
+    assert "diff = %s" in source
+    assert "Jsonb(diff.as_counts())" in source

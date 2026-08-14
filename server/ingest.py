@@ -700,8 +700,9 @@ def scan_directory(data_dir: Path, landscape_id: int, system_id: Optional[int],
 
             conn.execute(
                 "UPDATE scan_run SET status = 'complete', finished_at = now(), "
-                "coverage = %s, module_status = %s WHERE id = %s",
-                (Jsonb(manifest), Jsonb(module_status), run_id))
+                "coverage = %s, module_status = %s, diff = %s WHERE id = %s",
+                (Jsonb(manifest), Jsonb(module_status), Jsonb(diff.as_counts()),
+                 run_id))
             db.audit(conn, "scanner", "scan.complete", "scan_run", str(run_id),
                      {"findings": len(findings), **diff.as_counts()})
             conn.commit()

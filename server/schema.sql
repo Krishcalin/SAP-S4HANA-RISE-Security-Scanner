@@ -594,6 +594,23 @@ CREATE INDEX IF NOT EXISTS finding_tier_idx ON finding (landscape_id, priority_t
 -- page can never disagree with the row that carries the path's history.
 ALTER TABLE attack_path ADD COLUMN IF NOT EXISTS detail jsonb NOT NULL DEFAULT '{}'::jsonb;
 
+-- What the run CONCLUDED, as distinct from what the finding rows imply.
+--
+-- `queries.run_diff` derives new/persisting/resolved/regressed from stored
+-- columns, which is right: those are properties of the findings and can never
+-- disagree with them. `unexamined` is not. A finding left open because no module
+-- that could have observed it ran is indistinguishable, row by row, from one
+-- that simply persisted — the difference lives in the RUN, and nothing recorded
+-- it. So the count reached the CLI and stopped there, and the console could show
+-- the corrected backlog without being able to say why a run had resolved
+-- nothing.
+--
+-- DEFAULT '{}' rather than a zeroed shape, deliberately. A run stored before
+-- this column existed did not withhold nothing — it did not measure. The reader
+-- must be able to tell those apart, so `run_diff` returns null for such a run
+-- and the console declines to draw a zero.
+ALTER TABLE scan_run ADD COLUMN IF NOT EXISTS diff jsonb NOT NULL DEFAULT '{}'::jsonb;
+
 -- ---------------------------------------------------------------------
 --  Code findings
 -- ---------------------------------------------------------------------

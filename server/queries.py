@@ -41,6 +41,20 @@ class TransitionError(ValueError):
     pass
 
 
+#: Every value `finding.state` may hold, from schema.sql's own CHECK constraint.
+#:
+#: WHY THIS IS NOT JUST TIDINESS. `list_findings` drops its default
+#: "NOT IN ('resolved','false_positive')" guard the moment a `state` is supplied,
+#: and the value went to an equality predicate unvalidated. So `?state=OPEN` —
+#: the obvious guess, and what a shell script produces from an uppercase
+#: constant — returned HTTP 200 with the ENTIRE corpus hidden: a queue that reads
+#: as "nothing to do here" because a filter matched nothing.
+FINDING_STATES = frozenset({
+    "open", "submitted_to_provider", "mitigated", "accepted", "false_positive",
+    "resolved",
+})
+
+
 def _scoped(where: List[str], params: List[Any], scope: Optional[Sequence[int]],
             column: str = "f.system_id") -> None:
     clause, extra = db.scope_clause(scope, column)
@@ -476,9 +490,22 @@ def run_diff(run_id: int, scope: Optional[Sequence[int]]) -> Dict[str, Any]:
         f"FROM finding f JOIN check_definition cd ON cd.check_id = f.check_id "
         f"WHERE {' AND '.join(where)}", params)
 
+    # WHAT THE RUN CONCLUDED, which the finding rows cannot say.
+    #
+    # A finding left open because no module could observe it looks, row by row,
+    # exactly like one that persisted. The difference is a property of the RUN,
+    # so it is read from what the run recorded rather than re-derived.
+    #
+    # None, never 0, when the run recorded nothing: a scan stored before
+    # scan_run.diff existed did not withhold nothing, it did not measure. The
+    # console draws no tile for None rather than a reassuring zero.
+    stored = db.one("SELECT diff FROM scan_run WHERE id = %s", [run_id]) or {}
+    recorded = stored.get("diff") if isinstance(stored.get("diff"), dict) else {}
     return {"new": new, "new_count": len(new), "persisting": persisting,
             "resolved": resolved, "regressed": regressed,
-            "regressed_count": len(regressed)}
+            "regressed_count": len(regressed),
+            "unexamined": recorded.get("unexamined"),
+            "resolution_skipped": recorded.get("resolution_skipped")}
 
 
 # --------------------------------------------------------------------------- #

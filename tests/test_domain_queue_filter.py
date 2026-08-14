@@ -318,3 +318,30 @@ def test_the_fair_cam_route_narrows_both_sides_by_the_same_landscape():
     block = block[:block.index("@app.get", 10)]
     assert "findings_for_crq(scope, landscape_id)" in block
     assert "latest_coverage(scope, landscape_id)" in block
+
+
+@pg
+def test_an_unknown_state_is_refused_rather_than_hiding_the_corpus(client):
+    """`?state=OPEN` — the obvious guess, and what a shell script produces from
+    an uppercase constant — used to return HTTP 200 with the ENTIRE corpus
+    hidden. The `state` filter replaces the default resolved/false-positive
+    guard, so a value matching nothing hides everything, and an empty list is
+    indistinguishable from a clean estate."""
+    r = client.get("/api/findings", params={"state": "OPEN"})
+    assert r.status_code == 400
+    assert "no such state" in r.json()["detail"]
+    # And the real one still works, in the spelling the schema uses.
+    assert client.get("/api/findings", params={"state": "open"}).status_code == 200
+
+
+def test_the_legal_states_match_the_schemas_own_constraint():
+    """One spelling of the state vocabulary. A list here that drifts from
+    schema.sql would refuse a state the database happily stores."""
+    import re
+
+    from server.queries import FINDING_STATES
+
+    schema = (ROOT / "server" / "schema.sql").read_text(encoding="utf-8")
+    block = schema[schema.index("CHECK (state IN ("):]
+    block = block[:block.index("))") + 2]
+    assert set(re.findall(r"'([a-z_]+)'", block)) == set(FINDING_STATES)

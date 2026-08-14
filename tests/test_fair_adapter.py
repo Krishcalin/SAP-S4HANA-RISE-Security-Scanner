@@ -318,3 +318,66 @@ def test_every_surface_that_prints_the_zero_also_prints_the_reason():
     assert '"unexamined": sc.get("unexamined")' in crq_src
     console = (ROOT / "frontend" / "src" / "routes" / "Risk.tsx").read_text(encoding="utf-8")
     assert "s.detail.unexamined === true" in console
+
+
+def test_the_pdf_marks_a_scenario_nothing_was_routed_to(tmp_path):
+    """The HTML row and the console both disclosed it; the PDF did not — and the
+    PDF is the artefact its own module docstring calls "what goes to an auditor".
+    Four scenarios printed $987K / $420K / $359K with no marker at all.
+
+    RENDERED, NOT GREPPED. The first version of this asserted the source contains
+    the code, which is a different claim — and it passed while the marker was
+    being silently truncated by `_fit` to fit the name column, so nothing reached
+    the page. Two other things this only caught by rendering: the priced table
+    appears solely when `loss_model.applied` is set (the money guard), and the
+    note wraps, so a probe must be shorter than a line.
+    """
+    import contextlib, io, re, zlib
+
+    from modules.pdf_report import PDFReportGenerator
+
+    fair = {
+        "scenarios": [
+            {"id": "S1", "name": "Ransomware", "finding_count": 0, "unexamined": True,
+             "mean_ale": 987000, "ale_p90": 1200000, "severity": "HIGH",
+             "threat_community": "organised_crime"},
+            {"id": "S2", "name": "Privileged takeover", "finding_count": 4,
+             "unexamined": False, "mean_ale": 420000, "ale_p90": 800000,
+             "severity": "HIGH", "threat_community": "insider"},
+        ],
+        "portfolio": {"mean_ale": 1407000, "ale_p90": 2000000, "loss_exceedance": []},
+        "organization": {"revenue": 1e9, "industry": "manufacturing"},
+        "loss_model": {"applied": True},
+        "reducible_ale_p90": 0, "input_finding_count": 1,
+    }
+    finding = _f("USR-001", "User & Authorization")
+    out = tmp_path / "r.pdf"
+    with contextlib.redirect_stdout(io.StringIO()):
+        PDFReportGenerator([finding], {"scan_time": "2026-01-01"},
+                           fair=fair).generate(str(out))
+
+    text = []
+    for m in re.finditer(r"stream\r?\n(.*?)endstream",
+                         out.read_bytes().decode("latin-1"), re.S):
+        chunk = m.group(1).encode("latin-1")
+        try:
+            text.append(zlib.decompress(chunk).decode("latin-1"))
+        except Exception:                                    # noqa: BLE001
+            text.append(chunk.decode("latin-1"))
+    page = " ".join(text)
+
+    assert "nothing routed" in page, "the marker never reached the page"
+    assert "fully-hardened band" in page, "nothing explains what the marker means"
+    assert "a floor, not a measurement" in page
+
+
+def test_every_priced_surface_now_discloses_it():
+    """HTML, PDF, the stored scenario detail and the console row. A zero in a
+    findings column has two meanings and only one of them is good news."""
+    for rel, needle in (
+        ("modules/report_generator.py", 'sc.get("unexamined")'),
+        ("modules/pdf_report.py", 'sc.get("unexamined")'),
+        ("server/crq.py", '"unexamined": sc.get("unexamined")'),
+        ("frontend/src/routes/Risk.tsx", "s.detail.unexamined === true"),
+    ):
+        assert needle in (ROOT / rel).read_text(encoding="utf-8"), rel
