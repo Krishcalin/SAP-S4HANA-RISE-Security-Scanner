@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 470" width="1200" height="470" role="img">
+<defs><marker id="ar" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L12,6 L0,12 z" fill="#0F1D29"/></marker>
+<marker id="ar-a" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L12,6 L0,12 z" fill="#B4690E"/></marker>
+<marker id="ar-b" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L12,6 L0,12 z" fill="#0A6ED1"/></marker>
+<marker id="ar-g" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L12,6 L0,12 z" fill="#3A4E62"/></marker></defs>
+<style>.sv-h{font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:23px;font-weight:600;fill:#0F1D29}
+.sv-t{font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:20px;fill:#0F1D29}
+.sv-s{font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:17px;fill:#3A4E62}
+.sv-m{font-family:Consolas,Menlo,monospace;font-size:18px;fill:#0F1D29}
+.sv-ms{font-family:Consolas,Menlo,monospace;font-size:15px;fill:#3A4E62}
+.sv-lbl{font-family:Consolas,Menlo,monospace;font-size:14px;font-weight:600;letter-spacing:.12em;fill:#0A6ED1}
+.sv-big{font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:34px;font-weight:700;fill:#0A6ED1}
+.box{fill:#FFFFFF;stroke:#0F1D29;stroke-width:2}
+.box-q{fill:#EEF2F6;stroke:#C3CFDB;stroke-width:2}
+.box-sap{fill:#E5F0FB;stroke:#0A6ED1;stroke-width:2.5}
+.box-amber{fill:#FAF1E3;stroke:#B4690E;stroke-width:2.5}
+.box-crim{fill:#F9E9EC;stroke:#A32638;stroke-width:2.5}
+.box-teal{fill:#E4F1EF;stroke:#0F7A6B;stroke-width:2.5}
+.box-vio{fill:#EDE9F6;stroke:#5A3FA0;stroke-width:2.5}
+.ln{stroke:#0F1D29;stroke-width:2.5;fill:none}
+.ln-d{stroke:#B4690E;stroke-width:3;fill:none;stroke-dasharray:10 7}
+.ln-q{stroke:#3A4E62;stroke-width:2;fill:none;stroke-dasharray:5 5}
+.zone{fill:none;stroke:#C3CFDB;stroke-width:2;stroke-dasharray:8 6}
+.bnd{stroke:#B4690E;stroke-width:3;fill:none;stroke-dasharray:10 7}
+.hop{fill:#FFFFFF;stroke:none}</style>
+<rect x="0" y="0" width="1200" height="470" fill="#FFFFFF"/>
+<rect class="box-sap" x="24" y="40" width="300" height="86" rx="4"/>
+  <text class="sv-h" x="46" y="76">Money</text>
+  <text class="sv-ms" x="46" y="104">ledger · payments · banking</text>
+
+  <rect class="box-sap" x="24" y="192" width="300" height="86" rx="4"/>
+  <text class="sv-h" x="46" y="228">Buying</text>
+  <text class="sv-ms" x="46" y="256">suppliers · orders · invoices</text>
+
+  <rect class="box-sap" x="24" y="344" width="300" height="86" rx="4"/>
+  <text class="sv-h" x="46" y="380">Making</text>
+  <text class="sv-ms" x="46" y="408">stock · plants · logistics</text>
+
+  <rect class="box-sap" x="876" y="40" width="300" height="86" rx="4"/>
+  <text class="sv-h" x="898" y="76">People</text>
+  <text class="sv-ms" x="898" y="104">payroll · contracts · hiring</text>
+
+  <rect class="box-sap" x="876" y="192" width="300" height="86" rx="4"/>
+  <text class="sv-h" x="898" y="228">Selling</text>
+  <text class="sv-ms" x="898" y="256">customers · prices · billing</text>
+
+  <rect class="box-sap" x="876" y="344" width="300" height="86" rx="4"/>
+  <text class="sv-h" x="898" y="380">Reporting</text>
+  <text class="sv-ms" x="898" y="408">results · tax · disclosure</text>
+
+  <rect class="box" x="470" y="170" width="260" height="130" rx="65"/>
+  <text class="sv-h" x="600" y="216" text-anchor="middle">SAP</text>
+  <text class="sv-ms" x="600" y="246" text-anchor="middle">one system</text>
+  <text class="sv-ms" x="600" y="270" text-anchor="middle">one database</text>
+
+  <path class="ln-q" d="M324 83 H 400 V 200 H 470" marker-end="url(#ar-g)"/>
+  <path class="ln-q" d="M324 235 H 470" marker-end="url(#ar-g)"/>
+  <path class="ln-q" d="M324 387 H 400 V 270 H 470" marker-end="url(#ar-g)"/>
+  <path class="ln-q" d="M876 83 H 800 V 200 H 730" marker-end="url(#ar-g)"/>
+  <path class="ln-q" d="M876 235 H 730" marker-end="url(#ar-g)"/>
+  <path class="ln-q" d="M876 387 H 800 V 270 H 730" marker-end="url(#ar-g)"/>
+</svg>

@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 190" width="1200" height="190" role="img">
+<defs><marker id="ar" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L12,6 L0,12 z" fill="#0F1D29"/></marker>
+<marker id="ar-a" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L12,6 L0,12 z" fill="#B4690E"/></marker>
+<marker id="ar-b" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L12,6 L0,12 z" fill="#0A6ED1"/></marker>
+<marker id="ar-g" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L12,6 L0,12 z" fill="#3A4E62"/></marker></defs>
+<style>.sv-h{font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:23px;font-weight:600;fill:#0F1D29}
+.sv-t{font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:20px;fill:#0F1D29}
+.sv-s{font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:17px;fill:#3A4E62}
+.sv-m{font-family:Consolas,Menlo,monospace;font-size:18px;fill:#0F1D29}
+.sv-ms{font-family:Consolas,Menlo,monospace;font-size:15px;fill:#3A4E62}
+.sv-lbl{font-family:Consolas,Menlo,monospace;font-size:14px;font-weight:600;letter-spacing:.12em;fill:#0A6ED1}
+.sv-big{font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:34px;font-weight:700;fill:#0A6ED1}
+.box{fill:#FFFFFF;stroke:#0F1D29;stroke-width:2}
+.box-q{fill:#EEF2F6;stroke:#C3CFDB;stroke-width:2}
+.box-sap{fill:#E5F0FB;stroke:#0A6ED1;stroke-width:2.5}
+.box-amber{fill:#FAF1E3;stroke:#B4690E;stroke-width:2.5}
+.box-crim{fill:#F9E9EC;stroke:#A32638;stroke-width:2.5}
+.box-teal{fill:#E4F1EF;stroke:#0F7A6B;stroke-width:2.5}
+.box-vio{fill:#EDE9F6;stroke:#5A3FA0;stroke-width:2.5}
+.ln{stroke:#0F1D29;stroke-width:2.5;fill:none}
+.ln-d{stroke:#B4690E;stroke-width:3;fill:none;stroke-dasharray:10 7}
+.ln-q{stroke:#3A4E62;stroke-width:2;fill:none;stroke-dasharray:5 5}
+.zone{fill:none;stroke:#C3CFDB;stroke-width:2;stroke-dasharray:8 6}
+.bnd{stroke:#B4690E;stroke-width:3;fill:none;stroke-dasharray:10 7}
+.hop{fill:#FFFFFF;stroke:none}</style>
+<rect x="0" y="0" width="1200" height="190" fill="#FFFFFF"/>
+<rect class="box-sap" x="24" y="34" width="250" height="118" rx="4"/>
+  <text class="sv-h" x="46" y="74">Your SAP</text>
+  <text class="sv-ms" x="46" y="104">nothing is installed</text>
+  <text class="sv-ms" x="46" y="128">nothing is changed</text>
+
+  <path class="ln-d" d="M274 93 H 344" marker-end="url(#ar-a)"/>
+
+  <rect class="box-amber" x="344" y="34" width="250" height="118" rx="4"/>
+  <text class="sv-h" x="366" y="74">Export files</text>
+  <text class="sv-ms" x="366" y="104">a photograph of</text>
+  <text class="sv-ms" x="366" y="128">the settings</text>
+
+  <path class="ln" d="M594 93 H 664" marker-end="url(#ar)"/>
+
+  <rect class="box" x="664" y="34" width="250" height="118" rx="4"/>
+  <text class="sv-h" x="686" y="74">MonitorRisk</text>
+  <text class="sv-ms" x="686" y="104">620 checks</text>
+  <text class="sv-ms" x="686" y="128">30 modules</text>
+
+  <path class="ln" d="M914 93 H 984" marker-end="url(#ar)"/>
+
+  <rect class="box-teal" x="984" y="34" width="192" height="118" rx="4"/>
+  <text class="sv-h" x="1006" y="74">Answers</text>
+  <text class="sv-ms" x="1006" y="104">what · how bad</text>
+  <text class="sv-ms" x="1006" y="128">who fixes it</text>
+</svg>

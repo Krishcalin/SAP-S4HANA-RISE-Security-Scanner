@@ -44,6 +44,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 DOC = ROOT / "docs" / "ARCHITECTURE.html"
+MD = ROOT / "docs" / "ARCHITECTURE.md"
+FIGS = ROOT / "docs" / "architecture"
 
 
 @pytest.fixture(scope="module")
@@ -200,3 +202,78 @@ def test_it_is_a_whole_document_not_a_fragment(page):
     skeleton. The copy in the repository has to carry its own."""
     for tag in ("<!DOCTYPE html>", "<html", "</head>", "<body>", "</body>", "</html>"):
         assert tag in page, "missing %s — this is the fragment, not the file" % tag
+
+
+# ─────────────────────── the edition GitHub can render ──────────────────────
+#
+# GitHub shows an HTML blob as SOURCE, and the guide is classified Confidential
+# so Pages — which publishes to the open internet — is not available to render
+# it. Markdown is the one format GitHub renders natively in any repository,
+# public or private. It is therefore the canonical edition, and the HTML is the
+# print copy. Both are generated from the same source chunks so they cannot
+# disagree; these tests hold that.
+
+@pytest.fixture(scope="module")
+def markdown():
+    assert MD.exists(), "the Markdown edition is missing: %s" % MD
+    return MD.read_text(encoding="utf-8")
+
+
+def test_the_markdown_edition_is_the_same_document(markdown, page):
+    """Same chapters, same figures, same counts — a second edition that says
+    something different is worse than no second edition."""
+    import re
+
+    chapters = re.findall(r"^## Chapter (\d+)", markdown, re.M)
+    assert len(chapters) == 35, "expected 35 chapters, found %d" % len(chapters)
+    for part in ("Part one", "Part seven", "Appendices"):
+        assert part in markdown, part
+    for phrase in ("connects to nothing", "may never change a verdict",
+                   "not a silence", "Never fail open", "who can fix it",
+                   "strict partition"):
+        assert phrase in markdown, "the Markdown edition no longer states: %r" % phrase
+
+
+@pytest.mark.parametrize("what", sorted(_derived()))
+def test_the_markdown_states_the_same_figures(markdown, what):
+    import re
+
+    value = _derived()[what]
+    assert re.search(r"\b%d\b" % value, markdown), (
+        "the Markdown edition never states %d, the current %s" % (value, what))
+
+
+def test_every_figure_the_markdown_references_exists(markdown):
+    """A broken image is the most visible way a document can rot."""
+    import re
+
+    refs = re.findall(r"!\[[^\]]*\]\((architecture/[^)]+)\)", markdown)
+    assert len(refs) >= 12, "only %d figures referenced" % len(refs)
+    for ref in refs:
+        assert (ROOT / "docs" / ref).exists(), "missing figure: %s" % ref
+
+
+def test_the_exported_figures_are_self_contained_and_clean():
+    """A figure exported out of the page carries no :root to inherit from, so
+    every colour must be baked in — and the geometry must still hold."""
+    from tools.svg_geometry_check import check, parse_svgs
+
+    files = sorted(FIGS.glob("*.svg"))
+    assert len(files) >= 12, "only %d figures exported" % len(files)
+    problems = []
+    for f in files:
+        text = f.read_text(encoding="utf-8")
+        assert "var(--" not in text, "%s references a token it cannot resolve" % f.name
+        assert "<style>" in text, "%s carries no styling of its own" % f.name
+        for kind, message in check(parse_svgs(text)[0], 0):
+            problems.append("%s  %s  %s" % (f.name, kind, message))
+    assert not problems, "\n".join(["exported figures:"] + problems)
+
+
+def test_the_markdown_has_no_leftover_html():
+    """A half-converted document is worse than either format on its own."""
+    import re
+
+    text = MD.read_text(encoding="utf-8")
+    stray = re.findall(r"<(?!br\b|/br\b)[a-zA-Z][^>\n]*>", text)
+    assert not stray, "unconverted HTML in the Markdown edition: %s" % stray[:8]

@@ -55,7 +55,16 @@ def rects(svg):
 
 
 def segments(svg):
-    """(x0,y0,x1,y1, has_marker, d) for each straight run in each path."""
+    """(x0,y0,x1,y1, has_marker, d) for each straight run in each path.
+
+    <defs> IS NOT DIAGRAM CONTENT. Arrowhead markers are paths too, and a
+    standalone figure carries its own — they are shapes, not connectors, and
+    parsing them as geometry crashed this function on the first file that
+    embedded them. In the page edition the markers lived in a viewBox-less
+    block that parse_svgs skipped, so the defect stayed hidden until the
+    figures were exported as individual files.
+    """
+    svg = re.sub(r"<defs>.*?</defs>", "", svg, flags=re.S)
     out = []
     for pi, m in enumerate(re.finditer(r"<path[^>]*?d=\"([^\"]+)\"[^>]*?/?>", svg)):
         tag, d = m.group(0), m.group(1)
@@ -63,11 +72,13 @@ def segments(svg):
         if "zone" in tag or "bnd" in tag:
             continue
         marker = "marker-end" in tag
-        toks = re.findall(r"([MLHV])\s*([-\d.\s]*)", d)
+        toks = re.findall(r"([MLHV])\s*([-\d.,\s]*)", d)
         cx = cy = None
         pts = []
         for op, arg in toks:
             nums = [float(v) for v in re.findall(r"-?[\d.]+", arg)]
+            if op == "M" and len(nums) < 2:
+                continue                     # a malformed move, not a segment
             if op == "M":
                 cx, cy = nums[0], nums[1]
                 pts.append((cx, cy))

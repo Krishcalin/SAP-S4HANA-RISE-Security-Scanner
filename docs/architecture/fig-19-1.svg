@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" width="1200" height="400" role="img">
+<defs><marker id="ar" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L12,6 L0,12 z" fill="#0F1D29"/></marker>
+<marker id="ar-a" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L12,6 L0,12 z" fill="#B4690E"/></marker>
+<marker id="ar-b" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L12,6 L0,12 z" fill="#0A6ED1"/></marker>
+<marker id="ar-g" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L12,6 L0,12 z" fill="#3A4E62"/></marker></defs>
+<style>.sv-h{font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:23px;font-weight:600;fill:#0F1D29}
+.sv-t{font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:20px;fill:#0F1D29}
+.sv-s{font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:17px;fill:#3A4E62}
+.sv-m{font-family:Consolas,Menlo,monospace;font-size:18px;fill:#0F1D29}
+.sv-ms{font-family:Consolas,Menlo,monospace;font-size:15px;fill:#3A4E62}
+.sv-lbl{font-family:Consolas,Menlo,monospace;font-size:14px;font-weight:600;letter-spacing:.12em;fill:#0A6ED1}
+.sv-big{font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:34px;font-weight:700;fill:#0A6ED1}
+.box{fill:#FFFFFF;stroke:#0F1D29;stroke-width:2}
+.box-q{fill:#EEF2F6;stroke:#C3CFDB;stroke-width:2}
+.box-sap{fill:#E5F0FB;stroke:#0A6ED1;stroke-width:2.5}
+.box-amber{fill:#FAF1E3;stroke:#B4690E;stroke-width:2.5}
+.box-crim{fill:#F9E9EC;stroke:#A32638;stroke-width:2.5}
+.box-teal{fill:#E4F1EF;stroke:#0F7A6B;stroke-width:2.5}
+.box-vio{fill:#EDE9F6;stroke:#5A3FA0;stroke-width:2.5}
+.ln{stroke:#0F1D29;stroke-width:2.5;fill:none}
+.ln-d{stroke:#B4690E;stroke-width:3;fill:none;stroke-dasharray:10 7}
+.ln-q{stroke:#3A4E62;stroke-width:2;fill:none;stroke-dasharray:5 5}
+.zone{fill:none;stroke:#C3CFDB;stroke-width:2;stroke-dasharray:8 6}
+.bnd{stroke:#B4690E;stroke-width:3;fill:none;stroke-dasharray:10 7}
+.hop{fill:#FFFFFF;stroke:none}</style>
+<rect x="0" y="0" width="1200" height="400" fill="#FFFFFF"/>
+<rect class="box" x="24" y="24" width="270" height="96" rx="4"/>
+  <text class="sv-h" x="46" y="60">Severity</text>
+  <text class="sv-ms" x="46" y="88">how bad if used</text>
+  <text class="sv-ms" x="46" y="110">critical … low</text>
+
+  <rect class="box-crim" x="314" y="24" width="270" height="96" rx="4"/>
+  <text class="sv-h" x="336" y="60">Exploitability</text>
+  <text class="sv-ms" x="336" y="88">known to be actively</text>
+  <text class="sv-ms" x="336" y="110">used by attackers?</text>
+
+  <rect class="box-amber" x="604" y="24" width="270" height="96" rx="4"/>
+  <text class="sv-h" x="626" y="60">Exposure</text>
+  <text class="sv-ms" x="626" y="88">reachable from</text>
+  <text class="sv-ms" x="626" y="110">outside?</text>
+
+  <rect class="box-vio" x="894" y="24" width="282" height="96" rx="4"/>
+  <text class="sv-h" x="916" y="60">Privilege</text>
+  <text class="sv-ms" x="916" y="88">how much power</text>
+  <text class="sv-ms" x="916" y="110">does it hand over?</text>
+
+  <path class="ln" d="M159 120 V 150"/>
+  <path class="ln" d="M449 120 V 150"/>
+  <path class="ln" d="M739 120 V 150"/>
+  <path class="ln" d="M1035 120 V 150"/>
+  <path class="ln" d="M159 150 H 1035"/>
+  <path class="ln" d="M600 150 V 182" marker-end="url(#ar)"/>
+
+  <rect class="box" x="420" y="182" width="360" height="60" rx="4"/>
+  <text class="sv-h" x="600" y="220" text-anchor="middle">Combined into one order</text>
+
+  <path class="ln" d="M600 242 V 268"/>
+  <path class="ln" d="M159 268 H 1035"/>
+  <path class="ln" d="M159 268 V 296" marker-end="url(#ar)"/>
+  <path class="ln" d="M449 268 V 296" marker-end="url(#ar)"/>
+  <path class="ln" d="M739 268 V 296" marker-end="url(#ar)"/>
+  <path class="ln" d="M1035 268 V 296" marker-end="url(#ar)"/>
+
+  <rect class="box-crim" x="24" y="296" width="270" height="90" rx="4"/>
+  <text class="sv-big" x="46" y="334">P1</text>
+  <text class="sv-h" x="112" y="332">Fix now</text>
+  <text class="sv-ms" x="46" y="368">exploitable and exposed today</text>
+
+  <rect class="box-amber" x="314" y="296" width="270" height="90" rx="4"/>
+  <text class="sv-big" x="336" y="334" style="fill:#B4690E">P2</text>
+  <text class="sv-h" x="402" y="332">This cycle</text>
+  <text class="sv-ms" x="336" y="368">serious, less immediately reachable</text>
+
+  <rect class="box-q" x="604" y="296" width="270" height="90" rx="4"/>
+  <text class="sv-big" x="626" y="334" style="fill:#3A4E62">P3</text>
+  <text class="sv-h" x="692" y="332">Planned</text>
+  <text class="sv-ms" x="626" y="368">real, but bounded by other controls</text>
+
+  <rect class="box-q" x="894" y="296" width="282" height="90" rx="4"/>
+  <text class="sv-big" x="916" y="334" style="fill:#3A4E62">P4</text>
+  <text class="sv-h" x="982" y="332">Backlog</text>
+  <text class="sv-ms" x="916" y="368">hygiene and housekeeping</text>
+</svg>

@@ -49,7 +49,7 @@
 
 ## Contents
 
-- **[System Architecture](docs/ARCHITECTURE.html)** &nbsp;<sub>plain-language guide · 35 chapters · **confidential** — download and open locally</sub>
+- **[System Architecture](docs/ARCHITECTURE.md)** &nbsp;<sub>plain-language guide · 35 chapters · **confidential**</sub>
 - **[Overview](#overview)**
 - **[Server mode — quick start](#server-mode--quick-start)**
 - **[Connected mode](#connected-mode)**
@@ -99,7 +99,7 @@
 
 | Document | What it covers |
 |---|---|
-| [**`docs/ARCHITECTURE.html`**](docs/ARCHITECTURE.html) <br><sub>**Confidential** · not published · GitHub shows this file as source, so download it and open it in a browser</sub> | How the system is put together and why, explained from first principles for readers who are not software engineers. Seven parts and 35 chapters: the problem RISE creates, the trust boundary, the seven-stage pipeline, the thirty inspectors, what to fix first, risk in money terms, and a full chapter on what the product cannot do. Start here. |
+| [**`docs/ARCHITECTURE.md`**](docs/ARCHITECTURE.md) <br><sub>**Confidential** · not published. Renders here on GitHub; [`ARCHITECTURE.html`](docs/ARCHITECTURE.html) is the same document styled for print and offline reading, generated from the same source.</sub> | How the system is put together and why, explained from first principles for readers who are not software engineers. Seven parts and 35 chapters: the problem RISE creates, the trust boundary, the seven-stage pipeline, the thirty inspectors, what to fix first, risk in money terms, and a full chapter on what the product cannot do. Start here. |
 | [`docs/EXPORT_GUIDE.md`](docs/EXPORT_GUIDE.md) | How to produce the exports this tool reads |
 | [`docs/CHECKS_REFERENCE.md`](docs/CHECKS_REFERENCE.md) | Per-check reference |
 | [`docs/RELEASE_GATE.md`](docs/RELEASE_GATE.md) | Using the scanner as a CI gate — adoption order and policy |

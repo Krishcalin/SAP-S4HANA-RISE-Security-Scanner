@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 640" width="1200" height="640" role="img">
+<defs><marker id="ar" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L12,6 L0,12 z" fill="#0F1D29"/></marker>
+<marker id="ar-a" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L12,6 L0,12 z" fill="#B4690E"/></marker>
+<marker id="ar-b" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L12,6 L0,12 z" fill="#0A6ED1"/></marker>
+<marker id="ar-g" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L12,6 L0,12 z" fill="#3A4E62"/></marker></defs>
+<style>.sv-h{font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:23px;font-weight:600;fill:#0F1D29}
+.sv-t{font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:20px;fill:#0F1D29}
+.sv-s{font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:17px;fill:#3A4E62}
+.sv-m{font-family:Consolas,Menlo,monospace;font-size:18px;fill:#0F1D29}
+.sv-ms{font-family:Consolas,Menlo,monospace;font-size:15px;fill:#3A4E62}
+.sv-lbl{font-family:Consolas,Menlo,monospace;font-size:14px;font-weight:600;letter-spacing:.12em;fill:#0A6ED1}
+.sv-big{font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:34px;font-weight:700;fill:#0A6ED1}
+.box{fill:#FFFFFF;stroke:#0F1D29;stroke-width:2}
+.box-q{fill:#EEF2F6;stroke:#C3CFDB;stroke-width:2}
+.box-sap{fill:#E5F0FB;stroke:#0A6ED1;stroke-width:2.5}
+.box-amber{fill:#FAF1E3;stroke:#B4690E;stroke-width:2.5}
+.box-crim{fill:#F9E9EC;stroke:#A32638;stroke-width:2.5}
+.box-teal{fill:#E4F1EF;stroke:#0F7A6B;stroke-width:2.5}
+.box-vio{fill:#EDE9F6;stroke:#5A3FA0;stroke-width:2.5}
+.ln{stroke:#0F1D29;stroke-width:2.5;fill:none}
+.ln-d{stroke:#B4690E;stroke-width:3;fill:none;stroke-dasharray:10 7}
+.ln-q{stroke:#3A4E62;stroke-width:2;fill:none;stroke-dasharray:5 5}
+.zone{fill:none;stroke:#C3CFDB;stroke-width:2;stroke-dasharray:8 6}
+.bnd{stroke:#B4690E;stroke-width:3;fill:none;stroke-dasharray:10 7}
+.hop{fill:#FFFFFF;stroke:none}</style>
+<rect x="0" y="0" width="1200" height="640" fill="#FFFFFF"/>
+<rect class="zone" x="20" y="52" width="330" height="404" rx="6"/>
+  <text class="sv-lbl" x="24" y="40">YOUR SAP ESTATE</text>
+
+  <rect class="box-sap" x="44" y="74" width="282" height="62" rx="4"/>
+  <text class="sv-t" x="62" y="100">S/4HANA (RISE)</text>
+  <text class="sv-s" x="62" y="124">the main system</text>
+
+  <rect class="box-sap" x="44" y="150" width="282" height="62" rx="4"/>
+  <text class="sv-t" x="62" y="176">ECC / on-premise</text>
+  <text class="sv-s" x="62" y="200">the older generation</text>
+
+  <rect class="box-sap" x="44" y="226" width="282" height="62" rx="4"/>
+  <text class="sv-t" x="62" y="252">Cloud services (BTP)</text>
+  <text class="sv-s" x="62" y="276">integration and identity</text>
+
+  <rect class="box-sap" x="44" y="302" width="282" height="62" rx="4"/>
+  <text class="sv-t" x="62" y="328">HANA database</text>
+  <text class="sv-s" x="62" y="352">where the data sits</text>
+
+  <rect class="box-sap" x="44" y="378" width="282" height="62" rx="4"/>
+  <text class="sv-t" x="62" y="404">Your own tools</text>
+  <text class="sv-s" x="62" y="428">code checks · patch records</text>
+
+  <path class="bnd" d="M392 60 V 596"/>
+  <text class="sv-lbl" x="400" y="40" style="fill:#B4690E">THE LINE — DATA GOES OUT, NOTHING GOES IN</text>
+
+  <path class="ln-d" d="M326 258 H 452" marker-end="url(#ar-a)"/>
+  <rect class="hop" x="385" y="249" width="14" height="18"/>
+
+  <rect class="box-amber" x="452" y="212" width="230" height="92" rx="4"/>
+  <text class="sv-h" x="474" y="248">Export files</text>
+  <text class="sv-ms" x="474" y="274">spreadsheets and</text>
+  <text class="sv-ms" x="474" y="294">text files</text>
+
+  <path class="ln" d="M682 258 H 748" marker-end="url(#ar)"/>
+
+  <rect class="box" x="748" y="136" width="428" height="244" rx="4"/>
+  <text class="sv-h" x="770" y="174">MonitorRisk</text>
+  <text class="sv-s" x="770" y="200">one engine, two front doors</text>
+
+  <rect class="box-q" x="770" y="218" width="188" height="76" rx="3"/>
+  <text class="sv-h" x="790" y="248">Laptop</text>
+  <text class="sv-ms" x="790" y="274">one-off review</text>
+
+  <rect class="box-q" x="972" y="218" width="182" height="76" rx="3"/>
+  <text class="sv-h" x="992" y="248">Server</text>
+  <text class="sv-ms" x="992" y="274">tracked over time</text>
+
+  <text class="sv-ms" x="770" y="326">no internet access needed</text>
+  <text class="sv-ms" x="770" y="352">no information sent anywhere</text>
+
+  <path class="ln" d="M962 380 V 424" marker-end="url(#ar)"/>
+
+  <rect class="box-teal" x="620" y="424" width="556" height="172" rx="4"/>
+  <text class="sv-h" x="642" y="460">Who receives the answers</text>
+  <text class="sv-t" x="642" y="492">The SAP team — a fix list in priority order</text>
+  <text class="sv-t" x="642" y="520">The board — exposure in money terms</text>
+  <text class="sv-t" x="642" y="548">The auditor — evidence against frameworks</text>
+  <text class="sv-t" x="642" y="576">The change process — a pass or fail signal</text>
+
+  <path class="ln-q" d="M185 440 V 520 H 452 V 304" marker-end="url(#ar-g)"/>
+  <rect class="hop" x="385" y="511" width="14" height="18"/>
+  <text class="sv-ms" x="46" y="548">optional, older systems only: the tool</text>
+  <text class="sv-ms" x="46" y="572">can fetch some of this itself, read-only</text>
+</svg>
