@@ -328,14 +328,27 @@ def test_degraded_coverage_reaches_the_gate_from_the_scanner():
 #  "We could not look" must never render as "we found nothing"                #
 # --------------------------------------------------------------------------- #
 
-def _gate_on(source_dir):
-    """Run the ABAP module over `source_dir` and gate on what it produced."""
+def _gate_on(source_dir, show_working=True):
+    """Run the ABAP module over `source_dir` and gate on what it produced.
+
+    `show_working` supplies `assessed_checks` — how many checks the module that
+    ran actually declares, read from the code rather than typed in. Rule 4's third
+    arm needs it: this harness produces an empty finding list on a clean tree AND
+    on a tree it could not read, and the gate cannot tell those apart from the
+    list alone. Here the harness knows the module ran, so it says so. In
+    production `sap_scanner.py` derives the same number from the coverage
+    manifest. `show_working=False` is what a careless caller looks like.
+    """
     from modules.abap_sast import AbapSastAuditor
+    from modules.coverage import all_check_ids
+
     data = {} if source_dir is None else {"abap_source_dir": str(source_dir)}
     findings = AbapSastAuditor(data, {}).run_all_checks()
     degraded = [f for f in findings
                 if (f.get("details") or {}).get("degrades_coverage")]
-    result = rg.evaluate(findings, degraded=bool(degraded))
+    declared = len(all_check_ids().get("abap_sast", ())) if show_working else None
+    result = rg.evaluate(findings, degraded=bool(degraded),
+                         assessed_checks=declared)
     return [f["check_id"] for f in findings], result
 
 
@@ -561,6 +574,92 @@ def test_the_operator_can_still_opt_out_deliberately():
                                    degraded=bool(reasons),
                                    degraded_detail=" ".join(reasons))
     assert result.exit_code == rg.EXIT_PASS
+
+
+# --------------------------------------------------------------------------- #
+#  Rule 4's third arm: an empty finding list is not a result                   #
+# --------------------------------------------------------------------------- #
+#
+#  The last place in this module where an absence rendered as a measurement, and
+#  the one that was DOCUMENTED rather than fixed — the architecture guide carried
+#  it as a known limit with a recommended pipeline work-around ("assert on the
+#  finding count as well"), which is this rule, written out for the customer to
+#  implement by hand.
+#
+#  The two arms above catch a module that ran and could not see everything, and a
+#  module that never ran. Neither catches `evaluate([])` from a caller that
+#  computed no manifest at all: zero findings met no policy limit, so the gate
+#  said "No new finding exceeds the policy" and exited 0.
+
+def test_an_empty_finding_list_is_not_a_pass_on_its_own():
+    """`[]` is the identical argument whether four hundred checks passed or none
+    of them ran. Reproduced before this rule: decision "pass", exit 0."""
+    result = rg.evaluate([])
+    assert result.decision == "cannot_assess"
+    assert result.exit_code == rg.EXIT_CANNOT_ASSESS
+    assert any("no findings at all" in r for r in result.reasons)
+
+
+def test_an_empty_list_from_a_scan_that_can_show_its_working_is_a_pass():
+    """The other direction, and the reason this is not "no findings blocks". A
+    scan that looked at four hundred checks and found nothing HAS a result, and a
+    gate that refuses to green-light a clean estate is a gate people delete."""
+    result = rg.evaluate([], assessed_checks=402)
+    assert result.decision == "pass"
+    assert result.exit_code == rg.EXIT_PASS
+    # And it says so, rather than passing silently on an empty list.
+    assert any("402 check(s) that executed" in r for r in result.reasons)
+
+
+def test_a_count_of_zero_is_not_evidence_of_a_look():
+    """`assessed_checks=0` is a caller reporting that nothing ran. Reading a zero
+    as "the caller supplied a number, so it looked" is the same arithmetic slip as
+    `pct ?? 0` on the trend screen."""
+    result = rg.evaluate([], assessed_checks=0)
+    assert result.exit_code == rg.EXIT_CANNOT_ASSESS
+
+
+def test_findings_present_never_reach_this_rule():
+    """It fires on emptiness alone. One LOW finding is a scan that demonstrably
+    ran, and must go on being judged by the policy rather than by coverage."""
+    result = rg.evaluate([finding("USR-001", "LOW")])
+    assert result.decision == "pass"
+    assert result.exit_code == rg.EXIT_PASS
+
+
+def test_the_coverage_switch_disarms_this_arm_as_well():
+    """Rule 4's other two arms answer to `block_on_degraded_coverage`. A third arm
+    that ignored it would leave an operator who believed they had turned coverage
+    blocking off still blocked by coverage."""
+    result = rg.evaluate([], policy={"block_on_degraded_coverage": False})
+    assert result.exit_code == rg.EXIT_PASS
+    # Disarmed is not silent: the reader still learns the pass rests on nothing.
+    assert any("no findings at all" in r for r in result.reasons)
+
+
+def test_a_real_module_that_looked_and_one_that_did_not_now_differ(tmp_path):
+    """End to end through a real module. Both produce an empty finding list; only
+    one of them looked, and until this rule the gate returned exit 0 for both."""
+    (tmp_path / "zcl_ok.clas.abap").write_text(
+        "CLASS zcl_ok DEFINITION. PUBLIC SECTION. ENDCLASS.", encoding="utf-8")
+
+    _, looked = _gate_on(tmp_path)
+    assert looked.exit_code == rg.EXIT_PASS
+
+    _, unstated = _gate_on(tmp_path, show_working=False)
+    assert unstated.exit_code == rg.EXIT_CANNOT_ASSESS
+
+
+def test_the_scanner_tells_the_gate_how_many_checks_ran():
+    """The rule is only as good as its one production caller. Asserted against the
+    source because reaching this line means running a whole scan — which
+    `test_the_whole_chain_holds_through_the_real_cli` above does, at the cost of a
+    subprocess, for the arms that can be provoked cheaply."""
+    source = (ROOT / "sap_scanner.py").read_text(encoding="utf-8")
+    assert "assessed_checks=assessed_checks" in source, \
+        "the scanner evaluates the gate without saying how much it assessed"
+    assert "posture_score.assessed_check_count(" in source, \
+        "the count is no longer derived from the coverage manifest"
 
 
 def test_the_scanner_arms_the_gate_from_the_manifest():

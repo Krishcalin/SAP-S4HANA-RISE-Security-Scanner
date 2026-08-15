@@ -590,7 +590,7 @@ every run writes a manifest saying what it could not reach.
 jsdom + testing-library; CI runs it in the `server` job. It exists because `tsc --noEmit`
 proves the code COMPILES and says nothing about what the screen SAYS — two defects shipped
 through that gap in one day, a CSF Category filed under "Assessed here" while showing the
-"Export not supplied" chip, and `pct_compliant ?? 0` turning an unscanned category into the
+"Export not supplied" chip, and `pct_passing ?? 0` turning an unscanned category into the
 customer's worst-performing area. `??` is invisible to a type-checker by design.
 **Assert the SENTENCES A READER SEES**, not state names: `expect(document.body)
 .toMakeNoCleanClaim()` (in `src/test/setup.ts`) fails if a screen rendered from an
@@ -779,15 +779,17 @@ It is **CLI-only**. `server/` never imports `release_gate` and exposes no gate r
 `docs/RELEASE_GATE.md`'s suggestion to "run the gate against the server" describes something
 that does not exist. Either build it or drop the line.
 
-Two edges worth knowing before you trust an exit code:
-- **`evaluate([])` returns pass/0.** "Could not assess" is currently raised by a degraded ABAP
-  lex (`ABAP-LEX-001`) or an unreadable policy — *not* by an empty finding set, even though the
-  module docstring lists "no findings were supplied" among its exit-2 triggers. A run that
-  collapses to zero findings for an unrelated reason therefore reads as a pass. The docstring
-  is ahead of the code; treat it as intent, not behaviour.
+One edge worth knowing before you trust an exit code:
 - **`--gate-write-baseline` runs the whole scan and writes a report first**, then writes the
   baseline and exits 0 — and it is evaluated *before* `--gate`, so passing both silently skips
   gate evaluation.
+
+`evaluate([])` used to return pass/0 — the docstring listed "no findings were supplied" among
+its exit-2 triggers and the code did not implement it. It does now, as Rule 4's third arm:
+`evaluate(findings, assessed_checks=N)` takes the number of checks that actually executed, and
+an empty finding list is a pass only when N is greater than zero. `sap_scanner.py` derives N
+from the coverage manifest via `posture_score.assessed_check_count`; a caller that supplies
+nothing gets exit 2, which is the honest reading of "we have no idea how much was looked at".
 
 ## Adding a new module (the recipe)
 

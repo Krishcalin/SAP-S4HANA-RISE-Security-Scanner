@@ -359,11 +359,32 @@ class DataLoader:
             name for name in self._entries().values()
             if self._looks_like_an_unread_export(name))
 
+        # A FILE WE RECOGNISE AND DID NOT APPLY IS A THIRD THING, and lumping it
+        # in with the unknown names made the warning above fire on our own
+        # shipped sample directory. `sample_data/baseline.json` is there to be
+        # passed to --config; a first run without that flag printed "1 file(s)
+        # ... were not recognised", about a file this product wrote, on the very
+        # first command in the README. A warning whose first appearance is a
+        # false one teaches the reader to scroll past it, which costs more than
+        # the misnamed export it exists to catch.
+        #
+        # So it gets its own line, and that line is more useful than the one it
+        # replaced: it names the flag that would have applied the file.
+        self.unapplied_files = sorted(
+            (name, self._WELL_KNOWN_UNAPPLIED[name.lower()])
+            for name in self._entries().values()
+            if name.lower() in self._WELL_KNOWN_UNAPPLIED
+            and name not in self._consumed_files
+            and name.lower() not in self._disregard)
+
         loaded = [k for k, v in self._data.items() if v is not None]
         missing = [k for k, v in self._data.items() if v is None]
         print(f"    Loaded: {', '.join(loaded) if loaded else 'none'}")
         if missing:
             print(f"    Not found (skipping): {', '.join(missing)}")
+        for name, flag in self.unapplied_files:
+            print(f"    [NOTE] {name} is present but was not applied. "
+                  f"Pass {flag} {name} to use it.")
         if self.unrecognised_files:
             shown = ", ".join(self.unrecognised_files[:10])
             more = (" and %d more" % (len(self.unrecognised_files) - 10)
@@ -509,6 +530,12 @@ class DataLoader:
     #: A report or a scenario export sitting beside the exports is expected.
     _OUR_OWN = (".crq.json",)
 
+    #: Filenames this product knows, that only take effect behind a flag. Present
+    #: without the flag they are neither loaded nor misnamed, so they are neither
+    #: "not supplied" nor "not recognised" — they are the third thing, and the
+    #: useful sentence names the flag rather than the file.
+    _WELL_KNOWN_UNAPPLIED = {"baseline.json": "--config"}
+
     def _looks_like_an_unread_export(self, name: str) -> bool:
         """Is this a file a customer plausibly meant us to read, and we did not?"""
         if name in self._consumed_files:
@@ -520,6 +547,8 @@ class DataLoader:
             return False
         if lowered in self._disregard:
             return False
+        if lowered in self._WELL_KNOWN_UNAPPLIED:
+            return False           # reported separately, and more usefully
         return True
 
     def _resolve(self, fname: str) -> Optional[Path]:

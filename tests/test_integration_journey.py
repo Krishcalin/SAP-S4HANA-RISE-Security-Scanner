@@ -193,8 +193,8 @@ def test_domain_score_is_over_checks_that_ran_not_the_catalogue(database, landsc
         assert d["checks_known"] > 0
         assert d["checks_failing"] <= d["checks_known"], \
             "more checks failing than exist — the score denominator is wrong"
-        if d["pct_compliant"] is not None:
-            assert 0 <= d["pct_compliant"] <= 100
+        if d["pct_passing"] is not None:
+            assert 0 <= d["pct_passing"] <= 100
             assert d["assessed"] is True
 
 
@@ -386,7 +386,7 @@ def test_a_category_nothing_assessed_reports_no_percentage(database, landscape, 
     unassessed = [d for d in domains if not d["assessed"]]
     assert unassessed, "no category was marked unassessed on a one-module manifest"
     for d in unassessed:
-        assert d["pct_compliant"] is None, d["category"]
+        assert d["pct_passing"] is None, d["category"]
 
 
 @pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")
@@ -400,9 +400,9 @@ def test_supplying_less_cannot_produce_a_better_score(database, landscape, syste
     starved = {d["category"]: d for d in analytics.domain_scorecard(
         scope, coverage={"modules": {"user_auth_audit": {"status": "complete"}}})}
     improved = [c for c, d in starved.items()
-                if d["pct_compliant"] is not None
-                and everything.get(c, {}).get("pct_compliant") is not None
-                and d["pct_compliant"] > everything[c]["pct_compliant"]]
+                if d["pct_passing"] is not None
+                and everything.get(c, {}).get("pct_passing") is not None
+                and d["pct_passing"] > everything[c]["pct_passing"]]
     assert not improved, f"supplying fewer exports raised the score for {improved}"
 
 

@@ -26,7 +26,7 @@ import sys
 import datetime
 from pathlib import Path
 
-from modules import release_gate
+from modules import posture_score, release_gate
 from modules.snc_posture import SncPostureAuditor
 from modules.ecs_config_items import EcsConfigAuditor
 from modules.code_inventory_report import CodeInventoryAuditor
@@ -120,7 +120,7 @@ def main():
              "RISE system without OS access or an SAP ticket."
     )
     parser.add_argument(
-        "--output", default="sap_security_report.html",
+        "--output", default="sap_security_report.html", metavar="FILE",
         help="Output HTML report filename (default: sap_security_report.html)"
     )
     parser.add_argument(
@@ -135,7 +135,7 @@ def main():
         help="Which audit modules to run (default: all)"
     )
     parser.add_argument(
-        "--config", default=None,
+        "--config", default=None, metavar="FILE",
         help="Path to custom baseline config JSON (optional)"
     )
     parser.add_argument(
@@ -223,10 +223,21 @@ def main():
     # Load data
     print("[*] Loading exported configuration data...")
     loader = DataLoader(data_dir)
-    # The baseline and the report are the operator's files, frequently kept
-    # beside the exports. Naming them here keeps them out of the "we did not
-    # recognise this" list, which is only useful while it is short.
-    loader.disregard(getattr(args, "config", None), getattr(args, "output", None))
+    # The operator's own files are frequently kept beside the exports — the
+    # baseline, the report, and every gate artefact. Naming them keeps them out
+    # of the "we did not recognise this" list, which is only useful while it is
+    # short.
+    #
+    # DERIVED FROM THE PARSER, NOT LISTED HERE. The first version of this named
+    # `--config` and `--output` and missed the five gate flags, all of which take
+    # a .json path an operator can perfectly well keep in the export directory —
+    # `--gate-scope transport-objects.json` is the README's own example. A list
+    # written by hand goes stale the next time a flag is added, silently, and the
+    # symptom is a warning about the operator's own file. `metavar="FILE"` is
+    # what the author writes anyway, so it is what this reads.
+    loader.disregard(*[
+        getattr(args, action.dest, None) for action in parser._actions
+        if action.metavar == "FILE"])
     data = loader.load_all()
     # Source is a DIRECTORY, not one of the tabular exports, so it is handed to the
     # auditor through the same dict rather than through DataLoader's FILE_MAP.
@@ -248,6 +259,19 @@ def main():
 
     # Every ECS-aware check reads the mode from here. Built once so two auditors
     # cannot disagree about which estate they are looking at.
+    #
+    # AND HANDED TO EVERY AUDITOR, NOT THE ONES THAT CURRENTLY READ IT.
+    #
+    # There were three call shapes before: twenty-one auditors got no run context,
+    # six got this one, and three built their own `{"modules": ...}` literal that
+    # silently lacked `deployment_mode`. Nothing was broken by that on the day it
+    # was written — the three that read the mode all happened to be in the six —
+    # which is exactly why it is worth removing. The next field added here would
+    # have reached six of thirty auditors, the omission would have looked like a
+    # module deciding not to use it, and the failure would have been a check
+    # quietly judging an ECS estate by on-premise rules.
+    #
+    # tests/test_run_context_is_uniform.py holds this shut.
     run_ctx = {"deployment_mode": args.deployment_mode, "modules": set(run_modules)}
 
     all_findings = []
@@ -277,7 +301,7 @@ def main():
     # --- Network & Service Exposure ---
     if "network" in run_modules:
         print("[*] Running Network & Service Exposure Audit...")
-        auditor = NetworkServiceAuditor(data, baseline_overrides)
+        auditor = NetworkServiceAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -285,7 +309,7 @@ def main():
     # --- RISE/BTP-Specific Checks ---
     if "rise" in run_modules:
         print("[*] Running RISE/BTP-Specific Checks...")
-        auditor = RiseBtpAuditor(data, baseline_overrides)
+        auditor = RiseBtpAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -293,12 +317,11 @@ def main():
     # --- Advanced Identity & Access Management ---
     if "iam" in run_modules:
         print("[*] Running Advanced IAM Checks (SoD, Firefighter, Role Expiry, Cross-ID)...")
-        # run_context lets the module see whether the deeper permission-level SoD
+        # run_ctx lets the module see whether the deeper permission-level SoD
         # module ('ara') is actually in this run. Without it, iam deferred whenever
         # role_auth_values was merely PRESENT — so `--modules iam` stood down in
         # favour of a module that was not running, and produced no SoD findings.
-        auditor = AdvancedIamAuditor(data, baseline_overrides,
-                                     run_context={"modules": set(run_modules)})
+        auditor = AdvancedIamAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -306,7 +329,7 @@ def main():
     # --- BTP Cloud Attack Surface ---
     if "btpcloud" in run_modules:
         print("[*] Running BTP Cloud Attack Surface Checks...")
-        auditor = BtpCloudSurfaceAuditor(data, baseline_overrides)
+        auditor = BtpCloudSurfaceAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -314,7 +337,7 @@ def main():
     # --- Network & Integration Layer ---
     if "intglayer" in run_modules:
         print("[*] Running Network & Integration Layer Checks...")
-        auditor = IntegrationLayerAuditor(data, baseline_overrides)
+        auditor = IntegrationLayerAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -322,7 +345,7 @@ def main():
     # --- Data Protection & Privacy ---
     if "dataprot" in run_modules:
         print("[*] Running Data Protection & Privacy Checks...")
-        auditor = DataProtectionAuditor(data, baseline_overrides)
+        auditor = DataProtectionAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -346,7 +369,7 @@ def main():
     # --- Custom-code estate inventory ---
     if "codeinv" in run_modules:
         print("[*] Running Custom-Code Estate Inventory...")
-        auditor = CodeInventoryAuditor(data, baseline_overrides)
+        auditor = CodeInventoryAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -354,7 +377,7 @@ def main():
     # --- Resilience & Recovery Readiness ---
     if "resilience" in run_modules:
         print("[*] Running Resilience & Recovery Readiness Checks...")
-        auditor = ResiliencePostureAuditor(data, baseline_overrides)
+        auditor = ResiliencePostureAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -362,7 +385,7 @@ def main():
     # --- Code & Transport Security ---
     if "codetrans" in run_modules:
         print("[*] Running Code & Transport Security Checks...")
-        auditor = CodeTransportAuditor(data, baseline_overrides)
+        auditor = CodeTransportAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -372,8 +395,7 @@ def main():
     # the customer's own system, so they carry no false positives of our making.
     if "atc" in run_modules:
         print("[*] Importing ABAP Test Cockpit / Code Inspector results...")
-        auditor = AtcImportAuditor(data, baseline_overrides,
-                                   run_context={"modules": set(run_modules)})
+        auditor = AtcImportAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -383,8 +405,7 @@ def main():
     # customer has SAP's own CVA, prefer the `atc` module: those findings are SAP's.
     if "cva" in run_modules:
         print("[*] Running ABAP / UI5 source scan...")
-        auditor = AbapSastAuditor(data, baseline_overrides,
-                                  run_context={"modules": set(run_modules)})
+        auditor = AbapSastAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -392,7 +413,7 @@ def main():
     # --- Logging, Monitoring & Incident Response ---
     if "logmon" in run_modules:
         print("[*] Running Logging, Monitoring & IR Checks...")
-        auditor = LogMonitoringAuditor(data, baseline_overrides)
+        auditor = LogMonitoringAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -403,7 +424,7 @@ def main():
     # what the customer believes it captures, and what the exported window contains.
     if "logreview" in run_modules:
         print("[*] Running Security Audit Log Retrospective Review (filter coverage + patterns over the exported window)...")
-        auditor = LogReviewAuditor(data, baseline_overrides)
+        auditor = LogReviewAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -411,7 +432,7 @@ def main():
     # --- Fiori & UI Layer ---
     if "fiori" in run_modules:
         print("[*] Running Fiori & UI Layer Checks...")
-        auditor = FioriUiAuditor(data, baseline_overrides)
+        auditor = FioriUiAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -427,7 +448,7 @@ def main():
     # --- HANA Database Security ---
     if "hanadb" in run_modules:
         print("[*] Running HANA Database Security Checks (users, privileges, audit, params)...")
-        auditor = HanaDbSecurityAuditor(data, baseline_overrides)
+        auditor = HanaDbSecurityAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -435,7 +456,7 @@ def main():
     # --- SAP Security Notes / HotNews ---
     if "hotnews" in run_modules:
         print("[*] Running SAP Security Notes / HotNews Checks (missing critical patches since 2020)...")
-        auditor = SapHotNewsAuditor(data, baseline_overrides)
+        auditor = SapHotNewsAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -443,7 +464,7 @@ def main():
     # --- ABAP Authorization & Critical Access ---
     if "authz" in run_modules:
         print("[*] Running ABAP Authorization & Critical Access Checks (AGR_1251 role analysis)...")
-        auditor = AbapAuthorizationAuditor(data, baseline_overrides)
+        auditor = AbapAuthorizationAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -451,7 +472,7 @@ def main():
     # --- System Trust & Standard Users ---
     if "systrust" in run_modules:
         print("[*] Running System Trust & Standard Users Checks (trusted RFC, SAP*, default passwords)...")
-        auditor = SystemTrustAuditor(data, baseline_overrides)
+        auditor = SystemTrustAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -467,7 +488,7 @@ def main():
     # --- S/4HANA & Cloud Authorization ---
     if "s4authz" in run_modules:
         print("[*] Running S/4HANA & Cloud Authorization Checks (business roles, CDS, OData V4, CF, BTP)...")
-        auditor = S4BusinessAuthzAuditor(data, baseline_overrides)
+        auditor = S4BusinessAuthzAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -475,7 +496,7 @@ def main():
     # --- Access Risk Analysis (Segregation of Duties) ---
     if "ara" in run_modules:
         print("[*] Running Access Risk Analysis (permission-level SoD, critical access, mitigations)...")
-        auditor = AccessRiskAnalysisAuditor(data, baseline_overrides)
+        auditor = AccessRiskAnalysisAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -483,7 +504,7 @@ def main():
     # --- Basis Jobs & External OS Commands ---
     if "jobcmd" in run_modules:
         print("[*] Running Basis Jobs & OS-Command Checks (external commands, background job step users)...")
-        auditor = BasisJobCommandAuditor(data, baseline_overrides)
+        auditor = BasisJobCommandAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -491,7 +512,7 @@ def main():
     # --- GRC Access Control (Firefighter/EAM, ARM, GRC-native SoD & mitigations) ---
     if "grcac" in run_modules:
         print("[*] Running GRC Access Control Checks (firefighter/EAM, access requests, SoD & mitigations)...")
-        auditor = GrcAccessControlAuditor(data, baseline_overrides)
+        auditor = GrcAccessControlAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -499,7 +520,7 @@ def main():
     # --- Role Design & Governance (SU24 hygiene, ungenerated profiles, derived drift) ---
     if "rolegov" in run_modules:
         print("[*] Running Role Design & Governance Checks (SU24 proposals, profile generation, derived drift)...")
-        auditor = RoleGovernanceAuditor(data, baseline_overrides)
+        auditor = RoleGovernanceAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -507,7 +528,7 @@ def main():
     # --- Financial Controls (SOX: posting periods, tolerances, dual control, doc change) ---
     if "fincontrols" in run_modules:
         print("[*] Running Financial Controls Checks (posting periods, tolerances, dual control, doc change rules)...")
-        auditor = FinancialControlsAuditor(data, baseline_overrides)
+        auditor = FinancialControlsAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
@@ -770,6 +791,15 @@ def main():
         # release_gate.coverage_reasons, beside the rule it completes.
         coverage_reasons = release_gate.coverage_reasons(coverage_manifest)
 
+        # ...AND HOW MANY CHECKS STOOD BEHIND THE ANSWER. Rule 4's third arm: an
+        # empty finding list is the same argument whether everything passed or
+        # nothing ran, so the gate is told the size of the look as well as its
+        # result. None when the manifest could not be built, which is the honest
+        # answer and the one that fails closed.
+        assessed_checks = posture_score.assessed_check_count(
+            coverage_manifest,
+            observed=[f.get("check_id") for f in fair_findings])
+
         result = release_gate.evaluate(
             fair_findings,
             policy=policy,
@@ -778,7 +808,8 @@ def main():
             degraded=bool(degraded_findings) or bool(coverage_reasons),
             degraded_detail=" ".join(
                 [str(f.get("description", "")) for f in degraded_findings]
-                + coverage_reasons).strip())
+                + coverage_reasons).strip(),
+            assessed_checks=assessed_checks)
 
         print(release_gate.render(result))
         if args.gate_json:

@@ -15,7 +15,7 @@ import { Trend } from './Trend'
 /**
  * The second defect that type-checked perfectly and shipped.
  *
- * The pass-rate table read `const pct = d.pct_compliant ?? 0`. Null means "no
+ * The pass-rate table read `const pct = d.pct_passing ?? 0`. Null means "no
  * module feeding this category ran, so there is no rate" — and `?? 0` turned
  * that into the WORST POSSIBLE SCORE, so a category whose export was never
  * supplied rendered as 0% and sorted to the top of the table as the customer's
@@ -78,7 +78,7 @@ describe('a category nothing assessed', () => {
     category: 'Security Audit Log Review',
     checks_known: 12,
     checks_failing: 0,
-    pct_compliant: null,
+    pct_passing: null,
     assessed: false,
   }
 
@@ -104,7 +104,7 @@ describe('a category that was assessed', () => {
   it('still shows its rate, including a genuine nought', async () => {
     await renderTrend([{
       category: 'User & Authorization',
-      checks_known: 9, checks_failing: 9, pct_compliant: 0, assessed: true,
+      checks_known: 9, checks_failing: 9, pct_passing: 0, assessed: true,
     }])
     // A MEASURED zero is a real result and must still be printed. The defect was
     // never "0% is bad", it was "null became 0%".
@@ -115,7 +115,7 @@ describe('a category that was assessed', () => {
   it('shows a partial rate as measured', async () => {
     await renderTrend([{
       category: 'Data Protection & Privacy',
-      checks_known: 20, checks_failing: 10, pct_compliant: 50, assessed: true,
+      checks_known: 20, checks_failing: 10, pct_passing: 50, assessed: true,
     }])
     expect(screen.getByText('50%')).toBeInTheDocument()
   })

@@ -108,22 +108,96 @@ def test_only_files_that_could_be_an_export_are_considered(exports):
         loader.unrecognised_files
 
 
+def test_the_products_own_config_file_does_not_read_as_a_misnamed_export(exports):
+    """THE WARNING ABOVE CRIED WOLF ON THE README'S FIRST COMMAND.
+
+    `sample_data/baseline.json` ships with this product and only takes effect
+    behind `--config`. Without the flag it is unread, so the first version of
+    this warning reported "1 file(s) ... were not recognised" — about a file we
+    wrote, on the first command a new reader runs. A warning whose first
+    appearance is a false one is a warning people learn to scroll past, which
+    costs more than the misnamed export it exists to catch.
+
+    Present-but-not-applied is a third state, and its message is more useful than
+    the one it replaced because it names the flag.
+    """
+    loader, _, printed = _load(exports)
+    assert loader.unrecognised_files == [], loader.unrecognised_files
+    assert ("baseline.json", "--config") in loader.unapplied_files
+    assert "--config baseline.json" in printed, printed
+
+
+def test_applying_it_says_nothing_at_all(exports):
+    loader, _, printed = _load(exports, "baseline.json")
+    assert loader.unapplied_files == []
+    assert "was not applied" not in printed
+
+
+def test_the_two_messages_do_not_mask_each_other(exports):
+    """A directory can hold both. Reporting the known file must not suppress the
+    unknown one — that would trade a false warning for a missing one."""
+    (exports / "users.csv").rename(exports / "user_list_PRD.csv")
+    loader, _, printed = _load(exports)
+    assert loader.unrecognised_files == ["user_list_PRD.csv"]
+    assert loader.unapplied_files == [("baseline.json", "--config")]
+    assert "not recognised" in printed and "was not applied" in printed
+
+
 def test_the_caller_can_declare_files_it_owns(exports):
-    """The loader cannot know the operator passed `--config baseline.json`; the
-    composition root can, and says so."""
+    """The loader cannot know the operator passed `--gate-scope`; the composition
+    root can, and says so. Any operator file may sit beside the exports — the
+    README's own gate example puts a transport-objects list there."""
+    (exports / "transport-objects.json").write_text('["ZCL_A"]', encoding="utf-8")
+
     undeclared, _, _ = _load(exports)
-    assert "baseline.json" in undeclared.unrecognised_files
-    declared, _, _ = _load(exports, "baseline.json")
-    assert "baseline.json" not in declared.unrecognised_files
+    assert "transport-objects.json" in undeclared.unrecognised_files
+    declared, _, _ = _load(exports, "transport-objects.json")
+    assert "transport-objects.json" not in declared.unrecognised_files
 
 
-def test_the_scanner_declares_its_own_config_and_output():
-    """Otherwise every run with a baseline warns about the baseline."""
+def test_the_scanner_declares_every_file_valued_flag_not_two_of_them():
+    """A HAND-WRITTEN LIST WENT STALE BEFORE IT WAS A DAY OLD.
+
+    The first version named `--config` and `--output` and missed the five gate
+    flags and `--crq-inputs`, every one of which takes a path an operator may
+    keep in the export directory. So the scanner reads the flags off its own
+    parser: `metavar="FILE"` is what the author writes anyway, and a flag added
+    tomorrow is covered on the day it is written rather than the day someone
+    remembers this line.
+    """
+    import ast
+
     src = (ROOT / "sap_scanner.py").read_text(encoding="utf-8")
     assert "loader.disregard(" in src, \
         "sap_scanner no longer tells the loader which files it owns"
     assert "unrecognised_files=" in src, \
         "the scanner builds a manifest without the unrecognised list"
+    assert "action.metavar" in src, \
+        "the disregard list is hand-written again; it must be read off the parser"
+
+    # Every flag that takes a path declares itself as one, so the derivation sees
+    # it. `--data-dir` and `--abap-src` are directories and are excluded on
+    # purpose: they cannot be files sitting inside the export directory.
+    tree = ast.parse(src)
+    undeclared = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call)
+                and getattr(node.func, "attr", "") == "add_argument"):
+            continue
+        if not (node.args and isinstance(node.args[0], ast.Constant)):
+            continue
+        flag = node.args[0].value
+        kw = {k.arg: k.value for k in node.keywords}
+        metavar = kw.get("metavar")
+        metavar = metavar.value if isinstance(metavar, ast.Constant) else None
+        looks_like_a_path = any(
+            word in flag for word in ("baseline", "policy", "scope", "json",
+                                      "config", "output", "inputs"))
+        if looks_like_a_path and metavar != "FILE":
+            undeclared.append(flag)
+    assert not undeclared, (
+        "flag(s) take a file path without metavar=\"FILE\", so the loader will "
+        "warn about the operator's own file: %s" % undeclared)
 
 
 # ─────────────────── 2. the failed fetch on the CRQ screen ──────────────────

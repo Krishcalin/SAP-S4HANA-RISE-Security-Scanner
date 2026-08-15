@@ -1113,7 +1113,7 @@ Four rules, each drawn from a specific way gates get switched off in practice:
 - **Never block on what the customer cannot fix.** In RISE, a `ticket_to_sap` finding is not the developer's to resolve, and failing their build for it teaches them to bypass the gate.
 - **Never fail open.** Degraded coverage is exit **2**, never a pass — an unassessable build must not look like a clean one.
 
-> Two things worth knowing before you wire it up. `--gate-write-baseline` is evaluated **before** `--gate`, so passing both in one command writes the baseline and skips evaluation. And an empty finding set currently returns **pass**, not "could not assess" — if a run can collapse to zero findings for an unrelated reason, assert on the finding count in your pipeline too.
+> One thing worth knowing before you wire it up: `--gate-write-baseline` is evaluated **before** `--gate`, so passing both in one command writes the baseline and skips evaluation. An empty finding set no longer returns **pass** on its own — the gate is told how many checks executed, and "nothing failed" is only a result when that number is greater than zero.
 
 ---
 

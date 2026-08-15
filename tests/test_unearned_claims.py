@@ -98,6 +98,51 @@ def test_the_console_does_not_head_a_column_compliant():
     assert ">Compliant<" not in TREND.read_text(encoding="utf-8")
 
 
+def test_no_percentage_anywhere_is_named_for_compliance():
+    """THE COLUMN WAS RENAMED AND THE FIELD BEHIND IT WAS NOT.
+
+    The architecture guide states twice, without qualification, that there is
+    deliberately no compliance percentage anywhere in the product. That was true
+    of every label a customer could see and false of the JSON underneath it:
+    `domain_scorecard` returned `pct_compliant`, the console's `DomainScore`
+    carried it, and any integrator reading the API got a number called compliance
+    from a product whose written position is that it does not produce one.
+
+    The note in `types.ts` argued a rename was a breaking change not worth making
+    for one word. The word was the entire claim, and the console — in this
+    repository — was the only consumer.
+
+    Derived rather than listed: any key or field pairing a proportion with
+    conformance is the defect, whatever it ends up called.
+    """
+    suspect = re.compile(
+        r"\b\w*(?:pct|percent|rate|score)\w*compl\w*\b"
+        r"|\b\w*compl(?:iant|iance)\w*(?:pct|percent|rate|score)\w*\b", re.I)
+
+    offenders = []
+    surfaces = sorted((ROOT / "server").glob("*.py"))
+    surfaces.append(ROOT / "frontend" / "src" / "api" / "types.ts")
+    for path in surfaces:
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            # Prose about the rename is the record of it; the identifier is not.
+            stripped = line.strip()
+            if stripped.startswith(("#", "*", "//", "/*")):
+                continue
+            if suspect.search(line):
+                offenders.append(f"{path.name}:{n}: {stripped[:80]}")
+    assert not offenders, (
+        "a percentage is named for compliance, which the guide says the product "
+        "does not produce: %s" % offenders)
+
+
+def test_the_promise_this_enforces_is_still_written_down():
+    """An enforcement with no claim behind it is a rule nobody can argue with.
+    If the guide ever stops promising this, the test above should be revisited
+    rather than silently outliving its reason."""
+    guide = (ROOT / "docs" / "ARCHITECTURE.md").read_text(encoding="utf-8")
+    assert "no compliance percentage" in guide
+
+
 def test_the_pass_rate_has_no_severity_blind_traffic_light():
     """THE COLOUR WAS WORSE THAN THE WORD.
 
@@ -121,7 +166,7 @@ def test_the_pass_rate_is_still_measured_over_checks_that_ran():
     what it was always protecting: that supplying less cannot score more.
     """
     source = (ROOT / "server" / "analytics.py").read_text(encoding="utf-8")
-    assert "pct_compliant" in source
+    assert "pct_passing" in source
 
     # ASSERTED BY RUNNING IT, not by grepping for the helper of the day. This
     # test has now been rewritten twice because it named an implementation: first
@@ -131,14 +176,14 @@ def test_the_pass_rate_is_still_measured_over_checks_that_ran():
 
     nothing_scanned = _score_rows(observed={}, failing={}, coverage=None)
     assert nothing_scanned, "no rows produced"
-    assert all(r["pct_compliant"] is None for r in nothing_scanned), \
+    assert all(r["pct_passing"] is None for r in nothing_scanned), \
         "a category nobody scanned was given a pass rate"
 
     starved = {"modules": {"user_auth_audit": {"status": "complete"}}}
     partial = _score_rows(observed={}, failing={}, coverage=starved)
     unassessed = [r for r in partial if not r["assessed"]]
     assert unassessed, "supplying one module out of thirty scored every category"
-    assert all(r["pct_compliant"] is None for r in unassessed)
+    assert all(r["pct_passing"] is None for r in unassessed)
 
 
 # ── 3. the note catalogue that stopped in April 2025 ─────────────────────────

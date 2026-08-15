@@ -430,18 +430,18 @@ def _score_rows(observed: Dict[str, int], failing: Dict[str, int],
         n_failing = failing.get(category, 0)
         if not assessed:
             out.append({"category": category, "checks_known": known,
-                        "checks_failing": n_failing, "pct_compliant": None,
+                        "checks_failing": n_failing, "pct_passing": None,
                         "assessed": False})
             continue
         passing = max(0, known - n_failing)
         out.append({"category": category, "checks_known": known,
                     "checks_failing": n_failing,
-                    "pct_compliant": round(100.0 * passing / known) if known else None,
+                    "pct_passing": round(100.0 * passing / known) if known else None,
                     "assessed": True})
     # Worst first, with the unassessed after the measured ones: a category we did
     # not look at is not the worst performer, it is not a performer at all.
-    out.sort(key=lambda r: (r["pct_compliant"] is None,
-                            r["pct_compliant"] if r["pct_compliant"] is not None else 0))
+    out.sort(key=lambda r: (r["pct_passing"] is None,
+                            r["pct_passing"] if r["pct_passing"] is not None else 0))
     return out
 
 

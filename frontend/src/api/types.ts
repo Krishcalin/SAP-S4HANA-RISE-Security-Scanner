@@ -669,16 +669,24 @@ export interface TeamScore {
 
 /** server/analytics.py `domain_scorecard`.
  *
- *  `pct_compliant` is measured over CHECKS THAT ACTUALLY RAN, not the whole
+ *  `pct_passing` is measured over CHECKS THAT ACTUALLY RAN, not the whole
  *  catalogue — scoring against every check ever written would let a customer
  *  improve their score by supplying fewer exports. Null when nothing ran.
  *
  *  IT IS A PASS RATE, NOT A COMPLIANCE SCORE, and the console must not present it
  *  as one. It was rendered under a column headed "Compliant" with a green/amber/
  *  red bar until it was noticed that the colour is severity-blind: sixteen passes
- *  and four CRITICAL failures is eighty per cent and was drawn green. The name of
- *  this field is now the only place the word "compliant" survives, and renaming
- *  the column across the API would be a breaking change for one word. */
+ *  and four CRITICAL failures is eighty per cent and was drawn green.
+ *
+ *  IT WAS CALLED `pct_compliant` UNTIL THE PRODUCT WAS CHECKED AGAINST ITS OWN
+ *  PROMISE. The architecture guide states, twice and without qualification, that
+ *  there is deliberately no compliance percentage anywhere in the product; this
+ *  field was the one place that was not true. The note that used to sit here
+ *  argued the rename was a breaking change not worth making for one word. It was
+ *  neither: this console is the only consumer, it lives in the same repository,
+ *  and the word was the entire point. A percentage labelled "compliant" is a
+ *  claim about conformance with an external standard, which is precisely the
+ *  claim `modules/compliance_mapping.py` refuses to make. */
 export interface DomainScore {
   category: string | null
   /** How many checks EXIST in this category, read from the scanner's source —
@@ -690,7 +698,7 @@ export interface DomainScore {
   checks_failing: number
   /** Null, never 0, when nothing assessed this category. Zero is a measured
    *  result and this is the absence of one. */
-  pct_compliant: number | null
+  pct_passing: number | null
   /** False when no module feeding this category ran for the systems in scope. */
   assessed: boolean
 }

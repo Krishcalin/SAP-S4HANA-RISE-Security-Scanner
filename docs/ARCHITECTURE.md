@@ -1440,7 +1440,7 @@ In two steps, and the order matters. First, record where you are today as an acc
 
 > **Two sharp edges, stated plainly**
 >
->  Asking to write a baseline and to evaluate the gate in the same command writes the baseline and skips the evaluation. And a run that produces zero findings currently counts as a pass rather than “cannot assess” — so if a scan can collapse to zero findings for an unrelated reason, the pipeline should assert on the finding count as well. Both are documented rather than discovered.
+>  Asking to write a baseline and to evaluate the gate in the same command writes the baseline and skips the evaluation. That one is still true and is documented rather than discovered.
 
 ## Chapter 26 — The control room
 
@@ -1776,11 +1776,10 @@ The list above is a good proxy for maintainability. Adding a subject area touche
 
 | Limit | Current position |
 |---|---|
-| The zero-findings edge case in the gate | A run producing no findings counts as a pass rather than “cannot assess”. Documented, with the recommended pipeline workaround, until it is closed. |
 | The patch catalogue is curated | A verified subset of high-impact corrections since 2020, not the complete SAP corpus. Its size and cut-off are stated, and it can be extended with your own list. |
 | Custom-code scanning needs a code export | Without one, that module cannot run. Where SAP’s own code-analysis product is licensed, its results are imported instead and are preferred. |
 | Automatic collection is partial | The richest information requires an interface the product declines to use. Every collection run states what it could not reach. |
-| Internal inconsistency in how modules are constructed | Three slightly different shapes exist across thirty modules, a residue of how deployment-awareness was introduced. Cosmetic today; a known cleanup. |
+| The custom-code engine sees ABAP, not everything | Java, JavaScript beyond the UI layer, and generated artefacts are out of scope for the source scanner. Where SAP’s own analysis covers them, those results are imported instead. |
 
 ### Things it is sometimes assumed to be
 

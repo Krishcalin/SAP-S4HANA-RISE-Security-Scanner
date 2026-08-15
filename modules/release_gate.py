@@ -43,6 +43,17 @@ happens.
    clean code and it is a lie told automatically, on every build, until someone
    notices. `ABAP-LEX-001` exists to be read here.
 
+   Rule 4 has three arms, and they were written one defect at a time:
+
+   * `degraded=` — a module that RAN and knew it could not see everything, marked
+     per finding by the module itself.
+   * `coverage_reasons()` — a module that NEVER RAN, which emits nothing, and
+     nothing is what a gate reads as clean.
+   * `assessed_checks=` — the scan produced NO FINDINGS AT ALL, and cannot show
+     that anything executed. An empty list is the same bytes whether six hundred
+     checks passed or none of them ran, so it is not a result until the caller
+     can say how many checks stood behind it.
+
 ────────────────────────────────────────────────────────────────────────────────
 WHAT BLOCKS, BY DEFAULT
 ────────────────────────────────────────────────────────────────────────────────
@@ -340,13 +351,21 @@ def evaluate(findings: Sequence[Dict[str, Any]],
              baseline: Optional[Set[str]] = None,
              scope: Optional[Set[str]] = None,
              degraded: bool = False,
-             degraded_detail: str = "") -> GateResult:
+             degraded_detail: str = "",
+             assessed_checks: Optional[int] = None) -> GateResult:
     """Decide whether this change may ship.
 
     `degraded` is the fail-closed input: pass it True when anything made the scan
     less than complete. It is checked FIRST, before any finding is looked at,
     because "we found nothing" and "we could not look" must never produce the same
     exit code.
+
+    `assessed_checks` is how many checks this scan actually executed —
+    `modules.posture_score.assessed_check_count(manifest)` computes it. It exists
+    for one case: `findings` is empty. Supply it and an empty list can mean
+    "nothing failed, out of 402 checks that ran"; omit it and an empty list means
+    only "nothing was reported", which is not a statement about the system. None
+    is the honest default and is treated as "cannot tell", not as zero.
     """
     policy = policy or json.loads(json.dumps(DEFAULT_POLICY))
     reasons: List[str] = []
@@ -365,6 +384,59 @@ def evaluate(findings: Sequence[Dict[str, Any]],
         return GateResult("cannot_assess",
                           EXIT_PASS if warn_only else EXIT_CANNOT_ASSESS,
                           reasons, [], {}, 0, 0, policy)
+
+    # ---- Rule 4's third arm: an empty list is not a result -------------- #
+    #
+    # ZERO FINDINGS EXITED 0. It was the last place in this module where an
+    # absence rendered as a measurement, and it was documented as a known limit
+    # for long enough that the guide recommended a pipeline work-around —
+    # "assert on the finding count as well" — which is this rule, written out for
+    # the customer to implement instead of implemented here.
+    #
+    # `findings == []` is the identical input whether six hundred checks ran and
+    # every one passed, or the export directory was empty, or an --abap-src path
+    # was mistyped, or a caller wired this to the wrong list. Only the first is a
+    # pass, and the four are indistinguishable from the argument alone.
+    #
+    # So the caller must show its working. `assessed_checks` is a count of checks
+    # that actually executed; with one, "nothing failed" is a real and rather
+    # good result and is reported as such. Without one, the answer is Rule 4's.
+    #
+    # NO NEW POLICY KEY, AND NOT BECAUSE IT SHOULD NOT BE SWITCHABLE. This is a
+    # coverage rule, so it answers to the coverage switch that already exists.
+    # `block_on_degraded_coverage: false` is a deliberate statement that this
+    # pipeline takes responsibility for how much was looked at — a targeted job
+    # gating on one module is the legitimate case — and it would be incoherent
+    # for that to disarm two arms of Rule 4 and not the third. Adding a second
+    # key would also mean an operator who thought they had turned coverage
+    # blocking off had not, which is the failure `load_policy` refuses to allow
+    # for misspelled keys.
+    if not findings:
+        if assessed_checks:
+            # Said whether or not the rule is armed: a reader of a green gate is
+            # entitled to know it went green on an empty result, and how big the
+            # look behind it was.
+            reasons.append(
+                f"No findings at all, over {assessed_checks} check(s) that "
+                f"executed. That is a real result rather than an empty one — but "
+                f"it is unusual enough on a live estate to be worth confirming "
+                f"the inputs were the ones you meant.")
+        elif policy.get("block_on_degraded_coverage", True):
+            reasons.append(
+                "This scan reported no findings at all, and cannot say how many "
+                "checks ran. An empty result is the same input whether every "
+                "check passed or nothing executed, so it is not evidence that the "
+                "system is clean. Run the gate from a scan that produces a "
+                "coverage manifest, or investigate why this one found nothing.")
+            return GateResult("cannot_assess",
+                              EXIT_PASS if warn_only else EXIT_CANNOT_ASSESS,
+                              reasons, [], {}, 0, 0, policy)
+        else:
+            reasons.append(
+                "This scan reported no findings at all and cannot say how many "
+                "checks ran. block_on_degraded_coverage is off, so that is not "
+                "being held against it — but nothing below is evidence the system "
+                "is clean.")
 
     # ---- Rule 2: only what the change touches --------------------------- #
     considered = list(findings)

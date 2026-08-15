@@ -100,7 +100,7 @@ def test_a_fresh_install_does_not_report_every_category_as_fully_passing():
     rows = analytics._score_rows(  # type: ignore[attr-defined]
         observed={}, failing={}, coverage=None)
     assert rows, "no rows produced"
-    assert all(r["pct_compliant"] is None for r in rows), \
+    assert all(r["pct_passing"] is None for r in rows), \
         "a category nobody scanned reported a pass rate"
     assert all(r["assessed"] is False for r in rows)
 
@@ -113,7 +113,7 @@ def test_a_category_this_tenant_has_observed_is_still_scored_without_a_manifest(
     rows = analytics._score_rows(  # type: ignore[attr-defined]
         observed={"User & Authorization": 9}, failing={"User & Authorization": 4},
         coverage=None)
-    scored = [r for r in rows if r["pct_compliant"] is not None]
+    scored = [r for r in rows if r["pct_passing"] is not None]
     assert len(scored) == 1
     assert scored[0]["category"] == "User & Authorization"
     assert scored[0]["assessed"] is True

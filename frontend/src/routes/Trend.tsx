@@ -314,13 +314,17 @@ function Body({ j }: { j: Journey }) {
               // that into the worst possible score — a category whose export was
               // never supplied rendered as 0% and sorted to the top of the table
               // as the customer's biggest problem.
-              const pct = d.pct_compliant
+              const pct = d.pct_passing
               // NOT A TRAFFIC LIGHT, AND NOT CALLED "COMPLIANT".
               //
               // Two separate problems, and only one of them was the word. The
               // column read "Compliant", which claims conformance with something
               // external; this is the pass rate over the checks that actually ran,
               // which is a statement about our own checks and nothing else.
+              //
+              // The column was fixed first and the field behind it was not, so
+              // `pct_compliant` went on saying in JSON what the screen had stopped
+              // saying in English. It is `pct_passing` now, everywhere.
               //
               // The colour was worse. green >= 80 / amber >= 60 / red asserts that
               // eighty per cent passing is a good result, and it is SEVERITY-BLIND:

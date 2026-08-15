@@ -2070,7 +2070,7 @@ DORMANT_DAYS = 90                       <span class="c"># the threshold, overrid
 
 <div class="call amber">
   <span class="k">Two sharp edges, stated plainly</span>
-  <p>Asking to write a baseline and to evaluate the gate in the same command writes the baseline and skips the evaluation. And a run that produces zero findings currently counts as a pass rather than “cannot assess” — so if a scan can collapse to zero findings for an unrelated reason, the pipeline should assert on the finding count as well. Both are documented rather than discovered.</p>
+  <p>Asking to write a baseline and to evaluate the gate in the same command writes the baseline and skips the evaluation. That one is still true and is documented rather than discovered.</p>
 </div>
 
 <h3 class="ch" id="ch26"><span class="cnum">Chapter 26</span>The control room</h3>
@@ -2435,11 +2435,10 @@ python sap_scanner.py --data-dir ./exports --gate --gate-baseline baseline.json<
 <h4>Current limits — true today, addressable</h4>
 <div class="tw"><table>
   <tr><th style="width:30%">Limit</th><th>Current position</th></tr>
-  <tr><td>The zero-findings edge case in the gate</td><td>A run producing no findings counts as a pass rather than “cannot assess”. Documented, with the recommended pipeline workaround, until it is closed.</td></tr>
-  <tr><td>The patch catalogue is curated</td><td>A verified subset of high-impact corrections since 2020, not the complete SAP corpus. Its size and cut-off are stated, and it can be extended with your own list.</td></tr>
+    <tr><td>The patch catalogue is curated</td><td>A verified subset of high-impact corrections since 2020, not the complete SAP corpus. Its size and cut-off are stated, and it can be extended with your own list.</td></tr>
   <tr><td>Custom-code scanning needs a code export</td><td>Without one, that module cannot run. Where SAP’s own code-analysis product is licensed, its results are imported instead and are preferred.</td></tr>
   <tr><td>Automatic collection is partial</td><td>The richest information requires an interface the product declines to use. Every collection run states what it could not reach.</td></tr>
-  <tr><td>Internal inconsistency in how modules are constructed</td><td>Three slightly different shapes exist across thirty modules, a residue of how deployment-awareness was introduced. Cosmetic today; a known cleanup.</td></tr>
+  <tr><td>The custom-code engine sees ABAP, not everything</td><td>Java, JavaScript beyond the UI layer, and generated artefacts are out of scope for the source scanner. Where SAP’s own analysis covers them, those results are imported instead.</td></tr>
 </table></div>
 
 <h4>Things it is sometimes assumed to be</h4>
