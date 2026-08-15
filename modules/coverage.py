@@ -399,8 +399,17 @@ def check_catalogue() -> Dict[str, str]:
     passing `category=self.CATEGORY` is resolved through the class attribute, the
     spelling fifteen modules use.
 
-    Checks built at runtime from rule tables are not literals and are not here.
-    The consumer treats the result as a floor and says so.
+    RUNTIME FAMILIES ARE HERE NOW, AND THE FLOOR IS GONE. They were excluded
+    because their ids are composed rather than written, so the AST pairing above
+    finds nothing — which left every consumer of this map computing a
+    per-category denominator against 365 checks when 620 ran. That is the same
+    defect modules/posture_score.py had: a denominator that only counts what it
+    can see is not a denominator, and in a per-category pass rate it makes the
+    thinly-covered categories look best.
+
+    `runtime_check_families` now carries a category per id, derived from the
+    emit site rather than declared here, so the two halves of this map are built
+    the same way: pair the id with the category the same call passes.
     """
     out: Dict[str, str] = {}
     for path in sorted(MODULES_DIR.glob("*.py")):
@@ -445,6 +454,32 @@ def check_catalogue() -> Dict[str, str]:
                     and isinstance(cat_node, ast.Constant)
                     and isinstance(cat_node.value, str)):
                 out.setdefault(cid_node.value, cat_node.value)
+
+    for family in runtime_check_families():
+        for cid, category in family.get("categories", {}).items():
+            out.setdefault(cid, category)
+
+    # AND THE IDS PASSED POSITIONALLY, which neither reader above can pair.
+    #
+    # `_emit("AUTH-001", title, severity, …)` writes the id as an argument with
+    # no keyword, so there is no `category=` beside it to pair with — the
+    # category is applied inside the wrapper, one call further down. That left 31
+    # ids uncategorised: the whole AUTH- and BASELINE- sets and three coverage
+    # checks.
+    #
+    # Every one of those modules emits exactly ONE category, which is the
+    # wrapper's own, so the attribution is not a guess. Where a module emits more
+    # than one it is left out rather than assigned the more common of them: a
+    # wrong category is worse than a missing one, because it moves a finding into
+    # a denominator it does not belong to and nothing looks broken.
+    emitted = runtime_emit_categories()
+    for module, ids in all_check_ids().items():
+        cats = emitted.get(module) or set()
+        if len(cats) != 1:
+            continue
+        only = next(iter(cats))
+        for cid in ids:
+            out.setdefault(cid, only)
     return out
 
 
@@ -575,6 +610,60 @@ def positional_check_ids() -> Dict[str, List[str]]:
     return out
 
 
+@lru_cache(maxsize=1)
+def runtime_emit_categories() -> Dict[str, Set[str]]:
+    """{module: the categories it uses when the check id is COMPOSED}.
+
+    `check_catalogue` pairs a check id with a category inside one call, and skips
+    the call when the id is not a constant it can read. Every runtime family is
+    exactly that call: `check_id=f"ARA-{rid}"`, `check_id=lead["rule_id"]`. The
+    id cannot be read statically; the CATEGORY beside it usually can, and it is
+    the same literal for every id the family produces.
+
+    So the rule is the mirror of the one above it: a call whose check id is not
+    resolvable and whose category is, is a runtime family's emit site, and that
+    category belongs to every id in the family.
+
+    DERIVED RATHER THAN DECLARED, because a per-family table here would be a
+    second copy of a decision the emit site already makes, and it would go stale
+    silently — a category is a string a person renames.
+    """
+    out: Dict[str, Set[str]] = {}
+    for path in sorted(MODULES_DIR.glob("*.py")):
+        if path.stem in _NOT_AN_AUDITOR:
+            continue
+        src = path.read_text(encoding="utf-8")
+        if "BaseAuditor" not in src:
+            continue
+        tree = ast.parse(src, str(path))
+        class_category = None
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Assign)
+                    and isinstance(node.value, ast.Constant)
+                    and isinstance(node.value.value, str)
+                    and any(isinstance(x, ast.Name) and x.id == "CATEGORY"
+                            for x in node.targets)):
+                class_category = node.value.value
+        found: Set[str] = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            kwargs = {k.arg: k.value for k in node.keywords if k.arg}
+            if "check_id" not in kwargs or "category" not in kwargs:
+                continue
+            if _const_str(kwargs["check_id"]) is not None:
+                continue                      # a literal id — the other reader has it
+            cat = kwargs["category"]
+            if isinstance(cat, ast.Constant) and isinstance(cat.value, str):
+                found.add(cat.value)
+            elif (isinstance(cat, ast.Attribute) and cat.attr == "CATEGORY"
+                  and class_category):
+                found.add(class_category)
+        if found:
+            out[path.stem] = found
+    return out
+
+
 def runtime_check_families() -> List[Dict[str, Any]]:
     """The check ids built at RUNTIME from shipped rule tables, per module.
 
@@ -692,6 +781,39 @@ def runtime_check_families() -> List[Dict[str, Any]]:
             "runtime check families resolved to zero entries: %s. A family with "
             "no members is a broken table reference, not an empty table — fix "
             "the source rather than carrying on without it." % (empty,))
+
+    # A CATEGORY FOR EVERY ID, so check_catalogue can answer for these too.
+    #
+    # security_params is the one family whose category VARIES per id — it passes
+    # `category=rule["category"]`, one per profile parameter — so it comes from
+    # the same table the ids do. The other four pass a literal at the emit site,
+    # which runtime_emit_categories reads.
+    #
+    # NOT FROM THE RULE ROW'S OWN `category` FIELD, for abap_sast. That table has
+    # one, and it is a DIFFERENT TAXONOMY: "SQL Injection", "Cross-Site
+    # Scripting", "Directory Traversal" — a classification of the weakness, not
+    # of the finding. Taking it would have injected twelve categories that no
+    # finding carries and no domain maps, and it looks exactly like the right
+    # field to use. The emit site says "Code & Transport Security", and the emit
+    # site is what the finding will actually carry.
+    emitted = runtime_emit_categories()
+    for family in families:
+        module = family["module"]
+        if module == "security_params":
+            family["categories"] = {
+                "PARAM-" + name: rule.get("category")
+                for name, rule in params.items()
+                if isinstance(rule, dict) and rule.get("category")}
+        else:
+            cats = emitted.get(module) or set()
+            if len(cats) != 1:
+                raise RuntimeError(
+                    "cannot attribute a finding category to %s: its composed "
+                    "check ids are emitted with %s. One family, one category — "
+                    "name it at the emit site rather than leaving this to guess."
+                    % (family["pattern"], sorted(cats) or "no readable category"))
+            only = next(iter(cats))
+            family["categories"] = {cid: only for cid in family["ids"]}
     return families
 
 

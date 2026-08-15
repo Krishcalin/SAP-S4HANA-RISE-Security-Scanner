@@ -1709,6 +1709,11 @@ DORMANT_DAYS = 90                       <span class="c"># the threshold, overrid
 <p>A reader can ask the report to show only high-severity findings. This is a common and reasonable request. It changes what is printed, and nothing else — <strong>a display option may never change a verdict</strong>.</p>
 <p>The summary counts, the compliance panels, the domain figures, the financial exposure and the pass/fail signal are all computed from the complete set of findings. Getting this wrong is easy and the consequences are subtle: an early version protected the money figure from the filter but not the compliance panels, with the result that asking to see only serious items made a compliance area containing genuine medium-severity problems display a green “nothing found” badge.</p>
 
+<div class="call amber">
+  <span class="k">The same rule, applied to a denominator</span>
+  <p>A rate needs a bottom half as well as a top, and the bottom half has to count the checks that <em>ran</em>, not the checks that <em>failed</em>. Six categories in this product are built entirely from profile parameters, whose check identifiers are generated at run time rather than written out; the map from identifier to category could only read the written ones, so those six were measured against their own failures and reported 0% compliant on every estate, permanently. Correcting the map moved Password Policy from 0% to 44%, and Code &amp; Transport Security — measured against 31 of its 177 checks — from 0% to 84%. Nothing about any customer’s systems changed; the denominator did.</p>
+</div>
+
 <div class="call crim">
   <span class="k">The test for anyone adding a new panel, chart or number</span>
   <p>Does this element <em>show a list of findings</em>, or does it <em>make a claim about the estate</em>? Only the first may use the filtered set. If in doubt, use the complete set — over-counting in a summary is visible and gets corrected; under-counting is invisible and gets believed.</p>
@@ -2434,7 +2439,6 @@ python sap_scanner.py --data-dir ./exports --gate --gate-baseline baseline.json<
   <tr><td>The patch catalogue is curated</td><td>A verified subset of high-impact corrections since 2020, not the complete SAP corpus. Its size and cut-off are stated, and it can be extended with your own list.</td></tr>
   <tr><td>Custom-code scanning needs a code export</td><td>Without one, that module cannot run. Where SAP’s own code-analysis product is licensed, its results are imported instead and are preferred.</td></tr>
   <tr><td>Automatic collection is partial</td><td>The richest information requires an interface the product declines to use. Every collection run states what it could not reach.</td></tr>
-  <tr><td>Per-category denominators are a floor</td><td>The check-id → category map reads only the identifiers written out as literals, so per-category rates in the trend view are computed against fewer checks than actually ran. The per-module counts the posture score uses resolve all three forms; the category map does not yet.</td></tr>
   <tr><td>Internal inconsistency in how modules are constructed</td><td>Three slightly different shapes exist across thirty modules, a residue of how deployment-awareness was introduced. Cosmetic today; a known cleanup.</td></tr>
 </table></div>
 

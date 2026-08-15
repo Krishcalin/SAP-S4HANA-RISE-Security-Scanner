@@ -1133,6 +1133,10 @@ A reader can ask the report to show only high-severity findings. This is a commo
 
 The summary counts, the compliance panels, the domain figures, the financial exposure and the pass/fail signal are all computed from the complete set of findings. Getting this wrong is easy and the consequences are subtle: an early version protected the money figure from the filter but not the compliance panels, with the result that asking to see only serious items made a compliance area containing genuine medium-severity problems display a green “nothing found” badge.
 
+> **The same rule, applied to a denominator**
+>
+>  A rate needs a bottom half as well as a top, and the bottom half has to count the checks that *ran*, not the checks that *failed*. Six categories in this product are built entirely from profile parameters, whose check identifiers are generated at run time rather than written out; the map from identifier to category could only read the written ones, so those six were measured against their own failures and reported 0% compliant on every estate, permanently. Correcting the map moved Password Policy from 0% to 44%, and Code & Transport Security — measured against 31 of its 177 checks — from 0% to 84%. Nothing about any customer’s systems changed; the denominator did.
+
 > **The test for anyone adding a new panel, chart or number**
 >
 >  Does this element *show a list of findings*, or does it *make a claim about the estate*? Only the first may use the filtered set. If in doubt, use the complete set — over-counting in a summary is visible and gets corrected; under-counting is invisible and gets believed.
@@ -1776,7 +1780,6 @@ The list above is a good proxy for maintainability. Adding a subject area touche
 | The patch catalogue is curated | A verified subset of high-impact corrections since 2020, not the complete SAP corpus. Its size and cut-off are stated, and it can be extended with your own list. |
 | Custom-code scanning needs a code export | Without one, that module cannot run. Where SAP’s own code-analysis product is licensed, its results are imported instead and are preferred. |
 | Automatic collection is partial | The richest information requires an interface the product declines to use. Every collection run states what it could not reach. |
-| Per-category denominators are a floor | The check-id → category map reads only the identifiers written out as literals, so per-category rates in the trend view are computed against fewer checks than actually ran. The per-module counts the posture score uses resolve all three forms; the category map does not yet. |
 | Internal inconsistency in how modules are constructed | Three slightly different shapes exist across thirty modules, a residue of how deployment-awareness was introduced. Cosmetic today; a known cleanup. |
 
 ### Things it is sometimes assumed to be
