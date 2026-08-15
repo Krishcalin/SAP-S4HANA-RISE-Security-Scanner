@@ -90,7 +90,8 @@ def test_the_snippet_and_taint_trace_reach_the_database(landscape):
     row = db.one(
         "SELECT o.details FROM finding_observation o "
         "JOIN finding f ON f.id = o.finding_id "
-        "WHERE f.landscape_id = %s AND f.check_id LIKE 'ABAP-SQLI%%' LIMIT 1",
+        "WHERE f.landscape_id = %s AND f.check_id LIKE 'ABAP-SQLI%%' "
+        "ORDER BY f.check_id, f.id LIMIT 1",
         (landscape["landscape"],))
     assert row, "no ABAP-SQLI finding was stored at all"
     details = row["details"]
@@ -104,7 +105,8 @@ def test_the_evidence_class_lands_on_the_finding_not_the_catalogue(landscape):
     from server import db
     _store(landscape, TAINTED)
     row = db.one("SELECT taint_confidence FROM finding "
-                 "WHERE landscape_id = %s AND check_id LIKE 'ABAP-SQLI%%' LIMIT 1",
+                 "WHERE landscape_id = %s AND check_id LIKE 'ABAP-SQLI%%' "
+                 "ORDER BY check_id, id LIMIT 1",
                  (landscape["landscape"],))
     assert row["taint_confidence"] in ("confirmed", "tentative", "pattern-only")
 
@@ -113,7 +115,7 @@ def test_the_cwe_lands_on_the_catalogue(landscape):
     from server import db
     _store(landscape, TAINTED)
     row = db.one("SELECT cwe FROM check_definition WHERE check_id LIKE 'ABAP-SQLI%%' "
-                 "AND cwe IS NOT NULL LIMIT 1")
+                 "AND cwe IS NOT NULL ORDER BY check_id LIMIT 1")
     assert row and row["cwe"].startswith("CWE-")
 
 
@@ -128,12 +130,12 @@ def test_reachability_is_stored_and_refreshed_between_runs(landscape):
 
     _store(landscape, TAINTED, inventory=dead)
     first = db.one("SELECT reachability FROM finding WHERE landscape_id = %s "
-                   "AND check_id LIKE 'ABAP-SQLI%%' LIMIT 1",
+                   "AND check_id LIKE 'ABAP-SQLI%%' ORDER BY check_id, id LIMIT 1",
                    (landscape["landscape"],))["reachability"]
 
     _store(landscape, TAINTED, inventory=live)
     second = db.one("SELECT reachability FROM finding WHERE landscape_id = %s "
-                    "AND check_id LIKE 'ABAP-SQLI%%' LIMIT 1",
+                    "AND check_id LIKE 'ABAP-SQLI%%' ORDER BY check_id, id LIMIT 1",
                     (landscape["landscape"],))["reachability"]
 
     assert first == "unreachable" and second == "reachable", (first, second)
@@ -208,7 +210,7 @@ def test_the_detail_screen_is_given_the_code_and_the_taint_trace(client, landsca
            inventory=[{"OBJECT_NAME": "Z_TAINT_DEMO", "REFERENCED": "YES",
                        "LAST_USED": "20260801"}])
     fid = db.one("SELECT id FROM finding WHERE landscape_id = %s "
-                 "AND check_id LIKE 'ABAP-SQLI%%' LIMIT 1",
+                 "AND check_id LIKE 'ABAP-SQLI%%' ORDER BY check_id, id LIMIT 1",
                  (landscape["landscape"],))["id"]
 
     body = _detail(client, fid)
@@ -233,7 +235,8 @@ def test_a_confirmed_finding_carries_its_source_to_sink_path(client, landscape):
     row = db.one(
         "SELECT f.id, f.taint_confidence, o.details FROM finding f "
         "JOIN finding_observation o ON o.finding_id = f.id "
-        "WHERE f.landscape_id = %s AND f.check_id LIKE 'ABAP-SQLI%%' LIMIT 1",
+        "WHERE f.landscape_id = %s AND f.check_id LIKE 'ABAP-SQLI%%' "
+        "ORDER BY f.check_id, f.id LIMIT 1",
         (landscape["landscape"],))
     if row["taint_confidence"] != "confirmed" or not row["details"].get("taint_flow"):
         pytest.skip("taint pass produced no flow for this sample")
@@ -254,13 +257,43 @@ def test_a_non_code_finding_carries_nothing_to_put_in_the_card(client, landscape
     The condition is `details.source`, so the server-side assertion is that a
     non-code finding does not claim to be one — which is what actually keeps the
     card off the screen.
+
+    IT NOW STORES ITS OWN SUBJECT. It used to take whichever non-code finding a
+    bare `SELECT … LIMIT 1` happened to return — no landscape filter, no ORDER
+    BY — so it asserted against a row some other test had left in the shared
+    database, from a landscape this test's user may not be scoped to, and then
+    demanded 200 from an endpoint that scopes by accessible system. Pass or fail
+    depended on what had run before it and what had been cleaned up, which is the
+    definition of a flake and is why nine consecutive green runs proved nothing.
     """
-    from server import db
-    row = db.one(
-        "SELECT id FROM finding WHERE check_id NOT LIKE 'ABAP-%%' "
-        "AND check_id NOT LIKE 'ATC-%%' LIMIT 1")
-    if not row:
-        pytest.skip("no non-code finding in this database")
+    from server import db, ingest
+
+    _store(landscape, TAINTED)                       # a code finding, to contrast
+    run = db.one("INSERT INTO scan_run (landscape_id, system_id, status) "
+                 "VALUES (%s,%s,'pending') RETURNING id",
+                 (landscape["landscape"], landscape["system"]))["id"]
+    plain = [{
+        "check_id": "PARAM-login/min_password_lng",
+        "title": "Parameter login/min_password_lng non-compliant",
+        "severity": "HIGH",
+        "category": "Password Policy",
+        "description": "Minimum password length is below the baseline.",
+        "affected_items": ["login/min_password_lng = 6"],
+    }]
+    with db.connection() as conn:
+        ingest.store_run(conn, run, landscape["landscape"], landscape["system"],
+                         plain, default_sid="PRD", default_client="100")
+        conn.commit()
+
+    # ILIKE, not `=`: ingest normalises a check id to upper case on the way in,
+    # so `PARAM-login/min_password_lng` is stored as `PARAM-LOGIN/MIN_PASSWORD_LNG`.
+    # Matching case-insensitively asserts the finding arrived without also
+    # asserting which case the storage layer chose.
+    row = db.one("SELECT id FROM finding WHERE landscape_id = %s "
+                 "AND check_id ILIKE %s ORDER BY id LIMIT 1",
+                 (landscape["landscape"], plain[0]["check_id"]))
+    assert row, "the non-code finding this test stores was not stored"
+
     details = _detail(client, row["id"])["latest_details"] or {}
     assert details.get("source") not in ("abap_scan", "atc_export")
     assert not details.get("snippet") and not details.get("taint_flow")

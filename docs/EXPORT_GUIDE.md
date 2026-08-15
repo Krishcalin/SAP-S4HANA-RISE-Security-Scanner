@@ -60,6 +60,22 @@ and table authorisation groups. `--list-sources` prints the current list with a
 reason for each.
 
 
+## Every source, including the ones this guide does not cover
+
+This guide gives a verified, step-by-step procedure for the sources a first scan
+needs. The scanner reads **123** logical sources in total, and the remaining ones
+have no written procedure yet.
+
+[**`EXPORT_SOURCES.md`**](EXPORT_SOURCES.md) lists all 123 — the filenames the
+loader accepts, which checks each one feeds, and whether a procedure exists. It
+is generated from the code, so a source cannot be added to the scanner without
+appearing there.
+
+If you already hold one of those files, supply it: the scanner will read it under
+any of the listed names. What is missing is the extraction procedure, and those
+are not guessed — a wrong transaction code in an export guide costs you an
+afternoon.
+
 ## Core Data Exports
 
 ### Users (`users.csv`)
