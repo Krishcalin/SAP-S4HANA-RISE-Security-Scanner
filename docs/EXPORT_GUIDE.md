@@ -322,6 +322,188 @@ Optional: ALIAS, SCOPE, REQUIRED_AUTH_OBJECT, IMPL_CLASS
 
 ---
 
+---
+
+## SAP GRC Access Control exports (the `grcac` module)
+
+These six sources feed `modules/grc_access_control.py`. They come out of a
+**separate SAP GRC Access Control system**, not out of the ABAP system the other
+exports come from, which is why they are the last set to be written and why they
+are optional: omit them and the GRC checks do not run, exactly as chapter 13
+describes.
+
+> ⚠️ **THE GRC REPOSITORY IS A SYNCHRONISED COPY, AND A STALE SYNC LOOKS LIKE
+> GOOD NEWS.** Every table below is populated by a background job on the GRC
+> box, not written live. If `GRAC_SPM_LOG_SYNC` has not run, the firefighter log
+> export comes out short or empty — and "no privileged sessions" is the single
+> most reassuring thing this product can be told. Before exporting, confirm the
+> synchronisation jobs have run recently, under `SPRO` → *Governance, Risk and
+> Compliance* → *Access Control* → *Synchronization Jobs*:
+>
+> | Job | Transaction | SAP's recommended frequency |
+> |---|---|---|
+> | Authorization Synch | `GRAC_AUTH_SYNC` | weekly |
+> | Repository Object Synch | `GRAC_REP_OBJ_SYNC` | daily |
+> | Action Usage Synch | `GRAC_ACT_USAGE_SYNC` | daily |
+> | Role Usage Synch | `GRAC_ROLE_USAGE_SYNC` | daily |
+> | Firefighter Log Synch | `GRAC_SPM_LOG_SYNC` | daily |
+> | Firefighter Workflow Synch | `GRAC_SPM_WF_SYNC` | daily |
+>
+> Record the date each job last ran alongside the export. A finding built on a
+> three-week-old sync is a finding about three weeks ago.
+
+**Read-only is enough.** SAP delivers `SAP_GRAC_DISPLAY_ALL` for display-only
+access to GRC master and application data; it is the role SAP itself names for
+read-only remote support. Nobody needs a maintenance role to produce these files.
+
+**Finding the transaction for anything below**: `SE93`, search `GRAC*`.
+
+### Firefighter session log (`grac_firefighter_log.csv`, `gracfflog.csv`)
+**Table:** `GRACFFLOG`  |  **Report:** *Consolidated Log Report*, under Emergency
+Access Management → Reports (`NWBC`). The report's *Update Firefighter Log*
+button runs `GRAC_SPM_LOG_SYNC_UPDATE`, which is the same collection the daily
+job performs — press it before exporting if the job's timing is uncertain.
+
+```
+Required: FFID (or FIREFIGHTER_ID), FF_USER (or USER), REASON_CODE, STATUS
+Optional: LOGON_TIME (or LOGON_DATE), CONTROLLER, LOG_REVIEWED
+```
+The module reads a session as unreviewed when `STATUS` is absent, so an export
+that drops the column reports every session as unreviewed rather than as clean.
+
+*What decides whether this export can exist at all*: configuration parameter
+`4000` selects ID-based (`1`) or role-based (`2`) firefighting, and parameters
+`4003`–`4006` decide which logs are collected at all (change log, system log,
+audit log, O/S command log). If those are unset, the log is thin for a reason
+that has nothing to do with how the estate is used — note it on the export.
+
+### Firefighter ID owners and controllers (`grac_firefighter_owners.csv`)
+**Route:** `NWBC` → Access Control → Emergency Access Management → owner and
+controller maintenance. **Authorization object:** `GRAC_FFOWN` (fields
+`GRAC_OWN_T` owner type, `GRAC_USER`, `GRAC_SYSID`).
+*Table name not verified* — export from the maintenance screen, not `SE16`.
+
+```
+Required: FFID (or FIREFIGHTER_ID), FF_OWNER (or OWNER), FF_CONTROLLER (or CONTROLLER)
+Optional: VALID_TO, NOTIFY_BY_EMAIL
+```
+> Configuration parameter `5033` decides whether firefighters may exist with **no
+> controller at all** (SAP ships it permissive). Where it is on, a blank
+> controller column is a real configuration state and not a broken export —
+> which is the difference between a finding and a data-quality note.
+
+### Access requests (`grac_access_requests.csv`, `gracreq.csv`)
+**Table:** `GRACREQ`, with request detail across `GRACREQUSER`,
+`GRACREQOWNER`, `GRACREQPROVITEM` and `GRACREQPROVLOG`. **Authorization
+object:** `GRAC_REQ`.
+
+```
+Required: REQ_ID (or REQUEST_ID / REQNO), REQUESTOR, PROVISIONED_USER, STATUS
+Optional: APPROVER, RISK_ANALYSIS_DONE, PROV_STATUS
+```
+`RISK_ANALYSIS_DONE` is the column worth chasing: configuration parameter `1071`
+decides whether risk analysis runs automatically on submission at all, so its
+absence across every row may mean the control is off rather than that the export
+is short.
+
+### SoD violations (`grac_sod_violations.csv`)
+**Route:** Batch risk analysis (`GRAC_BATCH_RA`, monitored with
+`GRACRABATCH_MONITOR`), then export the violation report. Related stored data:
+`GRACSODUSERROLE`, `GRACSODREVIEW`; spooled analytics land in `GRACSODREPDATA`
+(column `REPCONTENT`) when configuration parameter `1053` is set to `D`.
+
+```
+Required: USER_ID (or USER / BNAME), RISK_ID
+Optional: MITIGATION_ID, MIT_VALID_TO, RISK_LEVEL
+```
+> **`MIT_VALID_TO` decides whether a mitigation counts.** The module treats an
+> expired or undated mitigation as no mitigation, deliberately. Parameter `1011`
+> sets the default mitigation lifetime (SAP ships 365 days), so a control
+> assigned and forgotten a year ago is exactly the case this column exists to
+> expose. Export it.
+>
+> Two parameters change what the analysis even contains, and both belong in the
+> export note: `1031` excludes critical roles and profiles by default, and `1030`
+> excludes already-mitigated risks by default. A violation list produced with the
+> defaults is narrower than the estate.
+
+### Mitigating controls (`grac_mitigating_controls.csv`)
+**Route:** `NWBC` → Access Control → mitigating control maintenance; the
+*Invalid Mitigating Controls* report lists assignments whose risk no longer
+exists. **Authorization object:** `GRAC_MITC` (fields `GRAC_MITC` control id,
+`GRAC_OUNIT`). *Table name not verified.*
+
+```
+Required: CONTROL_ID (or MITIGATION_ID), CONTROL_OWNER (or OWNER), MONITOR
+Optional: MONITOR_FREQUENCY, VALID_TO
+```
+
+### SoD risks and rule set (`grac_sod_risks.csv`)
+**Route:** `NWBC` → Access Control → access risk maintenance. **Authorization
+object:** `GRAC_RISK`, whose fields name the columns exactly: `GRAC_RISK` (risk
+id), `GRAC_RLVL` (risk level), `GRAC_RSET` (rule set id), `GRAC_RTYPE` (risk
+type), `GRAC_BPROC` (business process). *Table name not verified.*
+
+```
+Required: RISK_ID, RISK_LEVEL, STATUS
+Optional: RISK_OWNER, RISK_TYPE, RULE_SET
+```
+
+### Which rule set you are being measured against (`ara_ruleset.json`)
+SAP delivers its SoD rule content as **BC sets**, activated at installation.
+Which ones are active is what your violation counts mean:
+
+`GRAC_RA_RULESET_COMMON`, `..._SAP_R3`, `..._SAP_BASIS`, `..._SAP_HR`,
+`..._SAP_NHR`, `..._SAP_CRM`, `..._SAP_SRM`, `..._SAP_APO`, `..._SAP_ECCS`,
+`..._S4HANA_ALL`, and the non-SAP sets `..._JDE`, `..._ORACLE`, `..._PSOFT`.
+
+Export the active rule set with its id and version. SAP Note **986996** explains
+the delivered risk-analysis and remediation rules and is the reference for what
+each rule means. A customer-written rule set is the other legitimate answer —
+name it, and the finding text will say the analysis was run against yours.
+
+---
+
+## Basis background jobs and OS commands
+
+### Background jobs (`background_jobs.csv`, `sm37_jobs.csv`, `tbtco.csv`)
+**Transaction:** `SM37`. Select by job name, user name, status and time period,
+then export the overview list.
+
+```
+Required: JOBNAME, SDLUNAME (or the "Job CreatedBy" column), STATUS
+Optional: STRTDATE, STRTTIME, PERIODIC
+```
+The overview carries job name, created-by, status, start date, start time,
+duration and delay — filter on **user name** rather than job name when you want
+everything a given account schedules, which is the question the module asks.
+
+### Background job steps (`background_job_steps.csv`, `job_steps.csv`, `tbtcp.csv`)
+**Transaction:** `SM37` → select the job → **Step** → *Step List Overview*.
+
+```
+Required: JOBNAME, PROGRAM (the "Program name/command" column)
+Optional: AUTHCKNAM (the step "User"), TYPE (Prog. type), PARAMETER, LANGUAGE
+```
+> **The step user is the whole point of this export.** A job's *step* runs under
+> an authorisation user that need not be the account that scheduled it, so a
+> low-privileged scheduler can run a step as a privileged one. The overview shows
+> the program and the user side by side; export both columns or the check cannot
+> be made.
+
+### External OS commands (`ext_os_commands.csv`, `sm69_commands.csv`)
+**Execution transaction:** `SM49`. Where SAP GRC Emergency Access Management is
+in use, configuration parameter `4006` makes it collect the O/S command log
+(table `GRACOSCMDLOG`) covering commands created, changed or executed — which is
+the audit trail for this surface rather than the command definitions themselves.
+*The definition-maintenance transaction and table are not verified here; export
+the command list from your Basis team's own documented route and say which.*
+
+```
+Required: NAME (command name), OPSYSTEM, OPCOMMAND
+Optional: PARAMETERS, ADDITIONAL_PARAMETERS_ALLOWED
+```
+
 ## Making custom-code findings rankable
 
 Three exports decide whether a code finding can be told apart from every other

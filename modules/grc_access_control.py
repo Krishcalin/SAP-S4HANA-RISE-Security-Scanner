@@ -26,16 +26,37 @@ level SoD offline from AGR_1251, THIS module reads what GRC AC itself recorded:
   - SoD ruleset governance: disabled critical risks, risks with no owner, and a
     ruleset so small it was clearly never tailored from the delivered content.
 
-All data is SE16-exportable from the GRC AC ABAP system (GRAC* tables), so the
-audit stays fully offline. Each check self-skips when its export is absent.
+All data is exportable from the GRC AC system, so the audit stays fully offline.
+Each check self-skips when its export is absent.
+
+WHICH TABLE NAMES BELOW ARE VERIFIED, AND WHICH ARE THIS FILE'S OWN GUESS.
+
+This list was written from working knowledge and read as fact for as long as it
+has existed. Checked against SAP's published Access Control 12.0 Security Guide
+and Administrator Guide, two of the six survive and four are unconfirmed. They
+may well be right; nobody has shown that they are, and a table name a customer
+cannot find is a support call that makes the whole guide look careless.
+
+So they are marked. `docs/EXPORT_GUIDE.md` documents the UI route for the
+unverified ones — Emergency Access Management and risk maintenance in NWBC —
+because a route SAP documents beats a table nobody has checked.
 
 Data sources (exported to CSV):
-  - grac_firefighter_log     → GRACFFLOG (session usage: FF id, user, reason, review status)
-  - grac_firefighter_owners  → GRACFFOWNER + GRACFFCTRL + GRACFFOBJECT (FF id owner/controller/log)
-  - grac_access_requests     → GRACREQ (+ prov/appr): request, requestor, provisioned user, approver
-  - grac_sod_violations      → GRACUSERPRMVL + GRACMITUSER: user, risk id, mitigation + validity
-  - grac_mitigating_controls → GRACMITCNT: control id, owner, monitor, frequency, validity
-  - grac_sod_risks           → GRACSODRISK + GRACRULESET: risk id, type, status, level, owner
+  - grac_firefighter_log     → GRACFFLOG            [verified: Security Guide, EAM archiving]
+                               session usage: FF id, user, reason, review status
+  - grac_access_requests     → GRACREQ              [verified: Security Guide, request archiving]
+                               request, requestor, provisioned user, approver
+  - grac_firefighter_owners  → GRACFFOWNER/CTRL/OBJECT   [UNVERIFIED — export via NWBC]
+  - grac_sod_violations      → GRACUSERPRMVL + GRACMITUSER  [UNVERIFIED — export via GRAC_BATCH_RA]
+  - grac_mitigating_controls → GRACMITCNT           [UNVERIFIED — export via NWBC]
+  - grac_sod_risks           → GRACSODRISK + GRACRULESET    [UNVERIFIED — export via NWBC]
+
+THE SYNC IS THE REAL PREREQUISITE, not the table name. Every one of these is
+populated on the GRC box by a scheduled job (GRAC_SPM_LOG_SYNC and siblings). An
+export taken while the job is behind comes back short, and a short firefighter
+log reads as "no privileged sessions were used" — the most reassuring sentence
+this module can be handed, and the one it has no way to check. The export guide
+tells the operator to record when each job last ran.
 """
 
 import datetime

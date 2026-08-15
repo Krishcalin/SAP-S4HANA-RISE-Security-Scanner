@@ -8,8 +8,8 @@
 Every logical source the scanner can read, what it enables, and whether
 [`EXPORT_GUIDE.md`](EXPORT_GUIDE.md) tells you how to produce it.
 
-**123 logical sources.** 36 have a written procedure in the export
-guide; **87 do not yet** — those rows name the files the loader will
+**123 logical sources.** 47 have a written procedure in the export
+guide; **76 do not yet** — those rows name the files the loader will
 accept, so a source you already have to hand can be supplied today, but the
 step-by-step extraction has not been verified and is deliberately not guessed.
 
@@ -24,11 +24,11 @@ clean — see chapter 13 of the architecture guide.
 | `api_endpoints` | `api_endpoints.json`, `odata_services.json` | `rise_btp_checks` | documented |
 | `apim_policies` | `apim_policies.json`, `api_proxies.json` | `integration_layer` | **not yet written** |
 | `applied_notes` | `applied_notes.csv`, `snote_status.csv`, `implemented_notes.csv` | `sap_hotnews` | **not yet written** |
-| `ara_ruleset` | `ara_ruleset.json`, `sod_ruleset_custom.json` | `access_risk_analysis` | **not yet written** |
+| `ara_ruleset` | `ara_ruleset.json`, `sod_ruleset_custom.json` | `access_risk_analysis` | documented |
 | `audit_config` | `audit_config.csv`, `sm19.csv` | `log_monitoring`, `log_review`, `network_services` | documented |
 | `auth_objects` | `auth_objects.csv` | `code_transport`, `iam_advanced`, `user_auth_audit` | **not yet written** |
-| `background_job_steps` | `background_job_steps.csv`, `tbtcp.csv`, `job_steps.csv` | `basis_job_command` | **not yet written** |
-| `background_jobs` | `background_jobs.csv`, `tbtco.csv`, `sm37_jobs.csv` | `basis_job_command`, `resilience_posture` | **not yet written** |
+| `background_job_steps` | `background_job_steps.csv`, `tbtcp.csv`, `job_steps.csv` | `basis_job_command` | documented |
+| `background_jobs` | `background_jobs.csv`, `tbtco.csv`, `sm37_jobs.csv` | `basis_job_command`, `resilience_posture` | documented |
 | `backup_catalog` | `backup_catalog.csv`, `backups.csv`, `db13.csv`, `backup_history.csv` | `resilience_posture` | documented |
 | `btp_audit_log_records` | `btp_audit_log_records.json`, `auditlogrecords.json`, `audit_log_records.json` | — | documented |
 | `btp_destinations` | `btp_destinations.json`, `destinations.json` | `btp_cloud_surface` | **not yet written** |
@@ -63,7 +63,7 @@ clean — see chapter 13 of the architecture guide.
 | `dpp_config` | `dpp_config.json`, `dpp_toolkit.json` | `data_protection` | **not yet written** |
 | `dual_control_fields` | `dual_control_fields.csv`, `t055f.csv`, `sensitive_fi_fields.csv` | `financial_controls` | **not yet written** |
 | `event_mesh` | `event_mesh.json`, `em_config.json` | `btp_cloud_surface` | **not yet written** |
-| `ext_os_commands` | `ext_os_commands.csv`, `sxpgcostab.csv`, `sm69_commands.csv` | `basis_job_command` | **not yet written** |
+| `ext_os_commands` | `ext_os_commands.csv`, `sxpgcostab.csv`, `sm69_commands.csv` | `basis_job_command` | documented |
 | `ext_os_commands_sap` | `ext_os_commands_sap.csv`, `sxpgcotabe.csv` | `basis_job_command` | **not yet written** · not obtainable in RISE |
 | `fi_number_ranges` | `fi_number_ranges.csv`, `tnro.csv`, `number_ranges.csv` | `financial_controls` | **not yet written** |
 | `fiori_app_usage` | `fiori_app_usage.csv`, `app_usage.csv` | `fiori_ui` | **not yet written** |
@@ -71,12 +71,12 @@ clean — see chapter 13 of the architecture guide.
 | `fiori_spaces` | `fiori_spaces.json`, `spaces_pages.json` | `fiori_ui` | **not yet written** |
 | `fiori_tiles` | `fiori_tiles.csv`, `flpd_tiles.csv` | `fiori_ui` | **not yet written** |
 | `firefighter_log` | `firefighter_log.csv`, `ff_log.csv`, `spm_log.csv` | `iam_advanced` | documented |
-| `grac_access_requests` | `grac_access_requests.csv`, `gracreq.csv` | `grc_access_control` | **not yet written** |
-| `grac_firefighter_log` | `grac_firefighter_log.csv`, `gracfflog.csv` | `grc_access_control` | **not yet written** |
-| `grac_firefighter_owners` | `grac_firefighter_owners.csv`, `gracffowner.csv` | `grc_access_control` | **not yet written** |
-| `grac_mitigating_controls` | `grac_mitigating_controls.csv`, `gracmitcnt.csv` | `grc_access_control` | **not yet written** |
-| `grac_sod_risks` | `grac_sod_risks.csv`, `gracsodrisk.csv` | `grc_access_control` | **not yet written** |
-| `grac_sod_violations` | `grac_sod_violations.csv`, `gracuserprmvl.csv` | `grc_access_control` | **not yet written** |
+| `grac_access_requests` | `grac_access_requests.csv`, `gracreq.csv` | `grc_access_control` | documented |
+| `grac_firefighter_log` | `grac_firefighter_log.csv`, `gracfflog.csv` | `grc_access_control` | documented |
+| `grac_firefighter_owners` | `grac_firefighter_owners.csv`, `gracffowner.csv` | `grc_access_control` | documented |
+| `grac_mitigating_controls` | `grac_mitigating_controls.csv`, `gracmitcnt.csv` | `grc_access_control` | documented |
+| `grac_sod_risks` | `grac_sod_risks.csv`, `gracsodrisk.csv` | `grc_access_control` | documented |
+| `grac_sod_violations` | `grac_sod_violations.csv`, `gracuserprmvl.csv` | `grc_access_control` | documented |
 | `gw_reginfo` | `gw_reginfo.csv`, `reginfo.csv` | `integration_layer` | documented · not obtainable in RISE |
 | `gw_secinfo` | `gw_secinfo.csv`, `secinfo.csv` | `integration_layer` | documented · not obtainable in RISE |
 | `hana_audit_policies` | `hana_audit_policies.csv`, `audit_policies.csv` | `hana_db_security` | **not yet written** |
@@ -96,7 +96,7 @@ clean — see chapter 13 of the architecture guide.
 | `key_management` | `key_management.json` | `crypto_posture` | **not yet written** |
 | `log_retention` | `log_retention.json` | `log_monitoring` | **not yet written** |
 | `logon_events` | `logon_events.csv`, `logon_stats.csv` | `log_monitoring`, `log_review` | **not yet written** |
-| `mitigating_controls` | `mitigating_controls.csv`, `mitigations.csv`, `grc_mitigations.csv` | `access_risk_analysis` | **not yet written** |
+| `mitigating_controls` | `mitigating_controls.csv`, `mitigations.csv`, `grc_mitigations.csv` | `access_risk_analysis` | documented |
 | `ms_acl` | `ms_acl.csv`, `ms_acl_info.csv`, `msacl.csv` | `system_trust` | documented · not obtainable in RISE |
 | `oauth_clients` | `oauth_clients.json`, `xsuaa_clients.json` | `integration_layer` | **not yet written** |
 | `odata_auth` | `odata_auth.csv`, `iwfnd_auth.csv` | `fiori_ui` | documented |
