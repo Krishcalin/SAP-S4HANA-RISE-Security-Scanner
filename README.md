@@ -49,7 +49,7 @@
 
 ## Contents
 
-- **[System Architecture](https://krishcalin.github.io/SAP-S4HANA-RISE-Security-Scanner/ARCHITECTURE.html)** &nbsp;<sub>illustrated guide · 11 diagrams</sub>
+- **[System Architecture](docs/ARCHITECTURE.html)** &nbsp;<sub>plain-language guide · 35 chapters · **confidential** — download and open locally</sub>
 - **[Overview](#overview)**
 - **[Server mode — quick start](#server-mode--quick-start)**
 - **[Connected mode](#connected-mode)**
@@ -99,7 +99,7 @@
 
 | Document | What it covers |
 |---|---|
-| [**System Architecture**](https://krishcalin.github.io/SAP-S4HANA-RISE-Security-Scanner/ARCHITECTURE.html) <br><sub>source: [`docs/ARCHITECTURE.html`](docs/ARCHITECTURE.html)</sub> | How the system is put together and why each boundary sits where it does — the trust boundary, the acquisition funnel, the seven-stage core, the corpus-split invariant, the release gate, the server tier and the honesty model. Start here. |
+| [**`docs/ARCHITECTURE.html`**](docs/ARCHITECTURE.html) <br><sub>**Confidential** · not published · GitHub shows this file as source, so download it and open it in a browser</sub> | How the system is put together and why, explained from first principles for readers who are not software engineers. Seven parts and 35 chapters: the problem RISE creates, the trust boundary, the seven-stage pipeline, the thirty inspectors, what to fix first, risk in money terms, and a full chapter on what the product cannot do. Start here. |
 | [`docs/EXPORT_GUIDE.md`](docs/EXPORT_GUIDE.md) | How to produce the exports this tool reads |
 | [`docs/CHECKS_REFERENCE.md`](docs/CHECKS_REFERENCE.md) | Per-check reference |
 | [`docs/RELEASE_GATE.md`](docs/RELEASE_GATE.md) | Using the scanner as a CI gate — adoption order and policy |
