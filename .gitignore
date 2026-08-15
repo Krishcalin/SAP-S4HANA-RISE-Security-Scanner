@@ -62,6 +62,12 @@ desktop.ini
 # Same trap, second time: the SPA's shell document is source too, and *.html
 # would drop the one file the whole React console is bootstrapped from.
 !frontend/index.html
+# Third time. docs/ARCHITECTURE.html is documentation, not a scan output, and
+# `git add -A` reports nothing when it skips an ignored file -- so the commit
+# that added the guide, its verifier and its tests landed WITHOUT the guide, and
+# the README shipped a link to a file that was not in the repository. Anything
+# under docs/ is authored, by definition.
+!docs/*.html
 *.pdf
 !docs/*.pdf
 sample_report.*

@@ -1,0 +1,1315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MonitorRisk — System Architecture</title>
+<meta name="description" content="How MonitorRisk is put together: the trust boundary, the acquisition funnel, the seven-stage core, the corpus-split invariant, the release gate and the honesty model.">
+<!-- GENERATED-ADJACENT FILE. The diagrams are verified by
+     tools/svg_geometry_check.py and the counts quoted in the prose are held
+     against the code by tests/test_architecture_doc.py. Edit freely, but run
+     the suite: a stale architecture guide is worse than none, because it is
+     read by people deciding whether to trust the product. -->
+<style>
+:root{
+  --ink:#101E2B; --ink2:#3A4E62; --paper:#EDF1F5; --card:#FFFFFF;
+  --line:#C3CFDB; --line2:#DEE5EC;
+  --sap:#0A6ED1; --amber:#B4690E; --crimson:#A32638; --teal:#0F7A6B; --violet:#5A3FA0;
+  --disp:"IBM Plex Sans Condensed",-apple-system,Segoe UI,sans-serif;
+  --body:"IBM Plex Sans",-apple-system,Segoe UI,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --arrow:#101E2B; --arrowA:#B4690E; --arrowG:#3A4E62;
+}
+:root:not([data-theme="light"]){ color-scheme:light }
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ink:#E8EEF4; --ink2:#A8BAC9; --paper:#0C161F; --card:#14222E;
+    --line:#2E4356; --line2:#22333F;
+    --sap:#5EA8EE; --amber:#E0A44A; --crimson:#F08494; --teal:#4FC2AE; --violet:#A38BE0;
+    --arrow:#E8EEF4; --arrowA:#E0A44A; --arrowG:#A8BAC9;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --ink:#E8EEF4; --ink2:#A8BAC9; --paper:#0C161F; --card:#14222E;
+  --line:#2E4356; --line2:#22333F;
+  --sap:#5EA8EE; --amber:#E0A44A; --crimson:#F08494; --teal:#4FC2AE; --violet:#A38BE0;
+  --arrow:#E8EEF4; --arrowA:#E0A44A; --arrowG:#A8BAC9;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:var(--body); font-size:17px; line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:0 28px 120px}
+
+.mast{border-bottom:3px solid var(--ink);padding:56px 0 26px;margin-bottom:44px}
+.eyebrow{font-family:var(--mono);font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--sap);font-weight:600}
+h1{font-family:var(--disp);font-weight:700;font-size:clamp(38px,6vw,68px);line-height:1.02;margin:14px 0 10px;letter-spacing:-.015em}
+.sub{font-size:20px;color:var(--ink2);max-width:74ch;margin:0}
+.meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px}
+.chip{font-family:var(--mono);font-size:12.5px;letter-spacing:.04em;border:1px solid var(--line);background:var(--card);padding:6px 11px;border-radius:2px;color:var(--ink2)}
+.chip b{color:var(--ink);font-weight:600}
+
+h2{font-family:var(--disp);font-weight:700;font-size:clamp(28px,3.6vw,40px);line-height:1.08;margin:76px 0 6px;letter-spacing:-.01em}
+h2 .num{font-family:var(--mono);font-size:15px;color:var(--sap);display:block;font-weight:500;letter-spacing:.14em;margin-bottom:8px}
+h3{font-family:var(--disp);font-weight:600;font-size:24px;margin:38px 0 8px}
+h4{font-family:var(--disp);font-weight:600;font-size:19px;margin:26px 0 4px;color:var(--ink2)}
+p{margin:0 0 16px;max-width:78ch}
+ul,ol{max-width:78ch;padding-left:22px;margin:0 0 18px}
+li{margin-bottom:9px}
+code{font-family:var(--mono);font-size:.88em;background:var(--line2);padding:1.5px 5px;border-radius:2px;color:var(--ink)}
+a{color:var(--sap)}
+strong{font-weight:600}
+hr{border:0;border-top:1px solid var(--line);margin:56px 0}
+
+figure{margin:34px 0 40px;background:var(--card);border:1px solid var(--line);border-radius:3px;overflow:hidden}
+figure .cap{display:flex;gap:14px;align-items:baseline;padding:14px 20px;border-bottom:1px solid var(--line2);background:var(--paper)}
+figure .cap .fid{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--sap);letter-spacing:.1em;white-space:nowrap}
+figure .cap .ftx{font-family:var(--disp);font-size:19px;font-weight:600}
+figure .art{padding:18px 14px 22px;overflow-x:auto}
+figure svg{display:block;width:100%;height:auto;min-width:880px}
+
+.sv-title{font-family:var(--disp);font-size:27px;font-weight:700;fill:var(--ink)}
+.sv-h{font-family:var(--disp);font-size:24px;font-weight:600;fill:var(--ink)}
+.sv-t{font-family:var(--body);font-size:21px;fill:var(--ink)}
+.sv-s{font-family:var(--body);font-size:18px;fill:var(--ink2)}
+.sv-m{font-family:var(--mono);font-size:19px;fill:var(--ink)}
+.sv-ms{font-family:var(--mono);font-size:16px;fill:var(--ink2)}
+.sv-lbl{font-family:var(--mono);font-size:15px;font-weight:600;letter-spacing:.1em;fill:var(--sap)}
+.box{fill:var(--card);stroke:var(--ink);stroke-width:2}
+.box-q{fill:var(--paper);stroke:var(--line);stroke-width:2}
+.box-sap{fill:color-mix(in srgb, var(--sap) 12%, var(--card));stroke:var(--sap);stroke-width:2.5}
+.box-amber{fill:color-mix(in srgb, var(--amber) 12%, var(--card));stroke:var(--amber);stroke-width:2.5}
+.box-crim{fill:color-mix(in srgb, var(--crimson) 12%, var(--card));stroke:var(--crimson);stroke-width:2.5}
+.box-teal{fill:color-mix(in srgb, var(--teal) 12%, var(--card));stroke:var(--teal);stroke-width:2.5}
+.box-vio{fill:color-mix(in srgb, var(--violet) 12%, var(--card));stroke:var(--violet);stroke-width:2.5}
+.ln{stroke:var(--ink);stroke-width:2.5;fill:none}
+.ln-d{stroke:var(--amber);stroke-width:3;fill:none;stroke-dasharray:11 8}
+.ln-q{stroke:var(--ink2);stroke-width:2;fill:none;stroke-dasharray:5 5}
+.bnd{stroke:var(--amber);stroke-width:3;fill:none;stroke-dasharray:11 8}
+.zone{fill:none;stroke:var(--line);stroke-width:2;stroke-dasharray:8 6}
+.hop{fill:var(--card);stroke:none}
+
+table{width:100%;border-collapse:collapse;margin:22px 0 30px;font-size:16px;background:var(--card)}
+th{font-family:var(--disp);font-size:15px;font-weight:600;text-align:left;text-transform:uppercase;letter-spacing:.07em;
+   padding:11px 14px;border-bottom:2px solid var(--ink);color:var(--ink)}
+td{padding:11px 14px;border-bottom:1px solid var(--line2);vertical-align:top}
+td:first-child{font-family:var(--mono);font-size:14.5px;white-space:nowrap;color:var(--ink)}
+tr:last-child td{border-bottom:0}
+.tbl-scroll{overflow-x:auto}
+
+.rule{border-left:4px solid var(--sap);background:var(--card);padding:18px 22px;margin:26px 0;border-radius:0 3px 3px 0;border-top:1px solid var(--line2);border-right:1px solid var(--line2);border-bottom:1px solid var(--line2)}
+.rule .k{font-family:var(--mono);font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--sap);font-weight:600;display:block;margin-bottom:5px}
+.rule.amber{border-left-color:var(--amber)} .rule.amber .k{color:var(--amber)}
+.rule.crim{border-left-color:var(--crimson)} .rule.crim .k{color:var(--crimson)}
+.rule p:last-child{margin-bottom:0}
+pre{background:#0F1D29;color:#DCE6F0;font-family:var(--mono);font-size:14.5px;line-height:1.62;
+    padding:18px 20px;border-radius:3px;overflow-x:auto;margin:20px 0}
+pre .c{color:#7E96AC}
+pre .g{color:#7FD1B9}
+
+.toc{background:var(--card);border:1px solid var(--line);border-radius:3px;padding:22px 26px;margin:34px 0 10px}
+.toc ol{columns:2;column-gap:44px;margin:0;padding-left:20px;font-size:16px}
+.toc li{margin-bottom:7px;break-inside:avoid}
+.toc a{text-decoration:none;color:var(--ink)}
+.toc a:hover{color:var(--sap);text-decoration:underline}
+
+/* ---------- at a glance ---------- */
+.glance{margin:44px 0 10px;border-top:3px solid var(--ink);padding-top:30px}
+.glance h2{margin-top:0}
+.gl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin:26px 0 4px}
+.gl-card{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--sap);border-radius:0 3px 3px 0;padding:15px 17px}
+.gl-card .n{font-family:var(--mono);font-size:12px;letter-spacing:.14em;color:var(--sap);font-weight:600;display:block;margin-bottom:5px}
+.gl-card .t{font-family:var(--disp);font-size:18px;font-weight:600;line-height:1.25;display:block;margin-bottom:5px}
+.gl-card p{font-size:14.5px;line-height:1.5;color:var(--ink2);margin:0;max-width:none}
+.gl-card.a{border-left-color:var(--amber)} .gl-card.a .n{color:var(--amber)}
+.gl-card.c{border-left-color:var(--crimson)} .gl-card.c .n{color:var(--crimson)}
+.gl-card.t{border-left-color:var(--teal)} .gl-card.t .n{color:var(--teal)}
+.gl-card.v{border-left-color:var(--violet)} .gl-card.v .n{color:var(--violet)}
+.jump{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 0}
+.jump a{font-family:var(--mono);font-size:12.5px;text-decoration:none;border:1px solid var(--line);
+        background:var(--card);color:var(--ink2);padding:5px 10px;border-radius:2px}
+.jump a:hover{border-color:var(--sap);color:var(--sap)}
+
+@media (max-width:720px){ .toc ol{columns:1} .wrap{padding:0 18px 80px} }
+@media print{
+  body{background:#fff} .wrap{max-width:none}
+  figure{break-inside:avoid} h2{break-after:avoid} figure svg{min-width:0}
+}
+</style>
+</head>
+<body>
+
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <marker id="ar" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L12,6 L0,12 z" fill="var(--arrow)"/></marker>
+  <marker id="ar-a" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L12,6 L0,12 z" fill="var(--arrowA)"/></marker>
+  <marker id="ar-b" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L12,6 L0,12 z" fill="var(--sap)"/></marker>
+  <marker id="ar-g" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L12,6 L0,12 z" fill="var(--arrowG)"/></marker>
+</defs></svg>
+
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow">System Architecture Guide · v2</div>
+  <h1>MonitorRisk</h1>
+  <p class="sub">SAP S/4HANA RISE Security Scanner — an agentless, offline-first security assessment engine for S/4HANA RISE, ECS, ECC, HANA and BTP. This guide explains how the system is put together, why each boundary sits where it does, and what an engineer must preserve when extending it.</p>
+  <div class="meta">
+    <span class="chip"><b>30</b> audit modules</span>
+    <span class="chip"><b>620</b> checks · 365 literal · 255 runtime</span>
+    <span class="chip"><b>133</b> custom-code rules</span>
+    <span class="chip"><b>2</b> execution modes · one core</span>
+    <span class="chip">CLI: <b>stdlib only</b></span>
+    <span class="chip">Server: <b>FastAPI + PostgreSQL 16</b></span>
+    <span class="chip">Reports: <b>HTML · PDF · PPTX</b></span>
+  </div>
+</header>
+
+<section class="glance">
+<h2 id="s0" style="margin-top:0"><span class="num">00</span>System architecture at a glance</h2>
+
+<p>One page for the whole system. Figure 00 is the compressed form of Figures 01, 02, 03 and 09 — the trust boundary, the acquisition funnel, the seven-stage core and the two terminal destinations — with the detail removed rather than the structure. Every band below links to the section that expands it.</p>
+
+<figure>
+  <div class="cap"><span class="fid">FIG. 00</span><span class="ftx">The whole system, one page — estate to artefact in five bands</span></div>
+  <div class="art">
+<svg viewBox="0 0 1200 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Whole-system overview: five horizontal bands from SAP estate to artefacts">
+
+  <text class="sv-lbl" x="24" y="26">BAND 1 · SOURCE — SAP OPERATED, NOTHING INSTALLED</text>
+  <rect class="box-sap" x="24" y="38" width="256" height="82" rx="4"/>
+  <text class="sv-t" x="44" y="70">S/4HANA · ECC</text>
+  <text class="sv-ms" x="44" y="98">users · roles · params</text>
+
+  <rect class="box-sap" x="300" y="38" width="256" height="82" rx="4"/>
+  <text class="sv-t" x="320" y="70">BTP · IAS · CPI</text>
+  <text class="sv-ms" x="320" y="98">cockpit &amp; API exports</text>
+
+  <rect class="box-sap" x="576" y="38" width="256" height="82" rx="4"/>
+  <text class="sv-t" x="596" y="70">HANA</text>
+  <text class="sv-ms" x="596" y="98">privileges · audit · ini</text>
+
+  <rect class="box-sap" x="852" y="38" width="324" height="82" rx="4"/>
+  <text class="sv-t" x="872" y="70">GRC · ATC/CVA · SNOTE</text>
+  <text class="sv-ms" x="872" y="98">the customer's own tooling</text>
+
+  <path class="ln-d" d="M152 120 V 150"/>
+  <path class="ln-d" d="M428 120 V 150"/>
+  <path class="ln-d" d="M704 120 V 150"/>
+  <path class="ln-d" d="M1014 120 V 150"/>
+  <path class="ln-d" d="M152 150 H 1014"/>
+  <path class="ln-d" d="M600 150 V 186" marker-end="url(#ar-a)"/>
+  <text class="sv-lbl" x="24" y="146" style="fill:var(--amber)">TRUST BOUNDARY — OUTBOUND ONLY · no agent · no add-on · no RFC user · no write-back</text>
+
+  <text class="sv-lbl" x="24" y="180">BAND 2 · ACQUISITION — THREE PATHS, ONE CONTRACT</text>
+  <rect class="box-amber" x="380" y="186" width="440" height="84" rx="4"/>
+  <text class="sv-h" x="402" y="220">Export bundle → DataLoader</text>
+  <text class="sv-ms" x="402" y="248">123 logical sources · absent file → key is None, never a crash</text>
+
+  <path class="ln" d="M600 270 V 306" marker-end="url(#ar)"/>
+
+  <text class="sv-lbl" x="24" y="300">BAND 3 · CORE — ONE PASS, SEVEN STAGES</text>
+  <rect class="box" x="24" y="306" width="1152" height="122" rx="4"/>
+  <text class="sv-m" x="52" y="346">LOAD → MODULES → CHECKS → RANK → MAP → QUANTIFY → REPORT / STORE</text>
+  <text class="sv-s" x="52" y="378">30 auditors · 620 checks · no hidden state between stages</text>
+  <text class="sv-s" x="52" y="406">sap_scanner.py is the composition root and owns every I/O decision</text>
+
+  <path class="ln" d="M340 428 V 470" marker-end="url(#ar)"/>
+  <path class="ln" d="M860 428 V 470" marker-end="url(#ar)"/>
+
+  <text class="sv-lbl" x="24" y="464">BAND 4 · THE SPLIT — A DISPLAY OPTION MAY NEVER CHANGE A VERDICT</text>
+  <rect class="box-q" x="130" y="470" width="420" height="86" rx="4"/>
+  <text class="sv-h" x="152" y="504">filtered list — rendering only</text>
+  <text class="sv-ms" x="152" y="532">what a reader is shown</text>
+
+  <rect class="box-crim" x="650" y="470" width="420" height="86" rx="4"/>
+  <text class="sv-h" x="672" y="504">full corpus — every claim</text>
+  <text class="sv-ms" x="672" y="532">FAIR · compliance · domains · gate</text>
+
+  <path class="ln" d="M340 556 V 600" marker-end="url(#ar)"/>
+  <path class="ln" d="M860 556 V 600" marker-end="url(#ar)"/>
+
+  <text class="sv-lbl" x="24" y="594">BAND 5 · TERMINAL — TWO DESTINATIONS, ONE CORE</text>
+  <rect class="box-teal" x="130" y="600" width="420" height="104" rx="4"/>
+  <text class="sv-h" x="152" y="634">CLI — one-shot artefacts</text>
+  <text class="sv-ms" x="152" y="662">HTML · PDF · PPTX · release gate</text>
+  <text class="sv-ms" x="152" y="686">stdlib only · air-gapped · exit 0/1/2</text>
+
+  <rect class="box-sap" x="650" y="600" width="420" height="104" rx="4"/>
+  <text class="sv-h" x="672" y="634">Server — durable state</text>
+  <text class="sv-ms" x="672" y="662">PostgreSQL 16 · mitigation journey</text>
+  <text class="sv-ms" x="672" y="686">same auditors, imported not reimplemented</text>
+</svg>
+  </div>
+</figure>
+
+<p>The five invariants below are the load-bearing ones. Each is enforced somewhere in code rather than merely intended, and each is the reason some part of the diagram above is shaped the way it is.</p>
+
+<div class="gl-grid">
+  <div class="gl-card">
+    <span class="n">INVARIANT 1</span>
+    <span class="t">The scanner connects to nothing</span>
+    <p>No network client of any kind. Connected collection is a separate program writing the same files a human would export, so connected mode inherits the offline test suite entirely.</p>
+  </div>
+  <div class="gl-card">
+    <span class="n">INVARIANT 2</span>
+    <span class="t">A display option may never change a verdict</span>
+    <p><code>--severity</code> decides what is listed, not what was found. Anything asserting something true about the estate reads the unfiltered corpus.</p>
+  </div>
+  <div class="gl-card a">
+    <span class="n">INVARIANT 3</span>
+    <span class="t">Missing input is a finding, not a silence</span>
+    <p>An absent export loads as <code>None</code> and dependent checks self-skip. The coverage manifest is computed once and carried into every artefact.</p>
+  </div>
+  <div class="gl-card c">
+    <span class="n">INVARIANT 4</span>
+    <span class="t">Never fail open</span>
+    <p>Degraded coverage is exit <strong>2 — could not assess</strong>, never exit 0. A typo in a config file must not quietly disarm a control.</p>
+  </div>
+  <div class="gl-card t">
+    <span class="n">INVARIANT 5</span>
+    <span class="t">A finding must know who can fix it</span>
+    <p>In RISE a customer can see a bad parameter and cannot change it. Those render as a service request to SAP, and never block a developer's build.</p>
+  </div>
+  <div class="gl-card v">
+    <span class="n">HONESTY MODEL</span>
+    <span class="t">Reach is separate from state</span>
+    <p>What the product can <em>ever</em> see in a domain is stated next to what <em>this</em> scan found — so four continuous-monitoring domains cannot read as assessed. <a href="#s13">§13</a></p>
+  </div>
+</div>
+
+<div class="jump">
+  <a href="#s2">01 · trust boundary</a>
+  <a href="#s3">02 · acquisition</a>
+  <a href="#s4">03 · core pipeline</a>
+  <a href="#s5">04 · module tier</a>
+  <a href="#s6">05 · deployment mode</a>
+  <a href="#s7">06 · corpus split</a>
+  <a href="#s8">07 · enrichment</a>
+  <a href="#s9">08 · release gate</a>
+  <a href="#s10">09 · server tier</a>
+  <a href="#s11">10 · finding identity</a>
+</div>
+</section>
+
+<div class="toc">
+  <ol>
+    <li><a href="#s1">Architectural thesis</a></li>
+    <li><a href="#s2">System context &amp; trust boundary</a></li>
+    <li><a href="#s3">Acquisition tier — three paths, one contract</a></li>
+    <li><a href="#s4">The scanner core pipeline</a></li>
+    <li><a href="#s5">Module tier &amp; the finding contract</a></li>
+    <li><a href="#s6">Deployment-mode resolution</a></li>
+    <li><a href="#s7">The corpus split invariant</a></li>
+    <li><a href="#s8">Enrichment &amp; decision chain</a></li>
+    <li><a href="#s9">Release gate</a></li>
+    <li><a href="#s10">Server tier &amp; persistence</a></li>
+    <li><a href="#s11">Finding identity &amp; the mitigation journey</a></li>
+    <li><a href="#s12">Report tier</a></li>
+    <li><a href="#s13">Reach vs. state — the honesty model</a></li>
+    <li><a href="#s14">Security posture of the tool itself</a></li>
+    <li><a href="#s15">Extending the system</a></li>
+    <li><a href="#s16">Known constraints</a></li>
+  </ol>
+</div>
+
+<h2 id="s1"><span class="num">01</span>Architectural thesis</h2>
+
+<p>Nearly every structural decision in this codebase falls out of a single commercial and technical reality: <strong>in RISE with SAP, you do not own the system you are auditing.</strong> You cannot install an agent, you cannot get an RFC user with the authorisations a scanner would want, and third-party ABAP add-ons are an Excluded Task requiring a separate SKU and a multi-week evaluation. A scanner that needs a foothold in the system is a scanner that never gets deployed.</p>
+
+<p>So the product is built the other way round: the customer produces an <em>export</em>, and the scanner is a pure function over that export. Everything else — the module tier, the report engines, the server, the gate — is layered on that one idea. Five invariants hold the design together, and each one is enforced somewhere in code rather than merely intended.</p>
+
+<div class="rule">
+  <span class="k">Invariant 1 — The scanner connects to nothing</span>
+  <p>The analysis engine has no network client of any kind. Connected collection lives in a separate program (<code>collect/</code>) that writes the same files a human would export by hand. The scanner cannot tell which produced them, which is the point: connected mode inherits the offline path's entire test suite for free.</p>
+</div>
+
+<div class="rule">
+  <span class="k">Invariant 2 — A display option may never change a verdict</span>
+  <p><code>--severity</code> decides what is <em>listed</em>, not what was <em>found</em>. The FAIR loss figure, the compliance roll-ups, the domain tiles and the release gate all read the unfiltered corpus. Anything that makes a claim about the estate reads the corpus; only rendering reads the filtered list.</p>
+</div>
+
+<div class="rule amber">
+  <span class="k">Invariant 3 — Missing input is a finding, not a silence</span>
+  <p>An absent export file loads as <code>None</code> and every dependent check self-skips. Left alone, that produces a clean-looking report over a fraction of the estate. The coverage manifest is computed once per run and carried into every artefact, and it arms the release gate.</p>
+</div>
+
+<div class="rule crim">
+  <span class="k">Invariant 4 — Never fail open</span>
+  <p>Degraded coverage is exit code <strong>2 — could not assess</strong>, never exit 0. An unreadable gate policy is also 2. A typo in a config file must not quietly disarm a control.</p>
+</div>
+
+<div class="rule">
+  <span class="k">Invariant 5 — A finding must know who can fix it</span>
+  <p>In RISE, a customer can see a bad profile parameter and cannot change it. Those findings render as a pre-drafted service request to SAP, never as "change this" — and the gate never blocks a developer's build on one.</p>
+</div>
+
+<h2 id="s2"><span class="num">02</span>System context &amp; trust boundary</h2>
+
+<p>Figure 01 is the outermost view. The dashed amber line is the boundary that defines the product: <strong>data crosses it outbound only.</strong> Nothing is installed inside the SAP estate, no RFC user is created, and nothing is ever written back — in either execution mode.</p>
+
+<figure>
+  <div class="cap"><span class="fid">FIG. 01</span><span class="ftx">System context — what the scanner touches, and what it never touches</span></div>
+  <div class="art">
+<svg viewBox="0 0 1200 700" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="System context diagram">
+  <rect class="zone" x="20" y="60" width="330" height="470" rx="6"/>
+  <text class="sv-lbl" x="24" y="46">SAP ESTATE — CUSTOMER / SAP OPERATED</text>
+
+  <rect class="box-sap" x="44" y="86" width="282" height="66" rx="4"/>
+  <text class="sv-t" x="62" y="112">S/4HANA RISE (PCE / Tailored)</text>
+  <text class="sv-s" x="62" y="136">users · roles · params · transports</text>
+
+  <rect class="box-sap" x="44" y="166" width="282" height="66" rx="4"/>
+  <text class="sv-t" x="62" y="192">ECC / on-premise NetWeaver</text>
+  <text class="sv-s" x="62" y="216">reachable over the network</text>
+
+  <rect class="box-sap" x="44" y="246" width="282" height="66" rx="4"/>
+  <text class="sv-t" x="62" y="272">SAP BTP · IAS · CPI · Cloud Connector</text>
+  <text class="sv-s" x="62" y="296">cockpit &amp; management API exports</text>
+
+  <rect class="box-sap" x="44" y="326" width="282" height="66" rx="4"/>
+  <text class="sv-t" x="62" y="352">HANA database</text>
+  <text class="sv-s" x="62" y="376">users · privileges · audit · ini params</text>
+
+  <rect class="box-sap" x="44" y="406" width="282" height="66" rx="4"/>
+  <text class="sv-t" x="62" y="432">GRC AC · ATC/CVA · SNOTE</text>
+  <text class="sv-s" x="62" y="456">the customer's own tooling output</text>
+
+  <path class="bnd" d="M395 66 V 656"/>
+  <text class="sv-lbl" x="404" y="46" style="fill:var(--amber)">TRUST BOUNDARY — OUTBOUND ONLY</text>
+  <text class="sv-ms" x="404" y="682" style="fill:var(--amber)">no agent · no add-on · no RFC user · no write-back</text>
+
+  <path class="ln-d" d="M326 279 H 470" marker-end="url(#ar-a)"/>
+  <rect class="hop" x="388" y="270" width="14" height="18"/>
+  <rect class="box-amber" x="470" y="232" width="250" height="96" rx="4"/>
+  <text class="sv-h" x="492" y="266">Export bundle</text>
+  <text class="sv-ms" x="492" y="292">CSV · JSON · abapGit ZIP</text>
+  <text class="sv-ms" x="492" y="314">123 logical sources</text>
+
+  <path class="ln" d="M720 280 H 790" marker-end="url(#ar)"/>
+  <rect class="box" x="790" y="150" width="386" height="260" rx="4"/>
+  <text class="sv-title" x="812" y="192">MonitorRisk</text>
+  <text class="sv-s" x="812" y="218">one scanner core, two front doors</text>
+
+  <rect class="box-q" x="812" y="238" width="166" height="76" rx="3"/>
+  <text class="sv-h" x="832" y="268">CLI</text>
+  <text class="sv-ms" x="832" y="292">stdlib only</text>
+
+  <rect class="box-q" x="990" y="238" width="166" height="76" rx="3"/>
+  <text class="sv-h" x="1010" y="268">Server</text>
+  <text class="sv-ms" x="1010" y="292">FastAPI + PG16</text>
+
+  <text class="sv-ms" x="812" y="344">air-gapped review · CI gate</text>
+  <text class="sv-ms" x="812" y="368">continuous mitigation tracking</text>
+  <text class="sv-ms" x="812" y="392">no outbound calls · no telemetry</text>
+
+  <path class="ln" d="M983 410 V 452" marker-end="url(#ar)"/>
+  <rect class="box-teal" x="640" y="452" width="536" height="176" rx="4"/>
+  <text class="sv-h" x="662" y="486">Consumers</text>
+  <text class="sv-t" x="662" y="520">SAP Basis / security team — PDF hand-over</text>
+  <text class="sv-t" x="662" y="550">CISO &amp; board — FAIR loss exposure, PPTX</text>
+  <text class="sv-t" x="662" y="580">Auditor — compliance mapping, evidence</text>
+  <text class="sv-t" x="662" y="610">CI pipeline — exit 0 / 1 / 2</text>
+
+  <path class="ln-q" d="M186 472 V 592 H 596 V 328" marker-end="url(#ar-g)"/>
+  <rect class="hop" x="388" y="584" width="14" height="18"/>
+  <text class="sv-ms" x="60" y="620">optional: python -m collect (read-only, ECC / on-prem)</text>
+</svg>
+  </div>
+</figure>
+
+<p>Two consequences of this shape are worth naming explicitly, because they are usually where competing products differ:</p>
+
+<ul>
+  <li><strong>Point-in-time, not continuous.</strong> The system reads a snapshot. It is a configuration and authorisation assessment, not a monitoring platform. Section 13 explains how the product states that limit on-screen rather than in a footnote.</li>
+  <li><strong>The customer owns the extraction.</strong> That is a deployment advantage and an accuracy risk at once, which is why the coverage manifest exists: the scanner must be able to say "you gave me 105 of 123 sources" before it says anything about posture.</li>
+</ul>
+
+<h2 id="s3"><span class="num">03</span>Acquisition tier — three paths, one contract</h2>
+
+<p>Three quite different mechanisms produce input, and all three converge on a single in-memory dictionary before any check runs. This convergence is the most load-bearing seam in the system: it is why connected collection required no new tests, and why the ABAP source scanner slots in beside 29 tabular auditors without special-casing the pipeline.</p>
+
+<figure>
+  <div class="cap"><span class="fid">FIG. 02</span><span class="ftx">Acquisition — three input paths collapse into one data contract</span></div>
+  <div class="art">
+<svg viewBox="0 0 1200 620" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Acquisition paths diagram">
+  <text class="sv-lbl" x="24" y="30">PATH A — MANUAL EXPORT (ALL ESTATES, INCLUDING RISE)</text>
+  <rect class="box" x="24" y="42" width="330" height="124" rx="4"/>
+  <text class="sv-t" x="44" y="76">Human runs SAP transactions</text>
+  <text class="sv-ms" x="44" y="102">RSUSR002 · SUIM · RSPARAM · SM59 · SICF</text>
+  <text class="sv-ms" x="44" y="124">SM19/SM20 · AGR_1251 · SNOTE · WE20/WE21</text>
+  <text class="sv-ms" x="44" y="146">BTP cockpit &amp; management APIs</text>
+
+  <text class="sv-lbl" x="24" y="212">PATH B — CONNECTED MODE (ECC / ON-PREM ONLY)</text>
+  <rect class="box-amber" x="24" y="224" width="330" height="168" rx="4"/>
+  <text class="sv-m" x="44" y="258">python -m collect</text>
+  <text class="sv-ms" x="44" y="286">sapcontrol → sapstartsrv SOAP on 5&lt;NN&gt;14</text>
+  <text class="sv-ms" x="44" y="308">icf → active endpoints, unauthenticated probe</text>
+  <text class="sv-ms" x="44" y="330">rfc → NW RFC SDK via ctypes (customer licence)</text>
+  <text class="sv-ms" x="44" y="356" style="fill:var(--amber)">allowlist checked BEFORE any byte hits the wire</text>
+  <text class="sv-ms" x="44" y="378" style="fill:var(--amber)">no --password · prompted, piped or env var</text>
+
+  <text class="sv-lbl" x="24" y="438">PATH C — SOURCE EXPORT</text>
+  <rect class="box-vio" x="24" y="450" width="330" height="116" rx="4"/>
+  <text class="sv-m" x="44" y="484">--abap-src ./abapgit_export</text>
+  <text class="sv-ms" x="44" y="512">abapGit offline ZIP: the one route ABAP</text>
+  <text class="sv-ms" x="44" y="534">source leaves a RISE PCE system without</text>
+  <text class="sv-ms" x="44" y="556">OS access or an SAP ticket</text>
+
+  <path class="ln" d="M354 104 H 448 V 214 H 530" marker-end="url(#ar)"/>
+  <path class="ln" d="M354 308 H 492 V 280 H 530" marker-end="url(#ar)"/>
+  <path class="ln" d="M354 508 H 448 V 346 H 530" marker-end="url(#ar)"/>
+
+  <rect class="box" x="530" y="150" width="300" height="260" rx="4"/>
+  <text class="sv-h" x="552" y="186">DataLoader</text>
+  <text class="sv-ms" x="552" y="212">modules/data_loader.py</text>
+  <text class="sv-t" x="552" y="248">FILE_MAP: filename → key</text>
+  <text class="sv-t" x="552" y="278">CSV / JSON, 40+ file types</text>
+  <text class="sv-t" x="552" y="308">absent file → key is None</text>
+  <text class="sv-t" x="552" y="338">never raises on a missing source</text>
+  <text class="sv-ms" x="552" y="376" style="fill:var(--violet)">--abap-src bypasses FILE_MAP: it is a</text>
+  <text class="sv-ms" x="552" y="396" style="fill:var(--violet)">directory, injected as data["abap_source_dir"]</text>
+
+  <path class="ln" d="M830 280 H 900" marker-end="url(#ar)"/>
+  <rect class="box-teal" x="900" y="180" width="276" height="200" rx="4"/>
+  <text class="sv-h" x="922" y="216">data: dict</text>
+  <text class="sv-ms" x="922" y="242">the one contract every auditor reads</text>
+  <text class="sv-m" x="922" y="278">users · profiles · user_roles</text>
+  <text class="sv-m" x="922" y="304">security_params · agr_1251</text>
+  <text class="sv-m" x="922" y="330">btp_* · cpi_* · hana_*</text>
+  <text class="sv-m" x="922" y="356">crq_parameters · abap_source_dir</text>
+
+  <path class="ln-q" d="M1038 380 V 440" marker-end="url(#ar-g)"/>
+  <rect class="box-q" x="620" y="440" width="556" height="140" rx="4"/>
+  <text class="sv-h" x="642" y="474">coverage.build_manifest(data, modules_run, deployment_mode)</text>
+  <text class="sv-t" x="642" y="506">sources supplied / sources known · modules degraded · modules skipped</text>
+  <text class="sv-t" x="642" y="534">"1 source is not obtainable in RISE at all" — a distinct state from absent</text>
+  <text class="sv-t" x="642" y="562">computed once, passed as data to every report engine and to the gate</text>
+</svg>
+  </div>
+</figure>
+
+<h3>Why <code>collect/</code> is a separate program</h3>
+
+<p>It would have been easier to add a <code>--host</code> flag to the scanner. That option was refused, and the reasoning is worth preserving because it is the product's central claim:</p>
+
+<ul>
+  <li><strong>Testability.</strong> The scanner is a pure function over a directory. Adding a network client to it would mean every audit test now runs against something that can time out.</li>
+  <li><strong>Auditability of the claim.</strong> "The scanner connects to nothing" is verifiable by inspection when the scanner contains no client. It is a promise when the client is compiled in and disabled by a flag.</li>
+  <li><strong>Read-only is enforced in the transport, not the caller.</strong> The same <code>sapstartsrv</code> service that returns profile parameters also exposes <code>Start</code>, <code>Stop</code>, <code>Restart</code> and OS command execution. The allowlist is checked before the request is constructed — a bug in calling code cannot reach a destructive method.</li>
+  <li><strong>Partial by construction.</strong> Users, roles and authorisations are RFC-only, and the RFC route is declined by default (decision D3). Every collect run writes a manifest naming what it could not reach, so partial collection is disclosed rather than silently thin.</li>
+</ul>
+
+<h2 id="s4"><span class="num">04</span>The scanner core pipeline</h2>
+
+<p>One pass, seven stages, no hidden state between them. Each stage produces a value the next stage consumes; nothing reaches back. <code>sap_scanner.py</code> is the composition root — it wires the stages together and owns every I/O decision, so the auditors and the report engines can stay pure.</p>
+
+<figure>
+  <div class="cap"><span class="fid">FIG. 03</span><span class="ftx">Core pipeline — LOAD → MODULES → CHECKS → RANK → MAP → QUANTIFY → REPORT / STORE</span></div>
+  <div class="art">
+<svg viewBox="0 0 1200 700" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Core pipeline diagram">
+  <rect class="box-sap" x="24" y="40" width="200" height="104" rx="4"/>
+  <text class="sv-lbl" x="42" y="70">STAGE 1</text>
+  <text class="sv-h" x="42" y="98">LOAD</text>
+  <text class="sv-ms" x="42" y="124">DataLoader → data dict</text>
+
+  <path class="ln" d="M224 92 H 280" marker-end="url(#ar)"/>
+
+  <rect class="box" x="280" y="40" width="240" height="104" rx="4"/>
+  <text class="sv-lbl" x="298" y="70">STAGE 2</text>
+  <text class="sv-h" x="298" y="98">MODULES</text>
+  <text class="sv-ms" x="298" y="124">30 auditors, selected by --modules</text>
+
+  <path class="ln" d="M520 92 H 576" marker-end="url(#ar)"/>
+
+  <rect class="box" x="576" y="40" width="240" height="104" rx="4"/>
+  <text class="sv-lbl" x="594" y="70">STAGE 3</text>
+  <text class="sv-h" x="594" y="98">CHECKS</text>
+  <text class="sv-ms" x="594" y="124">620 rules → findings list</text>
+
+  <path class="ln" d="M816 92 H 872" marker-end="url(#ar)"/>
+
+  <rect class="box-crim" x="872" y="24" width="304" height="136" rx="4"/>
+  <text class="sv-lbl" x="890" y="52" style="fill:var(--crimson)">THE CORPUS AS SCANNED</text>
+  <text class="sv-m" x="890" y="82">fair_findings = list(all_findings)</text>
+  <text class="sv-s" x="890" y="110">Everything that makes a claim ABOUT</text>
+  <text class="sv-s" x="890" y="132">THE ESTATE reads this, never the</text>
+  <text class="sv-s" x="890" y="154">severity-filtered list. See §07.</text>
+
+  <path class="ln-q" d="M1000 160 V 182 H 640 V 208" marker-end="url(#ar-g)"/>
+  <path class="ln" d="M1100 160 V 208" marker-end="url(#ar)"/>
+
+  <rect class="box-q" x="500" y="208" width="280" height="84" rx="4"/>
+  <text class="sv-h" x="520" y="242">--severity filter</text>
+  <text class="sv-ms" x="520" y="268">display list only</text>
+
+  <rect class="box-crim" x="880" y="208" width="288" height="84" rx="4"/>
+  <text class="sv-h" x="900" y="242">unfiltered corpus</text>
+  <text class="sv-ms" x="900" y="268">gate · FAIR · compliance · domains</text>
+
+  <path class="ln" d="M640 292 V 312 H 475 V 336" marker-end="url(#ar)"/>
+  <path class="ln" d="M920 292 V 312 H 765 V 336" marker-end="url(#ar)"/>
+  <path class="ln" d="M1043 292 V 336" marker-end="url(#ar)"/>
+
+  <rect class="box" x="330" y="336" width="290" height="100" rx="4"/>
+  <text class="sv-lbl" x="348" y="366">STAGE 4</text>
+  <text class="sv-h" x="348" y="394">RANK</text>
+  <text class="sv-ms" x="348" y="418">RiskPrioritizer → P1 · P2 · P3 · P4</text>
+
+  <rect class="box" x="640" y="336" width="250" height="100" rx="4"/>
+  <text class="sv-lbl" x="658" y="366">STAGE 5</text>
+  <text class="sv-h" x="658" y="394">MAP</text>
+  <text class="sv-ms" x="658" y="418">8 compliance frameworks</text>
+
+  <rect class="box-vio" x="910" y="336" width="266" height="100" rx="4"/>
+  <text class="sv-lbl" x="928" y="366" style="fill:var(--violet)">STAGE 6 — OPTIONAL</text>
+  <text class="sv-h" x="928" y="394">QUANTIFY</text>
+  <text class="sv-ms" x="928" y="418">FAIR Monte Carlo → ALE ($)</text>
+
+  <path class="ln" d="M475 436 V 462"/>
+  <path class="ln" d="M765 436 V 462"/>
+  <path class="ln" d="M1043 436 V 462"/>
+  <path class="ln" d="M304 462 H 1043"/>
+  <path class="ln" d="M304 462 V 494" marker-end="url(#ar)"/>
+  <path class="ln" d="M896 462 V 494" marker-end="url(#ar)"/>
+
+  <text class="sv-lbl" x="24" y="484">STAGE 7 — TERMINAL, TWO DESTINATIONS</text>
+  <rect class="box-teal" x="24" y="494" width="560" height="182" rx="4"/>
+  <text class="sv-h" x="46" y="528">REPORT — one-shot artefacts</text>
+  <text class="sv-t" x="46" y="562">ReportGenerator → self-contained HTML</text>
+  <text class="sv-t" x="46" y="592">PDFReportGenerator → hand-over PDF</text>
+  <text class="sv-t" x="46" y="622">PPTXReportGenerator → OOXML deck</text>
+  <text class="sv-ms" x="46" y="656" style="fill:var(--teal)">all three engines: pure standard library</text>
+
+  <rect class="box-sap" x="616" y="494" width="560" height="182" rx="4"/>
+  <text class="sv-h" x="638" y="528">STORE — durable state</text>
+  <text class="sv-t" x="638" y="562">PostgreSQL 16 · findings persist across runs</text>
+  <text class="sv-t" x="638" y="592">fingerprint match → same row re-opens</text>
+  <text class="sv-t" x="638" y="622">run-over-run diff · graph nodes · MTTR</text>
+  <text class="sv-ms" x="638" y="656" style="fill:var(--sap)">the mitigation journey (§10, §11)</text>
+</svg>
+  </div>
+</figure>
+
+<h3>Composition root responsibilities</h3>
+
+<p><code>sap_scanner.py</code> deliberately keeps a handful of concerns that could have been pushed down, because pushing them down would let two components disagree:</p>
+
+<div class="tbl-scroll">
+<table>
+  <tr><th style="width:34%">Concern</th><th>Why it lives in the composition root</th></tr>
+  <tr><td>run_ctx construction</td><td>Built once as <code>{"deployment_mode": …, "modules": set(…)}</code> and passed to every ECS-aware auditor, so two auditors cannot disagree about which estate they are looking at.</td></tr>
+  <tr><td>Module inter-dependency</td><td><code>iam</code> defers its coarse transaction-level SoD to <code>ara</code> — but only when <code>ara</code> is <em>actually in this run</em>. Passing the module set fixes a real bug where <code>--modules iam</code> stood down in favour of a module that was not running and produced no SoD findings at all.</td></tr>
+  <tr><td>Corpus vs. display split</td><td>The one place the filtered and unfiltered lists both exist. Every consumer is handed the correct one explicitly.</td></tr>
+  <tr><td>Coverage manifest</td><td>Computed once and passed as <em>data</em> to the report tier. A generator's job is to render what it was given, not to import an analysis module.</td></tr>
+  <tr><td>Output encoding</td><td><code>_make_output_encoding_safe()</code> runs before anything else. On Windows, redirecting stdout drops Python to cp1252 and the banner's box-drawing characters raise <code>UnicodeEncodeError</code> before work starts. CI <em>always</em> redirects stdout — a control that cannot run under redirection is not a control.</td></tr>
+</table>
+</div>
+
+<h2 id="s5"><span class="num">05</span>Module tier &amp; the finding contract</h2>
+
+<p>Thirty auditor classes, each in its own file under <code>modules/</code>, each with a check-ID family it owns exclusively. They share a base class and a uniform entry point, <code>run_all_checks()</code>, returning a list of finding dictionaries. There is no plugin registry and no dynamic discovery: modules are imported and dispatched explicitly in the composition root, which is verbose and makes the run order and the dependency between modules readable in one file.</p>
+
+<figure>
+  <div class="cap"><span class="fid">FIG. 04</span><span class="ftx">Module tier — 30 auditors over one base contract, grouped by concern</span></div>
+  <div class="art">
+<svg viewBox="0 0 1200 770" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Module tier diagram">
+  <rect class="box" x="24" y="30" width="1152" height="112" rx="4"/>
+  <text class="sv-h" x="46" y="64">BaseAuditor — modules/base_auditor.py</text>
+  <text class="sv-m" x="46" y="98">__init__(data, baseline_overrides[, run_ctx])   ·   run_all_checks() → list[finding]</text>
+  <text class="sv-ms" x="46" y="126">thresholds resolve as: custom --config JSON  ▸  module default  ·  a missing data key self-skips the check</text>
+
+  <path class="ln" d="M600 142 V 184"/>
+  <path class="ln" d="M163 184 H 1038"/>
+  <path class="ln" d="M163 184 V 200" marker-end="url(#ar)"/>
+  <path class="ln" d="M455 184 V 200" marker-end="url(#ar)"/>
+  <path class="ln" d="M747 184 V 200" marker-end="url(#ar)"/>
+  <path class="ln" d="M1038 184 V 200" marker-end="url(#ar)"/>
+
+  <rect class="box-sap" x="24" y="200" width="278" height="234" rx="4"/>
+  <text class="sv-lbl" x="42" y="228">IDENTITY &amp; AUTHORISATION</text>
+  <text class="sv-m" x="42" y="258">user_auth_audit</text>
+  <text class="sv-m" x="42" y="284">iam_advanced</text>
+  <text class="sv-m" x="42" y="310">abap_authorizations</text>
+  <text class="sv-m" x="42" y="336">access_risk_analysis</text>
+  <text class="sv-m" x="42" y="362">grc_access_control</text>
+  <text class="sv-m" x="42" y="388">role_governance</text>
+  <text class="sv-m" x="42" y="414">s4_business_authz</text>
+
+  <rect class="box-teal" x="316" y="200" width="278" height="234" rx="4"/>
+  <text class="sv-lbl" x="334" y="228" style="fill:var(--teal)">PLATFORM &amp; HARDENING</text>
+  <text class="sv-m" x="334" y="258">security_params</text>
+  <text class="sv-m" x="334" y="284">baseline_params</text>
+  <text class="sv-m" x="334" y="310">snc_posture</text>
+  <text class="sv-m" x="334" y="336">ecs_config_items</text>
+  <text class="sv-m" x="334" y="362">crypto_posture</text>
+  <text class="sv-m" x="334" y="388">hana_db_security</text>
+  <text class="sv-m" x="334" y="414">system_trust</text>
+
+  <rect class="box-amber" x="608" y="200" width="278" height="234" rx="4"/>
+  <text class="sv-lbl" x="626" y="228" style="fill:var(--amber)">SURFACE &amp; INTEGRATION</text>
+  <text class="sv-m" x="626" y="258">network_services</text>
+  <text class="sv-m" x="626" y="284">rise_btp_checks</text>
+  <text class="sv-m" x="626" y="310">btp_cloud_surface</text>
+  <text class="sv-m" x="626" y="336">integration_layer</text>
+  <text class="sv-m" x="626" y="362">fiori_ui</text>
+  <text class="sv-m" x="626" y="388">basis_job_command</text>
+  <text class="sv-m" x="626" y="414">sap_hotnews</text>
+
+  <rect class="box-vio" x="900" y="200" width="276" height="234" rx="4"/>
+  <text class="sv-lbl" x="918" y="228" style="fill:var(--violet)">CODE, DATA &amp; ASSURANCE</text>
+  <text class="sv-m" x="918" y="258">abap_sast (133 rules)</text>
+  <text class="sv-m" x="918" y="284">atc_import</text>
+  <text class="sv-m" x="918" y="310">code_transport</text>
+  <text class="sv-m" x="918" y="336">code_inventory_report</text>
+  <text class="sv-m" x="918" y="362">data_protection</text>
+  <text class="sv-m" x="918" y="388">log_monitoring · log_review</text>
+  <text class="sv-m" x="918" y="414">financial_controls · resilience</text>
+
+  <path class="ln" d="M163 434 V 452"/>
+  <path class="ln" d="M455 434 V 452"/>
+  <path class="ln" d="M747 434 V 452"/>
+  <path class="ln" d="M1038 434 V 452"/>
+  <path class="ln" d="M163 452 H 1038"/>
+  <path class="ln" d="M600 452 V 476" marker-end="url(#ar)"/>
+
+  <rect class="box" x="140" y="476" width="920" height="278" rx="4"/>
+  <text class="sv-h" x="164" y="512">The finding contract — enforced by the test suite, not by convention</text>
+  <text class="sv-m" x="164" y="550">check_id</text><text class="sv-t" x="392" y="550">unique across ALL modules — collisions fail the build</text>
+  <text class="sv-m" x="164" y="582">severity</text><text class="sv-t" x="392" y="582">CRITICAL · HIGH · MEDIUM · LOW · INFO</text>
+  <text class="sv-m" x="164" y="614">description</text><text class="sv-t" x="392" y="614">must be a string — a tuple here is a real bug the suite catches</text>
+  <text class="sv-m" x="164" y="646">affected objects</text><text class="sv-t" x="392" y="646">the concrete SAP objects named — feeds fingerprint and graph nodes</text>
+  <text class="sv-m" x="164" y="678">remediation owner</text><text class="sv-t" x="392" y="678">customer · ticket_to_sap — decides finding text and gate behaviour</text>
+  <text class="sv-m" x="164" y="710">details.degrades_coverage</text><text class="sv-t" x="392" y="710">a module saying "I could not see everything" — arms the gate</text>
+  <text class="sv-ms" x="164" y="740">Every module runs against sample_data crafted to trigger each check; empty input must not crash.</text>
+</svg>
+  </div>
+</figure>
+
+<h3>Two structural details worth knowing before you touch this tier</h3>
+
+<p><strong>The constructor signature is not yet uniform.</strong> Some auditors take <code>(data, baseline_overrides, run_ctx)</code> positionally; some take <code>(data, baseline_overrides)</code>; two take <code>run_context=</code> as a keyword. This is honest history — <code>run_ctx</code> arrived with deployment-mode awareness and was threaded only through the modules that needed it. It is the clearest refactor candidate in the codebase: a single optional third positional parameter on <code>BaseAuditor</code> would let the composition root construct all thirty identically.</p>
+
+<p><strong>Check IDs are partly generated, not all literal.</strong> 365 IDs are written as literals; a further 255 are built at runtime, giving 620 once the five runtime-generated families resolve against their shipped rulesets — profile parameters (<code>PARAM-&lt;parameter&gt;</code>, 78 of them), ABAP rules (133), SoD risks and ATC families. That distinction matters when you write tests: you cannot assert a fixed count against a ruleset that ships as data. It matters more than it looks, because anything using the check count as a <em>denominator</em> must resolve all three forms — a keyword <code>check_id=</code>, a positional <code>_emit("AUTH-001", …)</code>, and the runtime families — or it is counting failures rather than checks.</p>
+
+<div class="rule">
+  <span class="k">Design rule — prefer SAP's own answer</span>
+  <p><code>atc_import</code> runs <em>before</em> the in-house ABAP scanner would. Where a customer already licenses SAP's Code Vulnerability Analyzer, those findings are authoritative and produced inside the customer's own system; re-deriving them would only mean disagreeing with SAP about SAP's own tool. The same deference appears between <code>iam</code> and <code>ara</code>: the coarse module stands down when the precise one is running.</p>
+</div>
+
+<h2 id="s6"><span class="num">06</span>Deployment-mode resolution</h2>
+
+<p>This is the part of the design that most distinguishes the product, and it is easy to underrate. <strong>The same parameter value can be a critical finding and a mandated baseline, depending on which estate produced the export.</strong> SAP Note 3250501 makes specific settings mandatory in Enterprise Cloud Services that are genuine weaknesses on classic on-premise ABAP. A RISE-specific scanner that flags SAP's own baseline is confidently wrong on every compliant system it sees.</p>
+
+<figure>
+  <div class="cap"><span class="fid">FIG. 05</span><span class="ftx">Deployment mode decides what "compliant" means</span></div>
+  <div class="art">
+<svg viewBox="0 0 1200 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Deployment mode resolution diagram">
+  <rect class="box" x="24" y="34" width="300" height="124" rx="4"/>
+  <text class="sv-m" x="44" y="70">--deployment-mode</text>
+  <text class="sv-ms" x="44" y="100">on_prem  (DEFAULT)</text>
+  <text class="sv-ms" x="44" y="122">rise_pce · rise_tailored · rise_ecc</text>
+  <text class="sv-ms" x="44" y="146" style="fill:var(--amber)">defaults to on_prem on purpose</text>
+
+  <path class="ln" d="M324 96 H 400" marker-end="url(#ar)"/>
+
+  <rect class="box-sap" x="400" y="34" width="330" height="124" rx="4"/>
+  <text class="sv-h" x="422" y="70">run_ctx</text>
+  <text class="sv-ms" x="422" y="100">built once in the composition root</text>
+  <text class="sv-ms" x="422" y="124">read by every ECS-aware auditor</text>
+  <text class="sv-ms" x="422" y="148">so no two modules can disagree</text>
+
+  <path class="ln" d="M730 96 H 806" marker-end="url(#ar)"/>
+
+  <rect class="box-teal" x="806" y="34" width="370" height="124" rx="4"/>
+  <text class="sv-h" x="828" y="70">Verdict resolution</text>
+  <text class="sv-ms" x="828" y="100">snc_posture · ecs_config_items</text>
+  <text class="sv-ms" x="828" y="124">security_params · baseline_params</text>
+  <text class="sv-ms" x="828" y="148">crypto_posture · user_auth_audit</text>
+
+  <path class="ln" d="M991 158 V 178 H 307 V 224" marker-end="url(#ar)"/>
+  <path class="ln" d="M893 178 V 224" marker-end="url(#ar)"/>
+  <text class="sv-lbl" x="24" y="212">SAME EXPORT · SAME PARAMETER · OPPOSITE VERDICT</text>
+
+  <rect class="box-crim" x="24" y="224" width="566" height="356" rx="4"/>
+  <text class="sv-h" x="46" y="260">on_prem — classic ABAP</text>
+  <text class="sv-m" x="46" y="302">snc/accept_insecure_gui = 1</text>
+  <text class="sv-t" x="46" y="328" style="fill:var(--crimson)">▸ FINDING — unencrypted SAP GUI accepted</text>
+  <text class="sv-m" x="46" y="374">rfc/callback_security_method = 1</text>
+  <text class="sv-t" x="46" y="400" style="fill:var(--crimson)">▸ FINDING — callback ACL not enforced</text>
+  <text class="sv-m" x="46" y="446">DDIC unlocked</text>
+  <text class="sv-t" x="46" y="472" style="fill:var(--crimson)">▸ FINDING — standard user must be locked</text>
+  <text class="sv-ms" x="46" y="522">All three are real weaknesses here, and</text>
+  <text class="sv-ms" x="46" y="544">this is the default so that guessing ECS</text>
+  <text class="sv-ms" x="46" y="566">can never silently relax them.</text>
+
+  <rect class="box-teal" x="610" y="224" width="566" height="356" rx="4"/>
+  <text class="sv-h" x="632" y="260">rise_pce — SAP Enterprise Cloud Services</text>
+  <text class="sv-m" x="632" y="302">snc/accept_insecure_gui = 1</text>
+  <text class="sv-t" x="632" y="328" style="fill:var(--teal)">▸ COMPLIANT — SAP's own mandated value</text>
+  <text class="sv-m" x="632" y="374">rfc/callback_security_method = 1</text>
+  <text class="sv-t" x="632" y="400" style="fill:var(--teal)">▸ DOCUMENTED EXCEPTION — ECS standard is 3</text>
+  <text class="sv-m" x="632" y="446">DDIC unlocked</text>
+  <text class="sv-t" x="632" y="472" style="fill:var(--teal)">▸ NOT REQUIRED — explicitly, by the note</text>
+  <text class="sv-ms" x="632" y="522">92 of 92 profile parameters from Note</text>
+  <text class="sv-ms" x="632" y="544">3250501 are covered, every value read from</text>
+  <text class="sv-ms" x="632" y="566">a recorded extract — never hand-typed.</text>
+</svg>
+  </div>
+</figure>
+
+<h3>The SNC module is a model, not eighteen comparisons</h3>
+
+<p><code>snc_posture</code> is the clearest illustration of a design principle that recurs throughout the check tier: <strong>report the problem, not its symptoms.</strong> Note 3250501 specifies eighteen SNC and IGS parameters. Evaluated independently, a system with <code>snc/enable = 0</code> produces ten findings — but every <code>accept_insecure_*</code> setting is moot when SNC is off. Ten findings would report ten problems where the truth is one. The module therefore evaluates the eighteen parameters as a single state model, and additionally checks the relationships the note itself states:</p>
+
+<ul>
+  <li><code>igs/snc/name</code> must match <code>snc/identity/as</code></li>
+  <li><code>igs/snc/library</code> must match <code>snc/gssapi_lib</code></li>
+  <li><code>data_protection/min</code> may not exceed <code>data_protection/max</code></li>
+</ul>
+
+<p><code>ecs_config_items</code> covers the configuration half of the same note — the items that are not profile parameters: password-hash tables behind authorisation group SPWD, <code>SSF_PSE_D</code> behind SPSE, unused clients, and audit-log filter coverage. Every one of the note's eighteen items is accounted for in a disposition table naming its owner, <em>so a future note version that adds a nineteenth breaks the build rather than the report.</em> That is the difference between a build-time failure and a silent coverage gap, and it is a pattern worth copying anywhere a shipped ruleset tracks an external standard.</p>
+
+<h2 id="s7"><span class="num">07</span>The corpus split invariant</h2>
+
+<p>This deserves its own section because it is the invariant most likely to be broken by a well-meaning change, and because breaking it produces artefacts that are wrong in a way nobody notices.</p>
+
+<figure>
+  <div class="cap"><span class="fid">FIG. 06</span><span class="ftx">One filter, two audiences — what may read the filtered list, and what may not</span></div>
+  <div class="art">
+<svg viewBox="0 0 1200 530" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Corpus split diagram">
+  <rect class="box-crim" x="380" y="24" width="440" height="96" rx="4"/>
+  <text class="sv-h" x="404" y="58">all findings, as scanned</text>
+  <text class="sv-m" x="404" y="92">fair_findings = list(all_findings)</text>
+
+  <path class="ln" d="M520 120 V 148 H 360 V 182" marker-end="url(#ar)"/>
+  <path class="ln" d="M680 120 V 148 H 810 V 182" marker-end="url(#ar)"/>
+
+  <rect class="box-q" x="180" y="182" width="360" height="76" rx="4"/>
+  <text class="sv-h" x="204" y="218">apply --severity</text>
+  <text class="sv-ms" x="204" y="244">a rendering decision, nothing more</text>
+
+  <rect class="box-crim" x="620" y="182" width="380" height="76" rx="4"/>
+  <text class="sv-h" x="644" y="218">bypass the filter entirely</text>
+  <text class="sv-ms" x="644" y="244">anything that asserts something true</text>
+
+  <path class="ln" d="M360 258 V 306" marker-end="url(#ar)"/>
+  <path class="ln" d="M810 258 V 306" marker-end="url(#ar)"/>
+
+  <rect class="box-teal" x="80" y="306" width="480" height="196" rx="4"/>
+  <text class="sv-lbl" x="104" y="336" style="fill:var(--teal)">MAY READ THE FILTERED LIST</text>
+  <text class="sv-t" x="104" y="372">the findings section of the HTML report</text>
+  <text class="sv-t" x="104" y="402">the per-finding pages of the PDF</text>
+  <text class="sv-t" x="104" y="432">the per-finding slides of the PPTX</text>
+  <text class="sv-ms" x="104" y="468">i.e. only the parts that show a reader a list</text>
+  <text class="sv-ms" x="104" y="490">of findings and claim nothing beyond it</text>
+
+  <rect class="box-crim" x="620" y="306" width="500" height="196" rx="4"/>
+  <text class="sv-lbl" x="644" y="336" style="fill:var(--crimson)">MUST READ THE FULL CORPUS</text>
+  <text class="sv-t" x="644" y="372">FAIR loss exposure (ALE, P90, exceedance)</text>
+  <text class="sv-t" x="644" y="402">compliance roll-ups · NIST CSF · FAIR-CAM</text>
+  <text class="sv-t" x="644" y="432">the twelve domain tiles · category summaries</text>
+  <text class="sv-t" x="644" y="462">the release gate verdict</text>
+  <text class="sv-ms" x="644" y="490">a control whose verdict moves with a display flag is not a control</text>
+</svg>
+  </div>
+</figure>
+
+<p>The rule was introduced narrowly — for the money figure alone, on the argument that a display option must not silently change a dollar amount. The argument was right and its original scope was too small. On <code>--severity HIGH</code>, a compliance category holding real MEDIUM findings rendered the green "no findings" chip: the money was protected and the frameworks were not. The generalised rule is now stated in the code at the split point itself, which is the right place for an invariant that any future consumer of the findings list will need to obey.</p>
+
+<div class="rule crim">
+  <span class="k">Test for any new consumer of the findings list</span>
+  <p>Ask: does this component <em>show a list</em>, or does it <em>make a claim about the estate</em>? Only the first may take the filtered list. If in doubt, take the corpus — over-counting in a summary is a visible error; under-counting is an invisible one.</p>
+</div>
+
+<h2 id="s8"><span class="num">08</span>Enrichment &amp; decision chain</h2>
+
+<p>Between the raw findings and any artefact sit five independent enrichment components. None of them mutates a finding's identity; each attaches a view of it. They are ordered by dependency, not by importance.</p>
+
+<figure>
+  <div class="cap"><span class="fid">FIG. 07</span><span class="ftx">Enrichment chain — five components, one direction of flow</span></div>
+  <div class="art">
+<svg viewBox="0 0 1200 640" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Enrichment chain diagram">
+  <rect class="box-crim" x="24" y="240" width="150" height="120" rx="4"/>
+  <text class="sv-h" x="44" y="288">findings</text>
+  <text class="sv-ms" x="44" y="314">the corpus</text>
+  <text class="sv-ms" x="44" y="336">immutable here</text>
+
+  <path class="ln" d="M174 300 H 202"/>
+  <path class="ln" d="M202 110 V 566"/>
+  <path class="ln" d="M202 110 H 232" marker-end="url(#ar)"/>
+  <path class="ln" d="M202 272 H 232" marker-end="url(#ar)"/>
+  <path class="ln" d="M202 428 H 232" marker-end="url(#ar)"/>
+  <path class="ln" d="M202 566 H 232" marker-end="url(#ar)"/>
+
+  <rect class="box" x="232" y="34" width="300" height="152" rx="4"/>
+  <text class="sv-h" x="252" y="70">RiskPrioritizer</text>
+  <text class="sv-ms" x="252" y="98">severity × exploitability × exposure × privilege</text>
+  <text class="sv-m" x="252" y="130">P1 fix now → P4 backlog</text>
+  <text class="sv-ms" x="252" y="162">works on findings CVSS cannot score at all</text>
+
+  <rect class="box" x="232" y="202" width="300" height="140" rx="4"/>
+  <text class="sv-h" x="252" y="238">FindingKB</text>
+  <text class="sv-ms" x="252" y="266">data/finding_details.json, keyed by check-id</text>
+  <text class="sv-ms" x="252" y="294">family-prefix fallback, then the finding's own text</text>
+  <text class="sv-ms" x="252" y="322">→ risk narrative + numbered remediation</text>
+
+  <rect class="box" x="232" y="358" width="300" height="140" rx="4"/>
+  <text class="sv-h" x="252" y="394">Compliance mapper</text>
+  <text class="sv-ms" x="252" y="422">ISO 27001:2022 · NIST CSF 2.0 · 800-53r5</text>
+  <text class="sv-ms" x="252" y="450">DORA · CIS v8 · TISAX/VDA ISA · SOC 2 · GDPR</text>
+  <text class="sv-ms" x="252" y="478">DORA → named requirement areas, not articles</text>
+
+  <rect class="box" x="232" y="514" width="300" height="104" rx="4"/>
+  <text class="sv-h" x="252" y="550">modules/domains.py</text>
+  <text class="sv-ms" x="252" y="578">twelve security domains · strict partition</text>
+  <text class="sv-ms" x="252" y="602">one module feeds console, API and deck</text>
+
+  <path class="ln" d="M532 110 H 596"/>
+  <path class="ln" d="M532 272 H 596"/>
+  <path class="ln" d="M532 428 H 596"/>
+  <path class="ln" d="M532 566 H 596"/>
+  <path class="ln" d="M596 110 V 566"/>
+  <path class="ln" d="M596 142 H 660" marker-end="url(#ar)"/>
+  <path class="ln" d="M596 353 H 660" marker-end="url(#ar)"/>
+  <path class="ln" d="M596 532 H 660" marker-end="url(#ar)"/>
+
+  <rect class="box-vio" x="660" y="34" width="516" height="216" rx="4"/>
+  <text class="sv-h" x="682" y="70">fair_adapter — optional, --crq</text>
+  <text class="sv-t" x="682" y="104">Findings are not risks. They are evidence that shifts the FAIR</text>
+  <text class="sv-t" x="682" y="132">factors of a small set of scoped SAP loss scenarios.</text>
+  <text class="sv-m" x="682" y="168">→ &lt;output&gt;.crq.json always written</text>
+  <text class="sv-m" x="682" y="196">→ ALE P50/P90/mean + loss-exceedance curve</text>
+  <text class="sv-ms" x="682" y="228" style="fill:var(--violet)">no customer loss figures supplied → NO currency figure is printed</text>
+
+  <rect class="box-amber" x="660" y="278" width="516" height="150" rx="4"/>
+  <text class="sv-h" x="682" y="314">release_gate</text>
+  <text class="sv-t" x="682" y="348">delta vs. baseline · scoped to the transport · never fails open</text>
+  <text class="sv-m" x="682" y="382">exit 0 pass · 1 blocked · 2 could not assess</text>
+  <text class="sv-ms" x="682" y="412">reads the corpus and the coverage manifest — §09</text>
+
+  <rect class="box-teal" x="660" y="456" width="516" height="162" rx="4"/>
+  <text class="sv-h" x="682" y="492">Artefact tier</text>
+  <text class="sv-t" x="682" y="526">HTML · PDF · PPTX  —  or  PostgreSQL + web console</text>
+  <text class="sv-ms" x="682" y="558">Every generator receives: findings, scan_meta, kb, priorities,</text>
+  <text class="sv-ms" x="682" y="582">fair, coverage, full_findings. It renders. It computes nothing</text>
+  <text class="sv-ms" x="682" y="606">and imports no analysis module.</text>
+</svg>
+  </div>
+</figure>
+
+<h3>Why FAIR sits here rather than in a module</h3>
+
+<p>Quantification is an interpretation of the whole finding set, not a check. Three properties keep it methodologically defensible, and each is a structural choice rather than a disclaimer:</p>
+
+<ol>
+  <li><strong>A finding is not a risk.</strong> Findings are evidence that shift the FAIR factors of a handful of scoped SAP loss scenarios — internet-facing RCE to ransomware, privileged-access abuse, and so on. The mapping is explicit and the unrouted count is disclosed rather than hidden.</li>
+  <li><strong>Priced on the unfiltered corpus.</strong> The input count is stored beside the figure, so a display filter provably cannot move the number.</li>
+  <li><strong>No figures, no price.</strong> Without the customer's own loss figures (<code>crq_parameters.json</code> or <code>--crq-inputs</code>), the catalogue's illustrative company supplies the <em>shape</em> of the analysis and no currency total is presented as this organisation's exposure — including on the terminal, because a number in scrollback is copied into a chat message exactly as readily as one in a PDF.</li>
+</ol>
+
+<h2 id="s9"><span class="num">09</span>Release gate</h2>
+
+<p><code>--gate</code> is what turns a report into a control. The design is shaped less by what a gate should ideally check than by the four specific ways gates get switched off in practice.</p>
+
+<figure>
+  <div class="cap"><span class="fid">FIG. 08</span><span class="ftx">Release gate decision flow — and the four rules that keep it switched on</span></div>
+  <div class="art">
+<svg viewBox="0 0 1200 700" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Release gate decision flow">
+  <rect class="box" x="430" y="24" width="340" height="76" rx="4"/>
+  <text class="sv-h" x="452" y="58">Scan completes → corpus</text>
+  <text class="sv-ms" x="452" y="84">+ coverage manifest</text>
+
+  <path class="ln" d="M600 100 V 142" marker-end="url(#ar)"/>
+
+  <rect class="box-amber" x="380" y="142" width="440" height="84" rx="4"/>
+  <text class="sv-h" x="402" y="178">Policy · baseline · scope loadable?</text>
+  <text class="sv-ms" x="402" y="206">policy merged OVER defaults — a partial policy cannot switch the rest off</text>
+
+  <path class="ln" d="M820 172 H 960" marker-end="url(#ar)"/>
+  <text class="sv-ms" x="836" y="164">no / unreadable</text>
+
+  <rect class="box-crim" x="960" y="134" width="216" height="76" rx="4"/>
+  <text class="sv-h" x="982" y="170">EXIT 2</text>
+  <text class="sv-ms" x="982" y="196">cannot assess</text>
+
+  <path class="ln" d="M600 226 V 268" marker-end="url(#ar)"/>
+  <text class="sv-ms" x="614" y="254">yes</text>
+
+  <rect class="box-amber" x="380" y="268" width="440" height="84" rx="4"/>
+  <text class="sv-h" x="402" y="304">Coverage degraded?</text>
+  <text class="sv-ms" x="402" y="332">per-finding details.degrades_coverage  OR  manifest coverage_reasons</text>
+
+  <path class="ln" d="M820 310 H 1068 V 210" marker-end="url(#ar)"/>
+  <text class="sv-ms" x="856" y="302">yes</text>
+
+  <path class="ln" d="M600 352 V 394" marker-end="url(#ar)"/>
+  <text class="sv-ms" x="614" y="380">no</text>
+
+  <rect class="box" x="380" y="394" width="440" height="84" rx="4"/>
+  <text class="sv-h" x="402" y="430">Narrow to --gate-scope</text>
+  <text class="sv-ms" x="402" y="458">objects this transport touches · a scope naming nothing is REFUSED → exit 2</text>
+
+  <path class="ln" d="M600 478 V 520" marker-end="url(#ar)"/>
+
+  <rect class="box" x="380" y="520" width="440" height="84" rx="4"/>
+  <text class="sv-h" x="402" y="556">Diff against baseline · drop ticket_to_sap</text>
+  <text class="sv-ms" x="402" y="584">judge what got worse, and only what the customer can actually fix</text>
+
+  <path class="ln" d="M380 562 H 240" marker-end="url(#ar)"/>
+  <rect class="box-teal" x="24" y="524" width="216" height="76" rx="4"/>
+  <text class="sv-h" x="46" y="560">EXIT 0</text>
+  <text class="sv-ms" x="46" y="586">nothing in scope got worse</text>
+
+  <path class="ln" d="M820 562 H 960" marker-end="url(#ar)"/>
+  <rect class="box-crim" x="960" y="524" width="216" height="76" rx="4"/>
+  <text class="sv-h" x="982" y="560">EXIT 1</text>
+  <text class="sv-ms" x="982" y="586">policy violated</text>
+
+  <text class="sv-lbl" x="24" y="646">ADOPTION ORDER</text>
+  <text class="sv-m" x="24" y="676">1 · --gate-write-baseline gate-baseline.json     2 · --gate --gate-baseline gate-baseline.json on every build</text>
+</svg>
+  </div>
+</figure>
+
+<div class="tbl-scroll">
+<table>
+  <tr><th style="width:32%">Rule</th><th>The failure it prevents</th></tr>
+  <tr><td>Judge the delta</td><td>A gate that fails on the pre-existing backlog is disabled within a week.</td></tr>
+  <tr><td>Judge only the scope</td><td>A developer cannot be asked to fix somebody else's object to ship their own. A scope file naming nothing is refused rather than obeyed — narrowing to nothing would pass every build.</td></tr>
+  <tr><td>Never block the unfixable</td><td>In RISE a <code>ticket_to_sap</code> finding is not the developer's to resolve; failing their build for it teaches them to bypass the gate.</td></tr>
+  <tr><td>Never fail open</td><td>Degraded coverage is exit 2. This is why <code>degrades_coverage</code> is a generic flag rather than a hard-coded check ID — an earlier version matched only <code>ABAP-LEX-001</code>, which armed the gate for a mis-lexed file and left it disarmed for an <code>--abap-src</code> typo, a metadata-only export, or unreadable files. A new coverage check now arms the gate the day it is written.</td></tr>
+</table>
+</div>
+
+<div class="rule amber">
+  <span class="k">Two sharp edges to know before wiring it up</span>
+  <p><code>--gate-write-baseline</code> is evaluated <em>before</em> <code>--gate</code>, so passing both in one command writes the baseline and skips evaluation. And an empty finding set currently returns pass, not "could not assess" — if a run can collapse to zero findings for an unrelated reason, assert on the finding count in the pipeline as well.</p>
+</div>
+
+<h2 id="s10"><span class="num">10</span>Server tier &amp; persistence</h2>
+
+<p>The CLI answers "what is wrong today". The server answers "are we getting better", which is a different question and needs durable state. The two share the scanner core exactly — the server does not re-implement a single check. What it adds is everything that only makes sense across time.</p>
+
+<figure>
+  <div class="cap"><span class="fid">FIG. 09</span><span class="ftx">Server tier — one app container, one database, no third service</span></div>
+  <div class="art">
+<svg viewBox="0 0 1200 780" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Server tier architecture diagram">
+  <rect class="box-q" x="24" y="40" width="250" height="86" rx="4"/>
+  <text class="sv-h" x="46" y="76">Browser</text>
+  <text class="sv-ms" x="46" y="104">upload · triage · domains</text>
+
+  <rect class="box-q" x="24" y="146" width="250" height="86" rx="4"/>
+  <text class="sv-h" x="46" y="182">API client / CI</text>
+  <text class="sv-ms" x="46" y="210">changes since run N</text>
+
+  <rect class="box-q" x="24" y="252" width="250" height="86" rx="4"/>
+  <text class="sv-h" x="46" y="288">Host shell</text>
+  <text class="sv-ms" x="46" y="316">python -m server.cli</text>
+
+  <path class="ln" d="M274 83 H 340 V 200 H 400" marker-end="url(#ar)"/>
+  <path class="ln" d="M274 189 H 362 V 240 H 400" marker-end="url(#ar)"/>
+  <path class="ln-q" d="M274 295 H 318 V 486 H 400" marker-end="url(#ar-g)"/>
+  <text class="sv-ms" x="46" y="360">air-gapped path: scan without a browser</text>
+
+  <rect class="zone" x="380" y="30" width="560" height="606" rx="6"/>
+  <text class="sv-lbl" x="384" y="22">APP CONTAINER — ONE PROCESS</text>
+
+  <rect class="box-sap" x="400" y="52" width="520" height="106" rx="4"/>
+  <text class="sv-h" x="422" y="88">Static bundle — React + TypeScript SPA</text>
+  <text class="sv-ms" x="422" y="116">built at build time, served at / by the same FastAPI process</text>
+  <text class="sv-ms" x="422" y="140">costs build tooling, not a runtime dependency and not a second service</text>
+
+  <rect class="box" x="400" y="174" width="520" height="128" rx="4"/>
+  <text class="sv-h" x="422" y="210">FastAPI — HTTP tier</text>
+  <text class="sv-ms" x="422" y="238">session auth · RBAC with per-system row scoping · append-only audit log</text>
+  <text class="sv-ms" x="422" y="264">every JSON endpoint stays closed until the seeded password is replaced —</text>
+  <text class="sv-ms" x="422" y="288">the gate is on the DATA, not the page, so it cannot be scripted around</text>
+
+  <rect class="box" x="400" y="318" width="520" height="118" rx="4"/>
+  <text class="sv-h" x="422" y="354">Query layer</text>
+  <text class="sv-ms" x="422" y="382">console and JSON API render from the SAME queries —</text>
+  <text class="sv-ms" x="422" y="406">a screen and an endpoint with two copies of one rule eventually disagree</text>
+  <text class="sv-ms" x="422" y="428">no ORM · no graph database · 4 runtime dependencies</text>
+
+  <rect class="box-crim" x="400" y="452" width="520" height="168" rx="4"/>
+  <text class="sv-h" x="422" y="488">Scanner core — imported, not reimplemented</text>
+  <text class="sv-ms" x="422" y="516">the same 30 auditors, the same finding contract, the same coverage manifest</text>
+  <text class="sv-ms" x="422" y="542">upload lands → scan runs automatically → findings persist</text>
+  <text class="sv-ms" x="422" y="568">FAIR runs on EVERY server scan and lands on the dashboard</text>
+  <text class="sv-ms" x="422" y="596">landscape → system (SID/client) or tenant (SuccessFactors, Concur, IAS, BTP)</text>
+
+  <path class="ln" d="M920 536 H 1000" marker-end="url(#ar)"/>
+
+  <rect class="box-sap" x="1000" y="416" width="176" height="240" rx="4"/>
+  <text class="sv-h" x="1018" y="452">PostgreSQL</text>
+  <text class="sv-h" x="1018" y="478">16</text>
+  <text class="sv-ms" x="1018" y="514">findings</text>
+  <text class="sv-ms" x="1018" y="538">runs</text>
+  <text class="sv-ms" x="1018" y="562">graph nodes</text>
+  <text class="sv-ms" x="1018" y="586">users · roles</text>
+  <text class="sv-ms" x="1018" y="610">audit log</text>
+  <text class="sv-ms" x="1018" y="634">acceptances</text>
+
+  <rect class="box-teal" x="24" y="668" width="1152" height="96" rx="4"/>
+  <text class="sv-lbl" x="46" y="698" style="fill:var(--teal)">WHAT THE SERVER ADDS OVER THE CLI</text>
+  <text class="sv-t" x="46" y="730">mitigation journey · coverage manifest over time · risk acceptance with expiry · FP disputes with a reason</text>
+  <text class="sv-t" x="46" y="756">submitted_to_provider state for RISE work handed to SAP · twelve security domains · graph nodes for attack paths</text>
+</svg>
+  </div>
+</figure>
+
+<h3>The dependency discipline</h3>
+
+<p>The CLI runs on the standard library alone — the HTML, PDF and PPTX engines are all hand-built, with no <code>reportlab</code> and no <code>python-pptx</code>. The server tier deliberately ends that rule, because a browser console and a durable finding store cannot be built on the stdlib. What replaces it is a stated ceiling rather than an absence: <strong>a single-digit runtime dependency count</strong> (currently four; Jinja2 left when the server-rendered console was replaced by the SPA), <strong>no ORM, and no graph database</strong> — the graph nodes are rows. The deployment stays one app container plus one PostgreSQL, and the guidance in the repo is explicit that a third service would forfeit the product's clearest structural advantage.</p>
+
+<h3>Account recovery as an architectural decision</h3>
+
+<p>Worth noting because it is the kind of detail usually left implicit. <code>create-user --generate</code> prints a password to the terminal, so it now lives in shell scrollback and in <code>docker compose logs</code>. The console therefore holds that account at <strong>Your account</strong> until the password is replaced, and every JSON endpoint stays closed until then. Self-service change requires the current password even though the session is already authenticated — a stolen session should not be enough to take an account over permanently. An admin reset <em>mints</em> a new password rather than setting a chosen one, and either path signs out every other session for that account. Locked out of every admin account, the way back in is from the host, where whoever runs the container already has the database anyway.</p>
+
+<h2 id="s11"><span class="num">11</span>Finding identity &amp; the mitigation journey</h2>
+
+<p>Everything the server offers over the CLI rests on one primitive: <strong>a finding must be able to recognise itself across runs.</strong> Without stable identity, remediation tracking, aging and MTTR are approximations, and a resolved finding that comes back looks like a new one.</p>
+
+<figure>
+  <div class="cap"><span class="fid">FIG. 10</span><span class="ftx">Fingerprint identity and the five-state mitigation journey</span></div>
+  <div class="art">
+<svg viewBox="0 0 1200 680" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Finding identity and mitigation journey diagram">
+  <rect class="box" x="24" y="30" width="470" height="200" rx="4"/>
+  <text class="sv-h" x="46" y="66">Fingerprint</text>
+  <text class="sv-t" x="46" y="100">derived from the concrete SAP objects the</text>
+  <text class="sv-t" x="46" y="128">finding names — role, user, parameter, destination,</text>
+  <text class="sv-t" x="46" y="156">service, table — not from its position in a list</text>
+  <text class="sv-ms" x="46" y="192" style="fill:var(--sap)">so re-upload matches the SAME ROW, and the row keeps</text>
+  <text class="sv-ms" x="46" y="212" style="fill:var(--sap)">its history, assignee, due date and acceptance state</text>
+
+  <path class="ln" d="M494 130 H 560" marker-end="url(#ar)"/>
+
+  <rect class="box-vio" x="560" y="30" width="616" height="200" rx="4"/>
+  <text class="sv-h" x="582" y="66">Graph nodes</text>
+  <text class="sv-t" x="582" y="100">The same named objects are materialised as typed nodes —</text>
+  <text class="sv-t" x="582" y="128">the substrate for the attack-path view.</text>
+  <text class="sv-ms" x="582" y="164">Stored as rows in PostgreSQL; no graph database was added.</text>
+  <text class="sv-ms" x="582" y="192">The identity primitive pays for itself twice: once for tracking,</text>
+  <text class="sv-ms" x="582" y="212">once for the graph.</text>
+
+  <text class="sv-lbl" x="24" y="304">RUN N → RUN N+1 · EVERY FINDING LANDS IN EXACTLY ONE STATE</text>
+
+  <rect class="box-crim" x="24" y="320" width="220" height="118" rx="4"/>
+  <text class="sv-h" x="46" y="356">new</text>
+  <text class="sv-ms" x="46" y="384">no matching fingerprint</text>
+  <text class="sv-ms" x="46" y="406">in the previous run</text>
+
+  <rect class="box-amber" x="268" y="320" width="220" height="118" rx="4"/>
+  <text class="sv-h" x="290" y="356">persisting</text>
+  <text class="sv-ms" x="290" y="384">seen before, still present</text>
+  <text class="sv-ms" x="290" y="406">age and MTTR clock run</text>
+
+  <rect class="box-teal" x="512" y="320" width="220" height="118" rx="4"/>
+  <text class="sv-h" x="534" y="356">resolved</text>
+  <text class="sv-ms" x="534" y="384">was present, observed</text>
+  <text class="sv-ms" x="534" y="406">absent — and observable</text>
+
+  <rect class="box-crim" x="756" y="320" width="220" height="118" rx="4"/>
+  <text class="sv-h" x="778" y="356">regressed</text>
+  <text class="sv-ms" x="778" y="384">resolved, then returned</text>
+  <text class="sv-ms" x="778" y="406">same row re-opens</text>
+
+  <rect class="box-q" x="1000" y="320" width="176" height="118" rx="4"/>
+  <text class="sv-h" x="1020" y="356">unexamined</text>
+  <text class="sv-ms" x="1020" y="384">this run could not</text>
+  <text class="sv-ms" x="1020" y="406">observe it</text>
+
+  <path class="ln" d="M244 379 H 268" marker-end="url(#ar)"/>
+  <path class="ln" d="M488 379 H 512" marker-end="url(#ar)"/>
+  <path class="ln" d="M732 379 H 756" marker-end="url(#ar)"/>
+  <path class="ln" d="M866 320 V 284 H 378 V 320" marker-end="url(#ar)"/>
+
+  <rect class="box-crim" x="24" y="470" width="1152" height="98" rx="4"/>
+  <text class="sv-h" x="46" y="506">Why the fifth state is not optional</text>
+  <text class="sv-t" x="46" y="538">A run that could not observe a finding — because the export was missing that source — must leave it OPEN and say so.</text>
+  <text class="sv-t" x="46" y="562">Folding it into "resolved" would report a remediation that never happened. Absence of evidence is its own state.</text>
+
+  <rect class="box-q" x="24" y="588" width="1152" height="80" rx="4"/>
+  <text class="sv-h" x="46" y="622">Adjacent states, tracked alongside</text>
+  <text class="sv-t" x="46" y="654">risk acceptance with an expiry date · false-positive dispute with a mandatory reason · submitted_to_provider</text>
+</svg>
+  </div>
+</figure>
+
+<h2 id="s12"><span class="num">12</span>Report tier</h2>
+
+<p>Three engines, all pure standard library, all fed the same seven arguments and none of them permitted to compute anything. Each exists because a different reader needs a different artefact, and the shape of each is driven by how that reader will actually use it.</p>
+
+<div class="tbl-scroll">
+<table>
+  <tr><th style="width:14%">Format</th><th style="width:26%">Reader &amp; use</th><th>Structure and what drives it</th></tr>
+  <tr>
+    <td>HTML</td>
+    <td>Interactive triage, at a desk</td>
+    <td>Single self-contained file, logos embedded as data URIs, so it survives being emailed. Overall risk score, P1–P4 queue, severity/category breakdown, compliance panel, live severity filter, collapsible findings each carrying its full risk narrative and remediation.</td>
+  </tr>
+  <tr>
+    <td>PDF</td>
+    <td>Formal hand-over to SAP Basis / security</td>
+    <td>Ordered <strong>cover → P1–P4 queue → findings by area → compliance mapping → per-finding detail pages</strong>. Fix-first order is the whole point: the document is worked through top to bottom. Each detail page names affected objects, the security risk, a numbered remediation procedure and references. Running header/footer, page numbers, confidentiality banner.</td>
+  </tr>
+  <tr>
+    <td>PPTX</td>
+    <td>Leadership meeting</td>
+    <td><code>--pptx-mode full</code> produces a 300+ slide deck with one slide per finding, fix-first, carrying severity and priority chips and exploit tags. <code>--pptx-mode summary</code> produces the short executive deck. Both from a hand-built OOXML engine.</td>
+  </tr>
+</table>
+</div>
+
+<div class="rule">
+  <span class="k">A deliberate asymmetry</span>
+  <p>The twelve security domains appear on the dashboard, at <code>/domains</code>, as a filter on the triage queue, and as one slide in the deck — but <strong>not</strong> in the HTML or PDF reports. Those are the long-form hand-over documents and are kept simple. Resist the pull to render every view in every artefact.</p>
+</div>
+
+<h3>The knowledge base</h3>
+
+<p>Finding text is not written in the check. Each check emits an identity and its evidence; the narrative lives in <code>data/finding_details.json</code>, keyed by check-id with a family-prefix fallback, and where an entry is absent the report falls back to the finding's own description and remediation. Two consequences: the report is always complete, and improving remediation guidance for 620 checks is a data edit rather than a code change across 30 modules.</p>
+
+<h2 id="s13"><span class="num">13</span>Reach vs. state — the honesty model</h2>
+
+<p>This is a product-design decision that turned into an architectural one, and it is the section most worth reading if you are evaluating rather than extending the tool.</p>
+
+<p>The findings are re-expressed in the twelve-domain vocabulary the SAP security market uses, so a reader holding an RFP checklist can match them line for line. The problem: this is an offline, point-in-time <em>configuration</em> assessment, and four of those twelve domains name <em>continuous</em> activities — event monitoring, interface traffic, user behaviour, exploit protection. Twelve tiles each showing a number would assert twelve capabilities, and four of the assertions would be false.</p>
+
+<p>So every domain carries two facts that are easy to confuse, and states both on the tile rather than in a footnote:</p>
+
+<div class="tbl-scroll">
+<table>
+  <tr><th style="width:18%">Fact</th><th>What it answers</th></tr>
+  <tr><td>Reach</td><td>What this product can <em>ever</em> see in that domain. A property of the product — fixed, identical for every customer.</td></tr>
+  <tr><td>State</td><td>What <em>this</em> scan found: findings · no findings · export not supplied · not assessed.</td></tr>
+</table>
+</div>
+
+<p>Three reach levels are in use. <strong>Fully assessed</strong> covers baselining, access and authorisation, identity security, violation management and custom code. <strong>Partly assessed</strong> covers compliance monitoring (point-in-time, no score), HotNews (a curated subset with its size and cut-off stated), transport security (routes and change control, not payloads) and suspicious user behaviour (a pattern library run retrospectively over the exported log window — not behavioural analytics, not live). <strong>Configuration only</strong> covers security event monitoring and interface traffic: whether the audit log <em>could</em> have recorded the answer, and which destinations and ACLs exist. Exploit and 0-day protection is <strong>not covered</strong> at all — it needs a runtime agent and the product holds no connection — so that tile prints a dash, never a zero.</p>
+
+<div class="rule">
+  <span class="k">Two structural rules fall out of this</span>
+  <p>Domain membership is a <strong>strict partition</strong>: every finding lands in exactly one domain, so the tiles add up to the corpus rather than exceeding it. And findings the vocabulary has no word for — BTP, RISE shared-responsibility, resilience — are <em>listed with the reason</em> rather than dropped. There is no score, no percentage and no maturity rating: the product sees your findings, not your control environment.</p>
+</div>
+
+<h2 id="s14"><span class="num">14</span>Security posture of the tool itself</h2>
+
+<p>A security scanner is a high-value target and handles the most sensitive configuration data an SAP estate produces. The properties below are structural rather than procedural — they hold because of how the system is built, which is the only kind of assurance worth writing down.</p>
+
+<div class="tbl-scroll">
+<table>
+  <tr><th style="width:30%">Property</th><th>How it is achieved</th></tr>
+  <tr><td>No footprint in SAP</td><td>Nothing installed, no add-on transported, no RFC user created, nothing written back. Verifiable by inspection: the scanner contains no network client.</td></tr>
+  <tr><td>Read-only enforced in transport</td><td>The <code>sapstartsrv</code> allowlist is checked before any byte reaches the network, so a caller bug cannot reach <code>Start</code>, <code>Stop</code>, <code>Restart</code> or OS command execution.</td></tr>
+  <tr><td>No credentials in argv</td><td>There is no <code>--password</code>. A credential in argv is visible in <code>ps</code> and in shell history. Prompted, piped, or <code>SAPCONTROL_PASSWORD</code>.</td></tr>
+  <tr><td>Minimal supply chain</td><td>CLI: zero runtime dependencies. Server: four, no ORM, no graph database. Every dependency added is a dependency an auditor asks about.</td></tr>
+  <tr><td>Air-gap capable</td><td><code>python -m server.cli scan</code> runs a full scan with no browser. The whole product functions with no egress.</td></tr>
+  <tr><td>Authenticated by default</td><td>Seeded admin credentials appear in logs by construction, so the console holds that account until replaced and every JSON endpoint stays closed. The gate is on the data, not the page.</td></tr>
+  <tr><td>Tamper-evident operation</td><td>Append-only audit log; RBAC with per-system row scoping; password change or reset invalidates every other session for that account.</td></tr>
+  <tr><td>CI-verified</td><td>GitHub Actions runs the full pytest suite on Python 3.8–3.12 plus a full scanner smoke run on every push and pull request.</td></tr>
+</table>
+</div>
+
+<div class="rule amber">
+  <span class="k">Handling the output</span>
+  <p>The artefacts are the sensitive asset. A completed report names privileged users, unlocked standard accounts, exposed services and unpatched HotNews notes — it is an attack plan for the estate it describes. The PDF carries a confidentiality banner for that reason. Treat scan outputs, the export bundle and the PostgreSQL volume at the classification of the SAP system they describe.</p>
+</div>
+
+<h2 id="s15"><span class="num">15</span>Extending the system</h2>
+
+<p>The most common extension is a new audit module. Nine steps, in the order the architecture wants them:</p>
+
+<pre><span class="c"># 1 — declare the input, so absence is a coverage fact rather than silence</span>
+modules/data_loader.py     <span class="g">→ add filename to FILE_MAP; absent file loads as None</span>
+modules/coverage.py        <span class="g">→ register the logical source, and whether it is</span>
+                             <span class="g">obtainable in RISE at all</span>
+
+<span class="c"># 2 — write the auditor against the base contract</span>
+modules/&lt;concern&gt;.py       <span class="g">→ class XAuditor(BaseAuditor): run_all_checks()</span>
+                             <span class="g">→ own a check-ID prefix nothing else uses</span>
+                             <span class="g">→ self-skip on a missing key; set</span>
+                                <span class="g">details.degrades_coverage when you know you</span>
+                                <span class="g">could not see everything</span>
+                             <span class="g">→ take run_ctx if the verdict is deployment-dependent</span>
+
+<span class="c"># 3 — wire it into the composition root</span>
+sap_scanner.py             <span class="g">→ import, add the --modules key, add to the</span>
+                                <span class="g">"all" list, add the dispatch block</span>
+
+<span class="c"># 4 — supply the narrative as data, not code</span>
+data/finding_details.json  <span class="g">→ risk explanation + numbered remediation per check-id</span>
+
+<span class="c"># 5 — place it in the vocabulary</span>
+modules/domains.py         <span class="g">→ exactly one domain; the partition must stay strict</span>
+
+<span class="c"># 6 — map it, quantify it, rank it</span>
+compliance mapping         <span class="g">→ verified control IDs only</span>
+fair_adapter               <span class="g">→ route to a loss scenario, or accept the unrouted default</span>
+risk_prioritizer           <span class="g">→ exploitability / exposure signals, if any apply</span>
+
+<span class="c"># 7 — make it testable without an SAP system</span>
+sample_data/               <span class="g">→ fixtures crafted to trigger every new check</span>
+
+<span class="c"># 8 — prove the contract</span>
+tests/                     <span class="g">→ module fires · empty input does not crash · field types</span>
+                                <span class="g">and severities valid · no check-ID collision · report</span>
+                                <span class="g">renders · CLI end-to-end still runs</span>
+
+<span class="c"># 9 — verify the whole pipeline</span>
+python -m pytest -q
+python sap_scanner.py --data-dir ./sample_data --format all</pre>
+
+<h3>Where extensions usually go wrong</h3>
+
+<ul>
+  <li><strong>Reading the filtered list.</strong> A new summary panel that takes <code>all_findings</code> after the severity filter will silently under-report. Take the corpus (§07).</li>
+  <li><strong>Silent self-skip.</strong> A check that skips on missing data without flagging coverage produces a clean-looking result over an estate nobody looked at. Skipping is fine; skipping quietly is not.</li>
+  <li><strong>Hard-coding a coverage signal.</strong> Flag it as <code>details.degrades_coverage</code>. Naming a specific check ID in the gate is exactly the bug that was fixed.</li>
+  <li><strong>Computing in the report tier.</strong> Generators render what they are given. If a report needs a number, compute it in the composition root and pass it in.</li>
+  <li><strong>Splitting one problem into ten findings.</strong> The SNC module exists as a counter-example. Model the state; report the cause.</li>
+  <li><strong>Assuming a fixed check count in tests.</strong> Five families are generated at runtime from shipped rulesets.</li>
+  <li><strong>Writing the check ID in a form nothing can read.</strong> A positional <code>_emit("X-001", …)</code> and a placeholder-free <code>f"X-001"</code> are both invisible to a naive reader, and a check nothing can enumerate until it fails corrupts any denominator built from the count.</li>
+</ul>
+
+<h2 id="s16"><span class="num">16</span>Known constraints</h2>
+
+<p>Stated plainly, because an architecture guide that only lists strengths is a brochure.</p>
+
+<div class="tbl-scroll">
+<table>
+  <tr><th style="width:34%">Constraint</th><th>Consequence &amp; current position</th></tr>
+  <tr><td>Point-in-time by construction</td><td>No continuous monitoring, no runtime protection, no traffic visibility. The domain model states this on-screen rather than hiding it (§13).</td></tr>
+  <tr><td>Export quality is the customer's</td><td>The coverage manifest turns this from a hidden risk into a disclosed one, but a thin export still yields a thin assessment.</td></tr>
+  <tr><td>Users / roles / authorisations are RFC-only in connected mode</td><td>RFC is declined by default (decision D3), so connected collection is partial by construction and every run writes a manifest naming what it could not reach.</td></tr>
+  <tr><td>Empty finding set returns pass</td><td>The gate treats zero findings as exit 0, not "could not assess". Assert on finding count in the pipeline until this closes.</td></tr>
+  <tr><td>Non-uniform auditor constructors</td><td>Three signature shapes across 30 modules (§05). Cosmetic today; it will bite when <code>run_ctx</code> gains a field every module needs.</td></tr>
+  <tr><td>HotNews catalogue is curated</td><td>A verified subset of high-impact Notes since 2020, not the full SAP Note corpus. Size and cut-off are stated; extensible via <code>sap_security_notes.json</code>.</td></tr>
+  <tr><td>Custom-code scanning needs an abapGit export</td><td>The <code>cva</code> module cannot run without <code>--abap-src</code>. Where SAP's own CVA is licensed, <code>atc</code> ingests those results instead and is preferred.</td></tr>
+  <tr><td>Per-category denominators are a floor</td><td>The check-id → category map reads literals only, so per-category rates in the trend view are computed against fewer checks than actually ran. The per-module counts used by the posture score resolve all three ID forms; the category map does not yet.</td></tr>
+</table>
+</div>
+
+<hr>
+
+<p style="font-size:15px;color:var(--ink2);max-width:82ch">
+<strong>Provenance.</strong> This guide was assembled from the repository's public README and <code>sap_scanner.py</code> as published at
+<a href="https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner">github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner</a>. Module names, CLI surface, pipeline ordering, the corpus-split invariant, the gate rules and the deployment-mode behaviour are taken from source and documentation. The internal call structure of individual auditors, the <code>BaseAuditor</code> signature and the exact finding-dict keys are described from the composition root and the stated test contract — confirm against <code>modules/base_auditor.py</code> before publishing externally. Diagrams are architectural, not exhaustive.
+</p>
+
+<p style="font-size:15px;color:var(--ink2)">
+Copyright © 2026 Krishnendu De. All rights reserved. Source-available, not open source — reading and review are permitted; any use requires written permission.
+</p>
+
+</div>
+
+</body>
+</html>
