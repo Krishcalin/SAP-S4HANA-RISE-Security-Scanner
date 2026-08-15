@@ -1,0 +1,6 @@
+# The architecture guide is what this site publishes. Everything else in
+# docs/ is repository documentation that happens to sit in the same folder.
+# Advisory only -- see docs/.nojekyll and the note in README Contents.
+User-agent: *
+Allow: /ARCHITECTURE.html
+Disallow: /
