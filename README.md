@@ -49,7 +49,7 @@
 
 ## Contents
 
-- **[System Architecture](docs/ARCHITECTURE.html)** &nbsp;<sub>illustrated guide · 11 diagrams</sub>
+- **[System Architecture](https://krishcalin.github.io/SAP-S4HANA-RISE-Security-Scanner/ARCHITECTURE.html)** &nbsp;<sub>illustrated guide · 11 diagrams</sub>
 - **[Overview](#overview)**
 - **[Server mode — quick start](#server-mode--quick-start)**
 - **[Connected mode](#connected-mode)**
@@ -99,7 +99,7 @@
 
 | Document | What it covers |
 |---|---|
-| [**`docs/ARCHITECTURE.html`**](docs/ARCHITECTURE.html) | How the system is put together and why each boundary sits where it does — the trust boundary, the acquisition funnel, the seven-stage core, the corpus-split invariant, the release gate, the server tier and the honesty model. Start here. |
+| [**System Architecture**](https://krishcalin.github.io/SAP-S4HANA-RISE-Security-Scanner/ARCHITECTURE.html) <br><sub>source: [`docs/ARCHITECTURE.html`](docs/ARCHITECTURE.html)</sub> | How the system is put together and why each boundary sits where it does — the trust boundary, the acquisition funnel, the seven-stage core, the corpus-split invariant, the release gate, the server tier and the honesty model. Start here. |
 | [`docs/EXPORT_GUIDE.md`](docs/EXPORT_GUIDE.md) | How to produce the exports this tool reads |
 | [`docs/CHECKS_REFERENCE.md`](docs/CHECKS_REFERENCE.md) | Per-check reference |
 | [`docs/RELEASE_GATE.md`](docs/RELEASE_GATE.md) | Using the scanner as a CI gate — adoption order and policy |
