@@ -190,12 +190,38 @@ def test_the_cli_computes_the_manifest_and_passes_it_to_every_generator():
 
 def test_a_manifest_failure_does_not_lose_the_scan():
     """The reports then say the coverage is unknown, which is worse than knowing
-    and much better than implying completeness."""
-    source = (ROOT / "sap_scanner.py").read_text(encoding="utf-8")
-    idx = source.find("coverage_manifest = build_manifest(")
-    assert idx > 0
-    assert "except Exception" in source[idx:idx + 900]
-    assert "coverage_manifest = None" in source[idx:idx + 900]
+    and much better than implying completeness.
+
+    ASKED OF THE SYNTAX TREE, NOT OF A CHARACTER WINDOW. This used to search the
+    900 characters following the call for `except Exception` and
+    `coverage_manifest = None`. Adding one argument to the call pushed the
+    handler past the window and the test failed on unchanged behaviour — a test
+    measuring the distance between two lines rather than the relationship
+    between them. The relationship is what matters: the call is inside a `try`,
+    and the handler sets the manifest to None.
+    """
+    import ast
+
+    tree = ast.parse((ROOT / "sap_scanner.py").read_text(encoding="utf-8"))
+
+    def calls_build_manifest(node):
+        return any(isinstance(n, ast.Call) and getattr(n.func, "id", "") == "build_manifest"
+                   for n in ast.walk(node))
+
+    guarded = [t for t in ast.walk(tree)
+               if isinstance(t, ast.Try) and any(calls_build_manifest(s) for s in t.body)]
+    assert guarded, "the manifest is built outside any try — one bad export loses the scan"
+
+    for attempt in guarded:
+        for handler in attempt.handlers:
+            assigns_none = any(
+                isinstance(n, ast.Assign)
+                and any(getattr(t, "id", "") == "coverage_manifest" for t in n.targets)
+                and isinstance(n.value, ast.Constant) and n.value.value is None
+                for n in ast.walk(handler))
+            assert assigns_none, (
+                "a handler around build_manifest does not set coverage_manifest "
+                "to None, so the reports would carry a half-built manifest")
 
 
 # ── an empty file is not an absent one ───────────────────────────────────────

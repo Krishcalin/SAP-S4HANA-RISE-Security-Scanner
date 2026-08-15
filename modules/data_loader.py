@@ -294,8 +294,24 @@ class DataLoader:
         #: the Cloud ALM pass, so a store file is neither double-counted nor
         #: silently withheld.
         self._consumed_files: set = set()
+        #: Files present in the directory that no loader path claimed. Populated
+        #: by load_all; a caller that wants to put them in front of a reader
+        #: (the coverage manifest does) reads them from here.
+        self.unrecognised_files: list = []
+        #: Names the CALLER knows about and we should not call unrecognised —
+        #: the --config baseline and the --output report both live wherever the
+        #: operator put them, which is often beside the exports. The loader
+        #: cannot know those names; the composition root can, and passes them.
+        self._disregard: set = set()
         #: Lazily built `lowercased filename -> real filename` index.
         self._dir_entries: Optional[Dict[str, str]] = None
+
+    def disregard(self, *names: str) -> "DataLoader":
+        """Declare files the caller already accounts for. Chainable."""
+        for name in names:
+            if name:
+                self._disregard.add(Path(name).name.lower())
+        return self
 
     def load_all(self) -> Dict[str, Any]:
         """Load all available data files and return unified data dict."""
@@ -327,11 +343,36 @@ class DataLoader:
         for note in self.btp_import_notes:
             print(f"    {note}")
 
+        # A FILE THAT IS PRESENT AND UNRECOGNISED IS NOT A MISSING FILE.
+        #
+        # The customer exported it, named it something the loader does not know,
+        # and will read "not supplied" in the coverage manifest for a source that
+        # is sitting in the directory. One typo, or `Users.CSV` from a system that
+        # exports differently, and the whole account list silently does not
+        # participate — reported accurately as absent, and unactionable, because
+        # nothing tells them the file was there.
+        #
+        # So the loader names them. Every path that claims a file records it in
+        # `_consumed_files`, which makes the leftovers derivable rather than
+        # guessed at.
+        self.unrecognised_files = sorted(
+            name for name in self._entries().values()
+            if self._looks_like_an_unread_export(name))
+
         loaded = [k for k, v in self._data.items() if v is not None]
         missing = [k for k, v in self._data.items() if v is None]
         print(f"    Loaded: {', '.join(loaded) if loaded else 'none'}")
         if missing:
             print(f"    Not found (skipping): {', '.join(missing)}")
+        if self.unrecognised_files:
+            shown = ", ".join(self.unrecognised_files[:10])
+            more = (" and %d more" % (len(self.unrecognised_files) - 10)
+                    if len(self.unrecognised_files) > 10 else "")
+            print(f"    [WARN] {len(self.unrecognised_files)} file(s) in the "
+                  f"directory were not recognised and have been ignored: "
+                  f"{shown}{more}")
+            print(f"           Check the name against docs/EXPORT_SOURCES.md — "
+                  f"a misnamed export reads as 'not supplied'.")
 
         return self._data
 
@@ -457,6 +498,29 @@ class DataLoader:
                 pass
             self._dir_entries = entries
         return self._dir_entries
+
+    #: Extensions an export arrives in. Anything else in the directory is not a
+    #: candidate for "you misnamed this", so listing it would be noise — and a
+    #: warning that cries wolf is one the reader learns to scroll past, which is
+    #: the failure this warning exists to prevent.
+    _EXPORT_SUFFIXES = (".csv", ".json")
+
+    #: Files this product itself writes into, or reads from, an export directory.
+    #: A report or a scenario export sitting beside the exports is expected.
+    _OUR_OWN = (".crq.json",)
+
+    def _looks_like_an_unread_export(self, name: str) -> bool:
+        """Is this a file a customer plausibly meant us to read, and we did not?"""
+        if name in self._consumed_files:
+            return False
+        lowered = name.lower()
+        if not lowered.endswith(self._EXPORT_SUFFIXES):
+            return False
+        if lowered.endswith(self._OUR_OWN):
+            return False
+        if lowered in self._disregard:
+            return False
+        return True
 
     def _resolve(self, fname: str) -> Optional[Path]:
         """Find `fname` on disk, or None. Case-insensitive, with one exception.

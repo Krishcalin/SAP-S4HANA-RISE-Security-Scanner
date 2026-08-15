@@ -395,9 +395,9 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="server.cli")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("init-db").set_defaults(fn=cmd_init_db)
+    sub.add_parser("init-db", help="Create or migrate the database schema.").set_defaults(fn=cmd_init_db)
 
-    cu = sub.add_parser("create-user")
+    cu = sub.add_parser("create-user", help="Create a console account with a role.")
     cu.add_argument("username")
     cu.add_argument("role", choices=sorted(auth.ROLE_RANK), nargs="?", default="viewer")
     cu.add_argument("--generate", action="store_true",
@@ -406,13 +406,13 @@ def main(argv=None) -> int:
                          "where there is no TTY.")
     cu.set_defaults(fn=cmd_create_user)
 
-    sp = sub.add_parser("set-password")
+    sp = sub.add_parser("set-password", help="Set an account's password, signing out its other sessions.")
     sp.add_argument("username")
     sp.add_argument("--generate", action="store_true",
                     help="mint one and print it; the user must then replace it")
     sp.set_defaults(fn=cmd_set_password)
 
-    al = sub.add_parser("add-landscape")
+    al = sub.add_parser("add-landscape", help="Register a customer estate.")
     al.add_argument("name")
     al.add_argument("--mode", default=DEFAULT_DEPLOYMENT_MODE,
                     choices=list(DEPLOYMENT_MODES))
@@ -420,7 +420,7 @@ def main(argv=None) -> int:
                     help="SAP Roles & Responsibilities version this mapping is read against")
     al.set_defaults(fn=cmd_add_landscape)
 
-    asys = sub.add_parser("add-system")
+    asys = sub.add_parser("add-system", help="Register an ABAP system (SID and client) in a landscape.")
     asys.add_argument("landscape")
     asys.add_argument("sid")
     asys.add_argument("client")
@@ -455,25 +455,25 @@ def main(argv=None) -> int:
     aten.add_argument("--owner", default=None)
     aten.set_defaults(fn=cmd_add_tenant)
 
-    sc = sub.add_parser("scan")
+    sc = sub.add_parser("scan", help="Scan an export directory and store the run.")
     sc.add_argument("landscape")
     sc.add_argument("data_dir")
     sc.add_argument("--sid", default=None)
     sc.add_argument("--client", default=None)
     sc.set_defaults(fn=cmd_scan)
 
-    rb = sub.add_parser("rebuild-sap-catalogue")
+    rb = sub.add_parser("rebuild-sap-catalogue", help="Rebuild the SAP security-note catalogue from its source data.")
     rb.add_argument("repo_dir", help="checkout of SAP-samples/frun-csa-policies-best-practices")
     rb.add_argument("--version", default="v2.4", help="baseline policy version folder")
     rb.set_defaults(fn=cmd_rebuild_sap_catalogue)
 
-    sub.add_parser("runs").set_defaults(fn=cmd_runs)
+    sub.add_parser("runs", help="List stored scan runs, newest first.").set_defaults(fn=cmd_runs)
 
-    td = sub.add_parser("totp-disable")
+    td = sub.add_parser("totp-disable", help="Turn off two-factor authentication for an account.")
     td.add_argument("username")
     td.set_defaults(fn=cmd_totp_disable)
 
-    ts = sub.add_parser("totp-status")
+    ts = sub.add_parser("totp-status", help="Show which accounts have two-factor authentication enabled.")
     ts.add_argument("username", nargs="?", default=None)
     ts.set_defaults(fn=cmd_totp_status)
 

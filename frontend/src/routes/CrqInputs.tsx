@@ -91,7 +91,18 @@ export function CrqInputs() {
           setParams({ landscape: String(ls[0].id) }, { replace: true })
         }
       })
-      .catch(() => { if (live) setScapes([]) })
+      .catch((e: unknown) => {
+        // AN EMPTY LIST IS AN ANSWER; A FAILED REQUEST IS NOT.
+        // This used to swallow the error and set [], so a landscape endpoint
+        // that was down, forbidden or timing out rendered as "no landscapes" —
+        // the same could-not-look-reads-as-nothing-there the rest of this
+        // product spends its effort refusing to do.
+        if (!live) return
+        const status = e instanceof ApiError ? e.status : 0
+        setScapes([])
+        setFailure(`The landscape list could not be loaded${status ? ` (HTTP ${status})` : ''}.`
+          + ' This screen cannot tell which estate to quantify — it is not that you have none.')
+      })
     return () => { live = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

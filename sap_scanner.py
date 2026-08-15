@@ -223,6 +223,10 @@ def main():
     # Load data
     print("[*] Loading exported configuration data...")
     loader = DataLoader(data_dir)
+    # The baseline and the report are the operator's files, frequently kept
+    # beside the exports. Naming them here keeps them out of the "we did not
+    # recognise this" list, which is only useful while it is short.
+    loader.disregard(getattr(args, "config", None), getattr(args, "output", None))
     data = loader.load_all()
     # Source is a DIRECTORY, not one of the tabular exports, so it is handed to the
     # auditor through the same dict rather than through DataLoader's FILE_MAP.
@@ -663,7 +667,8 @@ def main():
     try:
         coverage_manifest = build_manifest(
             data, modules_run=sorted(run_modules) if run_modules else None,
-            deployment_mode=args.deployment_mode)
+            deployment_mode=args.deployment_mode,
+            unrecognised_files=getattr(loader, "unrecognised_files", ()))
         counts = coverage_manifest["counts"]
         print(f"\n[*] Coverage: supplied {counts['sources_supplied']} of "
               f"{counts['sources_known']} logical sources; "

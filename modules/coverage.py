@@ -1033,12 +1033,21 @@ def _rank(entry: Dict[str, Any]) -> int:
 
 def build_manifest(data: Dict[str, Any],
                    modules_run: Optional[Iterable[str]] = None,
-                   deployment_mode: str = "on_prem") -> Dict[str, Any]:
+                   deployment_mode: str = "on_prem",
+                   unrecognised_files: Optional[Iterable[str]] = None
+                   ) -> Dict[str, Any]:
     """Build the coverage manifest for one scan run.
 
     `data` is the DataLoader output — logical name -> rows, or None when the file
     was absent.
+
+    `unrecognised_files` are files that were in the export directory and matched
+    no name the loader knows. They belong here rather than only in the console
+    output, because "you did not supply it" and "you supplied it under a name we
+    do not read" lead to different actions and this manifest is the one record
+    that reaches every artefact.
     """
+    unrecognised_names = sorted(unrecognised_files or ())
     known = all_logical_sources()
     supplied = sorted(k for k in known if data.get(k))
     # A file that was present but parsed to zero rows is NOT the same as an absent
@@ -1135,11 +1144,13 @@ def build_manifest(data: Dict[str, Any],
         "modules_not_run": sum(1 for m in mods.values() if m["status"] == "not_run"),
         "modules_not_requested": sum(1 for m in mods.values()
                                      if m["status"] == "not_requested"),
+        "files_unrecognised": len(unrecognised_names),
     }
 
     return {
         "deployment_mode": deployment_mode,
         "counts": counts,
+        "unrecognised_files": unrecognised_names,
         "supplied": supplied,
         "empty": empty,
         "missing": missing,
