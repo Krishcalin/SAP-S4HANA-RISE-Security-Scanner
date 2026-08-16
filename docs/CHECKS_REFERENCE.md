@@ -6,11 +6,11 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**368** check ids are written as literals in `modules/`, across **30** modules. A further **255** are built at runtime from shipped rule tables, giving **623** in total.
+**374** check ids are written as literals in `modules/`, across **31** modules. A further **255** are built at runtime from shipped rule tables, giving **629** in total.
 
 ## What this file does not claim
 
-**42 of the 368 titles and 15 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**42 of the 374 titles and 15 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -247,11 +247,14 @@ Category: ABAP Authorization & Critical Access, Cryptographic Posture, Security 
 | `LREV-ECS-001` | HIGH | Security Audit Log filters are bound to named users rather than all users |
 | `STDUSR-ECS-001` | MEDIUM | Obsolete standard client(s) still present in the system |
 
-### `financial_controls` — 6 checks
+### `financial_controls` — 9 checks
 
 | Check | Severity | Title |
 |---|---|---|
 | `FIN-DOC-001` | HIGH | Payment-relevant document fields may be changed after posting/clearing |
+| `FIN-EVD-001` | MEDIUM | Postings back-dated beyond the entry-lag threshold |
+| `FIN-EVD-002` | LOW | FI documents entered on weekends |
+| `FIN-EVD-003` | MEDIUM | Reversal rate above threshold in the FI document sample |
 | `FIN-NR-001` | MEDIUM | Financial document number ranges are buffered (completeness gaps) |
 | `FIN-PP-001` | HIGH | Posting periods open too wide with no authorization-group control |
 | `FIN-SF-001` | HIGH | Payment-relevant master-data fields are not under dual control (T055F) |
@@ -433,6 +436,14 @@ Category: Logging, Monitoring & IR
 | `LREV-SRC-003` | MEDIUM | Audit filter configuration not supplied alongside the event extract |
 | `LREV-WIN-001` | LOW | Reviewed window is too short to be representative |
 | `LREV-WIN-002` | HIGH | *varies* |
+
+### `master_data_changes` — 3 checks
+
+| Check | Severity | Title |
+|---|---|---|
+| `MDC-BANK-001` | HIGH | Vendor / customer / business-partner bank details were changed |
+| `MDC-DIRECT-001` | HIGH | Master data changed through direct table maintenance |
+| `MDC-EVD-001` | LOW | Change-document items were supplied without before/after values |
 
 ### `network_services` — 8 checks
 

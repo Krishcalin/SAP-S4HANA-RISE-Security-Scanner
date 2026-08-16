@@ -101,6 +101,8 @@ RISE_MODULE_SCOPE: Dict[str, str] = {
     "grc_access_control": "conditional",  # only if the customer owns GRC
     "role_governance": "in_scope",
     "financial_controls": "in_scope",
+    "master_data_changes": "in_scope",
+    "master_data_changes": "in_scope",
     "baseline_params": "read_only",
     "s4_business_authz": "in_scope",
     "access_risk_analysis": "in_scope",
@@ -155,6 +157,7 @@ CLI_MODULE_ALIASES: Dict[str, str] = {
     "grcac": "grc_access_control",
     "rolegov": "role_governance",
     "fincontrols": "financial_controls",
+    "mdchange": "master_data_changes",
 }
 
 #: Logical sources a RISE customer cannot produce, because they are read from the

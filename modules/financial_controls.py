@@ -32,15 +32,41 @@ Checks:
                 number gaps, breaking the sequential-completeness assertion over
                 financial documents.
 
+EVIDENCE CHECKS (FIN-EVD-*). The five checks above audit what the configuration
+PERMITS; the three below read BKPF document headers and audit what actually
+HAPPENED. FIN-PP-001 says whether the posting periods stand open — FIN-EVD-001
+says whether anyone back-dated into them. Config and evidence are two halves of
+one assertion, and an auditor is handed both or told which half is missing.
+
+  - FIN-EVD-001 Back-dated postings: documents whose posting date (BUDAT) lies
+                more than a threshold behind the entry date (CPUDT) — the
+                cutoff-manipulation pattern the open-period config enables.
+  - FIN-EVD-002 Weekend-entered postings: documents ENTERED (CPUDT) on a
+                Saturday/Sunday. Scheduled interfaces post on weekends
+                legitimately, so this is a review register, not an accusation —
+                which is why it is LOW and lists the entering users.
+  - FIN-EVD-003 Reversal rate: share of documents carrying a reversal (STBLG)
+                above a threshold. Any single reversal is routine; a high rate
+                is the post-and-reverse pattern that conceals activity inside
+                a period.
+
+BKPF is header-only, deliberately: no amounts leave the system, so the
+amount-vs-tolerance check the doc-type data would invite is out of scope until
+a line-item export (ACDOCA/BSEG) is defined and its privacy weighed.
+
 Data sources (exported to CSV):
   - posting_periods    → T001B/V_T001B: VARIANT, ACCOUNT_TYPE, FROM/TO_PERIOD+YEAR, AUTH_GROUP
   - tolerance_groups   → T043T: GROUP, CURRENCY, AMOUNT_PER_DOC, AMOUNT_PER_OPEN_ITEM
   - dual_control_fields→ T055F: TABLE, FIELD (fields flagged sensitive for dual control)
   - doc_change_rules   → TBAER/V_TBAER: FIELD, ACCOUNT_TYPE, CHANGE_ALLOWED, AFTER_POSTING/CLEARING
   - fi_number_ranges   → TNRO/NRIV: OBJECT, BUFFERING
+  - fi_documents       → BKPF headers: BUKRS, BELNR, GJAHR, BUDAT, CPUDT
+                         [, BLART, USNAM, TCODE, STBLG]  [verified: SAP data
+                         dictionary + operator field reference]
 """
 
-from typing import Any, Dict, List
+import datetime
+from typing import Any, Dict, List, Optional
 
 from modules.base_auditor import BaseAuditor
 
@@ -48,6 +74,16 @@ from modules.base_auditor import BaseAuditor
 class FinancialControlsAuditor(BaseAuditor):
 
     CATEGORY = "Financial Controls (SOX)"
+
+    # Evidence thresholds (FIN-EVD-*), all disclosed in the finding text.
+    # Back-dating within a few days is normal period-end housekeeping; beyond a
+    # week the posting was aimed at a period, not delayed by one.
+    _MAX_BACKDATE_DAYS = 7
+    # A reversal share above this, with at least _MIN_REVERSED reversed
+    # documents, is screened as the post-and-reverse pattern. The floor keeps a
+    # 3-document export from producing a 33% "rate".
+    _MAX_REVERSAL_SHARE = 5.0
+    _MIN_REVERSED = 3
 
     _ALL_ACCT_TYPES = {"+", "", "*", "ALL"}
     _UNLIMITED = 1_000_000_000          # >= this per-document limit is treated as "no limit"
@@ -71,6 +107,10 @@ class FinancialControlsAuditor(BaseAuditor):
         self.check_dual_control_fields()
         self.check_document_change_rules()
         self.check_fi_number_ranges()
+        # Evidence half — reads BKPF headers when fi_documents is supplied.
+        self.check_backdated_postings()
+        self.check_weekend_postings()
+        self.check_reversal_rate()
         return self.findings
 
     # ------------------------------------------------------------------ helpers
@@ -414,3 +454,179 @@ class FinancialControlsAuditor(BaseAuditor):
                             "SAP Note 62077 / SAP Help — number range buffering"],
                 details={"count": len(buffered)},
             )
+
+    # =====================================================  EVIDENCE (BKPF)
+    @staticmethod
+    def _parse_date(s: Any) -> Optional[datetime.date]:
+        """8-digit SAP date or ISO date -> date; None when empty/unparseable."""
+        digits = "".join(ch for ch in str(s or "") if ch.isdigit())
+        if len(digits) < 8:
+            return None
+        try:
+            return datetime.date(int(digits[:4]), int(digits[4:6]), int(digits[6:8]))
+        except ValueError:
+            return None
+
+    def _doc_label(self, r: dict) -> str:
+        doc = "/".join(x for x in (self._get(r, "BUKRS", "COMPANY_CODE"),
+                                   self._get(r, "BELNR", "DOC_NUMBER", "DOCUMENT"),
+                                   self._get(r, "GJAHR", "FISCAL_YEAR")) if x)
+        return doc or "?"
+
+    def check_backdated_postings(self):
+        rows = self.data.get("fi_documents")
+        if not rows:
+            return
+        hits, objects, max_gap = [], [], 0
+        for r in rows:
+            budat = self._parse_date(self._get(r, "BUDAT", "POSTING_DATE"))
+            cpudt = self._parse_date(self._get(r, "CPUDT", "ENTRY_DATE"))
+            if not budat or not cpudt:
+                continue
+            gap = (cpudt - budat).days
+            if gap <= self._MAX_BACKDATE_DAYS:
+                continue
+            user = self._get(r, "USNAM", "USER", "USERNAME")
+            tcode = self._get(r, "TCODE", "TRANSACTION")
+            max_gap = max(max_gap, gap)
+            hits.append(f"{self._doc_label(r)}: posted {budat.isoformat()}, "
+                        f"entered {cpudt.isoformat()} ({gap} days later) "
+                        f"by {user or '?'}" + (f" via {tcode}" if tcode else ""))
+            # The entering USER is the graph object: the documents are members
+            # of the register, but the pattern to review belongs to a person.
+            if user:
+                obj = {"type": "user", "name": user}
+                if obj not in objects:
+                    objects.append(obj)
+        if not hits:
+            return
+        self.finding(
+            check_id="FIN-EVD-001",
+            title="Postings back-dated beyond the entry-lag threshold",
+            severity=self.SEVERITY_MEDIUM,
+            category=self.CATEGORY,
+            description=(
+                f"{len(hits)} document(s) carry a posting date (BUDAT) more than "
+                f"{self._MAX_BACKDATE_DAYS} days before the date they were "
+                f"actually entered (CPUDT; worst gap {max_gap} days). Back-dating "
+                "aims a posting at an earlier period after the fact — the cutoff "
+                "manipulation that FIN-PP-001's open-period configuration makes "
+                "possible. Each entry should trace to a documented period-end "
+                "adjustment; the ones that do not are the finding."
+            ),
+            affected_items=hits[:50],
+            # Aggregate register over the audit window, users as members.
+            affected_objects=objects,
+            scope="aggregate",
+            remediation=(
+                "Reconcile each listed posting against the period-end close "
+                "documentation; close prior periods (OB52) and restrict the "
+                "special-period authorization group so back-dating requires the "
+                "close team, not any FI user."
+            ),
+            references=["SOX financial-reporting cutoff (PCAOB AS 2201)",
+                        "DSAG Prüfleitfaden — Buchungen in Vorperioden"],
+            details={"count": len(hits), "max_gap_days": max_gap,
+                     "threshold_days": self._MAX_BACKDATE_DAYS},
+        )
+
+    def check_weekend_postings(self):
+        rows = self.data.get("fi_documents")
+        if not rows:
+            return
+        hits, objects = [], []
+        for r in rows:
+            cpudt = self._parse_date(self._get(r, "CPUDT", "ENTRY_DATE"))
+            if not cpudt or cpudt.weekday() < 5:
+                continue
+            user = self._get(r, "USNAM", "USER", "USERNAME")
+            tcode = self._get(r, "TCODE", "TRANSACTION")
+            day = ("Saturday", "Sunday")[cpudt.weekday() - 5]
+            hits.append(f"{self._doc_label(r)}: entered {cpudt.isoformat()} "
+                        f"({day}) by {user or '?'}"
+                        + (f" via {tcode}" if tcode else ""))
+            if user:
+                obj = {"type": "user", "name": user}
+                if obj not in objects:
+                    objects.append(obj)
+        if not hits:
+            return
+        self.finding(
+            check_id="FIN-EVD-002",
+            title="FI documents entered on weekends",
+            severity=self.SEVERITY_LOW,
+            category=self.CATEGORY,
+            description=(
+                f"{len(hits)} document(s) were ENTERED on a Saturday or Sunday. "
+                "Scheduled interfaces and batch runs post on weekends "
+                "legitimately, so this is a review register rather than an "
+                "accusation: the question is which of the entering users are "
+                "people, and why a person was posting when the reviewers were "
+                "not there."
+            ),
+            affected_items=hits[:50],
+            affected_objects=objects,
+            scope="aggregate",
+            remediation=(
+                "Classify the listed users (dialog vs system/interface); for "
+                "dialog users, confirm the weekend activity with their manager "
+                "and cross-check the same users against the back-dating and "
+                "bank-change registers."
+            ),
+            references=["ACFE — off-hours activity as a fraud indicator",
+                        "SOX ITGC — monitoring of manual journal activity"],
+            details={"count": len(hits)},
+        )
+
+    def check_reversal_rate(self):
+        rows = self.data.get("fi_documents")
+        if not rows:
+            return
+        parsed = [r for r in rows if isinstance(r, dict)]
+        total = len(parsed)
+        reversed_docs = [r for r in parsed
+                         if self._get(r, "STBLG", "REVERSAL_DOC", "REVERSED_BY")]
+        if total == 0 or len(reversed_docs) < self._MIN_REVERSED:
+            return
+        share = 100.0 * len(reversed_docs) / total
+        if share <= self._MAX_REVERSAL_SHARE:
+            return
+        hits, objects = [], []
+        for r in reversed_docs[:50]:
+            user = self._get(r, "USNAM", "USER", "USERNAME")
+            hits.append(f"{self._doc_label(r)} reversed by document "
+                        f"{self._get(r, 'STBLG', 'REVERSAL_DOC', 'REVERSED_BY')}"
+                        + (f" — posted by {user}" if user else ""))
+            if user:
+                obj = {"type": "user", "name": user}
+                if obj not in objects:
+                    objects.append(obj)
+        self.finding(
+            check_id="FIN-EVD-003",
+            title="Reversal rate above threshold in the FI document sample",
+            severity=self.SEVERITY_MEDIUM,
+            category=self.CATEGORY,
+            description=(
+                f"{len(reversed_docs)} of {total} document(s) in the export were "
+                f"reversed ({share:.1f}%, threshold "
+                f"{self._MAX_REVERSAL_SHARE:.0f}%). Any single reversal is "
+                "routine; a rate this high is the post-and-reverse pattern — "
+                "entries that exist inside a period and vanish before scrutiny, "
+                "or posting quality poor enough to be its own control issue. "
+                "The rate is computed over the supplied export, so a "
+                "pre-filtered export inflates it; export the full audit window."
+            ),
+            affected_items=hits,
+            affected_objects=objects,
+            scope="aggregate",
+            remediation=(
+                "Sample the listed reversal pairs: confirm each reversal has a "
+                "documented reason and was not re-posted with altered values; "
+                "review users with repeated post-and-reverse cycles."
+            ),
+            references=["SOX financial-record integrity (PCAOB AS 2201)",
+                        "ACFE — journal-entry testing / reversal analysis"],
+            details={"reversed": len(reversed_docs), "total": total,
+                     "share_pct": round(share, 1),
+                     "threshold_pct": self._MAX_REVERSAL_SHARE},
+        )

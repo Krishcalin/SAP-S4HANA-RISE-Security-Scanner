@@ -107,3 +107,40 @@ def test_dual_control_with_bank_field_not_flagged():
     got = _ids(dual_control_fields=[{"TABLE": "LFBK", "FIELD": "BANKN"},
                                     {"TABLE": "LFBK", "FIELD": "IBAN"}])
     assert "FIN-SF-001" not in got
+# ── FIN-EVD-*: the evidence half (BKPF headers) ───────────────────────────────
+
+def _doc(belnr, budat, cpudt, user="AMILLER", stblg="", tcode="FB01"):
+    return {"BUKRS": "1000", "BELNR": belnr, "GJAHR": "2026", "BLART": "SA",
+            "BUDAT": budat, "CPUDT": cpudt, "USNAM": user, "TCODE": tcode,
+            "STBLG": stblg}
+
+
+def test_backdating_needs_more_than_the_threshold_gap():
+    out = _ids(fi_documents=[_doc("1", "20260601", "20260615"),   # 14 days -> hit
+                             _doc("2", "20260610", "20260615")])  # 5 days  -> fine
+    f = out["FIN-EVD-001"]
+    assert f["details"]["count"] == 1 and f["details"]["max_gap_days"] == 14
+    assert {"type": "user", "name": "AMILLER"} in f["affected_objects"]
+
+
+def test_weekend_register_names_the_day_and_user():
+    out = _ids(fi_documents=[_doc("3", "20260806", "20260808", user="KZHANG")])
+    f = out["FIN-EVD-002"]
+    assert any("Saturday" in i and "KZHANG" in i for i in f["affected_items"])
+
+
+def test_reversal_rate_needs_share_AND_floor():
+    reversed3 = [_doc(str(i), "20260706", "20260706", stblg="9%d" % i) for i in range(3)]
+    normal9 = [_doc(str(10 + i), "20260707", "20260707") for i in range(9)]
+    out = _ids(fi_documents=reversed3 + normal9)          # 3/12 = 25% -> fires
+    assert out["FIN-EVD-003"]["details"]["share_pct"] == 25.0
+    out = _ids(fi_documents=reversed3[:1] + normal9)      # below the 3-doc floor
+    assert "FIN-EVD-003" not in out
+    many_normal = [_doc(str(100 + i), "20260707", "20260707") for i in range(97)]
+    out = _ids(fi_documents=reversed3 + many_normal)      # 3% -> below share
+    assert "FIN-EVD-003" not in out
+
+
+def test_no_fi_documents_no_evidence_findings():
+    out = _ids(posting_periods=[])
+    assert not any(k.startswith("FIN-EVD") for k in out)

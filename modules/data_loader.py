@@ -184,6 +184,8 @@ class DataLoader:
         "transport_history":       ["transport_history.csv", "stms_log.csv", "import_history.csv"],
         "client_settings":         ["client_settings.csv", "scc4.csv"],
         "change_documents":        ["change_documents.csv", "cdhdr.csv"],
+        "change_document_items":   ["change_document_items.csv", "cdpos.csv"],
+        "fi_documents":            ["fi_documents.csv", "bkpf.csv"],
         "code_inventory":          ["code_inventory.csv", "custom_objects.csv"],
         "sap_modifications":       ["sap_modifications.csv", "se95.csv", "modifications.csv"],
         "dev_access_prod":         ["dev_access_prod.csv"],

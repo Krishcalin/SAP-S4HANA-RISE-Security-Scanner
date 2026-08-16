@@ -122,6 +122,8 @@ class ComplianceMapper:
         "Fiori & UI Layer": ["app-runtime", "access-control"],
         "Access Risk Analysis (SoD)": ["sod", "access-control"],
         "Financial Controls (SOX)": ["sod", "change-management", "access-control"],
+    "Master Data Change Audit": ["change-management", "sod"],
+    "Master Data Change Audit": ["change-management", "sod"],
         "Login Security": ["authentication", "access-control"],
         "SAP Security Notes (HotNews)": ["vuln-mgmt"],
         "RFC Security": ["network-security", "access-control"],

@@ -608,6 +608,52 @@ Required: TABNAME (or TABLE_NAME / TABLE), LOGGING (or LOG_ENABLED / LOG_FLAG)
 
 ---
 
+## Master-data change and posting evidence (the `mdchange` + `fincontrols` modules)
+
+The sections above export CONFIGURATION. These two sources export EVIDENCE —
+what actually happened — and each pairs with a configuration check that says
+what should have been possible. FIN-SF-001 reports whether vendor bank fields
+are under dual control; the change-document items show the bank changes that
+went through. FIN-PP-001 reports whether posting periods stand open; the FI
+document headers show the back-dating that happened anyway.
+
+### Change-document items (`change_document_items.csv`, `cdpos.csv`)
+**Tables:** `CDHDR` (headers — already exported above as
+`change_documents.csv`) and `CDPOS` (items, with `VALUE_OLD` / `VALUE_NEW`).
+Both are core data-dictionary tables, stable across releases. **Route:** `SE16`
+on `CDPOS`, filtered by `TABNAME` to the payment-relevant tables the module
+reads — `LFBK`, `KNBK`, `BUT0BK`, `TIBAN` — or unfiltered for a date-bounded
+change-number range. Export the matching `CDHDR` range too: item rows carry no
+user or date, and the join runs over `CHANGENR`.
+
+```
+CDPOS: OBJECTCLAS, OBJECTID, CHANGENR, TABNAME, FNAME,
+       VALUE_OLD, VALUE_NEW, CHNGIND
+```
+
+> **Bank account values in this export are sensitive by definition.** Findings
+> mask everything but the last four characters, but the CSV itself is the
+> unmasked original — handle it like the payment data it is.
+
+### FI document headers (`fi_documents.csv`, `bkpf.csv`)
+**Table:** `BKPF` — accounting document HEADERS only. **Route:** `SE16` on
+`BKPF` for the audit window (filter on `CPUDT`, the entry date), every company
+code in scope. Headers are enough for the evidence checks; no line items and
+no amounts leave the system.
+
+```
+Required: BUKRS, BELNR, GJAHR, BUDAT, CPUDT
+Optional: BLART, USNAM, TCODE, STBLG (reversal document), BSTAT
+```
+
+> Amount-level checks (postings above tolerance limits) would need line items
+> (`ACDOCA` / `BSEG`) and are deliberately not part of this export: the
+> header-only file keeps monetary data out of the audit bundle while still
+> answering when a document was posted versus when it was entered, who entered
+> it, and whether it was reversed.
+
+---
+
 ## SAP Security Notes exports (the sap_hotnews module)
 
 The module ships its own curated catalogue of high-impact notes (through

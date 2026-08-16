@@ -118,7 +118,8 @@ DOMAINS: List[Dict[str, Any]] = [
                  "is no compliance score here and there will not be one: we see "
                  "your findings, not your control environment.",
         "blurb": "Data protection, financial controls, and the framework mappings.",
-        "categories": ["Data Protection & Privacy", "Financial Controls (SOX)"],
+        "categories": ["Data Protection & Privacy", "Financial Controls (SOX)",
+                       "Master Data Change Audit"],
     },
     {
         "id": "patch",

@@ -50,6 +50,7 @@ from modules.basis_job_command import BasisJobCommandAuditor
 from modules.grc_access_control import GrcAccessControlAuditor
 from modules.role_governance import RoleGovernanceAuditor
 from modules.financial_controls import FinancialControlsAuditor
+from modules.master_data_changes import MasterDataChangeAuditor
 
 # (module key, auditor class) — mirrors sap_scanner.py's module registry.
 MODULES = [
@@ -66,6 +67,7 @@ MODULES = [
     ("ara", AccessRiskAnalysisAuditor), ("jobcmd", BasisJobCommandAuditor),
     ("grcac", GrcAccessControlAuditor), ("rolegov", RoleGovernanceAuditor),
     ("fincontrols", FinancialControlsAuditor),
+    ("mdchange", MasterDataChangeAuditor),
 ]
 _IDS = [m[0] for m in MODULES]
 
@@ -105,7 +107,9 @@ EXPECTED_CHECKS = {
     "grcac": {"GRC-FF-001", "GRC-FF-002", "GRC-FF-002B", "GRC-ARM-001", "GRC-ARM-001B",
               "GRC-ARA-001", "GRC-MIT-001", "GRC-RS-001", "GRC-RS-003", "GRC-SYNC-001"},
     "rolegov": {"RG-SU24-001", "RG-GEN-001", "RG-DRV-001"},
-    "fincontrols": {"FIN-PP-001", "FIN-TOL-001", "FIN-SF-001", "FIN-DOC-001", "FIN-NR-001"},
+    "fincontrols": {"FIN-PP-001", "FIN-TOL-001", "FIN-SF-001", "FIN-DOC-001", "FIN-NR-001",
+                    "FIN-EVD-001", "FIN-EVD-002", "FIN-EVD-003"},
+    "mdchange": {"MDC-BANK-001", "MDC-DIRECT-001"},
 }
 
 
@@ -181,7 +185,8 @@ def test_no_cross_module_check_id_collision(data):
 # that legitimately repeat an id once per affected item (e.g. codetrans CODE-STMT-001,
 # users USR-*, rise RISE-*), which are covered by the cross-module-collision test only.
 AGGREGATING_MODULES = {"hanadb", "hotnews", "authz", "systrust", "baseline", "s4authz",
-                       "ara", "jobcmd", "grcac", "logmon", "rolegov", "fincontrols"}
+                       "ara", "jobcmd", "grcac", "logmon", "rolegov", "fincontrols",
+                       "mdchange"}
 
 
 @pytest.mark.parametrize(

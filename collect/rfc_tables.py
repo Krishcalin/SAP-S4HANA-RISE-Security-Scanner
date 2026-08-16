@@ -93,10 +93,59 @@ EXTRACTS: List[Dict[str, Any]] = [
         "source": "change_documents",
         "file": "change_documents.csv",
         "table": "CDHDR",
-        "columns": {"OBJECTCLAS": "OBJECTCLAS", "CHANGENR": "CHANGENR",
-                    "USERNAME": "USERNAME", "UDATE": "UDATE", "TCODE": "TCODE"},
+        "columns": {"OBJECTCLAS": "OBJECTCLAS", "OBJECTID": "OBJECTID",
+                    "CHANGENR": "CHANGENR", "USERNAME": "USERNAME",
+                    "UDATE": "UDATE", "TCODE": "TCODE"},
         "note": "Change document headers. Unbounded on a production system; "
                 "always pair with --where on UDATE.",
+    },
+    {
+        "source": "change_document_items",
+        "file": "cdpos.csv",
+        "table": "CDPOS",
+        "columns": {"OBJECTCLAS": "OBJECTCLAS", "OBJECTID": "OBJECTID",
+                    "CHANGENR": "CHANGENR", "TABNAME": "TABNAME",
+                    "FNAME": "FNAME", "VALUE_OLD": "VALUE_OLD",
+                    "VALUE_NEW": "VALUE_NEW", "CHNGIND": "CHNGIND"},
+        "note": "Change document items — before/after values. Filter TABNAME to "
+                "LFBK/KNBK/BUT0BK/TIBAN (the bank tables) or bound by change "
+                "number; the values are unmasked payment data, handle the file "
+                "accordingly.",
+    },
+    {
+        "source": "fi_documents",
+        "file": "bkpf.csv",
+        "table": "BKPF",
+        "columns": {"BUKRS": "BUKRS", "BELNR": "BELNR", "GJAHR": "GJAHR",
+                    "BLART": "BLART", "BUDAT": "BUDAT", "CPUDT": "CPUDT",
+                    "USNAM": "USNAM", "TCODE": "TCODE", "STBLG": "STBLG"},
+        "note": "FI document HEADERS only — no amounts leave the system. "
+                "Unbounded on a production system; always pair with --where "
+                "on CPUDT for the audit window.",
+    },
+    {
+        "source": "change_document_items",
+        "file": "cdpos.csv",
+        "table": "CDPOS",
+        "columns": {"OBJECTCLAS": "OBJECTCLAS", "OBJECTID": "OBJECTID",
+                    "CHANGENR": "CHANGENR", "TABNAME": "TABNAME",
+                    "FNAME": "FNAME", "VALUE_OLD": "VALUE_OLD",
+                    "VALUE_NEW": "VALUE_NEW", "CHNGIND": "CHNGIND"},
+        "note": "Change document items — before/after values. Filter TABNAME to "
+                "LFBK/KNBK/BUT0BK/TIBAN (the bank tables) or bound by change "
+                "number; the values are unmasked payment data, handle the file "
+                "accordingly.",
+    },
+    {
+        "source": "fi_documents",
+        "file": "bkpf.csv",
+        "table": "BKPF",
+        "columns": {"BUKRS": "BUKRS", "BELNR": "BELNR", "GJAHR": "GJAHR",
+                    "BLART": "BLART", "BUDAT": "BUDAT", "CPUDT": "CPUDT",
+                    "USNAM": "USNAM", "TCODE": "TCODE", "STBLG": "STBLG"},
+        "note": "FI document HEADERS only — no amounts leave the system. "
+                "Unbounded on a production system; always pair with --where "
+                "on CPUDT for the audit window.",
     },
     {
         "source": "client_settings",

@@ -8,7 +8,7 @@
 Every logical source the scanner can read, what it enables, and whether
 [`EXPORT_GUIDE.md`](EXPORT_GUIDE.md) tells you how to produce it.
 
-**124 logical sources.** 59 have a written procedure in the export
+**126 logical sources.** 61 have a written procedure in the export
 guide; **65 do not yet** — those rows name the files the loader will
 accept, so a source you already have to hand can be supplied today, but the
 step-by-step extraction has not been verified and is deliberately not guessed.
@@ -46,7 +46,8 @@ clean — see chapter 13 of the architecture guide.
 | `cds_views` | `cds_views.csv`, `cds_access_control.csv` | `s4_business_authz` | **not yet written** |
 | `certificate_inventory` | `certificate_inventory.csv`, `strust_certs.csv` | `crypto_posture` | **not yet written** |
 | `cf_roles` | `cf_roles.csv`, `cf_org_space_roles.csv` | `s4_business_authz` | **not yet written** |
-| `change_documents` | `change_documents.csv`, `cdhdr.csv` | `code_transport` | documented |
+| `change_document_items` | `change_document_items.csv`, `cdpos.csv` | `master_data_changes` | documented |
+| `change_documents` | `change_documents.csv`, `cdhdr.csv` | `code_transport`, `master_data_changes` | documented |
 | `client_settings` | `client_settings.csv`, `scc4.csv` | `code_transport`, `ecs_config_items`, `log_review` | documented |
 | `cloud_connector` | `cloud_connector.json`, `scc_config.json`, `cloud_connector_configuration.json`, `scc_api_configuration.json` | `btp_cloud_surface`, `s4_business_authz` | documented |
 | `code_inventory` | `code_inventory.csv`, `custom_objects.csv` | `atc_import`, `code_inventory_report`, `code_transport` | documented |
@@ -65,6 +66,7 @@ clean — see chapter 13 of the architecture guide.
 | `event_mesh` | `event_mesh.json`, `em_config.json` | `btp_cloud_surface` | **not yet written** |
 | `ext_os_commands` | `ext_os_commands.csv`, `sxpgcostab.csv`, `sm69_commands.csv` | `basis_job_command` | documented |
 | `ext_os_commands_sap` | `ext_os_commands_sap.csv`, `sxpgcotabe.csv` | `basis_job_command` | **not yet written** · not obtainable in RISE |
+| `fi_documents` | `fi_documents.csv`, `bkpf.csv` | `financial_controls` | documented |
 | `fi_number_ranges` | `fi_number_ranges.csv`, `tnro.csv`, `number_ranges.csv` | `financial_controls` | **not yet written** |
 | `fiori_app_usage` | `fiori_app_usage.csv`, `app_usage.csv` | `fiori_ui` | **not yet written** |
 | `fiori_catalogs` | `fiori_catalogs.csv`, `flpd_catalogs.csv` | `fiori_ui` | **not yet written** |
