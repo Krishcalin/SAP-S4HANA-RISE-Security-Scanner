@@ -407,10 +407,16 @@ absence across every row may mean the control is off rather than that the export
 is short.
 
 ### SoD violations (`grac_sod_violations.csv`)
+**Table:** `GRACUSERPRMVL` — user-level violations, verified twice over: SAP's
+technical-table catalogue (SAP Note 2388483) lists it under *GRC violations*,
+and SAP Note 2270608 names it in its title. The loader accepts
+`gracuserprmvl.csv` directly. The same catalogue row names a role-level
+sibling, `GRACROLEPRMVL`; this product reads user-level violations only.
 **Route:** Batch risk analysis (`GRAC_BATCH_RA`, monitored with
 `GRACRABATCH_MONITOR`), then export the violation report. Related stored data:
 `GRACSODUSERROLE`, `GRACSODREVIEW`; spooled analytics land in `GRACSODREPDATA`
-(column `REPCONTENT`) when configuration parameter `1053` is set to `D`.
+(with `GRACSODREPINDEX` and `GRACSODREPSTATUS`, column `REPCONTENT`) when
+configuration parameter `1053` is set to `D`.
 
 ```
 Required: USER_ID (or USER / BNAME), RISK_ID
@@ -503,6 +509,208 @@ the command list from your Basis team's own documented route and say which.*
 Required: NAME (command name), OPSYSTEM, OPCOMMAND
 Optional: PARAMETERS, ADDITIONAL_PARAMETERS_ALLOWED
 ```
+
+---
+
+---
+
+## ABAP change and audit logging
+
+Two sources that decide whether the `log_monitoring` and `log_review` audit
+checks run. They share the failure mode this product exists to name: each is a
+*configuration* whose absence silently produces an empty *log*, and an empty
+log reads as good news.
+
+### Security audit log configuration (`security_audit_log.csv`, `sm19_filters.csv`)
+**Transaction:** `RSAU_CONFIG` — the kernel-based Security Audit Log
+configuration as of NetWeaver 7.50, with `RSAU_ADMIN` administering the log and
+its database store (tables `RSAU_BUF_DATA` and `RSAU_LOG`). On older systems
+the classic configuration transaction is `SM19`, the same one the
+`audit_config` export records. SAP Note **2191612** is the FAQ for the 7.50+
+log; SAP Note **3137004** covers archiving and deleting the database trail.
+
+Export the filter list — each filter with its activation state and event
+selection:
+
+```
+Required: ACTIVE (or STATUS), EVENT_CLASS (or EVENT_TYPE / FILTER_EVENT)
+Optional: PROFILE_TYPE (the module matches STATIC / DYNAMIC), DESCRIPTION
+```
+
+> **A filter list is not a log.** These checks read whether auditing is
+> *configured*: active filters, event coverage. An estate with no active
+> filters produces no audit events at all, and "no security events" is the most
+> reassuring sentence a review can be handed. That is why the export is the
+> configuration, and why an empty one is a finding rather than a pass.
+
+### Table change logging (`table_logging.csv`, `dd09l.csv`)
+**Per-table flag:** the *Log Changes* setting in a table's technical settings
+(`SE11` / `SE13`). **The log it produces:** table `DBTABLOG`, displayed with
+transaction `SCU3`, retained long-term via archiving objects `BC_DBLOGS` and
+`S_AUT_LTXT`. All of that is verified against SAP's Data Management Guide
+(ch. 5.8) and SAP Note 2388483. *The loader also accepts `dd09l.csv` — DD09L is
+where working knowledge says the flag lives, but that table name is not
+verified in these documents; export the flag list from `SE11`/`SE13` or your
+own audit tooling, and say which.*
+
+```
+Required: TABNAME (or TABLE_NAME / TABLE), LOGGING (or LOG_ENABLED / LOG_FLAG)
+```
+
+> **The flag alone logs nothing.** SAP writes a change record only when BOTH
+> conditions hold: the table's *Log Changes* flag is set AND the profile
+> parameter `rec/client` permits it — `OFF` never logs, `nnn[,mmm…]` logs the
+> listed clients (at most ten), `ALL` logs every client, and the value must be
+> consistent across all application servers. A flagged table on a system with
+> `rec/client = OFF` writes no `DBTABLOG` rows, and the empty history it leaves
+> is indistinguishable from "nobody changed anything". Record `rec/client` —
+> it is already in your `security_params.csv` — alongside this export.
+
+## SAP HANA database exports (the `hana_db_security` module)
+
+Five sources, from the database underneath S/4HANA rather than from the ABAP
+stack. They are the last exports most people produce and the first ones a
+database-layer finding depends on.
+
+> ⚠️ **WHICH HANA YOU ARE ON DECIDES WHICH OF THESE EXIST.** SAP HANA Cloud runs
+> a shared-responsibility model. You own users, authorisation, auditing, masking
+> and anonymisation. SAP owns secure operation, encryption and system auditing —
+> and you have **no operating-system access, no file-system access, and no access
+> to the system database**, only your tenant.
+>
+> That is not a limitation to work around, it is an answer. Where SAP holds the
+> control, the honest state is *not applicable*, not *not assessed*, and this
+> product will say so if you tell it which deployment you are on. Say it.
+
+**The superuser has two names, and only one of them is `SYSTEM`.** On-premise and
+managed HANA ship `SYSTEM`. SAP HANA Cloud ships **`DBADMIN`** — and SAP's list
+of *essential* security tasks, the five things to do after creating an instance,
+includes "Deactivate the user DBADMIN" as item four. Both names are checked.
+
+### Database users (`hana_db_users.csv`, `sys_users.csv`)
+**System view:** `USERS` — verified. SAP names it as the view carrying `CREATOR`
+(the user is technically created by `SYS`) and `CREATE_PROVIDER_TYPE` /
+`CREATE_PROVIDER_NAME` (which identity provider created the user, where one did).
+Restricted users — those without the `PUBLIC` role or authorisation for their own
+schema — are identified here too.
+
+```
+Required: USER_NAME, IS_DEACTIVATED (or DEACTIVATED / USER_DEACTIVATED / ACTIVE)
+Optional: IS_PASSWORD_LIFETIME_CHECK_ENABLED, LAST_SUCCESSFUL_CONNECT,
+          CREATOR, CREATE_PROVIDER_TYPE, CREATE_PROVIDER_NAME, USER_MODE
+```
+`ACTIVE` is read inverted against `DEACTIVATED`, so either spelling works — but
+export one of them. Without a status column every account reads as active.
+
+**Password policy is per user group, not per system.** A group's initial policy
+is a copy of the default (`password policy` section of `indexserver.ini`) and can
+then diverge. To see what is actually in force for one account rather than what
+the system default says:
+
+```sql
+SELECT * FROM "PUBLIC"."M_EFFECTIVE_PASSWORD_POLICY" WHERE USER_NAME = '<user>';
+```
+
+Worth exporting alongside: `USERGROUPS`, `USERGROUP_PARAMETERS` and
+`USERGROUP_CONNECT_RESTRICTIONS` — all named system views. Connect restrictions
+limit a group to an IP range, an application or an authentication method, and a
+user connects only if at least one restriction allows it. A group with none is a
+different posture from a group with one that permits everything.
+
+### Granted privileges (`hana_granted_privileges.csv`, `granted_privileges.csv`)
+**System view:** `GRANTED_PRIVILEGES` — verified.
+
+```
+Required: GRANTEE, PRIVILEGE
+Optional: IS_GRANTABLE, OBJECT_TYPE, SCHEMA_NAME, OBJECT_NAME, GRANTOR
+```
+> **`GRANTOR` can be structurally missing, and that is not an export error.**
+> When a privilege is granted with the `USING GROUP` option, SAP states plainly
+> that you can no longer determine which user performed the grant from this view
+> — the grant is attributed to the user group principal instead. SAP's own answer
+> is to audit `GRANT` and `REVOKE` operations. So a blank grantor column may mean
+> the estate uses group-principal granting, not that the export is short. Note
+> which, on the export.
+
+### Granted roles (`hana_granted_roles.csv`, `granted_roles.csv`)
+**Route:** the **Role Assignment** app of SAP HANA Cloud Central is the tool SAP
+names for granting roles to database users; export the assignments from there.
+*The system view name `GRANTED_ROLES` is this product's assumption and is not
+verified in the security guide* — use the app, or your own documented route, and
+say which you used.
+
+```
+Required: GRANTEE (or USER_NAME), ROLE_NAME (or ROLE)
+Optional: GRANTOR, IS_GRANTABLE
+```
+The two role names this export exists to find are `_SYS_BI_CP_ALL`, which
+bypasses analytic privileges entirely, and any role granting `USER ADMIN`. Note
+that on HANA Cloud, `DBADMIN` is deliberately **not** granted `USER ADMIN` — so
+finding it granted to somebody is a change from the delivered state.
+
+### Security parameters (`hana_parameters.csv`, `m_inifile_contents.csv`)
+*The view name `M_INIFILE_CONTENTS` is unverified here.* The **sections** are
+confirmed: `password policy` in `indexserver.ini`, and `ldap` in `global.ini`.
+
+The LDAP TLS parameters and their SAP-documented defaults, which are worth
+exporting whether or not you use LDAP, because the defaults are the finding:
+
+| Parameter | Default | Reads as |
+|---|---|---|
+| `sslMinProtocolVersion` | `TLS12` | minimum accepted TLS version |
+| `sslMaxProtocolVersion` | `MAX` (internally `TLS12`) | maximum accepted |
+| `sslCipherSuites` | `PFS:HIGH::EC_HIGH:+EC_OPT` | permitted ciphers |
+| `timeout` | `0` | **no timeout at all** |
+
+One more export that needs no view name at all, because SAP gives the statement:
+
+```sql
+SELECT * FROM M_CUSTOMIZABLE_FUNCTIONALITIES WHERE IS_ENABLED = 'FALSE';
+```
+That lists the features SAP has disabled on your instance — import/export on the
+server, and operational features SAP takes responsibility for. **You cannot
+enable what SAP has disabled**, so a check against one of those features is
+answered by this list rather than by a finding.
+
+### Audit policies (`hana_audit_policies.csv`, `audit_policies.csv`)
+**Route:** auditing configuration in SAP HANA Cloud Central / SAP HANA Cockpit.
+*The view name `AUDIT_POLICIES` is unverified here*; that audit policies are the
+mechanism, and that creating them is an **essential** post-installation task, is
+confirmed.
+
+```
+Required: AUDIT_POLICY_NAME, IS_AUDIT_POLICY_ACTIVE (or IS_ENABLED / ACTIVE / STATUS)
+Optional: AUDIT_ACTION_NAME (or ACTIONS / EVENT_ACTIONS), AUDIT_TRAIL_TYPE, LEVEL
+```
+> **The audit-trail-target check does not apply to HANA Cloud.** On HANA Cloud
+> the trail is *always* written to a database table local to the database, to
+> keep it private to that database — a file-system target is not reachable, and
+> neither is the file system. On-premise, `CSVTEXTFILE` remains a real and
+> serious misconfiguration. Same check, two deployments, two meanings.
+>
+> SAP also runs its **own** audit policies on customer systems for central
+> security monitoring. Those are designed to give SAP no insight into your
+> business data, and you can write your own policies to monitor what SAP-owned
+> database users do. If you see policies you did not create, that is why.
+
+### Encryption and key management (`hana_encryption.json`, `key_management.json`)
+On **SAP HANA Cloud** this is short and worth being exact about: data volumes,
+log volumes and backups are encrypted, and **it is not possible to disable
+encryption**. There is no setting to export and no finding to raise. Record the
+deployment and that is the whole answer.
+
+The one customer-controlled dimension is the root key. HANA encryption root keys
+can additionally be secured with the external **SAP Data Custodian Key Management
+Service (KMS)**. Whether you use it is a real posture question:
+
+```
+hana_encryption.json  {"deployment": "hana_cloud", "data_at_rest": "enforced_by_sap",
+                       "can_be_disabled": false}
+key_management.json   {"root_key_protection": "sap_managed" | "customer_kms",
+                       "kms": "sap_data_custodian" | null}
+```
+On-premise HANA is the opposite case — there encryption *is* yours to configure,
+it can be off, and the export has to carry the real state.
 
 ## Making custom-code findings rankable
 

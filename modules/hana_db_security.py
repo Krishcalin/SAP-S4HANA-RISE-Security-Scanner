@@ -20,12 +20,35 @@ Covers:
   - Database auditing (enabled, trail target, critical action coverage)
   - Security-relevant HANA parameters (password policy, error disclosure, SQL TLS)
 
-Data sources:
-  - hana_db_users.csv          → SYS.USERS export (user master)
-  - hana_granted_privileges.csv → GRANTED_PRIVILEGES / EFFECTIVE_PRIVILEGE_GRANTEES
-  - hana_granted_roles.csv     → GRANTED_ROLES export
-  - hana_parameters.csv        → M_INIFILE_CONTENTS (global.ini / indexserver.ini …)
-  - hana_audit_policies.csv    → AUDIT_POLICIES export
+Data sources — and which of these view names SAP has actually published.
+
+Two of the five are confirmed against the SAP HANA Cloud, SAP HANA Database
+Security Guide (QRC 2/2026). Three are this file's own working knowledge, read
+as fact for as long as they have existed. They are probably right; nobody has
+shown that they are, and a view name a customer cannot query is a support call.
+So they are marked, exactly as the GRC module's are:
+
+  - hana_db_users.csv           → USERS                  [verified: User Types;
+                                  CREATOR, CREATE_PROVIDER_TYPE and
+                                  CREATE_PROVIDER_NAME are named columns]
+  - hana_granted_privileges.csv → GRANTED_PRIVILEGES     [verified: named as the
+                                  view that reports the granting user]
+  - hana_granted_roles.csv      → GRANTED_ROLES          [UNVERIFIED]
+  - hana_parameters.csv         → M_INIFILE_CONTENTS     [UNVERIFIED — but the
+                                  *sections* are confirmed: `password policy` in
+                                  indexserver.ini, `ldap` in global.ini]
+  - hana_audit_policies.csv     → AUDIT_POLICIES         [UNVERIFIED — auditing
+                                  via audit policies is confirmed, the view that
+                                  lists them is not]
+
+DEPLOYMENT CHANGES WHAT "NOT SUPPLIED" MEANS HERE. SAP HANA Cloud runs a shared
+responsibility model: the customer owns users, authorisation, auditing, masking
+and anonymisation; SAP owns secure operation, encryption and system auditing.
+The customer has no operating-system access, no file-system access and no access
+to the system database — only their tenant. So on HANA Cloud several of these
+checks are *not applicable* rather than *not assessed*, and data-at-rest
+encryption cannot be switched off at all, which makes "encryption is disabled"
+an unreachable finding rather than a clean one.
 
 Aligned to the CIS SAP HANA Benchmark and the SAP HANA Security Guide.
 """
@@ -169,15 +192,41 @@ class HanaDbSecurityAuditor(BaseAuditor):
         return None
 
     # -------------------------------------------------------------------- users
+    #: The built-in superuser, which is not called the same thing everywhere.
+    #: On-premise and managed SAP HANA ship `SYSTEM`. SAP HANA Cloud ships
+    #: `DBADMIN` instead — and SAP's *essential* security task list for HANA
+    #: Cloud says, in four words, "Deactivate the user DBADMIN."
+    SUPERUSERS = {
+        "SYSTEM": ("on-premise and managed SAP HANA",
+                   "SAP HANA Security Guide — The SYSTEM User"),
+        "DBADMIN": ("SAP HANA Cloud",
+                    "SAP HANA Cloud, SAP HANA Database Security Guide — "
+                    "Essential Security Tasks: Deactivate the DBADMIN User"),
+    }
+
     def check_privileged_users(self):
-        """CRITICAL: the SYSTEM superuser should be deactivated once named
-        administrator accounts exist (CIS SAP HANA)."""
+        """CRITICAL: the built-in superuser should be deactivated once named
+        administrator accounts exist (CIS SAP HANA).
+
+        TWO ACCOUNTS, BECAUSE THERE ARE TWO DEPLOYMENTS, AND THIS CHECK KNEW ONE.
+
+        It matched `SYSTEM` and nothing else. A customer running SAP HANA Cloud
+        has no user called SYSTEM — theirs is `DBADMIN` — so the check walked the
+        export, matched no row, and said nothing. Silence from this module reads
+        as "the superuser is deactivated", which is the reassuring answer, about
+        the one account SAP's own essential-task list tells them to turn off.
+
+        That is this product's own failure mode: an absence of evidence rendered
+        as evidence of absence. The fix is not cleverness, it is knowing the
+        other name.
+        """
         users = self.data.get("hana_db_users")
         if not users:
             return
+        active: List[str] = []
         for row in users:
             name = str(row.get("USER_NAME", row.get("USER", row.get("NAME", "")))).strip().upper()
-            if name != "SYSTEM":
+            if name not in self.SUPERUSERS or name in active:
                 continue
             deactivated = row.get("USER_DEACTIVATED", row.get("DEACTIVATED",
                           row.get("IS_DEACTIVATED", row.get("ACTIVE", ""))))
@@ -185,36 +234,48 @@ class HanaDbSecurityAuditor(BaseAuditor):
             is_active = (self._truthy(row.get("ACTIVE", "")) if "ACTIVE" in row
                          else self._falsy(deactivated))
             if is_active:
-                self.finding(
-                    check_id="HANADB-USER-001",
-                    title="HANA SYSTEM superuser is still active",
-                    severity=self.SEVERITY_CRITICAL,
-                    category=self.CATEGORY,
-                    description=(
-                        "The built-in SYSTEM user is active. SYSTEM holds every system "
-                        "privilege and bypasses the role model; it should be deactivated "
-                        "after named administrator users are created, and used only for "
-                        "break-glass recovery."
-                    ),
-                    affected_items=["SYSTEM — status: active"],
-                    remediation=(
-                        "Create named administrator users with only the privileges they "
-                        "need, then deactivate SYSTEM: "
-                        "ALTER USER SYSTEM DEACTIVATE USER NOW. "
-                        "Re-activate only for documented emergencies."
-                    ),
-                    references=[
-                        "CIS SAP HANA Benchmark — Deactivate SYSTEM user",
-                        "SAP HANA Security Guide — The SYSTEM User",
-                    ],
-                    # One named user, one defect: the subject IS SYSTEM. No qualifier —
-                    # the check fires on exactly one state, so a qualifier would add no
-                    # discrimination while inheriting the export's spelling of the
-                    # ACTIVE/DEACTIVATED flag ("FALSE" vs "false" vs "0").
-                    affected_objects=[{"type": "hana_user", "name": name}],
-                    scope="object",
-                )
+                active.append(name)
+        if not active:
             return
+        # ONE finding, however many names matched. The aggregating invariant
+        # (test_aggregating_module_ids_unique) is no formality here: the sample
+        # export really does carry SYSTEM and DBADMIN side by side, and two
+        # findings sharing HANADB-USER-001 would count one defect — "the
+        # break-glass account is live" — twice in every score built on it.
+        names = " and ".join(active)
+        self.finding(
+            check_id="HANADB-USER-001",
+            title=("HANA %s superuser is still active" % names if len(active) == 1
+                   else "HANA superusers %s are still active" % names),
+            severity=self.SEVERITY_CRITICAL,
+            category=self.CATEGORY,
+            description=(
+                "The built-in superuser is active: %s. It holds every system "
+                "privilege available to the account and bypasses the role model; "
+                "it should be deactivated once named administrator users exist, "
+                "and used only for break-glass recovery. %s"
+                % (names, " ".join(
+                    "%s is the superuser shipped with %s." %
+                    (n, self.SUPERUSERS[n][0]) for n in active))
+            ),
+            affected_items=["%s — status: active" % n for n in active],
+            remediation=(
+                "Create named administrator users with only the privileges they "
+                "need, then deactivate the superuser (%s). "
+                "Re-activate only for documented emergencies."
+                % "; ".join("ALTER USER %s DEACTIVATE USER NOW" % n for n in active)
+            ),
+            references=(
+                ["CIS SAP HANA Benchmark — Deactivate SYSTEM user"]
+                + [self.SUPERUSERS[n][1] for n in active]
+            ),
+            # One defect — the break-glass account is live — whichever names carry
+            # it. No qualifier: the check fires on exactly one state, so a qualifier
+            # would add no discrimination while inheriting the export's spelling of
+            # the ACTIVE/DEACTIVATED flag ("FALSE" vs "false" vs "0").
+            affected_objects=[{"type": "hana_user", "name": n} for n in active],
+            scope="object",
+        )
 
     def check_password_lifetime(self):
         """HIGH: non-technical DB users whose password lifetime check is disabled

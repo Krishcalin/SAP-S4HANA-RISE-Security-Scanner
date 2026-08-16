@@ -10,7 +10,7 @@
 
 ## What this file does not claim
 
-**41 of the 365 titles and 15 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**42 of the 365 titles and 15 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -311,7 +311,7 @@ Category: Fiori & UI Layer
 | `HANADB-PRIV-005` | CRITICAL | Analytic-privilege bypass (_SYS_BI_CP_ALL) granted |
 | `HANADB-PRIV-006` | HIGH | Debug privileges (DEBUG / ATTACH DEBUGGER) granted to users |
 | `HANADB-ROLE-001` | HIGH | Powerful predefined roles granted to users |
-| `HANADB-USER-001` | CRITICAL | HANA SYSTEM superuser is still active |
+| `HANADB-USER-001` | CRITICAL | *varies* |
 | `HANADB-USER-002` | HIGH | DB users with password lifetime check disabled |
 | `HANADB-USER-003` | MEDIUM | *varies* — Dormant HANA DB users (no logon in …+ days) |
 

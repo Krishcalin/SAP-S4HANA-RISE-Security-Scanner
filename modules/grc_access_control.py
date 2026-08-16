@@ -32,10 +32,14 @@ Each check self-skips when its export is absent.
 WHICH TABLE NAMES BELOW ARE VERIFIED, AND WHICH ARE THIS FILE'S OWN GUESS.
 
 This list was written from working knowledge and read as fact for as long as it
-has existed. Checked against SAP's published Access Control 12.0 Security Guide
-and Administrator Guide, two of the six survive and four are unconfirmed. They
-may well be right; nobody has shown that they are, and a table name a customer
-cannot find is a support call that makes the whole guide look careless.
+has existed. Two document passes have now tested it. Against SAP's Access
+Control 12.0 Security and Administrator Guides, GRACFFLOG and GRACREQ survived.
+Against SAP Note 2388483 — SAP's own catalogue of technical tables — so did
+GRACUSERPRMVL: its "GRC violations" row lists the table, and Note 2270608
+names it in its title. That row also names a role-level sibling,
+GRACROLEPRMVL, which this module has never read. The rest remain unconfirmed.
+They may well be right; nobody has shown that they are, and a table name a
+customer cannot find is a support call that makes the whole guide look careless.
 
 So they are marked. `docs/EXPORT_GUIDE.md` documents the UI route for the
 unverified ones — Emergency Access Management and risk maintenance in NWBC —
@@ -46,8 +50,9 @@ Data sources (exported to CSV):
                                session usage: FF id, user, reason, review status
   - grac_access_requests     → GRACREQ              [verified: Security Guide, request archiving]
                                request, requestor, provisioned user, approver
+  - grac_sod_violations      → GRACUSERPRMVL        [verified: SAP Notes 2388483, 2270608]
+                               + GRACMITUSER for mitigation validity  [UNVERIFIED]
   - grac_firefighter_owners  → GRACFFOWNER/CTRL/OBJECT   [UNVERIFIED — export via NWBC]
-  - grac_sod_violations      → GRACUSERPRMVL + GRACMITUSER  [UNVERIFIED — export via GRAC_BATCH_RA]
   - grac_mitigating_controls → GRACMITCNT           [UNVERIFIED — export via NWBC]
   - grac_sod_risks           → GRACSODRISK + GRACRULESET    [UNVERIFIED — export via NWBC]
 

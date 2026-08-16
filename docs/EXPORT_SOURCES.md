@@ -8,8 +8,8 @@
 Every logical source the scanner can read, what it enables, and whether
 [`EXPORT_GUIDE.md`](EXPORT_GUIDE.md) tells you how to produce it.
 
-**123 logical sources.** 47 have a written procedure in the export
-guide; **76 do not yet** — those rows name the files the loader will
+**123 logical sources.** 56 have a written procedure in the export
+guide; **67 do not yet** — those rows name the files the loader will
 accept, so a source you already have to hand can be supplied today, but the
 step-by-step extraction has not been verified and is deliberately not guessed.
 
@@ -79,12 +79,12 @@ clean — see chapter 13 of the architecture guide.
 | `grac_sod_violations` | `grac_sod_violations.csv`, `gracuserprmvl.csv` | `grc_access_control` | documented |
 | `gw_reginfo` | `gw_reginfo.csv`, `reginfo.csv` | `integration_layer` | documented · not obtainable in RISE |
 | `gw_secinfo` | `gw_secinfo.csv`, `secinfo.csv` | `integration_layer` | documented · not obtainable in RISE |
-| `hana_audit_policies` | `hana_audit_policies.csv`, `audit_policies.csv` | `hana_db_security` | **not yet written** |
-| `hana_db_users` | `hana_db_users.csv`, `sys_users.csv` | `hana_db_security` | **not yet written** |
-| `hana_encryption` | `hana_encryption.json` | `crypto_posture` | **not yet written** |
-| `hana_granted_privileges` | `hana_granted_privileges.csv`, `granted_privileges.csv` | `hana_db_security` | **not yet written** |
-| `hana_granted_roles` | `hana_granted_roles.csv`, `granted_roles.csv` | `hana_db_security` | **not yet written** |
-| `hana_parameters` | `hana_parameters.csv`, `m_inifile_contents.csv`, `hana_ini.csv` | `crypto_posture`, `hana_db_security`, `resilience_posture` | **not yet written** |
+| `hana_audit_policies` | `hana_audit_policies.csv`, `audit_policies.csv` | `hana_db_security` | documented |
+| `hana_db_users` | `hana_db_users.csv`, `sys_users.csv` | `hana_db_security` | documented |
+| `hana_encryption` | `hana_encryption.json` | `crypto_posture` | documented |
+| `hana_granted_privileges` | `hana_granted_privileges.csv`, `granted_privileges.csv` | `hana_db_security` | documented |
+| `hana_granted_roles` | `hana_granted_roles.csv`, `granted_roles.csv` | `hana_db_security` | documented |
+| `hana_parameters` | `hana_parameters.csv`, `m_inifile_contents.csv`, `hana_ini.csv` | `crypto_posture`, `hana_db_security`, `resilience_posture` | documented |
 | `ias_config` | `ias_config.json`, `ias_applications.json` | `btp_cloud_surface`, `iam_advanced` | **not yet written** |
 | `icf_services` | `icf_services.csv`, `sicf.csv`, `icf_nodes.csv` | `network_services` | documented |
 | `idoc_partners` | `idoc_partners.csv`, `we20.csv` | `integration_layer` | **not yet written** |
@@ -93,7 +93,7 @@ clean — see chapter 13 of the architecture guide.
 | `incident_response` | `incident_response.json`, `ir_config.json` | `log_monitoring` | **not yet written** |
 | `integration_alerts` | `integration_alerts.json`, `alert_config.json` | `integration_layer` | **not yet written** |
 | `integration_topology` | `integration_topology.json`, `system_map.json` | `integration_layer` | **not yet written** |
-| `key_management` | `key_management.json` | `crypto_posture` | **not yet written** |
+| `key_management` | `key_management.json` | `crypto_posture` | documented |
 | `log_retention` | `log_retention.json` | `log_monitoring` | **not yet written** |
 | `logon_events` | `logon_events.csv`, `logon_stats.csv` | `log_monitoring`, `log_review` | **not yet written** |
 | `mitigating_controls` | `mitigating_controls.csv`, `mitigations.csv`, `grc_mitigations.csv` | `access_risk_analysis` | documented |
@@ -119,7 +119,7 @@ clean — see chapter 13 of the architecture guide.
 | `sap_modifications` | `sap_modifications.csv`, `se95.csv`, `modifications.csv` | `code_transport` | **not yet written** |
 | `sap_security_notes` | `sap_security_notes.json`, `hotnews_catalog.json` | `sap_hotnews` | **not yet written** |
 | `saprouttab` | `saprouttab.csv`, `route_permission.csv` | `system_trust` | **not yet written** · not obtainable in RISE |
-| `security_audit_log` | `security_audit_log.csv`, `sm19_filters.csv` | `log_monitoring`, `log_review` | **not yet written** |
+| `security_audit_log` | `security_audit_log.csv`, `sm19_filters.csv` | `log_monitoring`, `log_review` | documented |
 | `security_params` | `security_params.csv`, `rsparam.csv`, `profile_params.csv` | `abap_authorizations`, `baseline_params`, `crypto_posture`, `data_protection`, `log_monitoring`, `security_params`, `snc_posture`, `system_trust` | documented |
 | `sensitive_fields` | `sensitive_fields.csv`, `pii_fields.csv` | `data_protection` | **not yet written** |
 | `siem_config` | `siem_config.json` | `log_monitoring` | **not yet written** |
@@ -132,7 +132,7 @@ clean — see chapter 13 of the architecture guide.
 | `system_component` | `system_component.csv`, `cvers.csv`, `component_versions.csv` | — | documented |
 | `system_landscape` | `system_landscape.csv`, `landscape.csv` | `data_protection` | **not yet written** |
 | `table_auth_groups` | `table_auth_groups.csv`, `table_authorization_groups.csv`, `se54.csv` | — | documented |
-| `table_logging` | `table_logging.csv`, `dd09l.csv` | `log_monitoring` | **not yet written** |
+| `table_logging` | `table_logging.csv`, `dd09l.csv` | `log_monitoring` | documented |
 | `tls_config` | `tls_config.csv`, `icm_ssl.csv` | `crypto_posture` | **not yet written** |
 | `tolerance_groups` | `tolerance_groups.csv`, `t043t.csv`, `oba4.csv` | `financial_controls` | **not yet written** |
 | `transport_history` | `transport_history.csv`, `stms_log.csv`, `import_history.csv` | `code_transport` | **not yet written** |
