@@ -6,7 +6,7 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**376** check ids are written as literals in `modules/`, across **31** modules. A further **255** are built at runtime from shipped rule tables, giving **631** in total.
+**376** check ids are written as literals in `modules/`, across **31** modules. A further **264** are built at runtime from shipped rule tables, giving **640** in total.
 
 ## What this file does not claim
 
@@ -599,7 +599,7 @@ Examples: `ABAP-AMDP-001`, `ABAP-AMDP-002`, `ABAP-AMDP-003`, `ABAP-AMDP-004`, `A
 
 Custom-code scan rules. All three tables emit into the same `ABAP-` namespace: ABAP/UI5, JavaScript, and BTP descriptors.
 
-### `ARA-<risk id>` — 27
+### `ARA-<risk id>` — 36
 
 Source: `modules/access_risk_analysis.py — RULESET`
 

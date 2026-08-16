@@ -29,6 +29,32 @@ is what suppresses display-only false positives.
 A RISK is either two conflicting Functions (SOD) or a single high-risk Function
 (CRITICAL_ACTION / CRITICAL_PERMISSION).
 
+PROCESS COVERAGE, AND WHAT THE PLANT-FLOOR RULES ARE WORTH. The finance and
+Basis rules (P2P, O2C, R2R, H2R, BASIS) were each researched and web-verified
+object by object. A later block covers the operational processes an ERP
+audit reaches next — Manufacturing, Inventory, Quality, Plant Maintenance,
+Project System and Warehouse Management — and it is built from a different
+kind of source: an operator-supplied S/4HANA design specification that lists
+the authorization OBJECTS per module (Q_INSP_WRK, C_AFKO_AWK, C_STUE_BER,
+I_AUART, C_PRPS_ART, L_LGNUM …) together with the conflict patterns SAP's own
+starter library names. The objects come from that document; the FIELD
+vocabulary is working knowledge and is NOT document-verified — which is why
+the plant-floor entries carry a `provenance` key saying so, and why several
+name more than one object per function.
+
+That distinction is safe rather than merely disclosed, because the matcher is
+FAIL-CLOSED: `_field_ok` returns False when a required field is absent from
+the export, so a field name that turns out to be wrong makes its rule quieter,
+never louder. A mis-guessed field costs coverage. It cannot manufacture a
+conflict against a user who does not hold one — the failure direction that
+would matter.
+
+Several plant-floor functions are separated by TRANSACTION with a permission
+floor (record results vs make the usage decision both sit on the inspection
+lot, for instance). SAP's own model calls that a transaction-based rule and
+notes it is coarser than an authorization-based one; each such rationale says
+which kind it is rather than implying object-level precision it does not have.
+
 Data sources:
   - role_auth_values.csv  → AGR_1251 (AGR_NAME, OBJECT, AUTH, FIELD, LOW, HIGH)
   - user_roles.csv        → AGR_USERS (UNAME, AGR_NAME)  [optional; falls back to
@@ -475,6 +501,169 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
                                  {"object": "P_PERNR", "field": "AUTHC", "values": ["W", "E", "S", "*"]}]},
             ],
             "references": ["SAP Help P_PERNR", "SAP Help P_PERNR PSIGN I/E, main switch OOAC (AUTSW/PERNR)"],
+        },
+        # ══════════════════════════════════════════════════════════════════
+        #  PLANT-FLOOR PROCESSES (MFG / INV / QM / PM / PS / WM)
+        #  Objects from the operator design specification; field vocabulary is
+        #  working knowledge — see the module docstring's provenance note. The
+        #  matcher is fail-closed, so an inaccurate field silences a rule
+        #  rather than inventing a conflict.
+        # ══════════════════════════════════════════════════════════════════
+        {
+            "risk_id": "MFG-01", "name": "Maintain BOM / Routing and Release Production Order",
+            "process": "MFG", "risk_type": "SOD", "severity": "HIGH",
+            "provenance": "objects from design spec (C_STUE_BER, C_ROUT, C_AFKO_AWK); fields unverified",
+            "rationale": "A user who changes what a product is made of (BOM) or how it is made (routing) AND releases the production order that consumes it can quietly alter component quantities, then run the order that draws the extra material — the consumption becomes 'planned' and reconciles cleanly. Costing is distorted in the same motion. Authorization-based on both sides.",
+            "functions": [
+                {"name": "Maintain BOM / Routing",
+                 "actions": ["CS01", "CS02", "CA01", "CA02", "CEWB"],
+                 "permissions": [{"object": "C_STUE_BER", "field": "ACTVT", "values": ["01", "02"]},
+                                 {"object": "C_ROUT", "field": "ACTVT", "values": ["01", "02"]}]},
+                {"name": "Create / Release Production Order",
+                 "actions": ["CO01", "CO02", "CO40", "CO41", "COHV"],
+                 "permissions": [{"object": "C_AFKO_AWK", "field": "ACTVT", "values": ["01", "02"]}]},
+            ],
+            "references": ["S/4HANA security design specification — PP authorization objects",
+                           "SAP GRC starter ruleset — Manufacturing (BOM/routing vs order release)"],
+        },
+        {
+            "risk_id": "MFG-02", "name": "Confirm Production Order and Post Component Goods Movement",
+            "process": "MFG", "risk_type": "SOD", "severity": "HIGH",
+            "provenance": "objects from design spec (C_AFKO_AWK, M_MSEG_BWA/WMB); fields unverified",
+            "rationale": "Confirmation declares the yield and scrap a production order achieved; the goods movement books the components it consumed and the finished stock it produced. One user holding both can confirm output that was never made, or write off good material as scrap and remove it — the classic false-production-confirmation loss, invisible because the paperwork agrees with itself.",
+            "functions": [
+                {"name": "Confirm Production Order",
+                 "actions": ["CO11N", "CO15", "CO1F", "CO11", "MFBF"],
+                 "permissions": [{"object": "C_AFKO_AWK", "field": "ACTVT", "values": ["01", "02"]}]},
+                {"name": "Post Goods Movement",
+                 "actions": ["MIGO", "MB31", "MB1A", "MB1B", "MB11"],
+                 "permissions": [{"object": "M_MSEG_BWA", "field": "ACTVT", "values": ["01"]},
+                                 {"object": "M_MSEG_WMB", "field": "ACTVT", "values": ["01"]}]},
+            ],
+            "references": ["S/4HANA security design specification — PP / Inventory objects",
+                           "SAP GRC starter ruleset — Manufacturing (confirm vs component GI/GR)"],
+        },
+        {
+            "risk_id": "INV-01", "name": "Post Goods Movement and Post Physical Inventory Difference",
+            "process": "INV", "risk_type": "SOD", "severity": "CRITICAL",
+            "provenance": "objects from design spec (M_MSEG_BWA/WMB); fields unverified",
+            "rationale": "The count is the control that catches the theft. A user who moves stock AND posts the physical-inventory difference writes off exactly what they removed — the book balance is corrected to match the shelf, the variance is 'explained', and no reconciliation ever surfaces it. Posting an inventory difference is itself a material movement (types 701/702), so the movement-type authorization governs both sides.",
+            "functions": [
+                {"name": "Post Goods Movement",
+                 "actions": ["MIGO", "MB1A", "MB1B", "MB1C", "MB11", "MBST"],
+                 "permissions": [{"object": "M_MSEG_BWA", "field": "ACTVT", "values": ["01"]},
+                                 {"object": "M_MSEG_WMB", "field": "ACTVT", "values": ["01"]}]},
+                {"name": "Post Physical Inventory Difference",
+                 "actions": ["MI07", "MI08", "MI10", "MI37"],
+                 "permissions": [{"object": "M_MSEG_BWA", "field": "ACTVT", "values": ["01"]},
+                                 {"object": "M_MSEG_WMB", "field": "ACTVT", "values": ["01"]}]},
+            ],
+            "references": ["S/4HANA security design specification — Inventory objects and MI07 flow",
+                           "SAP GRC starter ruleset — Inventory (goods movement vs inventory difference)"],
+        },
+        {
+            "risk_id": "INV-02", "name": "Post Goods Movement and Maintain Material Valuation / Status",
+            "process": "INV", "risk_type": "SOD", "severity": "HIGH",
+            "provenance": "objects from design spec (M_MSEG_BWA, M_MATE_MAR/STA); fields unverified",
+            "rationale": "A user who moves stock AND maintains the material master can change the valuation class, price control or material status that governs how the movement is valued and whether it is blocked — writing stock off at a price they chose, or unblocking a material to move it and re-blocking it afterwards. The master data decides what the movement means.",
+            "functions": [
+                {"name": "Post Goods Movement",
+                 "actions": ["MIGO", "MB1A", "MB1B", "MB1C", "MB11"],
+                 "permissions": [{"object": "M_MSEG_BWA", "field": "ACTVT", "values": ["01"]},
+                                 {"object": "M_MSEG_WMB", "field": "ACTVT", "values": ["01"]}]},
+                {"name": "Maintain Material Master (valuation / status)",
+                 "actions": ["MM01", "MM02", "MM17", "MASS", "MR21"],
+                 "permissions": [{"object": "M_MATE_MAR", "field": "ACTVT", "values": ["01", "02"]},
+                                 {"object": "M_MATE_STA", "field": "ACTVT", "values": ["01", "02"]},
+                                 {"object": "M_MATE_BUK", "field": "ACTVT", "values": ["01", "02"]}]},
+            ],
+            "references": ["S/4HANA security design specification — Material master objects",
+                           "SAP GRC starter ruleset — Inventory / material master"],
+        },
+        {
+            "risk_id": "QM-01", "name": "Record Inspection Results and Make the Usage Decision",
+            "process": "QM", "risk_type": "SOD", "severity": "HIGH",
+            "provenance": "objects from design spec (Q_INSP_WRK); TRANSACTION-separated with a permission floor",
+            "rationale": "Quality assurance is two people by design: one records what the inspection measured, another decides whether the lot is acceptable. One user doing both can enter passing results and accept their own lot, releasing defective material to customers or production with no independent gate. Separated by transaction with an inspection-lot permission floor rather than by object — coarser than an authorization-based rule, and stated as such.",
+            "functions": [
+                {"name": "Record Inspection Results",
+                 "actions": ["QE51N", "QE01", "QE02", "QE11", "QE23"],
+                 "permissions": [{"object": "Q_INSP_WRK", "field": "ACTVT", "values": ["01", "02"]}]},
+                {"name": "Make Usage Decision",
+                 "actions": ["QA11", "QA12", "QA14", "QA32"],
+                 "permissions": [{"object": "Q_INSP_WRK", "field": "ACTVT", "values": ["01", "02"]}]},
+            ],
+            "references": ["S/4HANA security design specification — QM authorization objects",
+                           "SAP GRC starter ruleset — Quality (results recording vs usage decision)"],
+        },
+        {
+            "risk_id": "QM-02", "name": "Make Usage Decision and Maintain Material QM Inspection Setup",
+            "process": "QM", "risk_type": "SOD", "severity": "HIGH",
+            "provenance": "objects from design spec (Q_INSP_WRK, M_MATE_MAR/QM material); fields unverified",
+            "rationale": "Accepting a failing lot is a single event somebody may notice. Changing the material's QM inspection setup so future lots are not inspected at all is the same fraud made permanent, and it stops generating evidence. A user holding both can accept today's defective batch and switch off tomorrow's inspection.",
+            "functions": [
+                {"name": "Make Usage Decision",
+                 "actions": ["QA11", "QA12", "QA14"],
+                 "permissions": [{"object": "Q_INSP_WRK", "field": "ACTVT", "values": ["01", "02"]}]},
+                {"name": "Maintain Material QM / Inspection Setup",
+                 "actions": ["MM01", "MM02", "QS21", "QS22", "QDR1"],
+                 "permissions": [{"object": "Q_MATERIAL", "field": "ACTVT", "values": ["01", "02"]},
+                                 {"object": "M_MATE_MAR", "field": "ACTVT", "values": ["01", "02"]}]},
+            ],
+            "references": ["S/4HANA security design specification — QM objects (Q_MATERIAL, Q_INSP_WRK)",
+                           "SAP GRC starter ruleset — Quality (usage decision vs inspection setup)"],
+        },
+        {
+            "risk_id": "PM-01", "name": "Create Maintenance Order and Confirm the Work",
+            "process": "PM", "risk_type": "SOD", "severity": "HIGH",
+            "provenance": "objects from design spec (I_AUART, I_IWERK); I_* field vocabulary UNVERIFIED",
+            "rationale": "A maintenance order authorises spend — labour, parts, external services — and the confirmation says the work happened. One user raising the order and confirming it can book maintenance that was never performed, consuming spare parts that leave the storeroom to somewhere else, or route an external service to a colluding contractor with the confirmation as the only evidence.",
+            "functions": [
+                {"name": "Create / Change Maintenance Order",
+                 "actions": ["IW31", "IW32", "IW34", "IW36"],
+                 "permissions": [{"object": "I_AUART", "field": "ACTVT", "values": ["01", "02"]},
+                                 {"object": "I_IWERK", "field": "ACTVT", "values": ["01", "02"]}]},
+                {"name": "Confirm Maintenance Work",
+                 "actions": ["IW41", "IW42", "IW44", "IW48"],
+                 "permissions": [{"object": "I_AUART", "field": "ACTVT", "values": ["01", "02"]},
+                                 {"object": "I_IWERK", "field": "ACTVT", "values": ["01", "02"]}]},
+            ],
+            "references": ["S/4HANA security design specification — PM/EAM authorization objects",
+                           "SAP GRC starter ruleset — Plant Maintenance (order vs confirmation)"],
+        },
+        {
+            "risk_id": "PS-01", "name": "Maintain Project Budget and Settle Project Costs",
+            "process": "PS", "risk_type": "SOD", "severity": "HIGH",
+            "provenance": "objects from design spec (C_PRPS_ART, C_PROJ_TCD, K_ORDER); fields unverified",
+            "rationale": "Project budget is the control that stops a project absorbing cost without approval, and settlement is what moves that cost onto an asset or a P&L account. A user who sets the budget AND settles can raise the budget to cover an overrun they then settle away — the overrun never surfaces as a variance, and capital projects are where the largest single-approval amounts in an ERP live.",
+            "functions": [
+                {"name": "Maintain Project / WBS Budget",
+                 "actions": ["CJ30", "CJ32", "CJ37", "CJ36", "CJ20N"],
+                 "permissions": [{"object": "C_PRPS_ART", "field": "ACTVT", "values": ["01", "02"]},
+                                 {"object": "C_PROJ_TCD", "field": "ACTVT", "values": ["01", "02"]}]},
+                {"name": "Settle / Post Project Costs",
+                 "actions": ["CJ88", "CJ8G", "CJ44", "CJ45"],
+                 "permissions": [{"object": "K_ORDER", "field": "ACTVT", "values": ["01", "02"]},
+                                 {"object": "K_CCA", "field": "ACTVT", "values": ["01", "02"]}]},
+            ],
+            "references": ["S/4HANA security design specification — PS authorization objects",
+                           "SAP GRC starter ruleset — Project System (budget vs settlement)"],
+        },
+        {
+            "risk_id": "WM-01", "name": "Create Warehouse Transfer Order and Confirm It",
+            "process": "WM", "risk_type": "SOD", "severity": "HIGH",
+            "provenance": "objects from design spec (L_LGNUM); fields unverified",
+            "rationale": "The transfer order says stock should move; the confirmation says it did. A user holding both can confirm a movement that never physically happened — the bin balance in the system matches the paperwork while the goods are gone, and the discrepancy only appears at the next physical count, by which time the trail is a system record the same user created.",
+            "functions": [
+                {"name": "Create Warehouse Transfer Order / Task",
+                 "actions": ["LT01", "LT03", "LT06", "LT10", "/SCWM/TO_CREATE"],
+                 "permissions": [{"object": "L_LGNUM", "field": "ACTVT", "values": ["01"]}]},
+                {"name": "Confirm Warehouse Transfer Order / Task",
+                 "actions": ["LT11", "LT12", "LT13", "LT22", "/SCWM/TO_CONF"],
+                 "permissions": [{"object": "L_LGNUM", "field": "ACTVT", "values": ["02"]}]},
+            ],
+            "references": ["S/4HANA security design specification — WM/EWM objects (L_LGNUM)",
+                           "SAP GRC starter ruleset — Warehouse (task creation vs confirmation)"],
         },
     ]
 
