@@ -32,7 +32,7 @@ Each check self-skips when its export is absent.
 WHICH TABLE NAMES BELOW ARE VERIFIED, AND WHICH ARE THIS FILE'S OWN GUESS.
 
 This list was written from working knowledge and read as fact for as long as it
-has existed. Three document passes have now tested it. Against SAP's Access
+has existed. Four document passes have now tested it. Against SAP's Access
 Control 12.0 Security and Administrator Guides, GRACFFLOG and GRACREQ survived.
 Against SAP Note 2388483 — SAP's own catalogue of technical tables — so did
 GRACUSERPRMVL: its "GRC violations" row lists the table, and Note 2270608
@@ -45,7 +45,14 @@ is not an SAP document, EAM table names shift between support packs, and the
 reference's own advice is to confirm in SE11 before scripting anything. So
 "corroborated" is its own tier, and the guide says SE11 out loud.
 
-The same pass CONTRADICTS one guess outright. The mitigating-control MASTER
+A fourth pass — an SRS research package compiled from SAP Community
+catalogues — corroborates GRACFFOBJECT (marked unconfirmed until now) and
+GRACMITROLE, and spells the controller table GRACFFCTRL where the third
+pass wrote GRACFFCNTL. That disagreement is not an error to resolve here:
+it is the names-shift-between-support-packs warning happening inside the
+sources themselves, so both spellings are recorded below and SE11 decides.
+
+The third pass also CONTRADICTS one guess outright. The mitigating-control MASTER
 record — owner, monitor, validity: exactly what the governance check reads —
 lives in the GRC entity/hierarchy framework, not in a flat GRAC table; the
 flat GRACMIT* tables hold assignments, not the control master. GRACMITCNT may
@@ -63,10 +70,13 @@ Data sources (exported to CSV):
                                request, requestor, provisioned user, approver
   - grac_sod_violations      → GRACUSERPRMVL        [verified: SAP Notes 2388483, 2270608]
                                + GRACMITUSER for mitigation validity  [corroborated]
-  - grac_firefighter_owners  → GRACFFOWNER + GRACFFCNTL  [corroborated — confirm in SE11]
-                               (GRACFFOBJECT unconfirmed; EAM names shift between SPs)
+  - grac_firefighter_owners  → GRACFFOWNER + GRACFFCTRL/GRACFFCNTL (spelling
+                               differs between sources) + GRACFFOBJECT
+                               [corroborated — confirm in SE11]
   - grac_mitigating_controls → NWBC export  [flat-table guess GRACMITCNT CONTRADICTED —
-                               the control master lives in the entity framework]
+                               the control master lives in the entity framework;
+                               assignment tables GRACMITUSER/GRACMITROLE ARE flat
+                               and corroborated]
   - grac_sod_risks           → GRACSODRISK + GRACRULESET  [corroborated — confirm in SE11]
                                (GRACSODRISKOWN holds the risk→owner assignment)
   - grac_job_log             → GRACTASKEXECSTMP     [corroborated — confirm in SE11]
@@ -113,6 +123,8 @@ class GrcAccessControlAuditor(BaseAuditor):
         self.check_sync_job_staleness()
         self.check_firefighter_log_review()
         self.check_firefighter_ownership()
+        self.check_firefighter_assignment_integrity()
+        self.check_firefighter_self_use()
         self.check_access_request_governance()
         self.check_open_sod_without_mitigation()
         self.check_mitigating_control_governance()
@@ -858,5 +870,166 @@ class GrcAccessControlAuditor(BaseAuditor):
                 "GRC AC technical-table reference — GRACTASKEXECSTMP (corroborated, community SE80 catalogue)",
             ],
             details={"stale": stale_names, "threshold_days": self._MAX_SYNC_AGE_DAYS},
+        )
+
+    # ==============================  EAM CROSS-SOURCE MISUSE (log × owners)
+    def check_firefighter_assignment_integrity(self):
+        """Every logged session against the assignment register.
+
+        The research package's EAM-misuse patterns lead with "firefighter used
+        without active assignment": a session whose FFID has no owner row at
+        all, or whose logon date falls outside the assignment's validity.
+        Both halves need the log AND the owners export, so the check runs only
+        when both are supplied — with either missing it stays silent rather
+        than declaring sessions orphaned against a register it never saw. An
+        undated assignment covers every date (the export's validity columns
+        are optional); a session whose date cannot be parsed is presence-
+        checked only.
+        """
+        log = self.data.get("grac_firefighter_log")
+        owners = self.data.get("grac_firefighter_owners")
+        if not log or not owners:
+            return
+        windows: Dict[str, List] = {}
+        for r in owners:
+            ffid = self._get(r, "FFID", "FIREFIGHTER_ID", "FIREFIGHTER", "FF_ID").upper()
+            if not ffid:
+                continue
+            frm = self._parse_date(self._get(r, "VALID_FROM", "FROM_DAT", "FROM_DATE"))
+            to = self._parse_date(self._get(r, "VALID_TO", "TO_DAT", "TO_DATE"))
+            windows.setdefault(ffid, []).append((frm, to))
+        hits: List[str] = []
+        objs: List[Dict[str, Any]] = []
+        for r in log:
+            ffid = self._get(r, "FFID", "FIREFIGHTER_ID", "FIREFIGHTER", "FF_ID").upper()
+            user = self._get(r, "FF_USER", "USER", "BNAME", "FIREFIGHTER_USER", "OWNER")
+            when = self._get(r, "LOGON", "LOGON_TIME", "LOGON_DATE", "TIMESTAMP", "SESSION_DATE")
+            if not ffid:
+                continue
+            if ffid not in windows:
+                hits.append(f"{ffid} used by {user or '?'}"
+                            + (f" @ {when}" if when else "")
+                            + " — no assignment on record")
+                self._add_obj(objs, "user", ffid)
+                self._add_obj(objs, "user", user)
+                continue
+            day = self._parse_stamp(when)
+            if day is None:
+                continue
+            covered = any((frm is None or frm <= day) and (to is None or day <= to)
+                          for frm, to in windows[ffid])
+            if not covered:
+                hits.append(f"{ffid} used by {user or '?'} @ {when}"
+                            " — outside assignment validity")
+                self._add_obj(objs, "user", ffid)
+                self._add_obj(objs, "user", user)
+        if not hits:
+            return
+        self.finding(
+            check_id="GRC-FF-003",
+            title="Firefighter sessions without an active assignment",
+            severity=self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=(
+                f"{len(hits)} firefighter session(s) ran with no assignment to "
+                "stand on: the firefighter ID has no owner/controller row in the "
+                "assignment export, or the session falls outside the "
+                "assignment's validity window. An unassigned session is "
+                "privileged access with nobody accountable for it — there is no "
+                "owner to answer for the ID and no controller whose job it was "
+                "to review what it did."
+            ),
+            affected_items=hits[:50],
+            # Aggregate: one register of orphaned sessions; assigning an owner
+            # to one ID must shrink the list, not retire the gap.
+            affected_objects=objs,
+            scope="aggregate",
+            remediation=(
+                "Investigate each listed session with the EAM administrator: "
+                "either the assignment export is incomplete (re-export owners "
+                "and controllers unfiltered) or the sessions genuinely ran "
+                "unassigned — treat the latter as a privileged-access incident "
+                "and reconstruct what the session did from the consolidated log."
+            ),
+            references=[
+                "SAP GRC Access Control — EAM Owners & Controllers",
+                "SOX ITGC — accountability for emergency access",
+            ],
+            details={"count": len(hits)},
+        )
+
+    def check_firefighter_self_use(self):
+        """The session user against that FFID's own owner and controller.
+
+        GRC-FF-002B catches owner==controller in the master data. This is its
+        runtime twin: a session where the person USING the firefighter ID is
+        the ID's own owner or controller — the reviewer reviewing themselves,
+        found in the log rather than the org chart. The two can disagree, and
+        the log is the one that says what actually happened.
+        """
+        log = self.data.get("grac_firefighter_log")
+        owners = self.data.get("grac_firefighter_owners")
+        if not log or not owners:
+            return
+        parties: Dict[str, Dict[str, set]] = {}
+        for r in owners:
+            ffid = self._get(r, "FFID", "FIREFIGHTER_ID", "FIREFIGHTER", "FF_ID").upper()
+            if not ffid:
+                continue
+            d = parties.setdefault(ffid, {"owner": set(), "controller": set()})
+            owner = self._get(r, "OWNER", "FF_OWNER", "OWNER_USER").upper()
+            ctrl = self._get(r, "CONTROLLER", "FF_CONTROLLER", "CONTROLLER_USER").upper()
+            if owner:
+                d["owner"].add(owner)
+            if ctrl:
+                d["controller"].add(ctrl)
+        hits: List[str] = []
+        objs: List[Dict[str, Any]] = []
+        for r in log:
+            ffid = self._get(r, "FFID", "FIREFIGHTER_ID", "FIREFIGHTER", "FF_ID").upper()
+            user = self._get(r, "FF_USER", "USER", "BNAME", "FIREFIGHTER_USER", "OWNER").upper()
+            when = self._get(r, "LOGON", "LOGON_TIME", "LOGON_DATE", "TIMESTAMP", "SESSION_DATE")
+            if not ffid or not user or ffid not in parties:
+                continue
+            roles = [role for role in ("owner", "controller")
+                     if user in parties[ffid][role]]
+            if not roles:
+                continue
+            hits.append(f"{ffid} used by {user}"
+                        + (f" @ {when}" if when else "")
+                        + f" — who is its {' and '.join(roles)}")
+            self._add_obj(objs, "user", ffid)
+            self._add_obj(objs, "user", user)
+        if not hits:
+            return
+        self.finding(
+            check_id="GRC-FF-004",
+            title="Firefighter ID used by its own owner or controller",
+            severity=self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=(
+                f"{len(hits)} session(s) were run by the very person assigned "
+                "to govern the firefighter ID being used. When the owner or "
+                "controller is also the session user, the log review is a "
+                "self-review: the independent-check half of the emergency-"
+                "access control does not exist for these sessions, whatever "
+                "the master data says."
+            ),
+            affected_items=hits[:50],
+            # Aggregate: the defect is the collapsed segregation; every
+            # self-run session in the window is a member of it.
+            affected_objects=objs,
+            scope="aggregate",
+            remediation=(
+                "Have a different, segregated controller re-review the listed "
+                "sessions; reassign ownership/controllership so no firefighter "
+                "user governs their own ID (GRAC EAM Owners & Controllers)."
+            ),
+            references=[
+                "SAP GRC Access Control — EAM log review workflow",
+                "SOX ITGC — independence of privileged-access review",
+                "DSAG Prüfleitfaden — Notfalluser-Protokollprüfung",
+            ],
+            details={"count": len(hits)},
         )
 

@@ -121,3 +121,40 @@ def test_job_log_with_no_sync_rows_is_its_own_finding():
 def test_absent_job_log_self_skips():
     out = _run({})
     assert "GRC-SYNC-001" not in out and "GRC-SYNC-002" not in out
+# ── EAM cross-source misuse (GRC-FF-003 / GRC-FF-004) ─────────────────────────
+
+def test_session_without_assignment_and_outside_validity_fire():
+    data = {
+        "grac_firefighter_owners": [
+            {"FFID": "FF_A", "OWNER": "O1", "CONTROLLER": "C1",
+             "VALID_FROM": "20260101", "VALID_TO": "20260630"}],
+        "grac_firefighter_log": [
+            {"FFID": "FF_A", "FF_USER": "U1", "LOGON": "20260401"},   # inside
+            {"FFID": "FF_A", "FF_USER": "U1", "LOGON": "20260801"},   # outside
+            {"FFID": "FF_GHOST", "FF_USER": "U2", "LOGON": "20260401"}],
+    }
+    f = _run(data)["GRC-FF-003"]
+    joined = "\n".join(f["affected_items"])
+    assert "no assignment on record" in joined and "FF_GHOST" in joined
+    assert "outside assignment validity" in joined
+    assert f["details"]["count"] == 2
+
+
+def test_self_use_is_caught_and_bystanders_are_not():
+    data = {
+        "grac_firefighter_owners": [
+            {"FFID": "FF_A", "OWNER": "ADMIN2", "CONTROLLER": "CTRL1"}],
+        "grac_firefighter_log": [
+            {"FFID": "FF_A", "FF_USER": "ADMIN2", "LOGON": "20260401"},
+            {"FFID": "FF_A", "FF_USER": "JDOE", "LOGON": "20260402"}],
+    }
+    f = _run(data)["GRC-FF-004"]
+    assert any("ADMIN2" in i and "owner" in i for i in f["affected_items"])
+    assert not any("JDOE" in i for i in f["affected_items"])
+
+
+def test_cross_source_checks_need_both_exports():
+    log_only = {"grac_firefighter_log": [
+        {"FFID": "FF_A", "FF_USER": "U", "LOGON": "20260101"}]}
+    out = _run(log_only)
+    assert "GRC-FF-003" not in out and "GRC-FF-004" not in out

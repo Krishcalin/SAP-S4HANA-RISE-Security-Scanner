@@ -6,11 +6,11 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**374** check ids are written as literals in `modules/`, across **31** modules. A further **255** are built at runtime from shipped rule tables, giving **629** in total.
+**376** check ids are written as literals in `modules/`, across **31** modules. A further **255** are built at runtime from shipped rule tables, giving **631** in total.
 
 ## What this file does not claim
 
-**42 of the 374 titles and 15 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**42 of the 376 titles and 15 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -276,7 +276,7 @@ Category: Fiori & UI Layer
 | `FIORI-TILE-001` | MEDIUM | Fiori tiles with OData authorization mismatches |
 | `FIORI-USAGE-001` | LOW | Fiori apps with zero usage (never launched) |
 
-### `grc_access_control` — 15 checks
+### `grc_access_control` — 17 checks
 
 | Check | Severity | Title |
 |---|---|---|
@@ -286,6 +286,8 @@ Category: Fiori & UI Layer
 | `GRC-ARM-001B` | HIGH | Access request self-approved / self-provisioned |
 | `GRC-FF-001` | HIGH | Firefighter (emergency-access) sessions used without a documented reason |
 | `GRC-FF-002` | HIGH | Firefighter IDs without an assigned owner and controller |
+| `GRC-FF-003` | HIGH | Firefighter sessions without an active assignment |
+| `GRC-FF-004` | HIGH | Firefighter ID used by its own owner or controller |
 | `GRC-FF-001B` | HIGH | Firefighter session logs not reviewed / approved |
 | `GRC-FF-002B` | HIGH | Firefighter owner also acts as controller (self-monitoring) |
 | `GRC-FF-002C` | MEDIUM | Firefighter log review / delivery disabled |

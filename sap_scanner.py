@@ -281,6 +281,9 @@ def main():
         "data_directory": str(data_dir),
         "modules_run": run_modules,
         "severity_filter": args.severity,
+        # Audit-replay anchor: which bytes produced this report. Rendered as
+        # the evidence-manifest section; hashed here, in the run that read them.
+        "evidence_manifest": loader.evidence_manifest(),
     }
 
     # --- User & Authorization Audit ---

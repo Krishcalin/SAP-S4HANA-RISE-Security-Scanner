@@ -398,19 +398,21 @@ that drops the column reports every session as unreviewed rather than as clean.
 
 *What decides whether this export can exist at all*: configuration parameter
 `4000` selects ID-based (`1`) or role-based (`2`) firefighting, and parameters
-`4003`–`4006` decide which logs are collected at all (change log, system log,
-audit log, O/S command log). If those are unset, the log is thin for a reason
+`4003`–`4006` decide which logs are collected at all (change log `GRACCHANGELOG`, system log `GRACSYSTEMLOG`, audit log
+`GRACAUDITLOG`, O/S command log `GRACOSCMDLOG`; action usage lands in
+`GRACACTUSAGE` — table names corroborated by the community catalogues). If those are unset, the log is thin for a reason
 that has nothing to do with how the estate is used — note it on the export.
 
 ### Firefighter ID owners and controllers (`grac_firefighter_owners.csv`)
 **Route:** `NWBC` → Access Control → Emergency Access Management → owner and
 controller maintenance. **Authorization object:** `GRAC_FFOWN` (fields
 `GRAC_OWN_T` owner type, `GRAC_USER`, `GRAC_SYSID`).
-*Table names corroborated, not verified*: a community-compiled GRC table
-catalogue (SE80 dumps of real systems) lists `GRACFFOWNER` and `GRACFFCNTL`;
-`GRACFFOBJECT` remains unconfirmed, and EAM table names are known to shift
-between support packs. Confirm in `SE11` before scripting an extraction — the
-maintenance-screen export needs none of that.
+*Table names corroborated, not verified*: two independent community
+catalogues list `GRACFFOWNER` and `GRACFFOBJECT`, and spell the controller
+table differently between them — `GRACFFCNTL` in one, `GRACFFCTRL` in the
+other. That disagreement is the shift-between-support-packs warning
+demonstrating itself in the sources. Confirm the spelling in `SE11` before
+scripting an extraction — the maintenance-screen export needs none of that.
 
 ```
 Required: FFID (or FIREFIGHTER_ID), FF_OWNER (or OWNER), FF_CONTROLLER (or CONTROLLER)
@@ -423,7 +425,10 @@ Optional: VALID_TO, NOTIFY_BY_EMAIL
 
 ### Access requests (`grac_access_requests.csv`, `gracreq.csv`)
 **Table:** `GRACREQ`, with request detail across `GRACREQUSER`,
-`GRACREQOWNER`, `GRACREQPROVITEM` and `GRACREQPROVLOG`. **Authorization
+`GRACREQOWNER`, `GRACREQPROVITEM` and `GRACREQPROVLOG`; the approval trail
+itself lives in the MSMP workflow runtime — `GRFNMWRTINST`, `GRFNMWRTAPPR`
+(the approvals), `GRFNMWRTDATLG`, `GRFNMWRTMSGLG` [corroborated] — worth
+exporting when the question is WHO approved, not just whether. **Authorization
 object:** `GRAC_REQ`.
 
 ```
@@ -472,7 +477,9 @@ record — owner, monitor, validity, exactly the columns below — lives in the
 GRC entity/hierarchy framework, not in a flat `GRAC` table (the flat
 `GRACMIT*` tables hold user/role/profile ASSIGNMENTS). `GRACMITCNT` may
 exist; the data this file needs is not simply in it. The NWBC export is not a
-fallback route. It is the route.
+fallback route. It is the route. The ASSIGNMENT-level tables are flat and
+corroborated — `GRACMITUSER` (user) and `GRACMITROLE` (role); the control
+MASTER is what is not.
 
 ```
 Required: CONTROL_ID (or MITIGATION_ID), CONTROL_OWNER (or OWNER), MONITOR
@@ -488,7 +495,10 @@ the community catalogue lists `GRACSODRISK` (with `GRACSODRISKT` texts) and
 `GRACRULESET`, and names `GRACSODRISKOWN` as the risk-to-owner assignment —
 so an export whose `RISK_OWNER` column comes back empty may simply have been
 taken from the risk table alone. Confirm in `SE11` before scripting; the
-NWBC export sidesteps the question.
+NWBC export sidesteps the question. The catalogue also names the
+rule-generation siblings `GRACSODRISKFUNC` (risk-to-function), `GRACORGRULE`
+and `GRACACTRULE` [corroborated] — the org-rule table is where org-scope
+conflicts come from.
 
 ```
 Required: RISK_ID, RISK_LEVEL, STATUS

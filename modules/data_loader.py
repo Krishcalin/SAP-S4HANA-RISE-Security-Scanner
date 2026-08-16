@@ -317,6 +317,50 @@ class DataLoader:
                 self._disregard.add(Path(name).name.lower())
         return self
 
+    def evidence_manifest(self) -> List[Dict[str, Any]]:
+        """SHA-256, size, row count and mtime of every file this loader consumed.
+
+        The requirement this answers, in the SRS documents' own words: "keep
+        raw extract hash ... supports audit replay and defensible results." A
+        finding challenged months later is re-checkable because the report
+        names exactly which bytes produced it — same files, same hashes, same
+        findings; a hash that no longer matches means the evidence changed
+        after the scan, which is an answer rather than a failure.
+
+        Hashes are computed at call time from the files as they sit in the
+        data directory, so call it in the same run that loaded them — which
+        is what sap_scanner.py does when it builds scan_meta."""
+        import datetime as _dt
+        import hashlib as _hashlib
+        base = Path(self.data_dir)
+        alias_to_logical = {n.lower(): logical
+                            for logical, names in self.FILE_MAP.items()
+                            for n in names}
+        out: List[Dict[str, Any]] = []
+        for name in sorted(self._consumed_files, key=str.lower):
+            real = (self._entries() or {}).get(name.lower(), name)
+            path = base / real
+            if not path.is_file():
+                continue
+            digest = _hashlib.sha256()
+            with open(path, "rb") as fh:
+                for chunk in iter(lambda: fh.read(65536), b""):
+                    digest.update(chunk)
+            rows = None
+            logical = alias_to_logical.get(name.lower())
+            if logical is not None and isinstance(self._data.get(logical), list):
+                rows = len(self._data[logical])
+            st = path.stat()
+            out.append({
+                "file": real,
+                "sha256": digest.hexdigest(),
+                "bytes": st.st_size,
+                "rows": rows,
+                "modified": _dt.datetime.fromtimestamp(st.st_mtime)
+                            .strftime("%Y-%m-%d %H:%M:%S"),
+            })
+        return out
+
     def load_all(self) -> Dict[str, Any]:
         """Load all available data files and return unified data dict."""
         for logical_name, filenames in self.FILE_MAP.items():

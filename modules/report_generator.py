@@ -113,6 +113,37 @@ class ReportGenerator:
         """MonitorRisk tool-vendor logo (top-right)."""
         return ReportGenerator._asset_data_uri("monitorrisk-logo.png")
 
+    def _evidence_manifest_html(self) -> str:
+        """The evidence manifest: which files, hashed, produced this report.
+
+        Empty string when the meta carries no manifest (an older caller), so
+        existing callers keep rendering unchanged."""
+        manifest = self.meta.get("evidence_manifest") or []
+        if not manifest:
+            return ""
+        body = "".join(
+            "<tr>"
+            f"<td><code>{html.escape(str(e.get('file', '')))}</code></td>"
+            "<td style='font-family:monospace;font-size:11px;word-break:break-all'>"
+            f"{html.escape(str(e.get('sha256', '')))}</td>"
+            f"<td style='text-align:right'>{e.get('bytes', '')}</td>"
+            f"<td style='text-align:right'>{'' if e.get('rows') is None else e.get('rows')}</td>"
+            f"<td>{html.escape(str(e.get('modified', '')))}</td>"
+            "</tr>"
+            for e in manifest)
+        return f"""
+  <details class="evidence-manifest" style="margin:18px 0">
+    <summary style="cursor:pointer;font-weight:600">Evidence manifest — {len(manifest)} supplied export(s), SHA-256 hashed at scan time</summary>
+    <p style="font-size:13px;max-width:80ch">Every file this scan read. A challenged finding is re-checkable months
+    later: the same files with the same hashes produce the same findings. A
+    hash that no longer matches means the evidence changed after the scan —
+    which is an answer, not a failure.</p>
+    <div style="overflow-x:auto"><table>
+      <tr><th>File</th><th>SHA-256</th><th>Bytes</th><th>Rows</th><th>Modified</th></tr>
+      {body}
+    </table></div>
+  </details>"""
+
     def generate(self, output_path: str):
         """Generate complete HTML report."""
         # Compute stats
@@ -1045,6 +1076,7 @@ class ReportGenerator:
        severity cards, the P1-P4 queue and the category bars, which is every
        number a reader anchors on. -->
   {coverage_html}
+  {self._evidence_manifest_html()}
   {filter_html}
 
   <!-- Summary Grid -->
