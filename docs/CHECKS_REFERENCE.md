@@ -6,11 +6,11 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**366** check ids are written as literals in `modules/`, across **30** modules. A further **255** are built at runtime from shipped rule tables, giving **621** in total.
+**368** check ids are written as literals in `modules/`, across **30** modules. A further **255** are built at runtime from shipped rule tables, giving **623** in total.
 
 ## What this file does not claim
 
-**42 of the 366 titles and 15 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**42 of the 368 titles and 15 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -273,7 +273,7 @@ Category: Fiori & UI Layer
 | `FIORI-TILE-001` | MEDIUM | Fiori tiles with OData authorization mismatches |
 | `FIORI-USAGE-001` | LOW | Fiori apps with zero usage (never launched) |
 
-### `grc_access_control` — 13 checks
+### `grc_access_control` — 15 checks
 
 | Check | Severity | Title |
 |---|---|---|
@@ -290,6 +290,8 @@ Category: Fiori & UI Layer
 | `GRC-RS-001` | HIGH | Critical SoD risks are disabled in the rule set |
 | `GRC-RS-002` | MEDIUM | SoD risks without an assigned risk owner |
 | `GRC-RS-003` | MEDIUM | SoD rule set appears incomplete / never tailored |
+| `GRC-SYNC-001` | MEDIUM | GRC synchronisation jobs are behind — every export here inherits the gap |
+| `GRC-SYNC-002` | LOW | GRC job-log export contains no recognisable synchronisation job |
 
 ### `hana_db_security` — 19 checks
 

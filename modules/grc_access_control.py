@@ -32,18 +32,29 @@ Each check self-skips when its export is absent.
 WHICH TABLE NAMES BELOW ARE VERIFIED, AND WHICH ARE THIS FILE'S OWN GUESS.
 
 This list was written from working knowledge and read as fact for as long as it
-has existed. Two document passes have now tested it. Against SAP's Access
+has existed. Three document passes have now tested it. Against SAP's Access
 Control 12.0 Security and Administrator Guides, GRACFFLOG and GRACREQ survived.
 Against SAP Note 2388483 — SAP's own catalogue of technical tables — so did
 GRACUSERPRMVL: its "GRC violations" row lists the table, and Note 2270608
-names it in its title. That row also names a role-level sibling,
-GRACROLEPRMVL, which this module has never read. The rest remain unconfirmed.
-They may well be right; nobody has shown that they are, and a table name a
-customer cannot find is a support call that makes the whole guide look careless.
+names it in its title (that row also names a role-level sibling, GRACROLEPRMVL,
+which this module has never read). A third pass, against a GRC table reference
+compiled from community SE80 dumps, CORROBORATES GRACSODRISK, GRACRULESET,
+GRACMITUSER, GRACFFOWNER and GRACFFCNTL — the tables exist as repository
+objects on real systems — without promoting them to verified: a community dump
+is not an SAP document, EAM table names shift between support packs, and the
+reference's own advice is to confirm in SE11 before scripting anything. So
+"corroborated" is its own tier, and the guide says SE11 out loud.
 
-So they are marked. `docs/EXPORT_GUIDE.md` documents the UI route for the
-unverified ones — Emergency Access Management and risk maintenance in NWBC —
-because a route SAP documents beats a table nobody has checked.
+The same pass CONTRADICTS one guess outright. The mitigating-control MASTER
+record — owner, monitor, validity: exactly what the governance check reads —
+lives in the GRC entity/hierarchy framework, not in a flat GRAC table; the
+flat GRACMIT* tables hold assignments, not the control master. GRACMITCNT may
+exist, but the data this module needs is not simply in it, and the NWBC export
+route is therefore not a fallback for an unverified name. It is the route.
+
+`docs/EXPORT_GUIDE.md` documents the UI route for everything below verified —
+Emergency Access Management and risk maintenance in NWBC — because a route SAP
+documents beats a table nobody has checked.
 
 Data sources (exported to CSV):
   - grac_firefighter_log     → GRACFFLOG            [verified: Security Guide, EAM archiving]
@@ -51,17 +62,25 @@ Data sources (exported to CSV):
   - grac_access_requests     → GRACREQ              [verified: Security Guide, request archiving]
                                request, requestor, provisioned user, approver
   - grac_sod_violations      → GRACUSERPRMVL        [verified: SAP Notes 2388483, 2270608]
-                               + GRACMITUSER for mitigation validity  [UNVERIFIED]
-  - grac_firefighter_owners  → GRACFFOWNER/CTRL/OBJECT   [UNVERIFIED — export via NWBC]
-  - grac_mitigating_controls → GRACMITCNT           [UNVERIFIED — export via NWBC]
-  - grac_sod_risks           → GRACSODRISK + GRACRULESET    [UNVERIFIED — export via NWBC]
+                               + GRACMITUSER for mitigation validity  [corroborated]
+  - grac_firefighter_owners  → GRACFFOWNER + GRACFFCNTL  [corroborated — confirm in SE11]
+                               (GRACFFOBJECT unconfirmed; EAM names shift between SPs)
+  - grac_mitigating_controls → NWBC export  [flat-table guess GRACMITCNT CONTRADICTED —
+                               the control master lives in the entity framework]
+  - grac_sod_risks           → GRACSODRISK + GRACRULESET  [corroborated — confirm in SE11]
+                               (GRACSODRISKOWN holds the risk→owner assignment)
+  - grac_job_log             → GRACTASKEXECSTMP     [corroborated — confirm in SE11]
+                               sync-job last-run stamps — see THE SYNC below
 
 THE SYNC IS THE REAL PREREQUISITE, not the table name. Every one of these is
 populated on the GRC box by a scheduled job (GRAC_SPM_LOG_SYNC and siblings). An
 export taken while the job is behind comes back short, and a short firefighter
 log reads as "no privileged sessions were used" — the most reassuring sentence
-this module can be handed, and the one it has no way to check. The export guide
-tells the operator to record when each job last ran.
+this module can be handed, and the one it long had no way to check. Now it has
+one: grac_job_log carries the executed-jobs stamp table, and
+check_sync_job_staleness dates every GRAC_*_SYNC family before any other check
+runs, flagging the ones that are behind (GRC-SYNC-001) — what the export guide
+could only ask the operator to write down is now a finding.
 """
 
 import datetime
@@ -89,6 +108,9 @@ class GrcAccessControlAuditor(BaseAuditor):
     _CRIT_LEVELS = {"critical", "high"}
 
     def run_all_checks(self) -> List[Dict[str, Any]]:
+        # First: date the evidence itself. Every check below reads a
+        # synchronised copy, and this one says how current that copy is.
+        self.check_sync_job_staleness()
         self.check_firefighter_log_review()
         self.check_firefighter_ownership()
         self.check_access_request_governance()
@@ -709,3 +731,132 @@ class GrcAccessControlAuditor(BaseAuditor):
                             "DSAG Prüfleitfaden — Vollständigkeit des Regelwerks"],
                 details={"count": total},
             )
+
+    # =====================================  SYNCHRONISATION HEALTH (runs first)
+    #: Days a synchronisation family may go without a run before its data is
+    #: stale. SAP's recommended frequencies are daily for five of the six
+    #: families and weekly for the authorisation sync — this is the widest
+    #: recommended schedule plus nothing.
+    _MAX_SYNC_AGE_DAYS = 7
+
+    @staticmethod
+    def _parse_stamp(s: Any) -> Optional[datetime.date]:
+        """Job-execution stamp → date. Accepts an 8-digit SAP date, a 14-digit
+        SAP timestamp, or an ISO date/datetime; None when empty or unparseable
+        — and None is reported as "no recorded execution", never skipped."""
+        digits = "".join(ch for ch in str(s or "") if ch.isdigit())
+        if len(digits) < 8:
+            return None
+        try:
+            return datetime.date(int(digits[:4]), int(digits[4:6]), int(digits[6:8]))
+        except ValueError:
+            return None
+
+    def check_sync_job_staleness(self):
+        """GRACTASKEXECSTMP: date each synchronisation family's last actual run.
+
+        Every export this module reads is a synchronised COPY, populated by the
+        GRAC_*_SYNC job families — and an export taken while a job is behind
+        comes back short, where short reads as clean. This check runs before
+        the others so the GRC section opens with whether its own evidence is
+        current. Non-SYNC rows are deliberately ignored: one-off jobs
+        (GRAC_BATCH_RA runs and the like) age legitimately.
+        """
+        rows = self.data.get("grac_job_log")
+        if not rows:
+            return
+        latest: Dict[str, Optional[datetime.date]] = {}
+        for r in rows:
+            name = self._get(r, "TASK", "TASK_NAME", "TASKNAME", "JOB", "JOB_NAME",
+                             "JOBNAME", "PROGRAM", "REPORT").upper()
+            if not name or "SYNC" not in name:
+                continue
+            stamp = self._parse_stamp(self._get(
+                r, "LAST_RUN", "EXEC_TIMESTAMP", "EXEC_DATE", "TIMESTAMP",
+                "END_DATE", "ENDDATE", "RUN_DATE", "DATE"))
+            if name not in latest:
+                latest[name] = stamp
+            elif stamp and (latest[name] is None or stamp > latest[name]):
+                latest[name] = stamp
+        if not latest:
+            self.finding(
+                check_id="GRC-SYNC-002",
+                title="GRC job-log export contains no recognisable synchronisation job",
+                severity=self.SEVERITY_LOW,
+                category=self.CATEGORY,
+                description=(
+                    f"A job-log export was supplied ({len(rows)} row(s)) but no task "
+                    "name contains SYNC, so no synchronisation family can be dated. "
+                    "Either the sync jobs have never run on this GRC box — which would "
+                    "make every other export in this section unreliably short — or the "
+                    "export was filtered to exclude them. The scanner cannot tell which "
+                    "from here; the export note should say."
+                ),
+                affected_items=[f"{len(rows)} row(s), none matching a *SYNC* task name"],
+                # Aggregate, and deliberately with NO affected_objects: the statement
+                # is about the export's coverage of the job schedule, not about any
+                # job in it — the jobs that WOULD name it are precisely the absent ones.
+                scope="aggregate",
+                remediation=(
+                    "Re-export GRACTASKEXECSTMP (or the SM37 selection) unfiltered so "
+                    "the GRAC_*_SYNC families appear, or state on the export note that "
+                    "the synchronisation jobs are genuinely unscheduled — which is "
+                    "itself the finding."
+                ),
+                references=["SAP Access Control — Synchronization Jobs (SPRO → GRC → Access Control)"],
+                details={"rows": len(rows)},
+            )
+            return
+        today = self._today()
+        stale: List[str] = []
+        stale_objs: List[Dict[str, Any]] = []
+        stale_names: List[str] = []
+        for name in sorted(latest):
+            d = latest[name]
+            if d is None:
+                stale.append(f"{name} — no recorded execution")
+            else:
+                age = (today - d).days
+                if age <= self._MAX_SYNC_AGE_DAYS:
+                    continue
+                stale.append(f"{name} — last ran {d.isoformat()} ({age} days ago)")
+            stale_names.append(name)
+            self._add_obj(stale_objs, "job", name)
+        if not stale:
+            return
+        self.finding(
+            check_id="GRC-SYNC-001",
+            title="GRC synchronisation jobs are behind — every export here inherits the gap",
+            severity=self.SEVERITY_MEDIUM,
+            category=self.CATEGORY,
+            description=(
+                f"{len(stale)} GRC synchronisation famil(ies) have not run within "
+                f"{self._MAX_SYNC_AGE_DAYS} days, or have no recorded run at all. The "
+                "GRC repository is a synchronised copy: a firefighter log synced weeks "
+                "ago reads as \"no recent privileged sessions\", and a stale user/role "
+                "sync makes the risk analysis measure an estate that no longer exists. "
+                "Every clean GRC finding in this report is only as current as these "
+                "stamps."
+            ),
+            affected_items=stale[:50],
+            # Aggregate: one finding rolls up every stale family — re-running one
+            # sync must shrink the list, not retire the staleness gap and re-raise
+            # it with a reset age.
+            affected_objects=stale_objs,
+            scope="aggregate",
+            remediation=(
+                "Run the overdue synchronisation jobs (SPRO → Governance, Risk and "
+                "Compliance → Access Control → Synchronization Jobs; transactions "
+                "GRAC_AUTH_SYNC, GRAC_REP_OBJ_SYNC, GRAC_ACT_USAGE_SYNC, "
+                "GRAC_ROLE_USAGE_SYNC, GRAC_SPM_LOG_SYNC, GRAC_SPM_WF_SYNC), schedule "
+                "them at SAP's recommended frequencies, and re-export AFTER they "
+                "complete — findings produced from the current exports describe the "
+                "estate as of the last successful sync."
+            ),
+            references=[
+                "SAP Access Control — Synchronization Jobs (SPRO → GRC → Access Control)",
+                "GRC AC technical-table reference — GRACTASKEXECSTMP (corroborated, community SE80 catalogue)",
+            ],
+            details={"stale": stale_names, "threshold_days": self._MAX_SYNC_AGE_DAYS},
+        )
+

@@ -326,7 +326,7 @@ Optional: ALIAS, SCOPE, REQUIRED_AUTH_OBJECT, IMPL_CLASS
 
 ## SAP GRC Access Control exports (the `grcac` module)
 
-These six sources feed `modules/grc_access_control.py`. They come out of a
+These seven sources feed `modules/grc_access_control.py`. They come out of a
 **separate SAP GRC Access Control system**, not out of the ABAP system the other
 exports come from, which is why they are the last set to be written and why they
 are optional: omit them and the GRC checks do not run, exactly as chapter 13
@@ -349,14 +349,39 @@ describes.
 > | Firefighter Log Synch | `GRAC_SPM_LOG_SYNC` | daily |
 > | Firefighter Workflow Synch | `GRAC_SPM_WF_SYNC` | daily |
 >
-> Record the date each job last ran alongside the export. A finding built on a
-> three-week-old sync is a finding about three weeks ago.
+> Record the date each job last ran alongside the export — or better, export
+> the stamp table itself (*Synchronisation job log*, below) and the scanner
+> dates every family and flags the stale ones (`GRC-SYNC-001`) mechanically. A
+> finding built on a three-week-old sync is a finding about three weeks ago.
 
 **Read-only is enough.** SAP delivers `SAP_GRAC_DISPLAY_ALL` for display-only
 access to GRC master and application data; it is the role SAP itself names for
 read-only remote support. Nobody needs a maintenance role to produce these files.
 
 **Finding the transaction for anything below**: `SE93`, search `GRAC*`.
+
+### Synchronisation job log (`grac_job_log.csv`, `gractaskexecstmp.csv`)
+**Table:** `GRACTASKEXECSTMP` — executed background jobs with last-run stamps
+[corroborated — community SE80 table catalogue, not an SAP document; confirm
+in `SE11` before scripting]. **Route:** `SE16` on that table, or `SM37` job
+selection filtered to `GRAC_*`, exported to spreadsheet.
+
+```
+Required: TASK (or JOB / JOB_NAME / JOBNAME / PROGRAM),
+          LAST_RUN (or EXEC_DATE / EXEC_TIMESTAMP / TIMESTAMP / END_DATE)
+```
+
+The scanner recognises synchronisation families by name (anything containing
+`SYNC`), takes the latest run of each, and raises `GRC-SYNC-001` for every
+family more than seven days behind — SAP's own recommended frequencies are
+daily for five of the six families and weekly for the authorisation sync. A
+family with no parseable run date is reported as "no recorded execution",
+which is the fail-safe reading.
+
+> This export dates the evidence itself. Every other file in this section is
+> a synchronised copy, and the job table above can only ask you to check the
+> sync by hand; this file lets the scanner do it and put the answer in the
+> report next to the findings that depend on it.
 
 ### Firefighter session log (`grac_firefighter_log.csv`, `gracfflog.csv`)
 **Table:** `GRACFFLOG`  |  **Report:** *Consolidated Log Report*, under Emergency
@@ -381,7 +406,11 @@ that has nothing to do with how the estate is used — note it on the export.
 **Route:** `NWBC` → Access Control → Emergency Access Management → owner and
 controller maintenance. **Authorization object:** `GRAC_FFOWN` (fields
 `GRAC_OWN_T` owner type, `GRAC_USER`, `GRAC_SYSID`).
-*Table name not verified* — export from the maintenance screen, not `SE16`.
+*Table names corroborated, not verified*: a community-compiled GRC table
+catalogue (SE80 dumps of real systems) lists `GRACFFOWNER` and `GRACFFCNTL`;
+`GRACFFOBJECT` remains unconfirmed, and EAM table names are known to shift
+between support packs. Confirm in `SE11` before scripting an extraction — the
+maintenance-screen export needs none of that.
 
 ```
 Required: FFID (or FIREFIGHTER_ID), FF_OWNER (or OWNER), FF_CONTROLLER (or CONTROLLER)
@@ -437,7 +466,13 @@ Optional: MITIGATION_ID, MIT_VALID_TO, RISK_LEVEL
 **Route:** `NWBC` → Access Control → mitigating control maintenance; the
 *Invalid Mitigating Controls* report lists assignments whose risk no longer
 exists. **Authorization object:** `GRAC_MITC` (fields `GRAC_MITC` control id,
-`GRAC_OUNIT`). *Table name not verified.*
+`GRAC_OUNIT`). *The flat-table guess is CONTRADICTED*: the same community
+catalogue that corroborates other names here indicates the control MASTER
+record — owner, monitor, validity, exactly the columns below — lives in the
+GRC entity/hierarchy framework, not in a flat `GRAC` table (the flat
+`GRACMIT*` tables hold user/role/profile ASSIGNMENTS). `GRACMITCNT` may
+exist; the data this file needs is not simply in it. The NWBC export is not a
+fallback route. It is the route.
 
 ```
 Required: CONTROL_ID (or MITIGATION_ID), CONTROL_OWNER (or OWNER), MONITOR
@@ -448,7 +483,12 @@ Optional: MONITOR_FREQUENCY, VALID_TO
 **Route:** `NWBC` → Access Control → access risk maintenance. **Authorization
 object:** `GRAC_RISK`, whose fields name the columns exactly: `GRAC_RISK` (risk
 id), `GRAC_RLVL` (risk level), `GRAC_RSET` (rule set id), `GRAC_RTYPE` (risk
-type), `GRAC_BPROC` (business process). *Table name not verified.*
+type), `GRAC_BPROC` (business process). *Table names corroborated, not verified*:
+the community catalogue lists `GRACSODRISK` (with `GRACSODRISKT` texts) and
+`GRACRULESET`, and names `GRACSODRISKOWN` as the risk-to-owner assignment —
+so an export whose `RISK_OWNER` column comes back empty may simply have been
+taken from the risk table alone. Confirm in `SE11` before scripting; the
+NWBC export sidesteps the question.
 
 ```
 Required: RISK_ID, RISK_LEVEL, STATUS

@@ -87,3 +87,37 @@ def test_expired_mitigation_leaves_violation_open():
     assert "GRC-ARA-001" in got
     items = " ".join(got["GRC-ARA-001"]["affected_items"])
     assert "U1" in items and "U2" not in items       # expired counts as open; active does not
+# ── synchronisation staleness (GRC-SYNC, catalog AC-14) ───────────────────────
+
+def test_stale_and_unstamped_sync_jobs_fire():
+    import datetime
+    old = (datetime.date.today() - datetime.timedelta(days=30)).strftime("%Y%m%d")
+    rows = [{"TASK": "GRAC_SPM_LOG_SYNC", "LAST_RUN": old},
+            {"TASK": "GRAC_AUTH_SYNC", "LAST_RUN": ""},          # no recorded run
+            {"TASK": "GRAC_BATCH_RA", "LAST_RUN": "20200101"}]   # not a sync family
+    f = _run({"grac_job_log": rows})["GRC-SYNC-001"]
+    assert set(f["details"]["stale"]) == {"GRAC_SPM_LOG_SYNC", "GRAC_AUTH_SYNC"}
+    assert any("no recorded execution" in i for i in f["affected_items"])
+    assert {"type": "job", "name": "GRAC_SPM_LOG_SYNC"} in f["affected_objects"]
+
+
+def test_fresh_syncs_stay_quiet_and_latest_run_wins():
+    import datetime
+    today = datetime.date.today()
+    old = (today - datetime.timedelta(days=30)).strftime("%Y%m%d")
+    fresh = today.strftime("%Y%m%d") + "0400"    # timestamp digits; date prefix wins
+    # the same family twice — an old run plus a current one; the LATEST decides
+    rows = [{"TASK": "GRAC_SPM_LOG_SYNC", "LAST_RUN": old},
+            {"TASK": "GRAC_SPM_LOG_SYNC", "LAST_RUN": fresh}]
+    assert "GRC-SYNC-001" not in _run({"grac_job_log": rows})
+
+
+def test_job_log_with_no_sync_rows_is_its_own_finding():
+    out = _run({"grac_job_log": [{"TASK": "GRAC_BATCH_RA", "LAST_RUN": "20260101"}]})
+    assert "GRC-SYNC-002" in out and "GRC-SYNC-001" not in out
+    assert not out["GRC-SYNC-002"].get("affected_objects")
+
+
+def test_absent_job_log_self_skips():
+    out = _run({})
+    assert "GRC-SYNC-001" not in out and "GRC-SYNC-002" not in out
