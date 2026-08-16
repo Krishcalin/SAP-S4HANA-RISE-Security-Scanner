@@ -8,8 +8,8 @@
 Every logical source the scanner can read, what it enables, and whether
 [`EXPORT_GUIDE.md`](EXPORT_GUIDE.md) tells you how to produce it.
 
-**123 logical sources.** 56 have a written procedure in the export
-guide; **67 do not yet** — those rows name the files the loader will
+**123 logical sources.** 58 have a written procedure in the export
+guide; **65 do not yet** — those rows name the files the loader will
 accept, so a source you already have to hand can be supplied today, but the
 step-by-step extraction has not been verified and is deliberately not guessed.
 
@@ -23,7 +23,7 @@ clean — see chapter 13 of the architecture guide.
 | `access_reviews` | `access_reviews.csv`, `arm_reviews.csv` | `iam_advanced` | documented |
 | `api_endpoints` | `api_endpoints.json`, `odata_services.json` | `rise_btp_checks` | documented |
 | `apim_policies` | `apim_policies.json`, `api_proxies.json` | `integration_layer` | **not yet written** |
-| `applied_notes` | `applied_notes.csv`, `snote_status.csv`, `implemented_notes.csv` | `sap_hotnews` | **not yet written** |
+| `applied_notes` | `applied_notes.csv`, `snote_status.csv`, `implemented_notes.csv` | `sap_hotnews` | documented |
 | `ara_ruleset` | `ara_ruleset.json`, `sod_ruleset_custom.json` | `access_risk_analysis` | documented |
 | `audit_config` | `audit_config.csv`, `sm19.csv` | `log_monitoring`, `log_review`, `network_services` | documented |
 | `auth_objects` | `auth_objects.csv` | `code_transport`, `iam_advanced`, `user_auth_audit` | **not yet written** |
@@ -117,7 +117,7 @@ clean — see chapter 13 of the architecture guide.
 | `role_profiles` | `role_profiles.csv`, `agr_1016.csv` | `role_governance` | **not yet written** |
 | `role_tcodes` | `role_tcodes.csv`, `agr_1251.csv` | `iam_advanced` | documented |
 | `sap_modifications` | `sap_modifications.csv`, `se95.csv`, `modifications.csv` | `code_transport` | **not yet written** |
-| `sap_security_notes` | `sap_security_notes.json`, `hotnews_catalog.json` | `sap_hotnews` | **not yet written** |
+| `sap_security_notes` | `sap_security_notes.json`, `hotnews_catalog.json` | `sap_hotnews` | documented |
 | `saprouttab` | `saprouttab.csv`, `route_permission.csv` | `system_trust` | **not yet written** · not obtainable in RISE |
 | `security_audit_log` | `security_audit_log.csv`, `sm19_filters.csv` | `log_monitoring`, `log_review` | documented |
 | `security_params` | `security_params.csv`, `rsparam.csv`, `profile_params.csv` | `abap_authorizations`, `baseline_params`, `crypto_posture`, `data_protection`, `log_monitoring`, `security_params`, `snc_posture`, `system_trust` | documented |
@@ -129,7 +129,7 @@ clean — see chapter 13 of the architecture guide.
 | `standard_users` | `standard_users.csv`, `rsusr003.csv`, `default_users.csv` | `log_review`, `system_trust` | documented |
 | `su24_proposals` | `su24_proposals.csv`, `usobt_c.csv`, `su24.csv` | `role_governance` | **not yet written** |
 | `system_change` | `system_change.csv`, `se06.csv`, `system_change_option.csv` | `code_transport` | **not yet written** |
-| `system_component` | `system_component.csv`, `cvers.csv`, `component_versions.csv` | — | documented |
+| `system_component` | `system_component.csv`, `cvers.csv`, `component_versions.csv` | `sap_hotnews` | documented |
 | `system_landscape` | `system_landscape.csv`, `landscape.csv` | `data_protection` | **not yet written** |
 | `table_auth_groups` | `table_auth_groups.csv`, `table_authorization_groups.csv`, `se54.csv` | — | documented |
 | `table_logging` | `table_logging.csv`, `dd09l.csv` | `log_monitoring` | documented |

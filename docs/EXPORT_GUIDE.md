@@ -566,6 +566,70 @@ Required: TABNAME (or TABLE_NAME / TABLE), LOGGING (or LOG_ENABLED / LOG_FLAG)
 > is indistinguishable from "nobody changed anything". Record `rec/client` —
 > it is already in your `security_params.csv` — alongside this export.
 
+---
+
+## SAP Security Notes exports (the sap_hotnews module)
+
+The module ships its own curated catalogue of high-impact notes (through
+2025-08), so only ONE export from the system is required; the second file is
+an optional catalogue extension, not a system export.
+
+### Applied notes (`applied_notes.csv`, `snote_status.csv`, `implemented_notes.csv`)
+**Route (preferred):** System Recommendations — in SAP Solution Manager 7.2 or
+SAP Cloud ALM — filtered to security notes for the audited system, exported to
+spreadsheet. Preferred because it also tracks KERNEL-delivered fixes (the
+CommonCryptoLib note 3340576 ships as a kernel/CCL patch, not an SNOTE
+correction instruction) that a pure SNOTE worklist cannot represent.
+**Route (alternative):** transaction `SNOTE` (Note Assistant) — export the
+note worklist with implementation status. SAP Note **2342391** describes how
+security notes are accessed and consumed.
+
+```
+Required: NOTE (or SAP_NOTE / NOTE_NUMBER / NUMBER),
+          STATUS (or IMPLEMENTATION_STATUS / PROCESSING_STATUS)
+Optional: TITLE, VERSION
+```
+
+Status vocabulary: "Completely implemented", "Obsolete", "Not relevant" and
+"Cannot be implemented" count as addressed; "Incompletely implemented" is
+surfaced as its own finding; "Can be implemented" / "New" / "Downloaded" count
+as NOT applied. Note numbers may arrive zero-padded (`0002934135`) — the
+module normalises them.
+
+> **Absence is treated as missing, on purpose.** A note that never appears in
+> the export — never downloaded, never evaluated — is counted as missing, not
+> skipped. The reassuring reading ("SNOTE has never heard of it, so it must
+> not apply") is exactly the reading this product refuses to make. If a note
+> genuinely does not apply, SNOTE says so once it has been evaluated
+> ("Cannot be implemented", "Obsolete"), and that status is honoured. No
+> table name is claimed for this export: the SNOTE worklist store is
+> internal, and the two UI routes above are the documented ways out.
+
+Record the export date alongside the file: an export taken before the last
+patch cycle understates the estate in the safe direction, but one taken from
+a System Recommendations run that has not been refreshed can overstate it.
+
+### Security-notes catalogue extension (`sap_security_notes.json`, `hotnews_catalog.json`)
+**Not a system export.** The built-in catalogue is curated through 2025-08;
+this OPTIONAL file extends or corrects it. Source: SAP ONE Support Launchpad →
+My Security Notes (S-user required), filtered to HotNews / High. Notes newer
+than the built-in cut-off — for example the Feb-2026 HotNews the operator
+reference lists (note 3747367 / CVE-2026-44747), once confirmed in the
+Launchpad — belong here:
+
+```json
+[{"note": "3747367", "cve": "CVE-2026-44747", "priority": "HotNews",
+  "component": "NetWeaver AS ABAP", "released": "2026-02",
+  "applies_to": "abap"}]
+```
+
+Merge semantics: entries override the built-in catalogue key-by-key and never
+blank a curated field by omission (an entry without `exploited` keeps the
+built-in flag). `applies_to` values other than `abap` (`java`, `bi`, `btp`,
+`solman`) move an entry into the adjacent-systems disclosure instead of the
+missing-notes findings; an entry that does not say defaults to `abap` — the
+fail-safe direction is a false alarm on this system, never a silent pass.
+
 ## SAP HANA database exports (the `hana_db_security` module)
 
 Five sources, from the database underneath S/4HANA rather than from the ABAP

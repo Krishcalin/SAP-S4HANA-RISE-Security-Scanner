@@ -79,7 +79,11 @@ EXPECTED_CHECKS = {
                "HANADB-PARAM-005", "HANADB-PRIV-006"},
     "crypto": {"CRYPTO-HANA-004", "CRYPTO-HANA-005"},
     "btpcloud": {"BTP-IAS-004", "BTP-IAS-005", "BTP-CC-008"},
-    "hotnews": {"HOTNEWS-001", "HOTNEWS-002", "HOTNEWS-003", "HOTNEWS-004"},
+    # No HOTNEWS-002 here: after applies_to scoping, the only built-in High
+    # entry is an AS Java note, so an ABAP sample cannot raise it — the merge
+    # path keeps it covered in test_unearned_claims. HOTNEWS-005 is the
+    # adjacent-systems disclosure that replaced those false "missing" alarms.
+    "hotnews": {"HOTNEWS-001", "HOTNEWS-003", "HOTNEWS-004", "HOTNEWS-005"},
     "authz": {"AUTH-001", "AUTH-002", "AUTH-003", "AUTH-004", "AUTH-005", "AUTH-013",
               "AUTH-016"},
     "systrust": {"STDUSR-001", "STDUSR-002", "STDUSR-003", "TRUST-001",

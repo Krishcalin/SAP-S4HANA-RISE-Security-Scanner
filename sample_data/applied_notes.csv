@@ -1,6 +1,6 @@
 NOTE,STATUS,TITLE
 2890213,Completely implemented,Missing authentication check in SAP Solution Manager
-3084487,Completely implemented,Unrestricted file upload in SAP NetWeaver Visual Composer
+3084487,Completely implemented,SQL injection in SAP NetWeaver AS ABAP (SQLDBC)
 3245526,Obsolete,Code injection in BusinessObjects BI Platform
 3420923,Incompletely implemented,Code injection in SAP Application Basis
 3299673,Completely implemented,Some routine functional note

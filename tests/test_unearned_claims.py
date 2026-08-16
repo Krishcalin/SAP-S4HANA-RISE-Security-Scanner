@@ -243,3 +243,52 @@ def test_the_declared_cut_off_matches_the_newest_note():
     This fails the moment they disagree."""
     newest = max(e.get("released", "") for e in SapHotNewsAuditor.HOTNEWS_CATALOG)
     assert SapHotNewsAuditor.CATALOG_META["curated_through"] == newest
+
+
+def test_adjacent_system_notes_are_disclosed_not_alarmed():
+    """RECON is an AS Java note. An S/4HANA ABAP export carries no evidence
+    about the Java system, so rendering RECON as "missing" here was a false
+    alarm — but silently dropping an exploited-in-the-wild note would be worse.
+    It must move to the HOTNEWS-005 disclosure, exploited flag intact."""
+    with contextlib.redirect_stdout(io.StringIO()):
+        findings = SapHotNewsAuditor({"applied_notes": []}, {}).run_all_checks()
+    by_id = {f["check_id"]: f for f in findings}
+    for cid, key in (("HOTNEWS-001", "missing_notes"), ("HOTNEWS-003", "exploited_notes")):
+        listed = by_id.get(cid, {}).get("details", {}).get(key, [])
+        assert "2934135" not in listed, f"RECON alarmed as missing in {cid}"
+    scope = by_id["HOTNEWS-005"]
+    assert "2934135" in scope["details"]["unassessable_notes"]
+    assert any("2934135" in i and "EXPLOITED" in i for i in scope["affected_items"])
+
+
+def test_high_priority_missing_still_fires_via_the_merge_path():
+    """After applies_to scoping, the only built-in High entry (3123427) is an
+    AS Java note, so an ABAP sample can no longer exercise HOTNEWS-002. The
+    merge path can: an operator-supplied ABAP High entry that is not
+    implemented must still raise it."""
+    data = {"applied_notes": [],
+            "sap_security_notes": [{"note": "9990001", "priority": "High",
+                                    "cvss": 8.0, "applies_to": "abap",
+                                    "title": "synthetic High note"}]}
+    with contextlib.redirect_stdout(io.StringIO()):
+        findings = SapHotNewsAuditor(data, {}).run_all_checks()
+    high = next(f for f in findings if f["check_id"] == "HOTNEWS-002")
+    assert "9990001" in high["details"]["missing_notes"]
+
+
+def test_component_prereq_needs_positive_evidence_of_absence():
+    """The SLT note (3633838) requires the DMIS add-on. With a component export
+    that lacks DMIS it moves to the disclosure bucket; with NO component export
+    the add-on is unknown and the entry stays counted — the fail-safe direction
+    is a false alarm, never a silent pass."""
+    with contextlib.redirect_stdout(io.StringIO()):
+        unknown = SapHotNewsAuditor({"applied_notes": []}, {}).run_all_checks()
+        absent = SapHotNewsAuditor({"applied_notes": [],
+                                    "system_component": [{"COMPONENT": "SAP_BASIS"}]},
+                                   {}).run_all_checks()
+    missing_unknown = next(f for f in unknown if f["check_id"] == "HOTNEWS-001")
+    assert "3633838" in missing_unknown["details"]["missing_notes"]
+    missing_absent = next(f for f in absent if f["check_id"] == "HOTNEWS-001")
+    assert "3633838" not in missing_absent["details"]["missing_notes"]
+    scope = next(f for f in absent if f["check_id"] == "HOTNEWS-005")
+    assert "3633838" in scope["details"]["unassessable_notes"]
