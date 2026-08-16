@@ -40,6 +40,18 @@ from collections import defaultdict
 from modules.base_auditor import BaseAuditor
 
 
+def _norm_auth(value: Any) -> str:
+    """An authentication-type name with its spelling normalised away.
+
+    SAP writes these one way and hand-made exports write them another. The
+    Destination service returns `BasicAuthentication`; a spreadsheet export or
+    a hand-built fixture is as likely to say `BASIC_AUTHENTICATION`. Both name
+    the same setting, and a check that recognised only one of them would be
+    silent on whichever half of the estate it was not written against.
+    """
+    return "".join(ch for ch in str(value or "").upper() if ch.isalnum())
+
+
 class BtpCloudSurfaceAuditor(BaseAuditor):
 
     # ── Known high-risk backend resources exposed via Cloud Connector ──
@@ -833,9 +845,19 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
 
             label = f"{name} → {url}"
 
-            # Stored credentials
-            if auth_type and auth_type.upper() in (
-                "BASIC_AUTHENTICATION", "BASIC", "OAUTH2_PASSWORD",
+            # Stored credentials.
+            #
+            # SPELLING IS NORMALISED BECAUSE THE LIVE API DISAGREES WITH THE
+            # FIXTURE. The Destination service returns `BasicAuthentication`
+            # and `OAuth2Password` — CamelCase, no separator. This comparison
+            # was written against a hand-made sample that spelled them
+            # `BASIC_AUTHENTICATION` and `OAUTH2_PASSWORD`, so it matched the
+            # fixture, passed its tests, and would have matched nothing at all
+            # the first time it was given a real export: a silent clean on the
+            # most common destination misconfiguration there is. Found by
+            # feeding it what the API actually returns.
+            if _norm_auth(auth_type) in (
+                "BASICAUTHENTICATION", "BASIC", "OAUTH2PASSWORD",
             ) and user:
                 stored_creds.append(
                     f"{label} (auth: {auth_type}, user: {user})"

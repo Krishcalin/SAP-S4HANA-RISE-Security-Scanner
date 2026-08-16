@@ -57,6 +57,96 @@ def _read_password(user: Optional[str]) -> Optional[str]:
     return line
 
 
+def cmd_btp(args: argparse.Namespace) -> int:
+    # Imported here rather than at module scope for the reason `cmd_rfc` is:
+    # a subcommand nobody ran should cost nothing.
+    from collect import btp
+
+    if args.list_sources:
+        for line in btp.describe_sources():
+            print(line)
+        return 0
+
+    if not args.service_key and not args.cloud_connector:
+        print("nothing to collect: pass --service-key, --cloud-connector, or "
+              "both. --list-sources shows what each reaches.", file=sys.stderr)
+        return 2
+
+    out = Path(args.out)
+    wrote: dict = {}
+    attempts: list = []
+    endpoints: list = []
+    verify = not args.insecure
+    if not verify:
+        print("[!] TLS certificate verification is DISABLED for this collection.")
+
+    if args.service_key:
+        try:
+            key = btp.ServiceKey.from_file(args.service_key)
+        except (OSError, ValueError) as exc:
+            print("[!] %s" % exc, file=sys.stderr)
+            return 2
+        endpoints.append(key.service_url)
+        collector = btp.BtpCollector(key, verify_tls=verify,
+                                     ca_file=args.ca_file, timeout=args.timeout)
+        try:
+            payloads = collector.collect()
+        except Exception as exc:                             # noqa: BLE001
+            # A token that cannot be obtained is a connection/credential
+            # failure, not an estate with no configuration.
+            print("[!] could not authenticate to %s: %s"
+                  % (key.token_url, exc), file=sys.stderr)
+            return 1
+        attempts += collector.attempts
+        by_source = {e["source"]: e for e in btp.ENDPOINTS}
+        for source, payload in payloads.items():
+            fname = by_source[source]["file"]
+            wrote[fname] = extract.write_btp_payload(out, fname, payload)
+        for a in collector.attempts:
+            if not a["ok"]:
+                print("    %-52s FAILED: %s" % (a["operation"], a["error"]))
+
+    if args.cloud_connector:
+        if args.user is None:
+            print("--cloud-connector needs --user (its administration API uses "
+                  "Basic authentication).", file=sys.stderr)
+            return 2
+        password = _read_password(args.user)
+        if password is None:
+            return 2
+        endpoints.append(args.cloud_connector)
+        payload, attempt = btp.fetch_cloud_connector(
+            args.cloud_connector, username=args.user, password=password,
+            verify_tls=verify, ca_file=args.ca_file, timeout=args.timeout)
+        attempts.append(attempt)
+        if payload is None:
+            print("    %-52s FAILED: %s" % (attempt["operation"], attempt["error"]))
+        else:
+            wrote["cloud_connector.json"] = extract.write_btp_payload(
+                out, "cloud_connector.json", payload)
+
+    for name, n in sorted(wrote.items()):
+        if n:
+            print("    %-32s %d record(s)" % (name, n))
+
+    if not any(wrote.values()):
+        print("[!] nothing was collected. Every request failed or returned "
+              "nothing — that is a connection or authorisation problem, not a "
+              "landscape with no configuration.", file=sys.stderr)
+        return 1
+
+    manifest = extract.write_manifest(
+        out, source="btp", endpoint=", ".join(endpoints),
+        collected_at=btp.now_utc(), wrote=wrote, attempts=attempts,
+        cannot_reach=sorted(btp.BTP_CANNOT_REACH),
+        tls_verified=verify,
+        caveats=["Payloads are written through unchanged; modules/btp_import.py "
+                 "normalises them at scan time."])
+    print(extract.summarise(manifest))
+    print("[*] now scan it:  python sap_scanner.py --data-dir %s" % out)
+    return 0
+
+
 def cmd_sapcontrol(args: argparse.Namespace) -> int:
     if args.user is not None:
         password = _read_password(args.user)
@@ -389,6 +479,30 @@ def build_parser() -> argparse.ArgumentParser:
                          "rate-limited dispatcher")
     ic.add_argument("--out", default="./extract")
     ic.set_defaults(fn=cmd_icf)
+
+    bt = sub.add_parser(
+        "btp",
+        help="collect SAP BTP configuration over the platform's own REST APIs, "
+             "using a service key you download from the cockpit")
+    bt.add_argument("--service-key", default=None, metavar="FILE",
+                    help="path to a downloaded BTP service key (JSON). The "
+                         "endpoint and the credential both come from this file, "
+                         "so neither is ever on the command line")
+    bt.add_argument("--cloud-connector", default=None, metavar="HOST[:PORT]",
+                    help="Cloud Connector administration host. Uses Basic "
+                         "authentication with --user, not the service key")
+    bt.add_argument("--user", default=None,
+                    help="Cloud Connector administrator, for --cloud-connector")
+    bt.add_argument("--insecure", action="store_true",
+                    help="do not verify the TLS certificate; recorded in the "
+                         "manifest")
+    bt.add_argument("--ca-file", default=None)
+    bt.add_argument("--timeout", type=float, default=30.0)
+    bt.add_argument("--out", default="./extract")
+    bt.add_argument("--list-sources", action="store_true",
+                    help="print what this collector can and cannot produce, "
+                         "with the path used for each. Makes no connection")
+    bt.set_defaults(fn=cmd_btp)
 
     rf = sub.add_parser(
         "rfc",

@@ -165,6 +165,49 @@ def write_api_endpoints(out_dir: Path,
     return len(endpoints)
 
 
+def write_btp_payload(out_dir: Path, filename: str, payload: Any) -> int:
+    """One BTP API response, written through unchanged.
+
+    NOT NORMALISED HERE, DELIBERATELY. `modules/btp_import.py` already
+    translates these exact payloads — the BTP CLI's JSON, the Cloud Connector
+    configuration API, the audit-log API — into the shapes the checks read, and
+    it is careful about the parts that must NOT be inferred (it refuses to
+    synthesise Cloud Connector host ACLs, because the configuration API has no
+    such concept). A second normaliser here would eventually disagree with that
+    one, and the disagreement would be invisible.
+
+    Empty is absent. A file containing `[]` would read as "this subaccount has
+    no destinations", which is a claim; a collection that returned nothing has
+    not earned it.
+    """
+    count = _payload_count(payload)
+    if not count:
+        return 0
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / filename).write_text(
+        json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return count
+
+
+def _payload_count(payload: Any) -> int:
+    """How many records a BTP payload carries, for the manifest.
+
+    Counts the list inside the usual wrappers rather than reporting `1` for a
+    response object, so a manifest line reads as evidence rather than as "we
+    got a reply".
+    """
+    if isinstance(payload, list):
+        return len(payload)
+    if isinstance(payload, Mapping):
+        for key in ("value", "items", "results", "records", "elements",
+                    "destinations", "subaccounts", "content"):
+            inner = payload.get(key)
+            if isinstance(inner, list):
+                return len(inner)
+        return 1 if payload else 0
+    return 0
+
+
 def declare_complete(out_dir: Path, sources: Sequence[str], *,
                      declared_by: str, method: str, when: str) -> Optional[Path]:
     """State that these sources are the COMPLETE list. An INPUT, unlike the manifest.
