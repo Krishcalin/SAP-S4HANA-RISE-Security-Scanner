@@ -8,8 +8,8 @@
 Every logical source the scanner can read, what it enables, and whether
 [`EXPORT_GUIDE.md`](EXPORT_GUIDE.md) tells you how to produce it.
 
-**126 logical sources.** 61 have a written procedure in the export
-guide; **65 do not yet** — those rows name the files the loader will
+**126 logical sources.** 66 have a written procedure in the export
+guide; **60 do not yet** — those rows name the files the loader will
 accept, so a source you already have to hand can be supplied today, but the
 step-by-step extraction has not been verified and is deliberately not guessed.
 
@@ -60,14 +60,14 @@ clean — see chapter 13 of the architecture guide.
 | `data_residency` | `data_residency.json`, `cross_border.json` | `data_protection` | **not yet written** |
 | `deletion_requests` | `deletion_requests.csv`, `dsar_requests.csv` | `data_protection` | **not yet written** |
 | `dev_access_prod` | `dev_access_prod.csv` | `code_transport` | **not yet written** |
-| `doc_change_rules` | `doc_change_rules.csv`, `tbaer.csv`, `ob32.csv` | `financial_controls` | **not yet written** |
+| `doc_change_rules` | `doc_change_rules.csv`, `tbaer.csv`, `ob32.csv` | `financial_controls` | documented |
 | `dpp_config` | `dpp_config.json`, `dpp_toolkit.json` | `data_protection` | **not yet written** |
-| `dual_control_fields` | `dual_control_fields.csv`, `t055f.csv`, `sensitive_fi_fields.csv` | `financial_controls` | **not yet written** |
+| `dual_control_fields` | `dual_control_fields.csv`, `t055f.csv`, `sensitive_fi_fields.csv` | `financial_controls` | documented |
 | `event_mesh` | `event_mesh.json`, `em_config.json` | `btp_cloud_surface` | **not yet written** |
 | `ext_os_commands` | `ext_os_commands.csv`, `sxpgcostab.csv`, `sm69_commands.csv` | `basis_job_command` | documented |
 | `ext_os_commands_sap` | `ext_os_commands_sap.csv`, `sxpgcotabe.csv` | `basis_job_command` | **not yet written** · not obtainable in RISE |
 | `fi_documents` | `fi_documents.csv`, `bkpf.csv` | `financial_controls` | documented |
-| `fi_number_ranges` | `fi_number_ranges.csv`, `tnro.csv`, `number_ranges.csv` | `financial_controls` | **not yet written** |
+| `fi_number_ranges` | `fi_number_ranges.csv`, `tnro.csv`, `number_ranges.csv` | `financial_controls` | documented |
 | `fiori_app_usage` | `fiori_app_usage.csv`, `app_usage.csv` | `fiori_ui` | **not yet written** |
 | `fiori_catalogs` | `fiori_catalogs.csv`, `flpd_catalogs.csv` | `fiori_ui` | **not yet written** |
 | `fiori_spaces` | `fiori_spaces.json`, `spaces_pages.json` | `fiori_ui` | **not yet written** |
@@ -105,7 +105,7 @@ clean — see chapter 13 of the architecture guide.
 | `odata_auth` | `odata_auth.csv`, `iwfnd_auth.csv` | `fiori_ui` | documented |
 | `odata_v4_services` | `odata_v4_services.csv`, `iwfnd_v4.csv` | `s4_business_authz` | **not yet written** |
 | `personal_data_inventory` | `personal_data_inventory.csv`, `pdi.csv` | `data_protection` | **not yet written** |
-| `posting_periods` | `posting_periods.csv`, `t001b.csv`, `ob52.csv` | `financial_controls` | **not yet written** |
+| `posting_periods` | `posting_periods.csv`, `t001b.csv`, `ob52.csv` | `financial_controls` | documented |
 | `profiles` | `profiles.csv`, `usr04.csv` | `basis_job_command`, `log_review`, `user_auth_audit` | documented |
 | `pse_inventory` | `pse_inventory.csv`, `strust_pse.csv` | `crypto_posture` | **not yet written** |
 | `purpose_of_processing` | `purpose_of_processing.csv`, `pop_config.csv` | `data_protection` | **not yet written** |
@@ -137,7 +137,7 @@ clean — see chapter 13 of the architecture guide.
 | `table_auth_groups` | `table_auth_groups.csv`, `table_authorization_groups.csv`, `se54.csv` | — | documented |
 | `table_logging` | `table_logging.csv`, `dd09l.csv` | `log_monitoring` | documented |
 | `tls_config` | `tls_config.csv`, `icm_ssl.csv` | `crypto_posture` | **not yet written** |
-| `tolerance_groups` | `tolerance_groups.csv`, `t043t.csv`, `oba4.csv` | `financial_controls` | **not yet written** |
+| `tolerance_groups` | `tolerance_groups.csv`, `t043t.csv`, `oba4.csv` | `financial_controls` | documented |
 | `transport_history` | `transport_history.csv`, `stms_log.csv`, `import_history.csv` | `code_transport` | **not yet written** |
 | `transport_routes` | `transport_routes.csv`, `tms_routes.csv` | `code_transport` | **not yet written** |
 | `transports` | `transports.csv`, `se09.csv` | `network_services` | **not yet written** |

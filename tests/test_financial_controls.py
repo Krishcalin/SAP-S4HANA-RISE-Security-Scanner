@@ -144,3 +144,11 @@ def test_reversal_rate_needs_share_AND_floor():
 def test_no_fi_documents_no_evidence_findings():
     out = _ids(posting_periods=[])
     assert not any(k.startswith("FIN-EVD") for k in out)
+def test_dual_control_accepts_table_field_notation():
+    # A raw T055F export writes "LFBK-BANKN"; the FIELD half must match, or a
+    # documented raw export would raise a false "no dual control on bank
+    # fields" alarm on estates that have exactly that control configured.
+    out = _ids(dual_control_fields=[{"FIELD": "LFBK-BANKN"}])
+    assert "FIN-SF-001" not in out
+    out = _ids(dual_control_fields=[{"FIELD": "LFA1-NAME1"}])
+    assert "FIN-SF-001" in out

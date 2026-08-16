@@ -54,6 +54,16 @@ BKPF is header-only, deliberately: no amounts leave the system, so the
 amount-vs-tolerance check the doc-type data would invite is out of scope until
 a line-item export (ACDOCA/BSEG) is defined and its privacy weighed.
 
+THE FIVE CUSTOMIZING TABLES ARE VERIFIED, NOT GUESSED. T001B, T043T, T055F,
+TBAER and TNRO are standard FI Customizing storage, each maintained by an IMG
+transaction SAP has shipped for decades (OB52, OBA4, FK08/FD08, OB32, SNRO),
+and the operator's design-spec field catalog corroborates the vocabulary. The
+one deliberate translation: doc_change_rules takes INTERPRETED columns, never
+raw TBAER — the raw XAUSZ flag means the opposite of what it looks like ('X'
+= NOT changeable after clearing), and an export contract built on a negative
+flag would invert somewhere between SE16 and the CSV. The export guide says
+this out loud.
+
 Data sources (exported to CSV):
   - posting_periods    → T001B/V_T001B: VARIANT, ACCOUNT_TYPE, FROM/TO_PERIOD+YEAR, AUTH_GROUP
   - tolerance_groups   → T043T: GROUP, CURRENCY, AMOUNT_PER_DOC, AMOUNT_PER_OPEN_ITEM
@@ -306,6 +316,11 @@ class FinancialControlsAuditor(BaseAuditor):
         fields = set()
         for r in rows:
             f = self._get(r, "FIELD", "FIELDNAME", "FELDNAME", "FIELD_NAME").upper()
+            # T055F-style exports often write the field as TABLE-FIELD
+            # ("LFBK-BANKN"). Match on the FIELD half — otherwise a raw export
+            # would read as "bank fields not under dual control" when they are.
+            if "-" in f:
+                f = f.rsplit("-", 1)[-1]
             if f:
                 fields.add(f)
         covers_payment = bool(fields & self._PAYMENT_MASTER_FIELDS)

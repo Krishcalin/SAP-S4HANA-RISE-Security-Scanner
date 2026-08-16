@@ -618,6 +618,109 @@ Required: TABNAME (or TABLE_NAME / TABLE), LOGGING (or LOG_ENABLED / LOG_FLAG)
 
 ---
 
+## FI customizing exports (the `fincontrols` module)
+
+Five exports, five IMG transactions, five standard Customizing tables that
+have carried these settings for decades. This is the configuration half of
+the financial-controls pair — the evidence half (BKPF document headers) is
+documented in the next section, and each check here names what its evidence
+twin would show.
+
+**Read-only is enough for all five**: display access to the IMG activity, or
+`SE16` display on the table.
+
+### Posting periods (`posting_periods.csv`, `t001b.csv`, `ob52.csv`)
+**Transaction:** `OB52` — maintains posting-period variants in `T001B`
+(view `V_T001B`). **Route:** read the OB52 screen into the CSV, or `SE16` on
+`T001B` unfiltered.
+
+```
+Required: VARIANT (or BUKRS / PERIOD_VARIANT), ACCOUNT_TYPE (or KOART),
+          FROM_PERIOD / TO_PERIOD (or FRPE1 / TOPE1),
+          FROM_YEAR / TO_YEAR (or FRYE1 / TOYE1)
+Optional: AUTH_GROUP (or BRGRU) — export it; it is the point
+```
+
+Export EVERY row: all account types (`+` is the all-types row) and all
+period intervals. The second interval is the special-period range where the
+authorization group belongs — a wide-open first interval with no `BRGRU` on
+any row is exactly what FIN-PP-001 exists to catch, and `9999` as a to-year
+reads as "open into the far future", which it is.
+
+### Tolerance groups (`tolerance_groups.csv`, `t043t.csv`, `oba4.csv`)
+**Transaction:** `OBA4` — FI tolerance groups for users, stored in `T043T`
+(user assignments in `OB57`).
+
+```
+Required: GROUP (or TOLERANZ — blank IS the default group),
+          AMOUNT_PER_DOC (or MAX_AMOUNT)
+Optional: CURRENCY, AMOUNT_PER_OPEN_ITEM
+```
+
+> **Supply this file even when it is empty.** An empty export is evidence —
+> "no tolerance groups are defined, so no posting limit exists" — and raises
+> its own finding (FIN-TOL-002) instead of silently skipping the check. The
+> blank-key group is the default every unassigned user falls into; do not
+> filter it out. Amounts are parsed locale-tolerantly (`1,234.56` and
+> `1.234,56` both work), so export in whatever format the GUI gives you.
+
+### Sensitive fields for dual control (`dual_control_fields.csv`, `t055f.csv`, `sensitive_fi_fields.csv`)
+**Transactions:** `FK08` (vendor) / `FD08` (customer) define which
+master-data fields are dual-control sensitive; storage is `T055F`.
+**Route:** read the FK08/FD08 field list, or `SE16` on `T055F`.
+
+```
+Required: FIELD (or FIELDNAME / FELDNAME) — plain ("BANKN") or
+          table-qualified ("LFBK-BANKN"); both are accepted
+Optional: TABLE, ACCOUNT_TYPE
+```
+
+The check tests COVERAGE, not presence: an export that exists but contains
+no payment-relevant field (`BANKN`, `BANKL`, `BANKS`, `IBAN`, `BVTYP`,
+`ZWELS`, `HBKID`) raises FIN-SF-001, because a dual-control list that skips
+the bank fields protects everything except the fraud path. The runtime twin
+is the change-document register (MDC-BANK-001): this export says whether a
+second person HAD to confirm; that register shows the changes that went
+through.
+
+### Document change rules (`doc_change_rules.csv`, `tbaer.csv`, `ob32.csv`)
+**Transaction:** `OB32` — document change rules, stored in `TBAER`.
+
+```
+Required: FIELD (or FELDNAME), CHANGE_ALLOWED (or CHANGEABLE / AENDERBAR)
+Optional: ACCOUNT_TYPE (or KOART), AFTER_POSTING (or POSTED),
+          AFTER_CLEARING (or CLEARED)
+```
+
+> **Do not feed raw TBAER columns into this file.** The raw `XAUSZ` flag
+> means the OPPOSITE of what it looks like — `X` = *not* changeable after
+> clearing — and a contract built on a negative flag would invert somewhere
+> between `SE16` and the CSV. The loader therefore takes INTERPRETED,
+> positive columns: `CHANGE_ALLOWED` = the rule permits the change,
+> `AFTER_POSTING` / `AFTER_CLEARING` = it permits it even then. Read the
+> rules off the OB32 screen (which displays them positively) or transform
+> deliberately, and say which on the export note.
+
+### FI number ranges (`fi_number_ranges.csv`, `tnro.csv`, `number_ranges.csv`)
+**Transaction:** `SNRO` — number-range object maintenance; the buffering
+flag lives in `TNRO`. **Route:** `SNRO` on `RF_BELEG` (and `FI_BELEG` /
+`RF_BELEG_M` where present), or `SE16` on `TNRO`.
+
+```
+Required: OBJECT (or NROBJ), BUFFERING (or PUFFER / BUFFER_TYPE)
+Optional: NO_BUFFER (inverse flag, if that is what your export carries)
+```
+
+Every non-blank buffer code counts — `X` (main memory), `L` (local), `P`
+(parallel-local) and `S` all discard numbers on restart and break the
+sequential-completeness assertion over FI documents. Only the ACCOUNTING
+document objects are assessed: master-data ranges (`DEBITOR`, `KREDITOR`)
+gap legitimately per SAP Note 62077, and SD/CO document ranges carry no FI
+completeness assertion — the module deliberately ignores them, so export
+everything and let it filter. Interval contents (`NRIV`) are not needed.
+
+---
+
 ## Master-data change and posting evidence (the `mdchange` + `fincontrols` modules)
 
 The sections above export CONFIGURATION. These two sources export EVIDENCE —
