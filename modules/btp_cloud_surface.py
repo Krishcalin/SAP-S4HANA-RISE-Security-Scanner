@@ -212,7 +212,12 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                 ),
                 references=[
                     "SAP BTP Cloud Connector Security Guide — Resource Access Control",
-                    "SAP Note 2Amazon3222800 — Cloud Connector Hardening",
+                    # A second reference here read "SAP Note 2Amazon3222800", a note
+                    # number no customer could look up — the residue of a bad
+                    # find/replace. It is removed rather than repaired: the correct
+                    # number is not known, and inventing one would put a fabricated
+                    # SAP identifier in a remediation. The guide above is real and
+                    # findable, which is what a reference is for.
                 ],
                 affected_objects=wildcard_objects,
                 # One finding summarising every wildcard mapping in the Cloud

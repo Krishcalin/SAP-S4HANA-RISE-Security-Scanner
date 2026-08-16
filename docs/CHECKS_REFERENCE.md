@@ -6,11 +6,11 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**379** check ids are written as literals in `modules/`, across **32** modules. A further **264** are built at runtime from shipped rule tables, giving **643** in total.
+**380** check ids are written as literals in `modules/`, across **32** modules. A further **264** are built at runtime from shipped rule tables, giving **644** in total.
 
 ## What this file does not claim
 
-**42 of the 379 titles and 15 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**42 of the 380 titles and 16 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -39,7 +39,7 @@ A check's **identity** is its id. Severity is a judgement about a particular fin
 | `AUTH-015` | MEDIUM | Global authorization-object disabling is active |
 | `AUTH-016` | HIGH | Unrestricted destination authorization (S_ICF ICF_FIELD=DEST, ICF_VALUE=*) |
 
-### `abap_sast` — 5 checks
+### `abap_sast` — 6 checks
 
 Category: Code & Transport Security
 
@@ -48,6 +48,7 @@ Category: Code & Transport Security
 | `ABAP-COV-001` | *varies* | ABAP source scan was requested but the source path is not readable |
 | `ABAP-COV-002` | *varies* | ABAP source scan read no source files |
 | `ABAP-COV-003` | *varies* | Some source files could not be read and were not scanned |
+| `ABAP-COV-004` | *varies* | Files in languages this scanner does not read were not examined |
 | `ABAP-LEX-001` | INFO | Source the scanner could not lex reliably |
 | `ABAP-NOSEC-001` | INFO | Findings suppressed by #NOSEC markers in source |
 

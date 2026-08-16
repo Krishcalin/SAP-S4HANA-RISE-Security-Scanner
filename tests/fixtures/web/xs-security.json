@@ -1,0 +1,9 @@
+{
+  "xsappname": "demo-app",
+  "tenant-mode": "dedicated",
+  "scope-references": [
+    "$XSAPPNAME.*"
+  ],
+  "grant-as-authority-to-apps": ["$ACCEPT_GRANTED_AUTHORITIES"],
+  "documentation": "see http://help.sap.com for details"
+}

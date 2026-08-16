@@ -1,0 +1,9 @@
+_schema-version: "3.2"
+ID: demo
+modules:
+  - name: demo-srv
+    type: nodejs
+    properties:
+      # the next line is a real secret, the one above is a comment
+      password: sup3rS3cretValue
+      SAFE_URL: https://example.internal

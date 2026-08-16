@@ -522,6 +522,212 @@ def split_cds_statements(source: str) -> List["Statement"]:
     return statements
 
 
+def split_web_statements(source: str, style: str) -> List["Statement"]:
+    """Split JavaScript/TypeScript, JSON or YAML into matchable statements.
+
+    WHY THIS EXISTS. These four file types were already ROUTED — `.js`, `.ts`,
+    and the five BTP descriptor names had rule sets and were counted in
+    `files_scanned` — but they were handed to the ABAP splitter, where `"` opens
+    a comment and `.` ends a statement. Measured against the shipped rules, that
+    left `document.getElementById("a"); el.innerHTML = x` as
+    `['var el = document', 'getElementById(']`, and `{"authenticationType":
+    "none"}` as `'{'`. Only three of the seven JS rules could fire at all, and
+    every one of the eight BTP descriptor rules was unreachable, because each
+    begins `["']key["']` and that first quote ended the statement.
+
+    So the engine reported a clean scan of files it had not read, and counted
+    them as scanned while doing it. That is the one failure this scanner must
+    never have, and it is the reason this splitter is not an enhancement.
+
+    THREE STYLES, ONE CONCERN. All three need the same thing the ABAP lexer
+    needs — to know when it is inside a string — and for the same reason: `//`
+    inside `"http://host"` is not a comment, and `#` inside a YAML quoted scalar
+    is not one either. What differs is only where a statement ends:
+
+      `js`    `;`, `{`, `}` and end-of-line (semicolons are optional in JS, so a
+              newline has to end a statement or a whole file becomes one).
+      `json`  a key and the WHOLE of its value, however many lines the value
+              spans. Pretty-printed JSON puts `"scope-references": [` and its
+              entries on different lines, and a line-at-a-time split would miss
+              exactly the two rules that read a key's array.
+      `yaml`  the line. YAML is line-oriented; nothing is gained by more.
+
+    Line numbers are the line the statement STARTS on, as everywhere else in
+    this module: display detail, never identity.
+    """
+    if style == "json":
+        return _split_json(source)
+    if style == "yaml":
+        return _split_yaml(source)
+    return _split_js(source)
+
+
+def _strip_web_comments(line: str, in_block: bool,
+                        line_comment: Optional[str]) -> Tuple[str, str, bool]:
+    """Remove comments from one line, respecting string literals.
+
+    Returns `(code, mask, in_block)` where `mask` blanks literal CONTENT to `#`
+    with offsets preserved — the same contract `_scan_line` gives the ABAP
+    lexer, so `LITERAL_BLIND` behaves identically whatever the language.
+
+    `line_comment` is None for JSON, which has no comments: stripping `//` there
+    would eat the `//` of every `"http://..."` value and silence the rule that
+    looks for one.
+    """
+    code: List[str] = []
+    mask: List[str] = []
+    quote = ""
+    escaped = False
+    i = 0
+    n = len(line)
+    while i < n:
+        ch = line[i]
+        if in_block:
+            if line.startswith("*/", i):
+                in_block = False
+                i += 2
+                continue
+            i += 1
+            continue
+        if quote:
+            code.append(ch)
+            if escaped:
+                mask.append("#")
+                escaped = False
+            elif ch == "\\":
+                mask.append("#")
+                escaped = True
+            elif ch == quote:
+                mask.append(ch)
+                quote = ""
+            else:
+                mask.append("#")
+            i += 1
+            continue
+        # not in a string
+        if line.startswith("/*", i):
+            in_block = True
+            i += 2
+            continue
+        if line_comment and line.startswith(line_comment, i):
+            break
+        if ch in "\"'`":
+            quote = ch
+            code.append(ch)
+            mask.append(ch)
+            i += 1
+            continue
+        code.append(ch)
+        mask.append(ch)
+        i += 1
+    return "".join(code), "".join(mask), in_block
+
+
+def _split_js(source: str) -> List["Statement"]:
+    statements: List["Statement"] = []
+    in_block = False
+    buf: List[str] = []
+    buf_mask: List[str] = []
+    raw: List[str] = []
+    start = 1
+
+    def flush() -> None:
+        text = " ".join("".join(buf).split()).strip()
+        if text:
+            statements.append(Statement(
+                text, start, "\n".join(raw).strip()[:2000], 0, None,
+                " ".join("".join(buf_mask).split()).strip()))
+        del buf[:], buf_mask[:], raw[:]
+
+    for lineno, line in enumerate(source.splitlines(), 1):
+        code, mask, in_block = _strip_web_comments(line, in_block, "//")
+        if not buf:
+            start = lineno
+        raw.append(line)
+        segment: List[str] = []
+        seg_mask: List[str] = []
+        for ch, mch in zip(code, mask):
+            segment.append(ch)
+            seg_mask.append(mch)
+            if mch in ";{}":
+                buf.append("".join(segment))
+                buf_mask.append("".join(seg_mask))
+                segment, seg_mask = [], []
+                flush()
+                start = lineno
+        if segment:
+            buf.append("".join(segment))
+            buf_mask.append("".join(seg_mask))
+        # End of line ends a statement: JavaScript makes the semicolon optional,
+        # and without this a minified or semicolon-free file is one statement.
+        flush()
+        start = lineno + 1
+    flush()
+    return statements
+
+
+#: Start of a JSON member: a quoted key followed by a colon.
+_JSON_KEY = re.compile(r'"(?:[^"\\]|\\.)*"\s*:')
+
+
+def _split_json(source: str) -> List["Statement"]:
+    """One statement per member, spanning the whole of its value.
+
+    Written against the joined document rather than line by line, because that
+    is the only way `"scope-references": [` on one line and `"$XSAPPNAME.*"` on
+    the next reach the same regex.
+    """
+    # Comment-strip with line_comment=None: JSON has no comments, and `//`
+    # appears inside URL values that a rule looks for.
+    codes, masks = [], []
+    in_block = False
+    for line in source.splitlines():
+        code, mask, in_block = _strip_web_comments(line, in_block, None)
+        codes.append(code)
+        masks.append(mask)
+    text = "\n".join(codes)
+    mask_text = "\n".join(masks)
+
+    statements: List["Statement"] = []
+    for m in _JSON_KEY.finditer(mask_text):
+        begin = m.start()
+        i = m.end()
+        depth = 0
+        n = len(mask_text)
+        while i < n:
+            ch = mask_text[i]
+            if ch in "[{":
+                depth += 1
+            elif ch in "]}":
+                if depth == 0:
+                    break
+                depth -= 1
+            elif ch == "," and depth == 0:
+                break
+            i += 1
+        line = text.count("\n", 0, begin) + 1
+        raw = text[begin:i]
+        stmt = " ".join(raw.split()).strip()
+        if stmt:
+            statements.append(Statement(
+                stmt, line, raw.strip()[:2000], 0, None,
+                " ".join(mask_text[begin:i].split()).strip()))
+    return statements
+
+
+def _split_yaml(source: str) -> List["Statement"]:
+    statements: List["Statement"] = []
+    in_block = False
+    for lineno, line in enumerate(source.splitlines(), 1):
+        code, mask, in_block = _strip_web_comments(line, in_block, "#")
+        stmt = " ".join(code.split()).strip()
+        if stmt:
+            statements.append(Statement(
+                stmt, lineno, line.rstrip()[:2000], 0, None,
+                " ".join(mask.split()).strip()))
+    return statements
+
+
 # --------------------------------------------------------------------------- #
 #  The lexer                                                                  #
 # --------------------------------------------------------------------------- #
@@ -755,6 +961,12 @@ class AbapSourceScanner:
         self.files_scanned = 0
         self.metadata_skipped = 0
         self.unreadable: List[str] = []
+        #: Scanned files per language, so the report can say WHICH languages it
+        #: read rather than only how many files it opened.
+        self.files_by_language: Dict[str, int] = {}
+        #: Files this scanner has no rules for, by suffix. Counted rather than
+        #: skipped in silence — see the note in `scan_tree`.
+        self.unscanned_by_suffix: Dict[str, int] = {}
         #: Statements the runaway guard had to flush because the lexer lost its
         #: place. Reported beside `metadata_skipped`, because a mis-lexed file that
         #: reports as clean is the one failure this scanner must never have.
@@ -770,20 +982,43 @@ class AbapSourceScanner:
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def _rules_for(path: Path) -> Optional[List[Dict[str, Any]]]:
-        """The rule set for a file, by type. None when the file is not source."""
+    def _language_for(path: Path) -> Optional[str]:
+        """The LANGUAGE of a file, or None when this scanner does not read it.
+
+        Routing and lexing were one decision before, expressed as a suffix
+        ladder returning a rule set — so a file could be routed to rules
+        without anything choosing a splitter that could read it. Naming the
+        language separately is what lets `scan_text` pick a lexer and gate the
+        ABAP-only passes, and what lets the report count by language.
+        """
         name = path.name.lower()
         if name.endswith(METADATA_SUFFIXES):
             return None
         if name.endswith(CDS_SUFFIXES):
-            return CDS_RULES
+            return "cds"
         if name.endswith(ABAP_SUFFIXES):
-            return ALL_ABAP_SAST_RULES
+            return "abap"
         if name.endswith(JS_SUFFIXES):
-            return ALL_JS_RULES
+            return "js"
         if name in DESCRIPTOR_NAMES:
-            return ALL_BTP_CONFIG_RULES
+            return "yaml" if name.endswith((".yaml", ".yml")) else "json"
         return None
+
+    _RULES_BY_LANGUAGE = {
+        "cds": "CDS_RULES", "abap": "ALL_ABAP_SAST_RULES",
+        "js": "ALL_JS_RULES", "json": "ALL_BTP_CONFIG_RULES",
+        "yaml": "ALL_BTP_CONFIG_RULES",
+    }
+
+    @classmethod
+    def _rules_for(cls, path: Path) -> Optional[List[Dict[str, Any]]]:
+        """The rule set for a file, by type. None when the file is not source."""
+        lang = cls._language_for(path)
+        if lang is None:
+            return None
+        return {"cds": CDS_RULES, "abap": ALL_ABAP_SAST_RULES,
+                "js": ALL_JS_RULES, "json": ALL_BTP_CONFIG_RULES,
+                "yaml": ALL_BTP_CONFIG_RULES}[lang]
 
     def scan_tree(self, root: Path) -> List[Dict[str, Any]]:
         findings: List[Dict[str, Any]] = []
@@ -792,15 +1027,24 @@ class AbapSourceScanner:
             if name.endswith(METADATA_SUFFIXES):
                 self.metadata_skipped += 1
                 continue
-            rules = self._rules_for(path)
-            if rules is None:
+            lang = self._language_for(path)
+            if lang is None:
+                # NOT scanned, and therefore counted. A CAP project's .java, a
+                # HANA .hdbprocedure or a .py helper produce no finding and no
+                # error today; without this the report cannot distinguish "we
+                # read it and it was clean" from "we never opened it".
+                suffix = path.suffix.lower() or path.name.lower()
+                self.unscanned_by_suffix[suffix] = (
+                    self.unscanned_by_suffix.get(suffix, 0) + 1)
                 continue
+            rules = self._rules_for(path)
             try:
                 text = path.read_text(encoding="utf-8", errors="replace")
             except OSError as exc:                       # noqa: PERF203
                 self.unreadable.append(f"{path}: {exc}")
                 continue
             self.files_scanned += 1
+            self.files_by_language[lang] = self.files_by_language.get(lang, 0) + 1
             findings.extend(self.scan_text(text, path, rules))
         return findings
 
@@ -816,13 +1060,24 @@ class AbapSourceScanner:
         """
         if rules is None:
             rules = self._rules_for(path)
-        # CDS artefacts get the CDS splitter. Handing them to the ABAP one both
-        # loses every annotation and invents SQL-injection findings in DCL.
-        is_cds = str(path).lower().endswith(CDS_SUFFIXES)
-        statements = (split_cds_statements(source) if is_cds
-                      else split_statements(source))
+        # Each language gets the lexer that can read it. Handing CDS to the ABAP
+        # splitter both lost every annotation and invented SQL-injection
+        # findings in DCL; handing JavaScript and JSON to it lost the file
+        # almost entirely while still counting it as scanned.
+        language = self._language_for(path) or "abap"
+        is_cds = language == "cds"
+        is_abap = language == "abap"
+        if is_cds:
+            statements = split_cds_statements(source)
+        elif language in ("js", "json", "yaml"):
+            statements = split_web_statements(source, language)
+        else:
+            statements = split_statements(source)
         self.lex_degraded += sum(1 for st in statements if st.degraded)
-        guarded_blocks = _guarded_blocks(statements)
+        # Block-scoped ABAP guards. A JS/JSON/YAML artefact has no FORM/METHOD
+        # blocks and no AUTHORITY-CHECK, so the guard is not merely unnecessary
+        # there — computing it over another grammar is meaningless.
+        guarded_blocks = _guarded_blocks(statements) if is_abap else set()
 
         out: List[Dict[str, Any]] = []
 
@@ -872,7 +1127,8 @@ class AbapSourceScanner:
                 # Named "... without AUTHORITY-CHECK": honour the "without".
                 if rid in AUTHORITY_GUARDED and st.block in guarded_blocks:
                     continue
-                if rid == "ABAP-SQLI-001" and _INTERNAL_TABLE_DELETE.match(st.text):
+                if (is_abap and rid == "ABAP-SQLI-001"
+                        and _INTERNAL_TABLE_DELETE.match(st.text)):
                     continue
                 record(rule, st)
 
@@ -880,13 +1136,16 @@ class AbapSourceScanner:
         # (it needed a literal `.` the splitter strips, and a lookahead at the NEXT
         # statement), so it was dead code. The engine has both.
         auth003 = _RULES_BY_ID.get("ABAP-AUTH-003")
-        if auth003 is not None and not is_cds:
+        if auth003 is not None and is_abap:
             for i, st in enumerate(statements):
                 if (_AUTHORITY_CHECK_STMT.match(st.text_masked)
                         and not _subrc_evaluated(statements, i)):
                     record(auth003, st)
 
-        if self.data_flow:
+        # Taint refinement is ABAP-syntax throughout (sy-subrc, ->, abap_true),
+        # so it is asked only about ABAP. On any other language it would have
+        # nothing to say and would say it slowly.
+        if self.data_flow and is_abap:
             self._refine(out, statements, source)
         return out
 
@@ -1513,6 +1772,47 @@ class AbapSastAuditor(BaseAuditor):
                 details={"files_scanned": 0,
                          "metadata_skipped": scanner.metadata_skipped,
                          "reason": "no_source_files"},
+            )
+
+        if scanner.unscanned_by_suffix:
+            # THE LANGUAGES THIS SCANNER DOES NOT READ, NAMED.
+            #
+            # A CAP project is Java or Node; a HANA artefact is .hdbprocedure;
+            # a Fiori app carries .html and .properties. None of them have rules
+            # here, and before this they were skipped without being counted —
+            # so a scan of a repository that is 90% Java produced no findings,
+            # no error, and nothing anywhere saying the code had not been read.
+            # That is indistinguishable from a clean result and only one of the
+            # two is true.
+            top = sorted(scanner.unscanned_by_suffix.items(),
+                         key=lambda kv: (-kv[1], kv[0]))
+            total = sum(n for _s, n in top)
+            langs = ", ".join(f"{s} ({n})" for s, n in top[:12])
+            self._coverage_finding(
+                check_id="ABAP-COV-004",
+                title="Files in languages this scanner does not read were not examined",
+                description=(
+                    f"{total} file(s) in the source tree are in a language this "
+                    f"scanner has no rules for and were not opened: {langs}. "
+                    "The scanner reads ABAP, CDS/DCL/RAP, JavaScript/TypeScript "
+                    "and the BTP descriptor files (xs-security.json, xs-app.json, "
+                    "manifest.json, mta.yaml). Everything else is outside its "
+                    "corpus. This is not a defect in the code that was skipped — "
+                    "it is a statement about the boundary of this report, and it "
+                    "is stated because silence about an unread file and silence "
+                    "about a clean file look identical."
+                ),
+                affected_items=[f"{s} — {n} file(s) not scanned" for s, n in top[:50]],
+                remediation=(
+                    "Cover the listed languages with a tool that reads them and "
+                    "bring the results in beside these findings; where a language "
+                    "is out of scope by decision, record that decision so the gap "
+                    "is a choice on the record rather than an omission."
+                ),
+                details={"unscanned_by_suffix": dict(top),
+                         "unscanned_total": total,
+                         "languages_read": sorted(scanner.files_by_language),
+                         "reason": "language_not_covered"},
             )
 
         if scanner.unreadable:
