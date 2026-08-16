@@ -8,8 +8,8 @@
 Every logical source the scanner can read, what it enables, and whether
 [`EXPORT_GUIDE.md`](EXPORT_GUIDE.md) tells you how to produce it.
 
-**126 logical sources.** 66 have a written procedure in the export
-guide; **60 do not yet** — those rows name the files the loader will
+**128 logical sources.** 66 have a written procedure in the export
+guide; **62 do not yet** — those rows name the files the loader will
 accept, so a source you already have to hand can be supplied today, but the
 step-by-step extraction has not been verified and is deliberately not guessed.
 
@@ -144,6 +144,8 @@ clean — see chapter 13 of the architecture guide.
 | `user_groups` | `user_groups.csv` | `iam_advanced` | **not yet written** |
 | `user_roles` | `user_roles.csv`, `agr_users.csv` | `abap_authorizations`, `access_risk_analysis`, `iam_advanced`, `role_governance`, `user_auth_audit` | documented |
 | `users` | `users.csv` | `basis_job_command`, `iam_advanced`, `user_auth_audit` | documented |
+| `vendor_bank` | `vendor_bank.csv`, `but0bk.csv`, `lfbk.csv` | `vendor_master` | **not yet written** |
+| `vendor_master` | `vendor_master.csv`, `but000.csv`, `lfa1.csv` | `vendor_master` | **not yet written** |
 | `webhooks` | `webhooks.json`, `callbacks.json` | `integration_layer` | **not yet written** |
 | `ws_endpoints` | `ws_endpoints.csv`, `soamanager.csv` | `integration_layer` | **not yet written** |
 

@@ -186,6 +186,8 @@ class DataLoader:
         "change_documents":        ["change_documents.csv", "cdhdr.csv"],
         "change_document_items":   ["change_document_items.csv", "cdpos.csv"],
         "fi_documents":            ["fi_documents.csv", "bkpf.csv"],
+        "vendor_master":           ["vendor_master.csv", "but000.csv", "lfa1.csv"],
+        "vendor_bank":             ["vendor_bank.csv", "but0bk.csv", "lfbk.csv"],
         "code_inventory":          ["code_inventory.csv", "custom_objects.csv"],
         "sap_modifications":       ["sap_modifications.csv", "se95.csv", "modifications.csv"],
         "dev_access_prod":         ["dev_access_prod.csv"],

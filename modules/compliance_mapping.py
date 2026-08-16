@@ -123,7 +123,7 @@ class ComplianceMapper:
         "Access Risk Analysis (SoD)": ["sod", "access-control"],
         "Financial Controls (SOX)": ["sod", "change-management", "access-control"],
     "Master Data Change Audit": ["change-management", "sod"],
-    "Master Data Change Audit": ["change-management", "sod"],
+    "Vendor & Bank Master Integrity": ["sod", "change-management"],
         "Login Security": ["authentication", "access-control"],
         "SAP Security Notes (HotNews)": ["vuln-mgmt"],
         "RFC Security": ["network-security", "access-control"],

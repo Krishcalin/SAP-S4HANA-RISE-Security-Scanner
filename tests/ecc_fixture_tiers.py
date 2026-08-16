@@ -54,9 +54,14 @@ OPTIONAL_TOOLING = {
     "incident_response", "siem_config", "log_retention", "recovery_tests",
     "backup_catalog",
     # Finance configuration — plausible for an SOX-scoped review, absent from a
-    # Basis-led security export.
+    # Basis-led security export. BKPF document headers are the same call: an
+    # ECC system certainly HAS them, but they are a finance extract rather
+    # than anything a Basis-led security export would contain.
     "posting_periods", "tolerance_groups", "dual_control_fields",
-    "doc_change_rules", "fi_number_ranges",
+    "doc_change_rules", "fi_number_ranges", "fi_documents",
+    # GRC job-execution stamps live on the separately-licensed GRC box, like
+    # every other grac_* source above.
+    "grac_job_log",
     # Miscellaneous integration surfaces a Basis team would not routinely export.
     "webhooks", "ws_endpoints", "oauth_clients", "key_management",
 }

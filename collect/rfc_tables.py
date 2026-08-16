@@ -100,28 +100,27 @@ EXTRACTS: List[Dict[str, Any]] = [
                 "always pair with --where on UDATE.",
     },
     {
-        "source": "change_document_items",
-        "file": "cdpos.csv",
-        "table": "CDPOS",
-        "columns": {"OBJECTCLAS": "OBJECTCLAS", "OBJECTID": "OBJECTID",
-                    "CHANGENR": "CHANGENR", "TABNAME": "TABNAME",
-                    "FNAME": "FNAME", "VALUE_OLD": "VALUE_OLD",
-                    "VALUE_NEW": "VALUE_NEW", "CHNGIND": "CHNGIND"},
-        "note": "Change document items — before/after values. Filter TABNAME to "
-                "LFBK/KNBK/BUT0BK/TIBAN (the bank tables) or bound by change "
-                "number; the values are unmasked payment data, handle the file "
-                "accordingly.",
+        "source": "vendor_master",
+        "file": "vendor_master.csv",
+        "table": "BUT000",
+        "columns": {"PARTNER": "PARTNER", "MC_NAME1": "MC_NAME1",
+                    "BU_GROUP": "BU_GROUP", "XDELE": "XDELE", "XBLCK": "XBLCK",
+                    "NOT_RELEASED": "NOT_RELEASED", "CRUSR": "CRUSR",
+                    "CRDAT": "CRDAT", "CHUSR": "CHUSR", "CHDAT": "CHDAT"},
+        "note": "Business partner master. BUT000 carries the create/change "
+                "user and date directly, which is what the sole-maintenance "
+                "check reads. On ECC the loader also accepts an LFA1 export "
+                "(lfa1.csv) — LFA1 has ERNAM/ERDAT but no changed-by, so that "
+                "check simply stays quiet rather than guessing.",
     },
     {
-        "source": "fi_documents",
-        "file": "bkpf.csv",
-        "table": "BKPF",
-        "columns": {"BUKRS": "BUKRS", "BELNR": "BELNR", "GJAHR": "GJAHR",
-                    "BLART": "BLART", "BUDAT": "BUDAT", "CPUDT": "CPUDT",
-                    "USNAM": "USNAM", "TCODE": "TCODE", "STBLG": "STBLG"},
-        "note": "FI document HEADERS only — no amounts leave the system. "
-                "Unbounded on a production system; always pair with --where "
-                "on CPUDT for the audit window.",
+        "source": "vendor_bank",
+        "file": "vendor_bank.csv",
+        "table": "BUT0BK",
+        "columns": {"PARTNER": "PARTNER", "BANKS": "BANKS", "BANKL": "BANKL",
+                    "BANKN": "BANKN", "BKONT": "BKONT"},
+        "note": "Vendor bank details. Account numbers are payment data — the "
+                "file is unmasked at rest, handle it accordingly.",
     },
     {
         "source": "change_document_items",

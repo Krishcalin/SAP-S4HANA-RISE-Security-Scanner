@@ -8,25 +8,37 @@ Phase 3.
 
 ## The answer
 
-**It survives, exactly.** Fourteen of the thirty auditors produce findings on the
-ECC fixture that are **identical** to what they produce on the full sample.
+**It survived, exactly.** When this was first measured, fourteen of the thirty
+auditors produced findings on the ECC fixture **identical** to what they produced
+on the full sample — the estimate the plan rested on, confirmed on its own terms.
 
-| | of 30 |
+**The number has since moved to fifteen of thirty-two, and the reason is not that
+the estimate was wrong.** The product grew: two auditors were added
+(`master_data_changes`, `vendor_master`), and with them ECC-native sources the
+original fixture had no reason to carry — vendor master and bank details
+(`LFA1` / `LFBK`) and change-document items (`CDPOS`, whose header table `CDHDR`
+was in the fixture from the start, making its absence arbitrary rather than
+considered). Both are things an ECC 6.0 estate genuinely has and a Basis team can
+genuinely export, so both are Tier A, and `vendor_master` runs on ECC exactly as
+it runs on S/4. The estimate was conservative, not mistaken.
+
+| | of 32 |
 |---|---:|
-| identical to the full sample — *"runs with no code change"* | **14** |
-| produce findings, but fewer than with full data | 6 |
-| **produce findings at all** | **20** |
+| identical to the full sample — *"runs with no code change"* | **15** |
+| produce findings, but fewer than with full data | 7 |
+| **produce findings at all** | **22** |
 | cannot exist on ECC (no HANA, Fiori, BTP, CDS, S/4 business roles) | 5 |
 | optional tooling — could run if the customer exports it (GRC, FI config) | 2 |
 | no file inputs (`abap_sast` reads `--abap-src`) | 1 |
 | silent even with full data | 2 |
 
-The estimate is confirmed on its own terms and the number is not the whole story,
-so two more are published beside it. **20 of 30** produce something useful — the
-six "partial" modules are degraded and still worth running. And by the strictest
-reading, only **9** are `complete` on data presence alone. Which number is right
-depends on what "runs" is taken to mean, and this table exists so that nobody has
-to guess.
+The number is not the whole story, so two more are published beside it. **22 of
+32** produce something useful — the seven "partial" modules are degraded and
+still worth running. Which number is right depends on what "runs" is taken to
+mean, and this table exists so that nobody has to guess. The per-module table
+below is regenerated from the measurement rather than maintained by hand, because
+the first version of it had already drifted from the code by the time a second
+module was added.
 
 ## How the fixture was decided, and when
 
@@ -94,32 +106,34 @@ about whether 6 is all of them.
 | module | status | ECC | full | verdict |
 |---|---|---:|---:|---|
 | `security_params` | complete | 35 | 35 | **identical to full sample** |
+| `code_transport` | degraded | 22 | 22 | **identical to full sample** |
 | `abap_authorizations` | complete | 16 | 16 | **identical to full sample** |
 | `atc_import` | complete | 12 | 12 | **identical to full sample** |
 | `baseline_params` | complete | 12 | 12 | **identical to full sample** |
 | `system_trust` | complete | 12 | 12 | **identical to full sample** |
-| `log_review` | complete | 5 | 5 | **identical to full sample** |
-| `code_inventory_report` | complete | 3 | 3 | **identical to full sample** |
-| `snc_posture` | complete | 1 | 1 | **identical to full sample** |
-| `ecs_config_items` | complete | 0 | 0 | silent on both |
-| `code_transport` | degraded | 22 | 22 | **identical to full sample** |
 | `basis_job_command` | degraded | 11 | 11 | **identical to full sample** |
-| `integration_layer` | degraded | 9 | 30 | partial — 9 of 30 |
 | `user_auth_audit` | degraded | 9 | 9 | **identical to full sample** |
+| `access_risk_analysis` | degraded | 7 | 7 | **identical to full sample** |
+| `network_services` | degraded | 6 | 6 | **identical to full sample** |
+| `log_review` | complete | 5 | 5 | **identical to full sample** |
+| `sap_hotnews` | degraded | 5 | 5 | **identical to full sample** |
+| `code_inventory_report` | complete | 3 | 3 | **identical to full sample** |
+| `vendor_master` | complete | 2 | 2 | **identical to full sample** |
+| `snc_posture` | complete | 1 | 1 | **identical to full sample** |
+| `integration_layer` | degraded | 9 | 30 | partial — 9 of 30 |
 | `crypto_posture` | degraded | 7 | 13 | partial — 7 of 13 |
 | `log_monitoring` | degraded | 7 | 10 | partial — 7 of 10 |
-| `access_risk_analysis` | degraded | 6 | 6 | **identical to full sample** |
 | `iam_advanced` | degraded | 6 | 22 | partial — 6 of 22 |
-| `network_services` | degraded | 6 | 6 | **identical to full sample** |
-| `sap_hotnews` | degraded | 4 | 4 | **identical to full sample** |
 | `data_protection` | degraded | 3 | 18 | partial — 3 of 18 |
 | `role_governance` | degraded | 2 | 3 | partial — 2 of 3 |
-| `resilience_posture` | degraded | 0 | 0 | silent on both |
-| `abap_sast` | no_file_inputs | 0 | 0 | no file inputs (needs `--abap-src`) |
+| `master_data_changes` | complete | 1 | 2 | partial — 1 of 2 |
 | `btp_cloud_surface` | skipped | 0 | 32 | **cannot exist on ECC** |
-| `financial_controls` | skipped | 0 | 5 | optional tooling — ECC could, if exported |
-| `fiori_ui` | skipped | 0 | 6 | **cannot exist on ECC** |
-| `grc_access_control` | skipped | 0 | 13 | optional tooling — ECC could, if exported |
 | `hana_db_security` | skipped | 0 | 18 | **cannot exist on ECC** |
 | `rise_btp_checks` | skipped | 0 | 8 | **cannot exist on ECC** |
 | `s4_business_authz` | skipped | 0 | 8 | **cannot exist on ECC** |
+| `fiori_ui` | skipped | 0 | 6 | **cannot exist on ECC** |
+| `grc_access_control` | skipped | 0 | 16 | optional tooling — ECC could, if exported |
+| `financial_controls` | skipped | 0 | 8 | optional tooling — ECC could, if exported |
+| `abap_sast` | not_requested | 0 | 0 | no file inputs (needs `--abap-src`) |
+| `ecs_config_items` | complete | 0 | 0 | silent on both |
+| `resilience_posture` | degraded | 0 | 0 | silent on both |

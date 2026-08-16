@@ -72,7 +72,7 @@ TEAM_BY_PREFIX: List[Tuple[str, str]] = [
     ("LREV-", "data_protection"),   # audit-log retrospective review — same owner as LOG-
     ("FIN-", "data_protection"),
     ("MDC-", "data_protection"),
-    ("MDC-", "data_protection"),
+    ("VBM-", "data_protection"),
     # Resilience & recovery readiness. Deliberately NOT under the LOG- prefix it
     # was first written with, for two reasons that were both measured:
     #   * LOG-RET-001 and LOG-IR-001 already existed in modules/log_monitoring.py,

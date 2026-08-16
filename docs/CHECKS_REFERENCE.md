@@ -6,11 +6,11 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**376** check ids are written as literals in `modules/`, across **31** modules. A further **264** are built at runtime from shipped rule tables, giving **640** in total.
+**379** check ids are written as literals in `modules/`, across **32** modules. A further **264** are built at runtime from shipped rule tables, giving **643** in total.
 
 ## What this file does not claim
 
-**42 of the 376 titles and 15 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**42 of the 379 titles and 15 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -578,6 +578,14 @@ Category: User & Authorization
 | `USR-008` | MEDIUM | *varies* — Dialog users with stale passwords (>… days) |
 | `USR-009` | *varies* — HIGH or MEDIUM | DDIC is a dialog user on an ECS-managed system |
 | `USR-010` | *varies* — HIGH or LOW | EARLYWATCH still exists on an ECS-managed system |
+
+### `vendor_master` — 3 checks
+
+| Check | Severity | Title |
+|---|---|---|
+| `VBM-BANK-001` | HIGH | One bank account is shared by several business partners |
+| `VBM-DATA-001` | LOW | Bank export contains no account numbers, so no account can be compared |
+| `VBM-SOLE-001` | MEDIUM | Payment-relevant partners created and last changed by the same person |
 
 ## Runtime check families
 

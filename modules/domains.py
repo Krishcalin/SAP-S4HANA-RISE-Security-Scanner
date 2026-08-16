@@ -119,7 +119,8 @@ DOMAINS: List[Dict[str, Any]] = [
                  "your findings, not your control environment.",
         "blurb": "Data protection, financial controls, and the framework mappings.",
         "categories": ["Data Protection & Privacy", "Financial Controls (SOX)",
-                       "Master Data Change Audit"],
+                       "Master Data Change Audit",
+                       "Vendor & Bank Master Integrity"],
     },
     {
         "id": "patch",
