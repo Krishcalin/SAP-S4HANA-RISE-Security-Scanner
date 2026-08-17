@@ -367,6 +367,12 @@ class SapHotNewsAuditor(BaseAuditor):
 
         if not has_applied:
             self._report_no_data(catalog)
+            # NOT a return. The exposure checks below read the component export
+            # and the CVSS vector, neither of which needs an SNOTE list — and a
+            # system whose operator cannot produce one is exactly the system that
+            # most needs something said about it. Returning here was the reason
+            # this module had one detection route instead of three.
+            self._report_exposure(assessable, set(), has_applied=False)
             return self.findings
 
         # A note counts as "present" if it is fully addressed OR partially
@@ -390,6 +396,7 @@ class SapHotNewsAuditor(BaseAuditor):
         self._report_exploited(assessable, applied)
         self._report_partial(catalog, partial)
         self._report_out_of_scope(out_of_scope, present)
+        self._report_exposure(assessable, present, has_applied=True)
         return self.findings
 
     # ------------------------------------------------------------------ helpers
@@ -785,6 +792,373 @@ class SapHotNewsAuditor(BaseAuditor):
             ],
             details={"unassessable_notes": [e["note"] for e in hits],
                      "exploited_among_them": exploited},
+        )
+
+    # ================================================================
+    #  Tier three: exposure, not just patch status
+    #
+    #  Everything above answers one question — is this note in your
+    #  applied-notes export. That is a good question and it is the only one this
+    #  module could ask, which meant a customer who cannot produce an SNOTE
+    #  export got a list of notes to check by hand and nothing else.
+    #
+    #  Three more axes are available without that export, and each is read from
+    #  a source this scanner already loads and never used for CVEs:
+    #
+    #    version   the CVERS component release against the affected-version list
+    #              NVD carries (data/cve_exposure.json)
+    #    vector    the CVSS vector, which states whether an attacker needs
+    #              credentials at all — authoritative, present for every entry
+    #    workaround  SAP's own documented mitigation, where it is something this
+    #              scanner can look for
+    #
+    #  WHAT THESE DO NOT DO. None of them is a patch check and none may be read
+    #  as one. A release outside the affected list is NOT a clearance — see
+    #  HOTNEWS-008 — because NVD's affected lists are frequently incomplete and
+    #  absence from one is not evidence of anything.
+    # ================================================================
+
+    #: Per-note exposure evidence, harvested once from the SAP CNA records in NVD
+    #: and shipped. Loaded lazily so a missing or malformed file degrades the
+    #: exposure checks rather than the whole module.
+    EXPOSURE_PATH = Path(__file__).resolve().parent.parent / "data" / "cve_exposure.json"
+
+    def _exposure_data(self) -> Dict[str, Any]:
+        cached = getattr(self, "_exposure_cache", None)
+        if cached is not None:
+            return cached
+        try:
+            payload = json.loads(self.EXPOSURE_PATH.read_text(encoding="utf-8"))
+            data = payload.get("entries") or {}
+        except (OSError, ValueError):
+            data = {}
+        self._exposure_cache = data
+        return data
+
+    def _release_of(self, component: str) -> Optional[str]:
+        return self._components().get(component.upper())
+
+    @staticmethod
+    def _same_release(a: str, b: str) -> bool:
+        """Are these the same SAP release, however each is written?
+
+        `_release_key` is reused rather than string equality because an export
+        may write 0755 where the CPE list says 755, and comparing those as
+        strings would report an affected system as unaffected.
+        """
+        ka = SapHotNewsAuditor._release_key(a)
+        kb = SapHotNewsAuditor._release_key(b)
+        return ka is not None and ka == kb
+
+    def _report_exposure(self, assessable: List[Dict[str, Any]],
+                         present: Set[str], has_applied: bool) -> None:
+        exposure = self._exposure_data()
+        components = self._components()
+
+        confirmed, off_list, unauth = [], [], []
+        unassessed: List[str] = []
+
+        for entry in assessable:
+            note = self._norm_note(entry["note"])
+            row = exposure.get(note) or exposure.get(entry["note"]) or {}
+            addressed = note in present
+            label = self._label(entry)
+
+            # ── version axis ────────────────────────────────────────────────
+            mapped = row.get("affected_by_component") or {}
+            if not mapped:
+                reason = row.get("version_reason") or "no exposure record for this note"
+                unassessed.append("%s — version: %s" % (label, reason))
+            elif not components:
+                unassessed.append("%s — version: no component export supplied"
+                                  % label)
+            else:
+                verdict = None
+                for comp, releases in sorted(mapped.items()):
+                    here = components.get(comp)
+                    if not here:
+                        continue
+                    if any(self._same_release(here, r) for r in releases):
+                        verdict = ("affected", comp, here)
+                        break
+                    verdict = verdict or ("outside", comp, here)
+                if verdict is None:
+                    unassessed.append(
+                        "%s — version: none of %s is in the component export"
+                        % (label, "/".join(sorted(mapped))))
+                elif verdict[0] == "affected" and not addressed:
+                    confirmed.append(
+                        "%s — %s %s IS in the affected release list"
+                        % (label, verdict[1], verdict[2]))
+                elif verdict[0] == "outside" and not addressed:
+                    off_list.append(
+                        "%s — %s %s is not in the list NVD carries"
+                        % (label, verdict[1], verdict[2]))
+
+            # ── vector axis ─────────────────────────────────────────────────
+            vector = row.get("vector") or ""
+            if not addressed and "AV:N" in vector and "PR:N" in vector:
+                unauth.append("%s — %s" % (label, vector))
+
+        if confirmed:
+            self.finding(
+                check_id="HOTNEWS-006",
+                title="Installed release is inside the affected range of an unpatched note",
+                severity=self.SEVERITY_CRITICAL,
+                category=self.CATEGORY,
+                description=(
+                    "%d note(s) are not recorded as implemented AND this system's "
+                    "installed component release appears in the affected-version "
+                    "list SAP published with the CVE. This is a stronger statement "
+                    "than the missing-note findings above: those say a note is "
+                    "absent from an export, while this says the release running "
+                    "here is one the vendor named as vulnerable. It needs no SNOTE "
+                    "export to be true — the component list alone establishes it, "
+                    "which is why it is reported even when patch status is unknown."
+                    % len(confirmed)),
+                affected_items=confirmed,
+                remediation=(
+                    "1. Treat these as the top of the patch queue: the affected "
+                    "release is confirmed rather than assumed.\n"
+                    "2. Apply the SAP Notes listed, or the support package that "
+                    "contains them.\n"
+                    "3. Where a note cannot be applied immediately, apply the "
+                    "workaround SAP publishes in the note text and record it as a "
+                    "compensating control with an expiry.\n"
+                    "4. Re-export applied_notes.csv and system_component.csv after "
+                    "patching and re-run, so the change is evidenced rather than "
+                    "asserted."),
+                references=["SAP Security Patch Day",
+                            "NVD — affected version data from the SAP CNA record"],
+                affected_objects=self._note_objects(
+                    [e for e in assessable
+                     if any(self._label(e) in c for c in confirmed)]),
+                details={"confirmed_affected": len(confirmed),
+                         "patch_status_known": has_applied},
+                scope="aggregate",
+            )
+
+        if unauth:
+            self.finding(
+                check_id="HOTNEWS-007",
+                title="Unpatched notes exploitable without any credentials",
+                severity=self.SEVERITY_HIGH,
+                category=self.CATEGORY,
+                description=(
+                    "%d unimplemented note(s) fix vulnerabilities whose CVSS "
+                    "vector is AV:N/PR:N — reachable over the network with NO "
+                    "privileges of any kind. Every other missing note in this "
+                    "report needs the attacker to hold something first: an "
+                    "account, a role, a foothold. These need only a route to the "
+                    "port. That distinction is what should order the patch queue "
+                    "when it cannot all be done at once, and it is taken from the "
+                    "vector SAP itself assigned rather than from any judgement "
+                    "made here." % len(unauth)),
+                affected_items=unauth,
+                remediation=(
+                    "1. Patch these before any authenticated-only issue of the "
+                    "same or higher CVSS.\n"
+                    "2. Until patched, reduce reachability: restrict the exposed "
+                    "service, port or ICF node to trusted networks, and confirm "
+                    "the system is not internet-facing.\n"
+                    "3. Check the network-exposure findings elsewhere in this "
+                    "report — an unauthenticated flaw on a system reachable from "
+                    "the internet is a materially different risk from the same "
+                    "flaw behind a gateway ACL.\n"
+                    "4. Re-run after patching."),
+                references=["NVD — CVSS vector from the SAP CNA record",
+                            "SAP Security Patch Day"],
+                details={"unauthenticated_unpatched": len(unauth)},
+                scope="aggregate",
+            )
+
+        if off_list:
+            self.finding(
+                check_id="HOTNEWS-008",
+                title="Installed release is not in the published affected list (verify before deprioritising)",
+                severity=self.SEVERITY_INFO,
+                category=self.CATEGORY,
+                description=(
+                    "%d unimplemented note(s) target releases that do not include "
+                    "the one installed here. THIS IS NOT A CLEARANCE and must not "
+                    "be used as one. NVD's affected-version lists are frequently "
+                    "incomplete — a release can be missing because it was not "
+                    "enumerated, because it did not exist when the CVE was "
+                    "published, or because the record was never revisited — so "
+                    "absence from the list is not evidence of anything. It is "
+                    "published because a backlog of missing notes is easier to "
+                    "work through when the ones least likely to apply are "
+                    "identified, and the only safe way to use it is to check each "
+                    "one against the note's own validity section." % len(off_list)),
+                affected_items=off_list,
+                remediation=(
+                    "1. Open each note in the SAP Launchpad and read its validity "
+                    "and support-package sections, which are authoritative for "
+                    "your release in a way the CVE record is not.\n"
+                    "2. Where the note genuinely does not apply, record that "
+                    "decision with the evidence, so the next scan does not "
+                    "re-litigate it.\n"
+                    "3. Where it does apply, move it back into the patch queue — "
+                    "the absence from a published list was not a reason to "
+                    "deprioritise it."),
+                references=["NVD — affected version data from the SAP CNA record"],
+                details={"release_outside_published_list": len(off_list),
+                         "is_not_a_clearance": True},
+                scope="aggregate",
+            )
+
+        self._report_workaround(assessable, present)
+        self._report_exposure_coverage(unassessed, bool(components), has_applied)
+
+    # ── documented workarounds this scanner can actually look for ───────────
+
+    def _report_workaround(self, assessable: List[Dict[str, Any]],
+                           present: Set[str]) -> None:
+        """Is the mitigation SAP publishes actually in place?
+
+        Only entries carrying a workaround with a NAMED SOURCE are checked. An
+        invented mitigation would be worse than none: a customer told their
+        exposure is contained stops looking at it.
+        """
+        exposure = self._exposure_data()
+        rows = self.data.get("role_auth_values")
+        if not isinstance(rows, list):
+            return
+
+        offenders = []
+        for entry in assessable:
+            note = self._norm_note(entry["note"])
+            work = (exposure.get(note) or {}).get("workaround") or {}
+            if work.get("kind") != "authorization_absent" or note in present:
+                continue
+            holders = self._roles_granting(rows, work["object"], work["field"],
+                                           work["value"])
+            if holders:
+                offenders.append(
+                    "%s — workaround is to %s, but %d role(s) still grant "
+                    "%s %s=%s: %s"
+                    % (self._label(entry), work["statement"], len(holders),
+                       work["object"], work["field"], work["value"],
+                       ", ".join(sorted(holders)[:6])))
+
+        if not offenders:
+            return
+        self.finding(
+            check_id="HOTNEWS-009",
+            title="Note not implemented and its published workaround is not in place either",
+            severity=self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=(
+                "%d unimplemented note(s) have a documented workaround, and the "
+                "authorization the workaround tells you to withdraw is still "
+                "granted. This is the worst of the three states a known "
+                "vulnerability can be in — not patched, and not mitigated either "
+                "— and it is usually not a decision anybody made: the workaround "
+                "was applied to some roles, or was applied and later reversed by "
+                "a role rebuild. The roles naming it are listed so the gap can be "
+                "closed today, without waiting for the patch window."
+                % len(offenders)),
+            affected_items=offenders,
+            remediation=(
+                "1. Remove the named authorization from the roles listed, or "
+                "restrict its activity values, following the workaround in the "
+                "SAP Note.\n"
+                "2. Confirm no composite role re-grants it through a child.\n"
+                "3. Record the workaround as a time-bound compensating control "
+                "with the patch as its exit condition — a workaround with no "
+                "expiry becomes permanent and the patch never lands.\n"
+                "4. Apply the note itself at the next window and then restore the "
+                "authorization if the business genuinely needs it.\n"
+                "5. Re-run to confirm both the note and the authorization."),
+            references=["SAP Security Patch Day — note text carries the workaround"],
+            details={"unmitigated_notes": len(offenders)},
+            scope="aggregate",
+        )
+
+    @staticmethod
+    def _roles_granting(rows: List[Any], obj: str, field: str,
+                        value: str) -> Set[str]:
+        """Roles granting `value` for one authorization field.
+
+        A range is a grant: LOW=01 HIGH=60 covers 60, and reading only LOW would
+        miss most of the roles that actually hold it. `*` covers everything.
+        """
+        found: Set[str] = set()
+        target = str(value).strip().lstrip("0") or "0"
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            if str(row.get("OBJECT", "")).strip().upper() != obj.upper():
+                continue
+            if str(row.get("FIELD", "")).strip().upper() != field.upper():
+                continue
+            low = str(row.get("LOW", "")).strip()
+            high = str(row.get("HIGH", "")).strip()
+            role = str(row.get("AGR_NAME", "")).strip()
+            if not role:
+                continue
+            if low == "*" or high == "*":
+                found.add(role)
+                continue
+            lo = low.lstrip("0") or "0"
+            hi = (high.lstrip("0") or "0") if high else lo
+            try:
+                if int(lo) <= int(target) <= int(hi):
+                    found.add(role)
+            except ValueError:
+                if target in (lo, hi):
+                    found.add(role)
+        return found
+
+    def _report_exposure_coverage(self, unassessed: List[str],
+                                  have_components: bool,
+                                  has_applied: bool) -> None:
+        """What the exposure axes could NOT establish, and why.
+
+        Emitted whenever anything was unassessable, because the three checks
+        above are silent in exactly two situations that look identical from the
+        report — nothing was exposed, and nothing could be examined.
+        """
+        if not unassessed and have_components:
+            return
+        items = list(unassessed)
+        if not have_components:
+            items.insert(0, "no system_component (CVERS) export — no note could be "
+                            "assessed against an installed release at all")
+        self.finding(
+            check_id="HOTNEWS-010",
+            title="Exposure could not be established for some notes",
+            severity=self.SEVERITY_INFO,
+            category=self.CATEGORY,
+            description=(
+                "%d note(s) could not be assessed against this system's installed "
+                "releases. The reasons are individual and are listed: most often "
+                "NVD carries no affected-version data for the CVE, or the versions "
+                "it carries are kernel patch levels or S/4HANA product versions, "
+                "which are on a different scale from a CVERS component release and "
+                "cannot be compared against one without producing a confident wrong "
+                "answer. Silence from the release checks above therefore means "
+                "'not established', never 'not affected'.%s"
+                % (len(items),
+                   "" if has_applied else
+                   " Patch status is also unknown for this system, so the only "
+                   "axis that produced anything here was the CVSS vector.")),
+            affected_items=items[:60],
+            remediation=(
+                "1. Supply system_component.csv (the CVERS list) if it is absent — "
+                "it is a single SE16 export and it is what turns a missing-note "
+                "list into an exposure statement.\n"
+                "2. For notes whose affected versions are kernel patch levels, "
+                "check the kernel release and patch number in System > Status "
+                "against the note; this scanner reads no kernel source.\n"
+                "3. For notes with no published version data, the note's own "
+                "validity section in the SAP Launchpad is the authority.\n"
+                "4. Treat this list as the boundary of the exposure assessment, "
+                "not as a set of notes that do not apply."),
+            details={"unassessed": len(items),
+                     "component_export_supplied": have_components,
+                     "degrades_coverage": True},
+            scope="aggregate",
         )
 
     def _report_no_data(self, catalog):

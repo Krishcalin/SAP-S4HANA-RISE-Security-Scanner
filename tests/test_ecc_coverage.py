@@ -49,7 +49,7 @@ def measured():
 #  The published claim                                                        #
 # --------------------------------------------------------------------------- #
 
-def test_fifteen_auditors_are_identical_on_ecc(measured):
+def test_fourteen_auditors_are_identical_on_ecc(measured):
     """THE NUMBER docs/ECC_COVERAGE.md PUBLISHES.
 
     "Identical to the full sample" is the operational meaning of the plan's
@@ -57,12 +57,19 @@ def test_fifteen_auditors_are_identical_on_ecc(measured):
     Measured against the full-data control rather than asserted: without the
     control, "this module produced 6 findings" says nothing about whether 6 is
     all of them.
+
+    IT MOVED 15 -> 14, AND DOWNWARD WAS THE IMPROVEMENT. `sap_hotnews` left the
+    identical set when its exposure checks began reading the installed component
+    release: the ECC fixture is SAP_BASIS 750 with no S4CORE, the full sample is
+    755 with S4CORE 105, so the two systems now get different — correct — answers.
+    A module that returns the same findings whatever release it is pointed at is
+    identical for the least interesting reason there is.
     """
     ecc, full = measured
     identical = [m for m, r in ecc.items()
                  if r["findings"] > 0 and r["findings"] == full[m]["findings"]]
-    assert len(identical) == 15, (
-        f"ECC parity moved to {len(identical)} of 32. If that is an improvement, "
+    assert len(identical) == 14, (
+        f"ECC parity moved to {len(identical)} of 33. If that is an improvement, "
         f"say so and update docs/ECC_COVERAGE.md in this commit — a published "
         f"number nothing checks stops being true quietly.\n"
         f"identical: {sorted(identical)}")
@@ -207,6 +214,6 @@ def test_the_published_document_states_the_number_it_measured():
     """The document and the test must agree. If one is edited without the other,
     the repository publishes a claim its own suite contradicts."""
     doc = (ROOT / "docs" / "ECC_COVERAGE.md").read_text(encoding="utf-8")
-    assert "| **15** |" in doc, \
-        "docs/ECC_COVERAGE.md no longer states 15; update it and the test together"
+    assert "| **14** |" in doc, \
+        "docs/ECC_COVERAGE.md no longer states 14; update it and the test together"
     assert "**22**" in doc

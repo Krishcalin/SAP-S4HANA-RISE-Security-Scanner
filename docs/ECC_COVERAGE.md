@@ -12,8 +12,8 @@ Phase 3.
 auditors produced findings on the ECC fixture **identical** to what they produced
 on the full sample — the estimate the plan rested on, confirmed on its own terms.
 
-**The number has since moved to fifteen of thirty-three, and the reason is not
-that the estimate was wrong.** The product grew, in two different ways.
+**The number has since moved to fourteen of thirty-three, and neither move was
+the estimate being wrong.** The product grew, in two different ways.
 
 Two auditors were added that ECC *can* feed — `master_data_changes` and
 `vendor_master` — and with them ECC-native sources the original fixture had no
@@ -31,11 +31,20 @@ That is the honest way for this number to move, and it is worth stating plainly:
 adding modules an ECC customer can never use makes this figure look worse without
 making their scan worse.
 
+A fourth change moved it the other way, and downward was the improvement.
+`sap_hotnews` left the identical set when its exposure checks began comparing the
+installed component release against the affected-version lists SAP publishes with
+each CVE. The ECC fixture is SAP_BASIS 750 with no S4CORE; the full sample is 755
+with S4CORE 105 — so the two systems now receive different answers, which is the
+correct outcome and was not previously possible. A module that returns the same
+findings whatever release it is pointed at is "identical to the full sample" for
+the least interesting reason available.
+
 The estimate was conservative, not mistaken.
 
 | | of 33 |
 |---|---:|
-| identical to the full sample — *"runs with no code change"* | **15** |
+| identical to the full sample — *"runs with no code change"* | **14** |
 | produce findings, but fewer than with full data | 7 |
 | **produce findings at all** | **22** |
 | cannot exist on ECC (no HANA, Fiori, BTP, CDS, S/4 business roles) | 6 |
@@ -123,29 +132,29 @@ about whether 6 is all of them.
 | `baseline_params` | complete | 12 | 12 | **identical to full sample** |
 | `system_trust` | complete | 12 | 12 | **identical to full sample** |
 | `basis_job_command` | degraded | 11 | 11 | **identical to full sample** |
+| `sap_hotnews` | degraded | 10 | 9 | more on ECC (10 vs 9) — extra findings are coverage disclosures |
+| `integration_layer` | degraded | 9 | 30 | partial — 9 of 30 |
 | `user_auth_audit` | degraded | 9 | 9 | **identical to full sample** |
 | `access_risk_analysis` | degraded | 7 | 7 | **identical to full sample** |
-| `network_services` | degraded | 6 | 6 | **identical to full sample** |
-| `log_review` | complete | 5 | 5 | **identical to full sample** |
-| `sap_hotnews` | degraded | 5 | 5 | **identical to full sample** |
-| `code_inventory_report` | complete | 3 | 3 | **identical to full sample** |
-| `vendor_master` | complete | 2 | 2 | **identical to full sample** |
-| `snc_posture` | complete | 1 | 1 | **identical to full sample** |
-| `integration_layer` | degraded | 9 | 30 | partial — 9 of 30 |
 | `crypto_posture` | degraded | 7 | 13 | partial — 7 of 13 |
 | `log_monitoring` | degraded | 7 | 10 | partial — 7 of 10 |
 | `iam_advanced` | degraded | 6 | 22 | partial — 6 of 22 |
+| `network_services` | degraded | 6 | 6 | **identical to full sample** |
+| `log_review` | complete | 5 | 5 | **identical to full sample** |
+| `code_inventory_report` | complete | 3 | 3 | **identical to full sample** |
 | `data_protection` | degraded | 3 | 18 | partial — 3 of 18 |
 | `role_governance` | degraded | 2 | 3 | partial — 2 of 3 |
+| `vendor_master` | complete | 2 | 2 | **identical to full sample** |
 | `master_data_changes` | complete | 1 | 2 | partial — 1 of 2 |
+| `snc_posture` | complete | 1 | 1 | **identical to full sample** |
+| `abap_sast` | not_requested | 0 | 0 | no file inputs (needs `--abap-src`) |
 | `btp_cloud_surface` | skipped | 0 | 32 | **cannot exist on ECC** |
-| `cap_xsuaa` | skipped | 0 | 0 | **cannot exist on ECC** (CAP/BTP only) |
-| `hana_db_security` | skipped | 0 | 18 | **cannot exist on ECC** |
-| `rise_btp_checks` | skipped | 0 | 8 | **cannot exist on ECC** |
-| `s4_business_authz` | skipped | 0 | 8 | **cannot exist on ECC** |
+| `cap_xsuaa` | skipped | 0 | 0 | silent on both |
+| `ecs_config_items` | complete | 0 | 0 | silent on both |
+| `financial_controls` | skipped | 0 | 8 | optional tooling — ECC could, if exported |
 | `fiori_ui` | skipped | 0 | 6 | **cannot exist on ECC** |
 | `grc_access_control` | skipped | 0 | 16 | optional tooling — ECC could, if exported |
-| `financial_controls` | skipped | 0 | 8 | optional tooling — ECC could, if exported |
-| `abap_sast` | not_requested | 0 | 0 | no file inputs (needs `--abap-src`) |
-| `ecs_config_items` | complete | 0 | 0 | silent on both |
+| `hana_db_security` | skipped | 0 | 18 | **cannot exist on ECC** |
 | `resilience_posture` | degraded | 0 | 0 | silent on both |
+| `rise_btp_checks` | skipped | 0 | 8 | **cannot exist on ECC** |
+| `s4_business_authz` | skipped | 0 | 8 | **cannot exist on ECC** |

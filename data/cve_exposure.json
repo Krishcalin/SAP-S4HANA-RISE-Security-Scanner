@@ -1,0 +1,789 @@
+{
+ "meta": {
+  "source": "NVD 2.0 API (nvd.nist.gov), CVE records assigned by the SAP CNA",
+  "obtained": "2026-08-17",
+  "what_this_is": "Per-note exposure evidence for the HotNews catalogue: the CVSS vector as NVD records it, and the affected-version lists where they can be compared against a CVERS component. It is NOT a patch-status source — that is applied_notes.csv — and it is not exhaustive: NVD carries no affected-version data for many recent SAP CVEs, which is recorded per entry rather than inferred.",
+  "version_scale_note": "One CPE product name carries three incompatible version scales in SAP's records — SAP_BASIS releases, kernel patch levels and S/4HANA product versions. An entry is given affected_component only when every version in its list is on the CVERS RELEASE scale; otherwise version_match is 'unavailable' with the reason, because a wrong 'not affected' verdict is worse than no verdict."
+ },
+ "entries": {
+  "2890213": {
+   "cve": "CVE-2020-6207",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+   "nvd_cvss": 9.8,
+   "version_match": "unavailable",
+   "version_reason": "the affected-version lists NVD carries are not on a scale any CVERS component uses (solution_manager) — kernel patch levels and S/4HANA product versions cannot be compared against a component RELEASE",
+   "nvd_affected_raw": {
+    "solution_manager": [
+     "7.20"
+    ]
+   }
+  },
+  "2934135": {
+   "cve": "CVE-2020-6287",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 10.0,
+   "version_match": "unavailable",
+   "version_reason": "the affected-version lists NVD carries are not on a scale any CVERS component uses (netweaver_application_server_java) — kernel patch levels and S/4HANA product versions cannot be compared against a component RELEASE",
+   "nvd_affected_raw": {
+    "netweaver_application_server_java": [
+     "7.30",
+     "7.31",
+     "7.40",
+     "7.50"
+    ]
+   }
+  },
+  "3084487": {
+   "cve": "CVE-2021-38163",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 9.9,
+   "version_match": "unavailable",
+   "version_reason": "the affected-version lists NVD carries are not on a scale any CVERS component uses (netweaver) — kernel patch levels and S/4HANA product versions cannot be compared against a component RELEASE",
+   "nvd_affected_raw": {
+    "netweaver": [
+     "7.30",
+     "7.31",
+     "7.40",
+     "7.50"
+    ]
+   }
+  },
+  "3089831": {
+   "cve": "CVE-2021-38176",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
+   "nvd_cvss": 8.8,
+   "version_match": "unavailable",
+   "version_reason": "the affected-version lists NVD carries are not on a scale any CVERS component uses (landscape_transformation, landscape_transformation_replication_server, s\\/4hana, test_data_migration_server) — kernel patch levels and S/4HANA product versions cannot be compared against a component RELEASE",
+   "nvd_affected_raw": {
+    "landscape_transformation": [
+     "2.0"
+    ],
+    "landscape_transformation_replication_server": [
+     "1.0",
+     "2.0",
+     "3.0"
+    ],
+    "s\\/4hana": [
+     "1511",
+     "1610",
+     "1709",
+     "1809",
+     "1909",
+     "2020",
+     "2021"
+    ],
+    "test_data_migration_server": [
+     "4.0"
+    ]
+   }
+  },
+  "3097887": {
+   "cve": "CVE-2021-38178",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H",
+   "nvd_cvss": 8.8,
+   "affected_by_component": {
+    "SAP_BASIS": [
+     "700",
+     "701",
+     "702",
+     "710",
+     "730",
+     "731",
+     "740",
+     "750",
+     "751",
+     "752",
+     "753",
+     "754",
+     "755",
+     "756"
+    ]
+   },
+   "nvd_affected_raw": {
+    "netweaver_abap": [
+     "700",
+     "701",
+     "702",
+     "710",
+     "730",
+     "731",
+     "740",
+     "750",
+     "751",
+     "752",
+     "753",
+     "754",
+     "755",
+     "756"
+    ],
+    "netweaver_application_server_abap": [
+     "700",
+     "701",
+     "702",
+     "710",
+     "730",
+     "731",
+     "740",
+     "750",
+     "751",
+     "752",
+     "753",
+     "754",
+     "755",
+     "756"
+    ]
+   }
+  },
+  "3123396": {
+   "cve": "CVE-2022-22536",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 10.0,
+   "version_match": "unavailable",
+   "version_reason": "the affected-version lists NVD carries are not on a scale any CVERS component uses (content_server, netweaver_application_server_abap, web_dispatcher) — kernel patch levels and S/4HANA product versions cannot be compared against a component RELEASE",
+   "nvd_affected_raw": {
+    "content_server": [
+     "7.53"
+    ],
+    "netweaver_application_server_abap": [
+     "7.22",
+     "7.49",
+     "7.53",
+     "7.77",
+     "7.81",
+     "7.85",
+     "7.86",
+     "7.87",
+     "8.04",
+     "krnl64nuc_7.22",
+     "krnl64nuc_7.22ext",
+     "krnl64nuc_7.49",
+     "krnl64uc_7.22",
+     "krnl64uc_7.22ext",
+     "krnl64uc_7.49",
+     "krnl64uc_7.53",
+     "krnl64uc_8.04"
+    ],
+    "web_dispatcher": [
+     "7.22ext",
+     "7.49",
+     "7.53",
+     "7.77",
+     "7.81",
+     "7.85",
+     "7.86",
+     "7.87"
+    ]
+   }
+  },
+  "3123427": {
+   "cve": "CVE-2022-22532",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+   "nvd_cvss": 9.8,
+   "version_match": "unavailable",
+   "version_reason": "the affected-version lists NVD carries are not on a scale any CVERS component uses (netweaver_application_server_java) — kernel patch levels and S/4HANA product versions cannot be compared against a component RELEASE",
+   "nvd_affected_raw": {
+    "netweaver_application_server_java": [
+     "7.22",
+     "7.49",
+     "7.53",
+     "krnl64nuc_7.22",
+     "krnl64nuc_7.22ext",
+     "krnl64nuc_7.49",
+     "krnl64uc_7.22",
+     "krnl64uc_7.22ext",
+     "krnl64uc_7.49"
+    ]
+   }
+  },
+  "3239152": {
+   "cve": "CVE-2022-41204",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H",
+   "nvd_cvss": 8.8,
+   "version_match": "unavailable",
+   "version_reason": "the affected-version lists NVD carries are not on a scale any CVERS component uses (commerce) — kernel patch levels and S/4HANA product versions cannot be compared against a component RELEASE",
+   "nvd_affected_raw": {
+    "commerce": [
+     "1905",
+     "2005",
+     "2011",
+     "2105",
+     "2205"
+    ]
+   }
+  },
+  "3242933": {
+   "cve": "CVE-2022-39802",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+   "nvd_cvss": 7.5,
+   "version_match": "unavailable",
+   "version_reason": "the affected-version lists NVD carries are not on a scale any CVERS component uses (manufacturing_execution) — kernel patch levels and S/4HANA product versions cannot be compared against a component RELEASE",
+   "nvd_affected_raw": {
+    "manufacturing_execution": [
+     "15.1",
+     "15.2",
+     "15.3"
+    ]
+   }
+  },
+  "3245526": {
+   "cve": "CVE-2023-25616",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 9.9,
+   "version_match": "unavailable",
+   "version_reason": "the affected-version lists NVD carries are not on a scale any CVERS component uses (business_objects_business_intelligence_platform) — kernel patch levels and S/4HANA product versions cannot be compared against a component RELEASE",
+   "nvd_affected_raw": {
+    "business_objects_business_intelligence_platform": [
+     "420",
+     "430"
+    ]
+   }
+  },
+  "3252433": {
+   "cve": "CVE-2023-23857",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:L/I:L/A:H",
+   "nvd_cvss": 9.9,
+   "version_match": "unavailable",
+   "version_reason": "the affected-version lists NVD carries are not on a scale any CVERS component uses (netweaver_application_server_for_java) — kernel patch levels and S/4HANA product versions cannot be compared against a component RELEASE",
+   "nvd_affected_raw": {
+    "netweaver_application_server_for_java": [
+     "7.50"
+    ]
+   }
+  },
+  "3283438": {
+   "cve": "CVE-2023-25617",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 9.0,
+   "version_match": "unavailable",
+   "version_reason": "the affected-version lists NVD carries are not on a scale any CVERS component uses (business_objects_business_intelligence_platform) — kernel patch levels and S/4HANA product versions cannot be compared against a component RELEASE",
+   "nvd_affected_raw": {
+    "business_objects_business_intelligence_platform": [
+     "420",
+     "430"
+    ]
+   }
+  },
+  "3288480": {
+   "cve": "CVE-2023-27269",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:N/I:H/A:H",
+   "nvd_cvss": 9.6,
+   "affected_by_component": {
+    "SAP_BASIS": [
+     "700",
+     "701",
+     "702",
+     "731",
+     "740",
+     "750",
+     "751",
+     "752",
+     "753",
+     "754",
+     "755",
+     "756",
+     "757",
+     "791"
+    ]
+   },
+   "nvd_affected_raw": {
+    "netweaver_application_server_abap": [
+     "700",
+     "701",
+     "702",
+     "731",
+     "740",
+     "750",
+     "751",
+     "752",
+     "753",
+     "754",
+     "755",
+     "756",
+     "757",
+     "791"
+    ]
+   }
+  },
+  "3302162": {
+   "cve": "CVE-2023-27500",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:N/I:H/A:H",
+   "nvd_cvss": 9.6,
+   "affected_by_component": {
+    "SAP_BASIS": [
+     "700",
+     "701",
+     "702",
+     "731",
+     "740",
+     "750",
+     "751",
+     "752",
+     "753",
+     "754",
+     "755",
+     "756",
+     "757"
+    ]
+   },
+   "nvd_affected_raw": {
+    "netweaver_application_server_abap": [
+     "700",
+     "701",
+     "702",
+     "731",
+     "740",
+     "750",
+     "751",
+     "752",
+     "753",
+     "754",
+     "755",
+     "756",
+     "757"
+    ]
+   }
+  },
+  "3320355": {
+   "cve": "CVE-2023-40622",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 9.9,
+   "version_match": "unavailable",
+   "version_reason": "the affected-version lists NVD carries are not on a scale any CVERS component uses (businessobjects_business_intelligence) — kernel patch levels and S/4HANA product versions cannot be compared against a component RELEASE",
+   "nvd_affected_raw": {
+    "businessobjects_business_intelligence": [
+     "420",
+     "430"
+    ]
+   }
+  },
+  "3340576": {
+   "cve": "CVE-2023-40309",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+   "nvd_cvss": 9.8,
+   "version_match": "unavailable",
+   "version_reason": "the affected-version lists NVD carries are not on a scale any CVERS component uses (commoncryptolib, content_server, extended_application_services_and_runtime, hana_database) — kernel patch levels and S/4HANA product versions cannot be compared against a component RELEASE",
+   "nvd_affected_raw": {
+    "commoncryptolib": [
+     "8.0.0"
+    ],
+    "content_server": [
+     "6.50",
+     "7.53",
+     "7.54"
+    ],
+    "extended_application_services_and_runtime": [
+     "1.0"
+    ],
+    "hana_database": [
+     "2.0"
+    ],
+    "host_agent": [
+     "722"
+    ],
+    "netweaver_application_server_abap": [
+     "7.22ext",
+     "kernel64nuc_7.22",
+     "kernel64nuc_7.22ext",
+     "kernel64uc_7.22",
+     "kernel64uc_7.22ext",
+     "kernel64uc_7.53",
+     "kernel64uc_8.04",
+     "kernel_7.22",
+     "kernel_7.53",
+     "kernel_7.54",
+     "kernel_7.77",
+     "kernel_7.85",
+     "kernel_7.89",
+     "kernel_7.91",
+     "kernel_7.92",
+     "kernel_7.93",
+     "kernel_8.04"
+    ],
+    "netweaver_application_server_java": [
+     "kernel64nuc_7.22",
+     "kernel64nuc_7.22ext",
+     "kernel64uc_7.22",
+     "kernel64uc_7.22ext",
+     "kernel64uc_7.53",
+     "kernel64uc_8.04",
+     "kernel_7.22",
+     "kernel_7.53",
+     "kernel_7.54",
+     "kernel_7.77",
+     "kernel_7.85",
+     "kernel_7.89",
+     "kernel_7.91",
+     "kernel_7.92",
+     "kernel_7.93",
+     "kernel_8.04"
+    ],
+    "sapssoext": [
+     "17.0"
+    ],
+    "web_dispatcher": [
+     "7.22ext",
+     "7.53",
+     "7.54",
+     "7.77",
+     "7.85",
+     "7.89"
+    ]
+   }
+  },
+  "3411067": {
+   "cve": "CVE-2023-49583",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
+   "nvd_cvss": 9.1,
+   "version_match": "unavailable",
+   "version_reason": "the affected-version lists NVD carries are not on a scale any CVERS component uses (\\@sap\\/xssec) — kernel patch levels and S/4HANA product versions cannot be compared against a component RELEASE",
+   "nvd_affected_raw": {
+    "\\@sap\\/xssec": [
+     "*"
+    ]
+   }
+  },
+  "3420923": {
+   "cve": "CVE-2024-22131",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 9.1,
+   "version_match": "unavailable",
+   "version_reason": "the affected-version lists NVD carries are not on a scale any CVERS component uses (abap_platform) — kernel patch levels and S/4HANA product versions cannot be compared against a component RELEASE",
+   "nvd_affected_raw": {
+    "abap_platform": [
+     "700",
+     "701",
+     "702",
+     "731",
+     "740",
+     "750",
+     "751",
+     "752",
+     "75c",
+     "75i"
+    ]
+   }
+  },
+  "3448171": {
+   "cve": "CVE-2024-33006",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 9.6,
+   "version_match": "unavailable",
+   "version_reason": "NVD carries no affected-version data for this CVE"
+  },
+  "3469791": {
+   "cve": "CVE-2024-54198",
+   "vector": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 8.5,
+   "version_match": "unavailable",
+   "version_reason": "NVD carries no affected-version data for this CVE"
+  },
+  "3479478": {
+   "cve": "CVE-2024-41730",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+   "nvd_cvss": 9.8,
+   "version_match": "unavailable",
+   "version_reason": "the affected-version lists NVD carries are not on a scale any CVERS component uses (business_objects_business_intelligence_platform) — kernel patch levels and S/4HANA product versions cannot be compared against a component RELEASE",
+   "nvd_affected_raw": {
+    "business_objects_business_intelligence_platform": [
+     "enterprise_430",
+     "enterprise_440"
+    ]
+   }
+  },
+  "3536965": {
+   "cve": "CVE-2024-47578",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 9.1,
+   "version_match": "unavailable",
+   "version_reason": "NVD carries no affected-version data for this CVE"
+  },
+  "3537476": {
+   "cve": "CVE-2025-0070",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 9.9,
+   "version_match": "unavailable",
+   "version_reason": "NVD carries no affected-version data for this CVE"
+  },
+  "3550708": {
+   "cve": "CVE-2025-0066",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 9.9,
+   "affected_by_component": {
+    "SAP_BASIS": [
+     "700",
+     "701",
+     "702",
+     "731",
+     "740",
+     "750",
+     "751",
+     "752",
+     "753",
+     "754",
+     "755",
+     "756",
+     "757",
+     "758",
+     "912",
+     "913",
+     "914"
+    ]
+   },
+   "nvd_affected_raw": {
+    "sap_basis": [
+     "700",
+     "701",
+     "702",
+     "731",
+     "740",
+     "750",
+     "751",
+     "752",
+     "753",
+     "754",
+     "755",
+     "756",
+     "757",
+     "758",
+     "912",
+     "913",
+     "914"
+    ]
+   }
+  },
+  "3581961": {
+   "cve": "CVE-2025-27429",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 9.9,
+   "version_match": "unavailable",
+   "version_reason": "NVD carries no affected-version data for this CVE"
+  },
+  "3594142": {
+   "cve": "CVE-2025-31324",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 10.0,
+   "version_match": "unavailable",
+   "version_reason": "the affected-version lists NVD carries are not on a scale any CVERS component uses (netweaver) — kernel patch levels and S/4HANA product versions cannot be compared against a component RELEASE",
+   "nvd_affected_raw": {
+    "netweaver": [
+     "7.50"
+    ]
+   }
+  },
+  "3604119": {
+   "cve": "CVE-2025-42999",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 9.1,
+   "version_match": "unavailable",
+   "version_reason": "the affected-version lists NVD carries are not on a scale any CVERS component uses (netweaver) — kernel patch levels and S/4HANA product versions cannot be compared against a component RELEASE",
+   "nvd_affected_raw": {
+    "netweaver": [
+     "7.5"
+    ]
+   }
+  },
+  "3627998": {
+   "cve": "CVE-2025-42957",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 9.9,
+   "version_match": "unavailable",
+   "version_reason": "NVD carries no affected-version data for this CVE"
+  },
+  "3633838": {
+   "cve": "CVE-2025-42950",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 9.9,
+   "version_match": "unavailable",
+   "version_reason": "NVD carries no affected-version data for this CVE"
+  },
+  "3634501": {
+   "cve": "CVE-2025-42944",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 10.0,
+   "version_match": "unavailable",
+   "version_reason": "NVD carries no affected-version data for this CVE"
+  },
+  "3668705": {
+   "cve": "CVE-2025-42887",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 9.9,
+   "version_match": "unavailable",
+   "version_reason": "NVD carries no affected-version data for this CVE"
+  },
+  "3674774": {
+   "cve": "CVE-2026-0509",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:N/I:H/A:H",
+   "nvd_cvss": 9.6,
+   "version_match": "unavailable",
+   "version_reason": "the affected-version lists NVD carries are not on a scale any CVERS component uses (netweaver_as_abap_kernel, netweaver_as_abap_krnl64nuc, netweaver_as_abap_krnl64uc) — kernel patch levels and S/4HANA product versions cannot be compared against a component RELEASE",
+   "nvd_affected_raw": {
+    "netweaver_as_abap_kernel": [
+     "7.22",
+     "7.53",
+     "7.54",
+     "7.77",
+     "7.89",
+     "7.93",
+     "9.16",
+     "9.18",
+     "9.19"
+    ],
+    "netweaver_as_abap_krnl64nuc": [
+     "7.22",
+     "7.22ext"
+    ],
+    "netweaver_as_abap_krnl64uc": [
+     "7.22",
+     "7.22ext",
+     "7.53"
+    ]
+   }
+  },
+  "3685270": {
+   "cve": "CVE-2025-42880",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 9.9,
+   "version_match": "unavailable",
+   "version_reason": "NVD carries no affected-version data for this CVE"
+  },
+  "3687749": {
+   "cve": "CVE-2026-0501",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 9.9,
+   "version_match": "unavailable",
+   "version_reason": "NVD carries no affected-version data for this CVE"
+  },
+  "3694242": {
+   "cve": "CVE-2026-0498",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 9.1,
+   "affected_by_component": {
+    "S4CORE": [
+     "102",
+     "103",
+     "104",
+     "105",
+     "106",
+     "107",
+     "108",
+     "109"
+    ]
+   },
+   "nvd_affected_raw": {
+    "s\\/4_hana": [
+     "102",
+     "103",
+     "104",
+     "105",
+     "106",
+     "107",
+     "108",
+     "109"
+    ]
+   }
+  },
+  "3697099": {
+   "cve": "CVE-2026-0488",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 9.9,
+   "affected_by_component": {
+    "SAP_BASIS": [
+     "700"
+    ],
+    "S4CORE": [
+     "102",
+     "103",
+     "104",
+     "105",
+     "106",
+     "107",
+     "108",
+     "109"
+    ]
+   },
+   "nvd_affected_raw": {
+    "netweaver_application_server_abap": [
+     "700"
+    ],
+    "s\\/4hana": [
+     "102",
+     "103",
+     "104",
+     "105",
+     "106",
+     "107",
+     "108",
+     "109"
+    ],
+    "webclient_ui_framework": [
+     "700",
+     "701",
+     "730",
+     "731",
+     "746",
+     "747",
+     "748",
+     "800",
+     "801"
+    ]
+   }
+  },
+  "3714806": {
+   "cve": "CVE-2026-34265",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+   "nvd_cvss": 9.8,
+   "version_match": "unavailable",
+   "version_reason": "NVD carries no affected-version data for this CVE"
+  },
+  "3717897": {
+   "cve": "CVE-2026-27671",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+   "nvd_cvss": 9.8,
+   "version_match": "unavailable",
+   "version_reason": "NVD carries no affected-version data for this CVE"
+  },
+  "3719353": {
+   "cve": "CVE-2026-27681",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 9.9,
+   "version_match": "unavailable",
+   "version_reason": "NVD carries no affected-version data for this CVE",
+   "workaround": {
+    "kind": "authorization_absent",
+    "object": "S_GUI",
+    "field": "ACTVT",
+    "value": "60",
+    "statement": "revoke S_GUI activity 60 until the correction is in place",
+    "source": "Onapsis, via the operator vulnerability-intelligence review [corroborated — confirm against SAP Note 3719353]"
+   }
+  },
+  "3724838": {
+   "cve": "CVE-2026-34260",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:N/A:H",
+   "nvd_cvss": 9.6,
+   "version_match": "unavailable",
+   "version_reason": "NVD carries no affected-version data for this CVE"
+  },
+  "3731908": {
+   "cve": "CVE-2026-34256",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:H",
+   "nvd_cvss": 7.1,
+   "version_match": "unavailable",
+   "version_reason": "NVD carries no affected-version data for this CVE"
+  },
+  "3746332": {
+   "cve": "CVE-2026-44748",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 9.9,
+   "version_match": "unavailable",
+   "version_reason": "NVD carries no affected-version data for this CVE"
+  },
+  "3747367": {
+   "cve": "CVE-2026-44747",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 9.9,
+   "version_match": "unavailable",
+   "version_reason": "NVD carries no affected-version data for this CVE"
+  }
+ }
+}

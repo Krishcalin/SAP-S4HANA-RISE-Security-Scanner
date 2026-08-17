@@ -131,6 +131,7 @@ The findings that carry it today:
 | `CAPX-COV-001` | `cap_xsuaa` | `--cap-src` unreadable, or a descriptor or CDS construct that would not parse |
 | `VBM-DATA-001` | `vendor_master` | the vendor / bank master export carried no usable rows |
 | `HOTNEWS-COVERAGE` | `sap_hotnews` | the note catalogue is a curated subset, not the full patch history |
+| `HOTNEWS-010` | `sap_hotnews` | exposure could not be established against the installed releases |
 | `<CHECK>-COVERAGE` | any | a release-gated check could not determine whether it applied |
 
 > This table is derived by reading `details["degrades_coverage"]` out of the

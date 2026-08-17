@@ -114,7 +114,7 @@ clean — see chapter 13 of the architecture guide.
 | `recovery_tests` | `recovery_tests.csv`, `dr_tests.csv`, `restore_tests.csv` | `resilience_posture` | documented |
 | `rfc_destinations` | `rfc_destinations.csv`, `sm59.csv`, `rfcdes.csv` | `network_services`, `system_trust` | documented |
 | `rfc_trust` | `rfc_trust.csv`, `rfcsysacl.csv`, `trusted_systems.csv` | `system_trust` | **not yet written** |
-| `role_auth_values` | `role_auth_values.csv`, `role_authorizations.csv`, `agr1251_values.csv` | `abap_authorizations`, `access_risk_analysis`, `iam_advanced`, `role_governance` | documented |
+| `role_auth_values` | `role_auth_values.csv`, `role_authorizations.csv`, `agr1251_values.csv` | `abap_authorizations`, `access_risk_analysis`, `iam_advanced`, `role_governance`, `sap_hotnews` | documented |
 | `role_details` | `role_details.csv`, `agr_define.csv` | `iam_advanced`, `role_governance` | documented |
 | `role_expiry` | `role_expiry.csv`, `agr_users_validity.csv` | `iam_advanced` | documented |
 | `role_profiles` | `role_profiles.csv`, `agr_1016.csv` | `role_governance` | **not yet written** |

@@ -6,11 +6,11 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**402** check ids are written as literals in `modules/`, across **33** modules. A further **266** are built at runtime from shipped rule tables, giving **668** in total.
+**407** check ids are written as literals in `modules/`, across **33** modules. A further **266** are built at runtime from shipped rule tables, giving **673** in total.
 
 ## What this file does not claim
 
-**42 of the 402 titles and 18 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**42 of the 407 titles and 18 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -539,7 +539,7 @@ Category: RISE / BTP Security
 | `S4AUTHZ-007` | HIGH | Cloud Foundry privileged platform role over-assigned |
 | `S4AUTHZ-008` | MEDIUM | Birthright role collection auto-granted to all federated users |
 
-### `sap_hotnews` — 7 checks
+### `sap_hotnews` — 12 checks
 
 | Check | Severity | Title |
 |---|---|---|
@@ -549,6 +549,11 @@ Category: RISE / BTP Security
 | `HOTNEWS-003` | CRITICAL | Missing notes for actively-exploited SAP vulnerabilities |
 | `HOTNEWS-004` | HIGH | Critical SAP Notes only partially implemented |
 | `HOTNEWS-005` | INFO | Catalogue notes this system's export can neither confirm nor deny |
+| `HOTNEWS-006` | CRITICAL | Installed release is inside the affected range of an unpatched note |
+| `HOTNEWS-007` | HIGH | Unpatched notes exploitable without any credentials |
+| `HOTNEWS-008` | INFO | Installed release is not in the published affected list (verify before deprioritising) |
+| `HOTNEWS-009` | HIGH | Note not implemented and its published workaround is not in place either |
+| `HOTNEWS-010` | INFO | Exposure could not be established for some notes |
 | `HOTNEWS-COVERAGE` | INFO | SAP note check ran against a curated subset, not the full patch history |
 
 ### `security_params` — 3 checks
