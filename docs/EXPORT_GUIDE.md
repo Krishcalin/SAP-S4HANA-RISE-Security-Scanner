@@ -767,6 +767,44 @@ Optional: BLART, USNAM, TCODE, STBLG (reversal document), BSTAT
 > answering when a document was posted versus when it was entered, who entered
 > it, and whether it was reversed.
 
+### Payment runs (`payment_runs.csv`, `reguh.csv`)
+**Table:** `REGUH` — the payment program's settlement data, one row per payee per
+run, carrying **the bank account the payment actually went to**. **Route:** `SE16`
+on `REGUH` for the same window as the change documents, every paying company code
+in scope. *The field list below is corroborated from this product's own module and
+the payment-program data model rather than verified against SAP's published data
+dictionary — confirm the column names in `SE11` before you script the extract.*
+
+```
+Required: LIFNR or KUNNR or EMPFG (payee), ZBNKN (payee bank account),
+          ZALDT or LAUFD (payment / run date)
+Strongly recommended: XVORL (proposal flag), LAUFI (run id), ZBUKR (company code),
+          VBLNR (payment document), RWBTR + WAERS (amount and currency)
+```
+
+**Export `XVORL` and do not filter on it yourself.** It is the proposal flag: a
+proposal run is what the payment program *intends* to pay and can still be edited
+or deleted before the run proper. The scanner drops proposal rows, so counting one
+as a payment would report money that never moved — but a row with **no** proposal
+column at all is kept, because the absence of the flag is not evidence that the
+row is a proposal.
+
+**Match the window to `change_documents.csv`.** This export exists for one
+correlation: `MDC-PAY-001` matches `VALUE_NEW` on a bank-account field in CDPOS
+against `ZBNKN` here, and reports where a payment left into an account that had
+just been changed. The match is on the account number itself, not on "a payment to
+that partner around the same time" — which is why the two exports have to cover
+the same period or the correlation has nothing to join. Thirty days is the default
+window; `payment_correlation_days` changes it.
+
+If you supply the change documents and not this file, the scanner does not go
+quiet about it: `MDC-PAY-002` records that bank changes were found and the one
+test that separates a routine update from a diversion was not run.
+
+> **This file contains payment data.** Bank accounts and amounts are masked to
+> the last four characters in every finding, but the CSV itself is not — handle
+> and retain it as the payment record it is, alongside `vendor_bank.csv`.
+
 ---
 
 ## SAP Security Notes exports (the sap_hotnews module)
@@ -2173,16 +2211,24 @@ supplying the creation date in its place — the check reports "no rotation evid
 differently from "rotated three years ago", and the second is a claim.
 
 ### Private Link and network isolation (`btp_network.json`)
-**Source:** BTP cockpit → the Private Link service instances and your connectivity
-configuration.
+**Source:** SAP Private Link is consumed as **ordinary service instances**, so it
+is listed like any other service in the subaccount:
 
-*No verified export route is recorded for this one, and that is a searched-for
-absence rather than an untried one:* SAP's public documentation repositories carry
-no Private Link page at all — not in `btp-cloud-platform`, not in
-`btp-integration-suite` — so the CLI verb and API path are not stated here.
-Private Link instances are Service Manager instances, so `btp list
-services/instance` filtered to the Private Link offering is the obvious first
-thing to try; confirm it before you build a job around it.
+```bash
+btp target --subaccount <subaccount-id>
+btp --format json list services/instance > instances.json
+```
+
+Or `cf services` in the Cloud Foundry space. SAP's own documentation settles that
+these are service instances rather than a separate object: creating them needs the
+**Space Developer** role in the space, they carry service keys and bindings, and
+the guide notes that *"service keys for SAP Private Link service instances in
+Cloud Foundry do not include the hostname of the connected resource, only the
+private IP address"*.
+
+*What is not verified for this guide is the service offering name to filter on* —
+select the Private Link instances by the offering your subaccount is entitled to
+and say which. The cockpit route is the Private Link service's own instance list.
 
 Also accepted: `private_link.json`
 

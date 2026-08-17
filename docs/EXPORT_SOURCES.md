@@ -8,7 +8,7 @@
 Every logical source the scanner can read, what it enables, and whether
 [`EXPORT_GUIDE.md`](EXPORT_GUIDE.md) tells you how to produce it.
 
-**128 logical sources, all of them with a written procedure** in the export
+**129 logical sources, all of them with a written procedure** in the export
 guide. This table is the regression detector for that: add a source to the loader
 without writing its procedure and it appears here as *not yet written*.
 
@@ -103,6 +103,7 @@ clean — see chapter 13 of the architecture guide.
 | `oauth_clients` | `oauth_clients.json`, `xsuaa_clients.json` | `integration_layer` | documented |
 | `odata_auth` | `odata_auth.csv`, `iwfnd_auth.csv` | `fiori_ui` | documented |
 | `odata_v4_services` | `odata_v4_services.csv`, `iwfnd_v4.csv` | `s4_business_authz` | documented |
+| `payment_runs` | `payment_runs.csv`, `reguh.csv` | `master_data_changes` | documented |
 | `personal_data_inventory` | `personal_data_inventory.csv`, `pdi.csv` | `data_protection` | documented |
 | `posting_periods` | `posting_periods.csv`, `t001b.csv`, `ob52.csv` | `financial_controls` | documented |
 | `profiles` | `profiles.csv`, `usr04.csv` | `basis_job_command`, `log_review`, `user_auth_audit` | documented |

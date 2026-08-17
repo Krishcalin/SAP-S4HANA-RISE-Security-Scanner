@@ -6,11 +6,11 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**409** check ids are written as literals in `modules/`, across **33** modules. A further **267** are built at runtime from shipped rule tables, giving **676** in total.
+**411** check ids are written as literals in `modules/`, across **33** modules. A further **267** are built at runtime from shipped rule tables, giving **678** in total.
 
 ## What this file does not claim
 
-**42 of the 409 titles and 18 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**42 of the 411 titles and 18 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -469,13 +469,15 @@ Category: Logging, Monitoring & IR
 | `LREV-WIN-001` | LOW | Reviewed window is too short to be representative |
 | `LREV-WIN-002` | HIGH | *varies* |
 
-### `master_data_changes` — 3 checks
+### `master_data_changes` — 5 checks
 
 | Check | Severity | Title |
 |---|---|---|
 | `MDC-BANK-001` | HIGH | Vendor / customer / business-partner bank details were changed |
 | `MDC-DIRECT-001` | HIGH | Master data changed through direct table maintenance |
 | `MDC-EVD-001` | LOW | Change-document items were supplied without before/after values |
+| `MDC-PAY-001` | CRITICAL | A payment left into a bank account that had just been changed |
+| `MDC-PAY-002` | INFO | Bank changes found, but no payment-run export to check them against |
 
 ### `network_services` — 8 checks
 
