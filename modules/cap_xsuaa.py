@@ -49,10 +49,34 @@ The descriptor cannot tell you who holds a collection; the subaccount export
 cannot tell you what a collection grants. Read together they answer the question
 an auditor actually asks, which is who can do this.
 
+THE SECOND GRAPH: WHAT ONE REQUEST REACHES
+`CAPX-CDS-004` walks a different graph — associations and compositions — for a
+defect CAP documents against itself. "Currently, the security annotations are
+only evaluated on the target entity of the request... Restrictions of
+(recursively) expanded or inlined entities of a READ request aren't checked." So
+an entity CAN carry a correct `@requires`, be reached by `$expand` from a service
+that never demanded that role, and hand over its rows. The model looks right and
+the runtime does not enforce it, which is why reading the annotations alone —
+what every other CDS check here does — cannot find it.
+
+Two things had to be modelled or the check would have done harm rather than good.
+AUTO-REDIRECTION, because CAP's own remedy is to expose a reduced projection and
+navigation redirects onto it; a walk that ignored redirection would report a
+project that had applied the documented fix correctly. And THE RUNTIME SPLIT,
+because CAP Java 4.0+ does check association hops while neither runtime checks
+composition hops — so the finding names which kind it found and which runtime the
+project builds on, rather than asserting one blanket severity over both.
+
 WHAT THIS MODULE DOES NOT CLAIM
   * That a CDS role missing from the descriptor is a defect. It may be granted by
     another application's role-template. `CAPX-CDS-003` reports the disagreement,
     not a verdict on which side is wrong.
+  * That a reachable entity is necessarily reachable by an unauthorized caller.
+    `CAPX-CDS-004` fires only where the two role sets are DISJOINT — the target
+    asks for something the root never made the caller prove. Roles are not
+    ordered, so "weaker" is not a judgement this module makes.
+  * That an element is sensitive because of what it is called. `CAPX-CDS-005`
+    rests on the model's own `@PersonalData` annotations and nothing else.
   * That an unreferenced role-template is unreachable, unless the subaccount's
     role collections were also supplied — a collection assembled in the cockpit
     is invisible in the descriptor.
@@ -132,6 +156,27 @@ _SKIP_DIRS = frozenset((
 _CDS_SUFFIXES = (".cds",)
 _MAX_FILE_BYTES = 4 * 1024 * 1024
 
+#: How deep a navigation path is followed before the walk gives up. A CAP model
+#: is a graph, not a tree, and `Teams -> members -> team -> members` is a legal
+#: cycle; the walk is cycle-safe by construction, but depth still needs a bound
+#: so that a wide model cannot turn one exposed entity into a combinatorial
+#: report. Six hops is well past the two the documented example needs and past
+#: anything a reviewer would follow by hand. Paths cut at the bound are counted
+#: and named in the coverage manifest rather than dropped silently.
+_MAX_NAV_DEPTH = 6
+
+#: Element annotations that mark a field as personal or sensitive IN THE MODEL
+#: ITSELF. These are the only basis CAPX-CDS-005 uses. Guessing sensitivity from
+#: an element's NAME — salary, iban, password — would be a heuristic dressed as
+#: a finding, and would be wrong in both directions: it would miss
+#: `remuneration` and would flag a column called `password_policy_id`.
+#: `@PersonalData.*` is SAP's own vocabulary from the CAP data-privacy guide,
+#: applied by the developer, and it means what the finding says it means.
+_SENSITIVE_ELEMENT_ANNOTATIONS = (
+    "@PersonalData.IsPotentiallySensitive",
+    "@PersonalData.IsPotentiallyPersonal",
+)
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 #  Scope and role reference syntax
@@ -186,6 +231,33 @@ def _as_list(value: Any) -> List[Any]:
 _SERVICE_DECL = re.compile(r"\bservice\s+([A-Za-z_][\w.]*)", re.MULTILINE)
 _ANNOTATE_DECL = re.compile(r"\bannotate\s+([A-Za-z_][\w.]*)\s+with\b", re.MULTILINE)
 _QUOTED = re.compile(r"'([^']*)'|\"([^\"]*)\"")
+
+_ENTITY_DECL = re.compile(r"\bentity\s+([A-Za-z_][\w.]*)", re.MULTILINE)
+_NAMESPACE_DECL = re.compile(r"\bnamespace\s+([A-Za-z_][\w.]*)\s*;", re.MULTILINE)
+_USING_DECL = re.compile(r"\busing\s+(\{[^}]*\}|[A-Za-z_][\w.]*(?:\s+as\s+[A-Za-z_]\w*)?)"
+                         r"\s+from\b", re.MULTILINE)
+_USING_ALIAS = re.compile(r"([A-Za-z_][\w.]*)(?:\s+as\s+([A-Za-z_]\w*))?")
+
+#: `as projection on X`, `as select from X`, `as X` — the three ways a service
+#: entity names the entity it is built from. All three are followed, because a
+#: navigation reachable through a `select from` is exactly as reachable at
+#: runtime as one reachable through a `projection on`.
+_PROJECTION_SOURCE = re.compile(
+    r"\bas\s+(?:projection\s+on|select\s+from)\s+([A-Za-z_][\w.]*)", re.IGNORECASE)
+
+#: `excluding { a, b }` — CAP's own remedy for the exposure CAPX-CDS-004 and
+#: CAPX-CDS-005 report, so the parser has to see it or the checks would keep
+#: reporting a project that had already fixed itself.
+_EXCLUDING = re.compile(r"\bexcluding\s*\{([^}]*)\}", re.IGNORECASE)
+
+#: `Association to X`, `Association to many X`, `Composition of many X`. The
+#: `to`/`of` pair is not interchangeable in CDL but both spellings appear for
+#: both kinds in real models, so the parser accepts either and keeps the KIND
+#: from the keyword — the kind is what decides whether CAP Java checks the
+#: target, and the finding says which one it saw.
+_NAVIGATION = re.compile(
+    r"\b(Association|Composition)\s+(?:to|of)\s+(?:many\s+)?([A-Za-z_][\w.$]*)",
+    re.IGNORECASE)
 
 
 def strip_cds_comments(source: str) -> str:
@@ -356,11 +428,37 @@ class CdsModel(object):
         self.open_privileges = []   # (service/target, file, line) with no `to`
         self.files = 0
         self.unresolved = []
+        #: Every `entity` declaration, keyed by its fully-qualified name where a
+        #: namespace was declared and by its bare name otherwise. Entities inside
+        #: a service body are keyed `Service.Entity`, which is how CAP addresses
+        #: them and how `annotate CatalogService.Books with` names them.
+        self.entities = {}
+        #: Unqualified name -> set of qualified names carrying it. A model may
+        #: legitimately hold two `Books`, and a navigation target written `Books`
+        #: is then genuinely ambiguous; the resolver records that rather than
+        #: picking one.
+        self.by_short_name = {}
+        #: Paths abandoned at `_MAX_NAV_DEPTH`, for the coverage manifest.
+        self.truncated_paths = []
 
     def annotations_for(self, service: str) -> str:
         parts = [self.services.get(service, {}).get("annotations", "")]
         parts.extend(self.annotate_targets.get(service, []))
         return "\n".join(p for p in parts if p)
+
+    def entity_annotations(self, name: str) -> str:
+        """Everything annotating one entity, inline and from `annotate` blocks.
+
+        The two are equal in CAP and the fixture uses both, so a check that read
+        only the inline half would report a protected entity as unprotected.
+        """
+        parts = [self.entities.get(name, {}).get("annotations", "")]
+        parts.extend(self.annotate_targets.get(name, []))
+        return "\n".join(p for p in parts if p)
+
+    def register_entity(self, name: str, info: Dict[str, Any]) -> None:
+        self.entities[name] = info
+        self.by_short_name.setdefault(name.rsplit(".", 1)[-1], set()).add(name)
 
 
 def parse_cds_tree(root: Path, model: CdsModel) -> None:
@@ -383,6 +481,7 @@ def parse_cds_source(source: str, label: str, model: CdsModel) -> None:
     """Read one `.cds` file. Pure text in, `model` mutated."""
     text = strip_cds_comments(source)
 
+    service_spans = []
     for match in _SERVICE_DECL.finditer(text):
         name = match.group(1)
         annotations = (_annotation_span_before(text, match.start())
@@ -392,6 +491,16 @@ def parse_cds_source(source: str, label: str, model: CdsModel) -> None:
             "line": text.count("\n", 0, match.start()) + 1,
             "annotations": annotations,
         }
+        body = text.find("{", match.end())
+        if body >= 0:
+            end = _balanced(text, body, "{", "}")
+            if end < 0:
+                model.unresolved.append(
+                    "%s: body of `service %s` has no closing brace" % (label, name))
+            else:
+                service_spans.append((body, end, name))
+
+    _parse_entities(text, label, model, service_spans)
 
     for match in _ANNOTATE_DECL.finditer(text):
         target = match.group(1)
@@ -404,6 +513,423 @@ def parse_cds_source(source: str, label: str, model: CdsModel) -> None:
                 "%s: `annotate %s with` has no terminating ';'" % (label, target))
 
     _collect_roles(text, label, model)
+
+
+def _parse_entities(text: str, label: str, model: CdsModel,
+                    service_spans: List[Tuple[int, int, str]]) -> None:
+    """Every `entity` in one file, with its elements and its projection source.
+
+    The two kinds of entity are read the same way and kept apart by WHERE they
+    were found. An entity inside a `service { ... }` body is a service entity —
+    what OData exposes — and is keyed `Service.Entity`. An entity outside every
+    service body is a domain entity, keyed with the file's namespace. The
+    distinction matters because the exposure question is asked of one and the
+    navigation question of the other.
+    """
+    namespace = ""
+    ns = _NAMESPACE_DECL.search(text)
+    if ns:
+        namespace = ns.group(1)
+    aliases = _using_aliases(text)
+
+    for match in _ENTITY_DECL.finditer(text):
+        short = match.group(1)
+        start = match.start()
+        owner = next((name for begin, end, name in service_spans
+                      if begin < start < end), None)
+        if owner:
+            qualified = "%s.%s" % (owner, short)
+        elif namespace and "." not in short:
+            qualified = "%s.%s" % (namespace, short)
+        else:
+            qualified = short
+
+        head_end = _declaration_head_end(text, match.end())
+        head = text[match.end():head_end]
+        source_match = _PROJECTION_SOURCE.search(head)
+        excluding = set()
+        for group in _EXCLUDING.finditer(head):
+            excluding |= {n.strip() for n in group.group(1).split(",") if n.strip()}
+
+        elements = []
+        body = text.find("{", match.end())
+        if body >= 0 and body < head_end:
+            end = _balanced(text, body, "{", "}")
+            if end < 0:
+                model.unresolved.append(
+                    "%s: body of `entity %s` has no closing brace, so its "
+                    "elements and navigations were not read" % (label, short))
+            else:
+                elements = _parse_elements(text[body + 1:end - 1], namespace,
+                                           aliases, body + 1, text)
+
+        model.register_entity(qualified, {
+            "file": label,
+            "line": text.count("\n", 0, start) + 1,
+            "name": qualified,
+            "short": short,
+            "service": owner,
+            "annotations": (_annotation_span_before(text, start) + " "
+                            + head[:source_match.start() if source_match else len(head)]),
+            "source": (_qualify(source_match.group(1), namespace, aliases)
+                       if source_match else None),
+            "source_written": source_match.group(1) if source_match else None,
+            "excluding": excluding,
+            "elements": elements,
+        })
+
+
+def _declaration_head_end(text: str, start: int) -> int:
+    """End of a declaration's head — its `{` body, its `;`, or end of file.
+
+    Scanning to the first `{` alone would be wrong for
+    `entity X as projection on db.Y;`, which has no body, and scanning to the
+    first `;` alone would be wrong for an entity whose element list contains
+    several. Whichever comes first wins, and the body case is then re-read from
+    its own brace.
+    """
+    i, quote = start, None
+    while i < len(text):
+        ch = text[i]
+        if quote:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+        elif ch in ("'", '"'):
+            quote = ch
+        elif ch == "{":
+            end = _balanced(text, i, "{", "}")
+            return len(text) if end < 0 else end
+        elif ch == ";":
+            return i
+        i += 1
+    return len(text)
+
+
+def _parse_elements(block: str, namespace: str, aliases: Dict[str, str],
+                    offset: int, whole: str) -> List[Dict[str, Any]]:
+    """The elements of one entity body: name, navigation target, annotations.
+
+    Elements are separated by `;` at depth zero. Nested `{ }` — an anonymous
+    composition's inline type — is skipped as a unit rather than descended into:
+    its own elements belong to a generated entity that no `@restrict` in the
+    source can name, so there is nothing this analysis could say about them that
+    would not be a guess.
+    """
+    out = []
+    i, start, depth, quote = 0, 0, 0, None
+    while i <= len(block):
+        ch = block[i] if i < len(block) else ";"
+        if quote:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+        elif ch in ("'", '"'):
+            quote = ch
+        elif ch in "{([":
+            depth += 1
+        elif ch in "})]":
+            depth -= 1
+        elif ch == ";" and depth <= 0:
+            piece = block[start:i]
+            element = _parse_one_element(piece, namespace, aliases)
+            if element:
+                # Anchored on the element NAME, not on the start of the
+                # fragment. A fragment starts just after the previous `;`, so
+                # its own offset is the end of the LINE BEFORE — and for an
+                # annotated element it is two lines before the one a reader
+                # needs. Findings quote this number; it has to land on the
+                # element.
+                element["line"] = whole.count(
+                    "\n", 0, offset + start + element.pop("_at")) + 1
+                out.append(element)
+            start = i + 1
+        i += 1
+    return out
+
+
+_ELEMENT_NAME = re.compile(
+    r"(?:\b(?:key|virtual|masked|localized)\s+)*([A-Za-z_]\w*)\s*:", re.IGNORECASE)
+
+
+def _parse_one_element(piece: str, namespace: str,
+                       aliases: Dict[str, str]) -> Optional[Dict[str, Any]]:
+    """One `name : Type` element, or None if this fragment holds no element.
+
+    A fragment with no `name :` is not an error — an entity body's first piece
+    is often just the inherited-aspect list — so it returns None quietly rather
+    than being recorded as unresolved.
+    """
+    match = _ELEMENT_NAME.search(piece)
+    if not match:
+        return None
+    navigation = _NAVIGATION.search(piece)
+    return {
+        "name": match.group(1),
+        "_at": match.start(1),
+        # The whole fragment. Elements are split on `;` before this is called,
+        # so every annotation in it belongs to this element and none can leak in
+        # from the next — which is why no attempt is made to separate the
+        # leading form `@X\n name : T` from the trailing form `name : T @X`.
+        # Both are legal CDL and both appear in real models.
+        "annotations": piece,
+        "kind": navigation.group(1).lower() if navigation else None,
+        "target": (_qualify(navigation.group(2), namespace, aliases)
+                   if navigation else None),
+        "target_written": navigation.group(2) if navigation else None,
+    }
+
+
+def _using_aliases(text: str) -> Dict[str, str]:
+    """`using { acme.bookshop as db }` -> `{"db": "acme.bookshop"}`.
+
+    Without this a navigation to `db.Contracts` never resolves to the entity
+    `acme.bookshop.Contracts`, and CAPX-CDS-004 would go quiet on precisely the
+    project layout SAP's own guide uses.
+    """
+    aliases = {}
+    for match in _USING_DECL.finditer(text):
+        clause = match.group(1)
+        inner = clause[1:-1] if clause.startswith("{") else clause
+        for part in inner.split(","):
+            named = _USING_ALIAS.search(part.strip())
+            if not named:
+                continue
+            full = named.group(1)
+            aliases[named.group(2) or full.rsplit(".", 1)[-1]] = full
+    return aliases
+
+
+def _qualify(name: str, namespace: str, aliases: Dict[str, str]) -> str:
+    """Expand a written reference to the name the model keys entities by."""
+    if not name:
+        return name
+    head, _, rest = name.partition(".")
+    if head in aliases:
+        return "%s.%s" % (aliases[head], rest) if rest else aliases[head]
+    if "." not in name and namespace:
+        return "%s.%s" % (namespace, name)
+    return name
+
+
+def declared_roles(annotations: str) -> Set[str]:
+    """The application roles an annotation text demands.
+
+    Pseudo-roles are stripped. `any` is not a role — it is the absence of one.
+    `authenticated-user` is held by every caller that got as far as the service,
+    so demanding it downstream adds nothing the caller has not already proved.
+    Leaving either in would make CAPX-CDS-004 report a navigation as a privilege
+    gap when no privilege was involved.
+    """
+    roles = set()
+    for match in re.finditer(r"\brequires\s*:", annotations or ""):
+        roles |= set(_literal_values(annotations, match.end()))
+    for match in re.finditer(r"\brestrict\s*:", annotations or ""):
+        i = match.end()
+        while i < len(annotations) and annotations[i] in " \t\r\n":
+            i += 1
+        end = (_balanced(annotations, i, "[", "]")
+               if i < len(annotations) and annotations[i] == "[" else -1)
+        if end < 0:
+            continue
+        for privilege in _privileges(annotations[i:end]):
+            roles |= set(_privilege_roles(privilege))
+    return {r for r in roles if r not in _PSEUDO_ROLES}
+
+
+def effective_roles(model: CdsModel, name: str) -> Set[str]:
+    """The roles guarding one entity, own first and inherited otherwise.
+
+    SAP: "Service entities inherit the restriction from the database entity, on
+    which they define a projection. An explicit restriction defined on a service
+    entity REPLACES inherited restrictions from the underlying entity." Replaces,
+    not adds — so the chain stops at the first link that says anything, and a
+    projection that restates its restriction is not credited with the database
+    entity's as well.
+    """
+    seen, current = set(), name
+    while current and current not in seen:
+        seen.add(current)
+        roles = declared_roles(model.entity_annotations(current))
+        if roles:
+            return roles
+        current = (model.entities.get(current) or {}).get("source")
+    return set()
+
+
+def _resolve_entity(model: CdsModel, written: str) -> Optional[str]:
+    """The model key for a written entity reference, or None.
+
+    None covers three different situations — the target is in a package this
+    scan never read, the name is ambiguous across namespaces, or it was never
+    declared — and all three mean the same thing here: no claim can be made
+    about that entity's restrictions. The caller records it as unresolved.
+    """
+    if not written:
+        return None
+    if written in model.entities:
+        return written
+    candidates = model.by_short_name.get(written.rsplit(".", 1)[-1], set())
+    return next(iter(candidates)) if len(candidates) == 1 else None
+
+
+def _elements_with_owner(model: CdsModel,
+                         name: str) -> Tuple[Optional[str], List[Dict[str, Any]]]:
+    """An entity's elements and the entity they are actually declared on.
+
+    `entity Books as projection on db.Books;` declares no elements of its own
+    and exposes every element of `db.Books` — including its associations. An
+    analysis that read only the projection's own body would conclude that CAP
+    services expose nothing navigable at all.
+
+    The owner comes back with them because the elements' file and line belong to
+    it, not to the projection. Quoting a line number from schema.cds against the
+    name of catalog-service.cds sends a reader to the wrong file, and a wrong
+    location is worse than none — they trust it and lose the trail.
+    """
+    seen, current = set(), name
+    while current and current not in seen:
+        seen.add(current)
+        info = model.entities.get(current)
+        if not info:
+            return None, []
+        if info["elements"]:
+            return current, info["elements"]
+        current = info.get("source")
+    return None, []
+
+
+def _elements_of(model: CdsModel, name: str) -> List[Dict[str, Any]]:
+    return _elements_with_owner(model, name)[1]
+
+
+def _excluded_along(model: CdsModel, name: str) -> Set[str]:
+    """Element names removed by `excluding` anywhere down the projection chain."""
+    out, seen, current = set(), set(), name
+    while current and current not in seen:
+        seen.add(current)
+        info = model.entities.get(current)
+        if not info:
+            break
+        out |= info.get("excluding") or set()
+        current = info.get("source")
+    return out
+
+
+def _redirect(model: CdsModel, service: str, target: str) -> Optional[str]:
+    """The service entity a navigation lands on, honouring auto-redirection.
+
+    SAP: "When exposing related entities, associations are automatically
+    redirected. This ensures that clients can navigate between projected
+    entities as expected" — `AdminService.Authors.books` refers to
+    `AdminService.Books`, not to `my.Books`.
+
+    Skipping this is not a detail, it is the difference between a useful check
+    and a harmful one. CAP's documented remedy for the very defect this module
+    reports is to expose a reduced projection — `entity Employees as projection
+    on db.Employees excluding { contract }` — and it works ONLY because
+    navigation redirects to that projection. A walk that ignored redirection
+    would follow the unreduced database entity, still find the restricted child,
+    and report a project that had applied SAP's own fix correctly. Telling a
+    developer their correct fix did not work is worse than saying nothing.
+
+    Ambiguity returns None. Two projections on the same entity in one service is
+    a compile error unless `@cds.redirection.target` picks one — "Auto-redirection
+    fails if a target can't be resolved unambiguously" — so there is no real
+    model behind that case to report on.
+    """
+    candidates = []
+    for name, info in model.entities.items():
+        if info.get("service") != service:
+            continue
+        chain, seen, current = [], set(), name
+        while current and current not in seen:
+            seen.add(current)
+            chain.append(current)
+            current = (model.entities.get(current) or {}).get("source")
+        if target in chain[1:]:
+            annotations = model.entity_annotations(name)
+            if re.search(r"@cds\.redirection\.target\s*:\s*false", annotations,
+                         re.IGNORECASE):
+                continue
+            preferred = bool(re.search(
+                r"@cds\.redirection\.target(?!\s*:\s*false)", annotations,
+                re.IGNORECASE))
+            candidates.append((0 if preferred else 1, name))
+    if not candidates:
+        return None
+    candidates.sort()
+    if len(candidates) > 1 and candidates[0][0] == candidates[1][0]:
+        model.unresolved.append(
+            "navigation to %s inside service %s has %d equally-ranked "
+            "redirection targets, so the hop was not followed"
+            % (target, service, len(candidates)))
+        return None
+    return candidates[0][1]
+
+
+def navigation_reach(model: CdsModel, root: str) -> List[Dict[str, Any]]:
+    """Every entity reachable from a service entity by association or composition.
+
+    This is the `$expand` surface: what an OData client can ask for in one
+    request having satisfied the authorization on `root` alone. SAP's own
+    example is two hops — `/Teams?$expand=members($expand=contract)` — and the
+    walk follows the same edges the runtime would, redirection included.
+
+    Where a hop redirects to a projection inside the same service, the walk
+    continues from the projection, so an `excluding` on it removes everything
+    downstream of what it excluded. Where nothing in the service projects the
+    target, the walk continues on the database entity, because that is what CAP
+    auto-exposes and what the client reaches.
+
+    Cycle-safe on the node, so `Teams -> members -> team` terminates.
+    Depth-bounded, and anything cut at the bound is recorded on the model so the
+    coverage manifest can say the reach was reported short rather than complete.
+    """
+    service = (model.entities.get(root) or {}).get("service")
+    out, seen = [], {root}
+    queue = [(root, [])]
+    while queue:
+        current, path = queue.pop(0)
+        if len(path) >= _MAX_NAV_DEPTH:
+            _note(model.truncated_paths,
+                  "%s -> %s (stopped at depth %d)"
+                  % (root, " -> ".join(step["via"] for step in path),
+                     _MAX_NAV_DEPTH))
+            continue
+        excluded = _excluded_along(model, current)
+        for element in _elements_of(model, current):
+            if not element.get("kind") or element["name"] in excluded:
+                continue
+            target = _resolve_entity(model, element["target"])
+            if target is None:
+                _note(model.unresolved,
+                      "navigation %s.%s -> %s could not be resolved to a "
+                      "declared entity, so its restrictions were not examined"
+                      % (current, element["name"], element.get("target_written")))
+                continue
+            landed = _redirect(model, service, target) or target
+            step = {"via": element["name"], "kind": element["kind"],
+                    "written": element.get("target_written"),
+                    "resolved": landed, "redirected": landed != target,
+                    "from": current}
+            out.append({"entity": landed, "path": path + [step]})
+            if landed not in seen:
+                seen.add(landed)
+                queue.append((landed, path + [step]))
+    return out
+
+
+def _note(bucket: List[str], message: str) -> None:
+    """Record a note once. `navigation_reach` runs per exposed entity and the
+    same unreadable target is reached from several of them; a coverage manifest
+    that listed it eight times would read as eight gaps."""
+    if message not in bucket:
+        bucket.append(message)
 
 
 def _collect_roles(text: str, label: str, model: CdsModel) -> None:
@@ -476,6 +1002,49 @@ def _literal_values(text: str, start: int) -> List[str]:
         span = text[i:stop]
     return [(m.group(1) if m.group(1) is not None else m.group(2))
             for m in _QUOTED.finditer(span)]
+
+
+def detect_runtime(root: Path) -> str:
+    """`"java"`, `"node"`, `"both"` or `"unknown"` for a CAP project.
+
+    This is not trivia. CAP's two runtimes enforce different amounts of the
+    model, and the difference falls exactly across the finding below:
+
+      * CAP Node — "Currently, the security annotations are only evaluated on
+        the target entity of the request. Restrictions on associated entities
+        touched by the operation are not regarded." Associations AND
+        compositions are unchecked.
+      * CAP Java 4.0+ — deep authorization is on by default and DOES check
+        associated entities, but compositions are still exempt: "Restrictions on
+        associated composition entities touched by the request are not regarded
+        by the runtime", under a warning box that adds "If you model dedicated
+        restriction rules on child entity level, you need to add custom
+        authorization handlers accordingly."
+
+    So a composition finding holds whatever the runtime is, and an association
+    finding holds for Node and for Java below 4.0. Reporting both at the same
+    confidence on a Java project would be wrong; staying silent on both because
+    the runtime is unknown would be worse. The finding states which it found.
+    """
+    java = any((root / name).is_file() for name in ("pom.xml", "srv/pom.xml"))
+    node = False
+    package = root / "package.json"
+    if package.is_file():
+        try:
+            raw = json.loads(package.read_text(encoding="utf-8", errors="replace"))
+        except (OSError, ValueError):
+            raw = {}
+        for section in ("dependencies", "devDependencies"):
+            if any(str(k).startswith("@sap/cds")
+                   for k in (raw.get(section) or {})):
+                node = True
+    if java and node:
+        return "both"
+    if java:
+        return "java"
+    if node:
+        return "node"
+    return "unknown"
 
 
 def _walk(root: Path, suffixes: Tuple[str, ...]):
@@ -590,6 +1159,8 @@ class CapXsuaaAuditor(BaseAuditor):
 
         self.check_model_access_control(model)
         self.check_open_privileges(model)
+        self.check_expand_reach(model, detect_runtime(path))
+        self.check_property_exposure(model)
         self.check_model_descriptor_agreement(model, descriptors)
         self.check_who_holds_the_scopes(descriptors)
         self.check_undeliverable_role_templates(descriptors)
@@ -1430,6 +2001,240 @@ class CapXsuaaAuditor(BaseAuditor):
             scope="aggregate",
         )
 
+    # ── CAPX-CDS-004: $expand reaches past the authorization check ──────────
+
+    def check_expand_reach(self, model: CdsModel, runtime: str):
+        """Restricted entities reachable by navigation from a less-restricted one.
+
+        This is the defect CAP documents against itself, and the reason it is
+        worth a check of its own is that the model LOOKS correct: the sensitive
+        entity carries a restriction, the developer wrote it deliberately, and
+        the runtime does not apply it.
+
+        SAP: "Currently, the security annotations are only evaluated on the
+        target entity of the request. Restrictions on associated entities
+        touched by the operation are not regarded... Restrictions of
+        (recursively) expanded or inlined entities of a READ request aren't
+        checked." Their own worked example ends: "only the target entity
+        BrowseEmployeesService.Teams has to pass the authorization check in the
+        generic handler, and not the associated entities."
+
+        The comparison is deliberately timid. A navigation is reported only when
+        the target demands at least one application role and the path root
+        demands NONE of them — disjoint sets, not "weaker" ones. Roles are not
+        ordered and pretending otherwise would manufacture findings out of
+        naming; where the two overlap at all, the caller may well hold what the
+        target asks for and this check says nothing.
+        """
+        service_entities = [name for name, info in sorted(model.entities.items())
+                            if info.get("service")]
+        if not service_entities:
+            return
+
+        items, objects, kinds = [], [], set()
+        for name in service_entities:
+            info = model.entities[name]
+            service = info["service"]
+            root_roles = (effective_roles(model, name)
+                          or declared_roles(model.annotations_for(service)))
+
+            for reached in navigation_reach(model, name):
+                target_roles = effective_roles(model, reached["entity"])
+                if not target_roles or (target_roles & root_roles):
+                    continue
+                steps = reached["path"]
+                kinds |= {step["kind"] for step in steps}
+                items.append(
+                    "%s (requires %s) -> %s -> %s (requires %s) [%s]"
+                    % (name, ", ".join(sorted(root_roles)) or "no role",
+                       "?$expand=" + "($expand=".join(s["via"] for s in steps)
+                       + ")" * (len(steps) - 1),
+                       reached["entity"], ", ".join(sorted(target_roles)),
+                       "/".join(sorted({s["kind"] for s in steps}))))
+                self._add(objects, "cap_service_entity", name,
+                          "reaches %s" % reached["entity"])
+
+        if not items:
+            return
+
+        composition = "composition" in kinds
+        association = "association" in kinds
+        runtime_note = {
+            "java": ("This project builds on CAP Java (a pom.xml is present). "
+                     "Since CAP Java 4.0 deep authorization is on by default and "
+                     "DOES check associated entities, so association hops here "
+                     "are enforced unless "
+                     "`cds.security.authorization.deep.enabled` was set to "
+                     "false. Composition hops are not enforced on any version: "
+                     "SAP's warning is explicit — \"Restrictions on compositions "
+                     "are not checked by the runtime. If you model dedicated "
+                     "restriction rules on child entity level, you need to add "
+                     "custom authorization handlers accordingly.\""),
+            "node": ("This project builds on CAP Node (package.json depends on "
+                     "@sap/cds). Neither association nor composition hops are "
+                     "checked: the Limitations section applies in full."),
+            "both": ("Both a pom.xml and an @sap/cds dependency were found, so "
+                     "which runtime serves these entities could not be settled "
+                     "from the sources. Composition hops are unenforced either "
+                     "way; association hops are unenforced on Node and on Java "
+                     "below 4.0."),
+            "unknown": ("Neither a pom.xml nor an @sap/cds dependency was found, "
+                        "so the runtime could not be determined from the "
+                        "sources. Composition hops are unenforced on both "
+                        "runtimes; association hops are unenforced on Node and "
+                        "on Java below 4.0."),
+        }[runtime]
+
+        self.finding(
+            check_id="CAPX-CDS-004",
+            title="Restricted entity reachable by $expand from a service that does "
+                  "not require its role",
+            severity=self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=(
+                "%d navigation path(s) reach an entity carrying its own "
+                "`@requires`/`@restrict` from a service entity whose caller was "
+                "never required to hold any of those roles. CAP evaluates "
+                "authorization on the request target only: \"Currently, the "
+                "security annotations are only evaluated on the target entity "
+                "of the request. Restrictions on associated entities touched by "
+                "the operation are not regarded\", with the consequence stated "
+                "outright — \"Restrictions of (recursively) expanded or inlined "
+                "entities of a READ request aren't checked.\" So a single "
+                "`$expand` returns the restricted entity's rows to a caller who "
+                "proved only the root's authorization. SAP's own worked example "
+                "of this is a payroll one, and it closes: \"only the target "
+                "entity BrowseEmployeesService.Teams has to pass the "
+                "authorization check in the generic handler, and not the "
+                "associated entities.\" %s The paths are listed with the "
+                "`$expand` that walks them. Each was reported only because the "
+                "role sets are disjoint — the target asks for a role the root "
+                "never made the caller prove."
+                % (len(items), runtime_note)),
+            affected_items=items,
+            remediation=(
+                "1. Take CAP's own remedy first: remove the navigation from the "
+                "projection that should not carry it — `entity X as projection "
+                "on db.X excluding { contract }` — so the association is not "
+                "reachable from that service at all. SAP: \"Now, an Employee "
+                "user cannot expand the contracts as the composition is not "
+                "reachable anymore from the service.\"\n"
+                "2. Where the navigation must stay, add a custom authorization "
+                "handler on the child entity. The generic handler will not run "
+                "for it, so the restriction on the child is documentation until "
+                "code enforces it.\n"
+                "3. Split the service rather than the entity where two audiences "
+                "need different reach: one service exposing the full graph to "
+                "the privileged role, one exposing the reduced projection.\n"
+                "4. On CAP Java, confirm "
+                "`cds.security.authorization.deep.enabled` has not been set to "
+                "false, and note it still does not cover compositions.\n"
+                "5. Test the actual request, not the model: call the root with a "
+                "token holding only the root's role, add the `$expand` shown "
+                "above, and confirm the response is rejected rather than "
+                "filled.\n"
+                "6. Re-run the scan."),
+            references=[
+                "SAP CAP — Authorization: Limitations (annotations evaluated on "
+                "the target entity only)",
+                "SAP CAP — Authorization: Deep Authorizations, Compositions",
+                "SAP CAP — Authorization: Control Exposure of Associations and "
+                "Compositions",
+            ],
+            affected_objects=objects,
+            details={"paths": len(items), "runtime": runtime,
+                     "composition_hops": composition,
+                     "association_hops": association,
+                     "cwe": "CWE-863", "parser": "lexical"},
+            scope="aggregate",
+        )
+
+    # ── CAPX-CDS-005: no property-level authorization exists to reach for ───
+
+    def check_property_exposure(self, model: CdsModel):
+        """Model-marked personal data exposed by a projection that takes it all.
+
+        CAP has no property-level authorization to offer here, and that is the
+        finding rather than a caveat on it. The guide supports `@readonly` on a
+        property "for the sake of input validation" and nothing else — no
+        `@requires`, no `@restrict` at element level. So the only control over
+        who sees a column is which projection carries it, and a projection
+        written `as projection on db.X` carries every column including the ones
+        the model itself marks as personal or sensitive.
+
+        Only the model's own `@PersonalData.*` annotations count. Inferring
+        sensitivity from element names would be a guess, and a guess in a report
+        is worse than a gap in one.
+        """
+        items, objects = [], []
+        for name in sorted(model.entities):
+            info = model.entities[name]
+            if not info.get("service"):
+                continue
+            excluded = _excluded_along(model, name)
+            owner, elements = _elements_with_owner(model, name)
+            owner_file = (model.entities.get(owner) or info)["file"]
+            for element in elements:
+                marked = [a for a in _SENSITIVE_ELEMENT_ANNOTATIONS
+                          if a.lower() in (element.get("annotations") or "").lower()]
+                if not marked or element["name"] in excluded:
+                    continue
+                items.append(
+                    "%s.%s — %s, declared on %s (%s:%d) and carried into the "
+                    "service by `as projection on %s` with no `excluding`"
+                    % (name, element["name"], ", ".join(marked),
+                       owner or name, owner_file,
+                       element.get("line", info["line"]),
+                       info.get("source_written") or info.get("source") or name))
+                self._add(objects, "cap_service_entity", name,
+                          "element %s" % element["name"])
+
+        if not items:
+            return
+        self.finding(
+            check_id="CAPX-CDS-005",
+            title="Personal or sensitive element exposed by a projection that "
+                  "excludes nothing",
+            severity=self.SEVERITY_MEDIUM,
+            category=self.CATEGORY,
+            description=(
+                "%d element(s) that the model itself annotates as personal or "
+                "sensitive are exposed by a service projection that removes "
+                "nothing. This matters because CAP has no property-level "
+                "authorization to fall back on: the guide offers `@readonly` on "
+                "a property \"for the sake of input validation\" and supports "
+                "neither `@requires` nor `@restrict` at element level. Whoever "
+                "may read the entity reads every column of it, so the projection "
+                "IS the access control for these fields. The annotations quoted "
+                "here are the project's own — this check does not infer "
+                "sensitivity from element names, because a name is not evidence."
+                % len(items)),
+            affected_items=items,
+            remediation=(
+                "1. Decide, per element, whether every caller who may read this "
+                "entity should read this column. Where the answer is no, the "
+                "annotation cannot express that and the projection must: "
+                "`as projection on db.X excluding { salary }`.\n"
+                "2. Where two audiences need different columns, expose two "
+                "service entities over the same database entity rather than one "
+                "with a comment.\n"
+                "3. Keep `@PersonalData` annotations current — they drive the "
+                "audit-log and data-privacy behaviour as well as this check, and "
+                "an unmarked personal column is invisible to all three.\n"
+                "4. Confirm the exposed set against the OData $metadata document "
+                "the service actually publishes, which is what a client reads.\n"
+                "5. Re-run the scan."),
+            references=[
+                "SAP CAP — Authorization: restrictions are not supported at "
+                "element level (@readonly only)",
+                "SAP CAP — Data Privacy: @PersonalData annotations",
+            ],
+            affected_objects=objects,
+            details={"elements": len(items), "basis": "model_annotation",
+                     "cwe": "CWE-359", "parser": "lexical"},
+            scope="aggregate",
+        )
+
     # ── CAPX-CDS-003: the model and the descriptor disagree ─────────────────
 
     def check_model_descriptor_agreement(self, model: CdsModel,
@@ -1761,6 +2566,12 @@ class CapXsuaaAuditor(BaseAuditor):
         """
         gaps = list(getattr(self, "_unreadable_descriptors", []))
         gaps.extend(model.unresolved)
+        # A navigation walk cut at the depth bound reported a SHORTER reach than
+        # the model has, so CAPX-CDS-004's silence about anything past that point
+        # is ignorance and not a clean result. Saying so is the whole contract of
+        # this manifest.
+        gaps.extend("navigation walk truncated: %s" % path
+                    for path in model.truncated_paths)
 
         if descriptors and not model.files:
             gaps.append("no .cds file was found, so no service, role or "

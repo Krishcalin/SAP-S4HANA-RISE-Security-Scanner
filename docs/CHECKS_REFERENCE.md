@@ -6,11 +6,11 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**407** check ids are written as literals in `modules/`, across **33** modules. A further **267** are built at runtime from shipped rule tables, giving **674** in total.
+**409** check ids are written as literals in `modules/`, across **33** modules. A further **267** are built at runtime from shipped rule tables, giving **676** in total.
 
 ## What this file does not claim
 
-**42 of the 407 titles and 18 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**42 of the 409 titles and 18 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -153,7 +153,7 @@ Category: BTP Cloud Attack Surface
 | `BTP-TOK-002` | LOW | OAuth token validity left at the SAP default (12 hours / 7 days) |
 | `BTP-TOK-003` | LOW | OAuth token validity set below the 30-minute floor SAP states |
 
-### `cap_xsuaa` — 13 checks
+### `cap_xsuaa` — 15 checks
 
 | Check | Severity | Title |
 |---|---|---|
@@ -162,6 +162,8 @@ Category: BTP Cloud Attack Surface
 | `CAPX-CDS-001` | HIGH | CAP service exposed with no access control |
 | `CAPX-CDS-002` | HIGH | @restrict privilege grants to every user (no `to` given) |
 | `CAPX-CDS-003` | MEDIUM | CDS model enforces a role no security descriptor grants |
+| `CAPX-CDS-004` | HIGH | Restricted entity reachable by $expand from a service that does not require its role |
+| `CAPX-CDS-005` | MEDIUM | Personal or sensitive element exposed by a projection that excludes nothing |
 | `CAPX-CRED-001` | MEDIUM | Application requests an instance secret, which cannot be rotated |
 | `CAPX-GRAPH-001` | HIGH | Broken reference in the XSUAA authorization chain |
 | `CAPX-GRAPH-002` | HIGH | Application scopes are granted to every federated user by birthright |

@@ -110,6 +110,11 @@ CWE_TO_OWASP: Dict[str, Tuple[str, Optional[str], str]] = {
     "CWE-200": ("A01", "API3", "V8"),    # information exposure
     "CWE-269": ("A01", "API5", "V4"),    # improper privilege management
     "CWE-284": ("A01", "API5", "V4"),    # improper access control
+    # CWE-359 is the parent CWE-200's personal-data case, and MITRE's own entry
+    # records its membership of "OWASP Top Ten 2021 Category A01:2021 - Broken
+    # Access Control", so this is inherited and not inferred. It takes the same
+    # API and ASVS columns as CWE-200 because it is the narrower form of it.
+    "CWE-359": ("A01", "API3", "V8"),    # personal information exposure
     "CWE-601": ("A01", None,   "V5"),    # open redirect
     "CWE-862": ("A01", "API1", "V4"),    # missing authorization
     "CWE-863": ("A01", "API1", "V4"),    # incorrect authorization

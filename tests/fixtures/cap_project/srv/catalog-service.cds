@@ -30,7 +30,8 @@ service ReplicationService {
 }
 
 service AdminService {
-  entity Books    as projection on db.Books;
-  entity Orders   as projection on db.Orders;
-  entity Payments as projection on db.Payments;
+  entity Books     as projection on db.Books;
+  entity Orders    as projection on db.Orders;
+  entity Payments  as projection on db.Payments;
+  entity Customers as projection on db.Customers;
 }

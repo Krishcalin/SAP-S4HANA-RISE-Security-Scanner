@@ -1233,7 +1233,7 @@ usual CAP layout) are resolved to their target, so keeping restrictions in
 | Input | Checks |
 |---|---|
 | `xs-security.json` | `CAPX-GRAPH-001` (broken chain), `CAPX-SCOPE-001`, `CAPX-AUTH-001`, `CAPX-ATTR-001`, `CAPX-TOK-001`, `CAPX-URI-001`, `CAPX-CRED-001`, `CAPX-TEN-001` |
-| `srv/**/*.cds`, `db/**/*.cds` | `CAPX-CDS-001` (unprotected service), `CAPX-CDS-002` (privilege with no audience) |
+| `srv/**/*.cds`, `db/**/*.cds` | `CAPX-CDS-001` (unprotected service), `CAPX-CDS-002` (privilege with no audience), `CAPX-CDS-004` (restricted entity reachable by `$expand`), `CAPX-CDS-005` (personal element carried into a projection) |
 | both together | `CAPX-CDS-003` (model enforces a role no descriptor grants) |
 | both **plus** `btp_role_collections.json` | `CAPX-GRAPH-002` (who holds the scopes), `CAPX-GRAPH-003` (undeliverable role template) |
 

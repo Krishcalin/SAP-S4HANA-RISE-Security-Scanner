@@ -534,7 +534,7 @@ def test_every_check_in_this_module_fires_on_the_fixture(shop):
         "CAPX-GRAPH-001", "CAPX-GRAPH-002", "CAPX-GRAPH-003", "CAPX-SCOPE-001",
         "CAPX-AUTH-001", "CAPX-ATTR-001", "CAPX-TOK-001", "CAPX-URI-001",
         "CAPX-CRED-001", "CAPX-TEN-001", "CAPX-CDS-001", "CAPX-CDS-002",
-        "CAPX-CDS-003",
+        "CAPX-CDS-003", "CAPX-CDS-004", "CAPX-CDS-005",
     }
     assert expected == set(shop), sorted(expected ^ set(shop))
 
@@ -550,3 +550,190 @@ def test_the_fixture_project_is_read_without_unresolved_constructs(shop):
     """The parser must be able to read a realistic project completely. If it
     cannot, the CDS findings above are being made against a partial view."""
     assert "CAPX-COV-001" not in shop
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  CAPX-CDS-004 — the $expand reach, and CAPX-CDS-005 — the property surface
+# ═════════════════════════════════════════════════════════════════════════════
+
+#: SAP's own worked example from "Control Exposure of Associations and
+#: Compositions", kept in its documented shape because the whole point of these
+#: tests is that this module agrees with the guide about the case the guide
+#: itself calls a security issue.
+SAP_EXAMPLE = """namespace db;
+
+entity Employees : cuid {
+  name     : String(128);
+  team     : Association to Teams;
+  contract : Composition of Contracts;
+}
+
+entity Contracts @(requires:'Manager') : cuid {
+  @PersonalData.IsPotentiallySensitive
+  salary : Decimal;
+}
+
+entity Teams : cuid {
+  members : Composition of many Employees on members.team = $self;
+}
+
+service ManageTeamsService @(requires:'Manager') {
+  entity Teams as projection on db.Teams;
+}
+
+service BrowseEmployeesService @(requires:'Employee') {
+  @readonly entity Teams as projection on db.Teams;
+}
+"""
+
+#: The same model after applying the fix the guide prescribes: "introduce a new
+#: service entity BrowseEmployeesService.Employees that removes the navigation
+#: to Contracts from the projection".
+SAP_EXAMPLE_FIXED = SAP_EXAMPLE.replace(
+    """service BrowseEmployeesService @(requires:'Employee') {
+  @readonly entity Teams as projection on db.Teams;
+}""",
+    """service BrowseEmployeesService @(requires:'Employee') {
+  @readonly entity Employees as projection on db.Employees excluding { contract };
+  @readonly entity Teams as projection on db.Teams;
+}""")
+
+
+def _expand(tmp_path, source):
+    return _run(_project(tmp_path, cds=source)).get("CAPX-CDS-004", [])
+
+
+def test_the_documented_expand_path_is_found(tmp_path):
+    """SAP: "only the target entity BrowseEmployeesService.Teams has to pass the
+    authorization check in the generic handler, and not the associated
+    entities". The finding must name that entity, that path and that target."""
+    findings = _expand(tmp_path, SAP_EXAMPLE)
+    assert len(findings) == 1
+    items = findings[0]["affected_items"]
+    assert len(items) == 1, items
+    assert items[0].startswith("BrowseEmployeesService.Teams")
+    assert "$expand=members($expand=contract)" in items[0]
+    assert "db.Contracts" in items[0] and "Manager" in items[0]
+
+
+def test_the_service_that_already_requires_the_role_is_not_reported(tmp_path):
+    """`ManageTeamsService` requires 'Manager' and so does `Contracts`. The guide
+    describes that navigation as the intended one. A check that reported both
+    services would be reporting the model's shape rather than a defect."""
+    items = _expand(tmp_path, SAP_EXAMPLE)[0]["affected_items"]
+    assert not any(i.startswith("ManageTeamsService") for i in items), items
+
+
+def test_the_fix_the_guide_prescribes_silences_the_finding(tmp_path):
+    """The single most damaging thing this check could do is keep firing after
+    the developer applied SAP's own remedy. That remedy works through
+    auto-redirection — navigation from `Teams.members` lands on the reduced
+    projection — so this is really a test that redirection is modelled."""
+    assert _expand(tmp_path, SAP_EXAMPLE_FIXED) == []
+
+
+def test_an_unrestricted_target_is_not_reported(tmp_path):
+    """The subject is a restriction that will not be enforced. An entity with no
+    restriction has nothing to fail to enforce, and reporting every navigation
+    in the model would bury the ones that matter."""
+    source = SAP_EXAMPLE.replace("entity Contracts @(requires:'Manager') : cuid {",
+                                 "entity Contracts : cuid {")
+    assert _expand(tmp_path, source) == []
+
+
+def test_a_pseudo_role_on_the_target_is_not_a_privilege_gap(tmp_path):
+    """`authenticated-user` is held by everyone who reached the service at all,
+    so demanding it downstream adds nothing the caller has not proved. Treating
+    it as a gap would report every model that annotates defensively."""
+    source = SAP_EXAMPLE.replace("entity Contracts @(requires:'Manager')",
+                                 "entity Contracts @(requires:'authenticated-user')")
+    assert _expand(tmp_path, source) == []
+
+
+def test_the_hop_kind_is_recorded_because_the_runtimes_differ(tmp_path):
+    """Composition hops are unenforced on both runtimes; association hops are
+    enforced by CAP Java 4.0's deep authorization. The finding has to carry
+    which it saw, or a Java reader cannot tell how much of it applies."""
+    details = _expand(tmp_path, SAP_EXAMPLE)[0]["details"]
+    assert details["composition_hops"] is True
+    assert details["runtime"] == "unknown"     # no package.json, no pom.xml
+
+
+def test_the_runtime_is_read_from_the_project_not_assumed(tmp_path):
+    from modules.cap_xsuaa import detect_runtime
+    assert detect_runtime(tmp_path) == "unknown"
+    (tmp_path / "package.json").write_text(
+        json.dumps({"dependencies": {"@sap/cds": "^8"}}), encoding="utf-8")
+    assert detect_runtime(tmp_path) == "node"
+    (tmp_path / "pom.xml").write_text("<project/>", encoding="utf-8")
+    assert detect_runtime(tmp_path) == "both"
+
+
+def test_a_cycle_in_the_model_terminates(tmp_path):
+    """`Teams -> members -> team -> members` is a legal CAP model, and this one
+    contains it. A walk that was cycle-safe on the path rather than on the node
+    would not return at all."""
+    source = SAP_EXAMPLE.replace("entity Teams : cuid {",
+                                 "entity Teams @(requires:'Lead') : cuid {")
+    assert _expand(tmp_path, source)          # it terminated, and it found something
+
+
+def test_a_navigation_to_an_entity_this_scan_never_saw_is_declared_unread():
+    """The target may live in a reuse package the checkout did not include.
+    Silence there would be indistinguishable from a resolved, harmless hop."""
+    from modules.cap_xsuaa import navigation_reach
+    model = _model("namespace db;\n"
+                   "entity Orders : cuid { ref : Association to external.Ledger; }\n"
+                   "service S { entity Orders as projection on db.Orders; }")
+    assert navigation_reach(model, "S.Orders") == []
+    assert any("external.Ledger" in note for note in model.unresolved)
+
+
+def test_property_exposure_rests_on_the_models_own_annotation(tmp_path):
+    """CAP supports no `@requires`/`@restrict` at element level, so the
+    projection is the only control there is. The finding names the element the
+    MODEL marked — never one this check thought looked sensitive."""
+    source = SAP_EXAMPLE + ("\nservice PayrollService @(requires:'Manager') {\n"
+                            "  entity Contracts as projection on db.Contracts;\n}\n")
+    findings = _run(_project(tmp_path, cds=source))["CAPX-CDS-005"]
+    items = findings[0]["affected_items"]
+    assert len(items) == 1, items
+    assert items[0].startswith("PayrollService.Contracts.salary")
+    assert "@PersonalData.IsPotentiallySensitive" in items[0]
+    assert findings[0]["details"]["basis"] == "model_annotation"
+
+
+def test_an_unannotated_column_is_never_guessed_at(tmp_path):
+    """`salary` is about as suggestive a column name as exists. Without the
+    model's annotation it must produce nothing: a name is not evidence."""
+    source = (SAP_EXAMPLE.replace("  @PersonalData.IsPotentiallySensitive\n", "")
+              + "\nservice PayrollService @(requires:'Manager') {\n"
+                "  entity Contracts as projection on db.Contracts;\n}\n")
+    assert "CAPX-CDS-005" not in _run(_project(tmp_path, cds=source))
+
+
+def test_excluding_the_element_settles_it(tmp_path):
+    source = SAP_EXAMPLE + (
+        "\nservice PayrollService @(requires:'Manager') {\n"
+        "  entity Contracts as projection on db.Contracts excluding { salary };\n}\n")
+    assert "CAPX-CDS-005" not in _run(_project(tmp_path, cds=source))
+
+
+def test_the_new_findings_carry_the_standards_mapping(shop):
+    """CWE-863 and CWE-359 both reach A01 through the published lists rather
+    than through this module's opinion."""
+    finding = shop["CAPX-CDS-004"][0]
+    assert finding["details"]["cwe"] == "CWE-863"
+    assert finding["owasp"]["owasp_top10"] == "A01"
+    assert finding["owasp"]["basis"] == "cwe"
+    assert shop["CAPX-CDS-005"][0]["owasp"]["owasp_top10"] == "A01"
+
+
+def test_the_fixture_reports_the_composition_hop_the_reporting_service_opens(shop):
+    """A FinanceAuditor may read orders. `Payments` says only Treasury may read
+    bank details. `Orders?$expand=payment` returns them anyway."""
+    items = shop["CAPX-CDS-004"][0]["affected_items"]
+    hit = [i for i in items if i.startswith("ReportingService.Orders")]
+    assert len(hit) == 1, items
+    assert "FinanceAuditor" in hit[0] and "Treasury" in hit[0]
+    assert "$expand=payment" in hit[0]
