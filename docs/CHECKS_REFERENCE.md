@@ -6,11 +6,11 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**400** check ids are written as literals in `modules/`, across **33** modules. A further **264** are built at runtime from shipped rule tables, giving **664** in total.
+**402** check ids are written as literals in `modules/`, across **33** modules. A further **266** are built at runtime from shipped rule tables, giving **668** in total.
 
 ## What this file does not claim
 
-**42 of the 400 titles and 16 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**42 of the 402 titles and 18 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -39,7 +39,7 @@ A check's **identity** is its id. Severity is a judgement about a particular fin
 | `AUTH-015` | MEDIUM | Global authorization-object disabling is active |
 | `AUTH-016` | HIGH | Unrestricted destination authorization (S_ICF ICF_FIELD=DEST, ICF_VALUE=*) |
 
-### `abap_sast` — 6 checks
+### `abap_sast` — 8 checks
 
 Category: Code & Transport Security
 
@@ -49,6 +49,8 @@ Category: Code & Transport Security
 | `ABAP-COV-002` | *varies* | ABAP source scan read no source files |
 | `ABAP-COV-003` | *varies* | Some source files could not be read and were not scanned |
 | `ABAP-COV-004` | *varies* | Files in languages this scanner does not read were not examined |
+| `ABAP-COV-005` | *varies* | No CDS access-control artefact was found, so view protection was not assessed |
+| `ABAP-COV-006` | *varies* | Views without an access-control role whose exposure could not be established |
 | `ABAP-LEX-001` | INFO | Source the scanner could not lex reliably |
 | `ABAP-NOSEC-001` | INFO | Findings suppressed by #NOSEC markers in source |
 
@@ -625,13 +627,13 @@ Examples: `abap/ext_debugging_possible`, `auth/check/calltransaction`, `auth/no_
 
 One id per judged profile parameter. `PARAM-000`, `PARAM-MISSING` and `PARAM-MISSING-OTHER` are fixed ids and appear in the literal table above.
 
-### `ABAP-<rule id>` — 133
+### `ABAP-<rule id>` — 135
 
-Source: `modules/abap_sast.py — ALL_ABAP_SAST_RULES (118) + ALL_JS_RULES (7) + ALL_BTP_CONFIG_RULES (8)`
+Source: `modules/abap_sast.py — ALL_ABAP_SAST_RULES (118) + ALL_JS_RULES (7) + ALL_BTP_CONFIG_RULES (8) + CROSS_ARTIFACT_RULES (2)`
 
 Examples: `ABAP-AMDP-001`, `ABAP-AMDP-002`, `ABAP-AMDP-003`, `ABAP-AMDP-004`, `ABAP-AMDP-005`, `ABAP-AUTH-001`
 
-Custom-code scan rules. All three tables emit into the same `ABAP-` namespace: ABAP/UI5, JavaScript, and BTP descriptors.
+Custom-code scan rules. All four tables emit into the same `ABAP-` namespace: ABAP/UI5, JavaScript, BTP descriptors, and the cross-artefact checks — which carry no pattern, because what they find is an artefact that does not exist.
 
 ### `ARA-<risk id>` — 36
 

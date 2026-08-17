@@ -206,23 +206,26 @@ def collect_dynamic_families() -> List[Dict[str, Any]]:
     # first table undercounted the catalogue by 15 and the shortfall was invisible,
     # because 118 is a plausible-looking number.
     from modules.abap_sast import (ALL_ABAP_SAST_RULES, ALL_BTP_CONFIG_RULES,
-                                   ALL_JS_RULES)
+                                   ALL_JS_RULES, CROSS_ARTIFACT_RULES)
 
     def _rule_ids(table: Any) -> List[str]:
         return [str(r.get("id")) if isinstance(r, dict) else str(r) for r in table]
 
     abap_ids = (_rule_ids(ALL_ABAP_SAST_RULES) + _rule_ids(ALL_JS_RULES)
-                + _rule_ids(ALL_BTP_CONFIG_RULES))
+                + _rule_ids(ALL_BTP_CONFIG_RULES) + _rule_ids(CROSS_ARTIFACT_RULES))
     families.append({
         "pattern": "ABAP-<rule id>",
         "count": len(abap_ids),
         "source": ("modules/abap_sast.py — ALL_ABAP_SAST_RULES "
                    f"({len(ALL_ABAP_SAST_RULES)}) + ALL_JS_RULES "
                    f"({len(ALL_JS_RULES)}) + ALL_BTP_CONFIG_RULES "
-                   f"({len(ALL_BTP_CONFIG_RULES)})"),
+                   f"({len(ALL_BTP_CONFIG_RULES)}) + CROSS_ARTIFACT_RULES "
+                   f"({len(CROSS_ARTIFACT_RULES)})"),
         "examples": sorted(abap_ids)[:6],
-        "note": "Custom-code scan rules. All three tables emit into the same "
-                "`ABAP-` namespace: ABAP/UI5, JavaScript, and BTP descriptors.",
+        "note": "Custom-code scan rules. All four tables emit into the same "
+                "`ABAP-` namespace: ABAP/UI5, JavaScript, BTP descriptors, and the "
+                "cross-artefact checks — which carry no pattern, because what they "
+                "find is an artefact that does not exist.",
     })
 
     from modules.access_risk_analysis import AccessRiskAnalysisAuditor

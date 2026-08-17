@@ -60,6 +60,12 @@ _NOT_AN_AUDITOR = {
     # for its own purposes cannot quietly appear in a customer's coverage table.
     "crq_engine", "fair_cam", "fair_loss_model", "fair_provenance",
     "nist_csf", "deployment_modes", "platforms",
+    # The cross-artefact CDS/RAP analysis. It holds a rule table and an index and
+    # emits nothing on its own — `abap_sast` owns its findings, and its ids are
+    # counted through that module's entry in `runtime_check_families`. Without
+    # this line it appeared as a 34th auditor in the customer-facing coverage
+    # table, which is the same "a module discovered itself" error recorded above.
+    "cds_authorization_index",
 }
 
 #: RISE scoping, from docs/RISE_SECURITY_MODEL.md section 4. In a RISE tenant the
@@ -700,7 +706,7 @@ def runtime_check_families() -> List[Dict[str, Any]]:
     here would restore precisely the undercount this function exists to end.
     """
     from modules.abap_sast import (ALL_ABAP_SAST_RULES, ALL_BTP_CONFIG_RULES,
-                                   ALL_JS_RULES)
+                                   ALL_JS_RULES, CROSS_ARTIFACT_RULES)
     from modules.access_risk_analysis import AccessRiskAnalysisAuditor
     from modules.atc_import import AtcImportAuditor
     from modules.iam_advanced import AdvancedIamAuditor
@@ -745,13 +751,18 @@ def runtime_check_families() -> List[Dict[str, Any]]:
             "pattern": "ABAP-<rule id>",
             "ids": sorted(set(_ids(ALL_ABAP_SAST_RULES, "id")
                               + _ids(ALL_JS_RULES, "id")
-                              + _ids(ALL_BTP_CONFIG_RULES, "id"))),
+                              + _ids(ALL_BTP_CONFIG_RULES, "id")
+                              + _ids(CROSS_ARTIFACT_RULES, "id"))),
             "source": ("modules/abap_sast.py — ALL_ABAP_SAST_RULES (%d) + "
-                       "ALL_JS_RULES (%d) + ALL_BTP_CONFIG_RULES (%d)"
+                       "ALL_JS_RULES (%d) + ALL_BTP_CONFIG_RULES (%d) + "
+                       "CROSS_ARTIFACT_RULES (%d)"
                        % (len(ALL_ABAP_SAST_RULES), len(ALL_JS_RULES),
-                          len(ALL_BTP_CONFIG_RULES))),
-            "note": "Custom-code scan rules. All three tables emit into the same "
-                    "`ABAP-` namespace: ABAP/UI5, JavaScript, and BTP descriptors.",
+                          len(ALL_BTP_CONFIG_RULES),
+                          len(CROSS_ARTIFACT_RULES))),
+            "note": "Custom-code scan rules. All four tables emit into the same "
+                    "`ABAP-` namespace: ABAP/UI5, JavaScript, BTP descriptors, "
+                    "and the cross-artefact checks, which carry no pattern "
+                    "because the finding is the ABSENCE of an artefact.",
         },
         {
             "module": "access_risk_analysis",

@@ -123,6 +123,8 @@ The findings that carry it today:
 | `ABAP-COV-002` | `abap_sast` | the source tree held no file the scanner recognises |
 | `ABAP-COV-003` | `abap_sast` | files that could not be read were skipped |
 | `ABAP-COV-004` | `abap_sast` | source files were present in a language this scanner has no rules for |
+| `ABAP-COV-005` | `abap_sast` | no CDS access-control artefact in the tree, so view protection was not assessed |
+| `ABAP-COV-006` | `abap_sast` | roleless views whose exposure could not be established |
 | `BASELINE-000` | `baseline_params` | no profile parameter export, so eighteen parameters went unjudged |
 | `PARAM-MISSING-OTHER` | `security_params` | parameters absent from an export nobody declared complete |
 | `BTP-AUD-001` | `btp_cloud_surface` | subaccounts whose audit-log state no supplied export settles |

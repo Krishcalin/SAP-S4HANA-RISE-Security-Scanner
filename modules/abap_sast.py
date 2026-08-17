@@ -71,6 +71,9 @@ from modules.abap_sast_rules import (
     _ABAP_NOISE_WORDS,
 )
 from modules.base_auditor import BaseAuditor
+from modules.cds_authorization_index import (CROSS_ARTIFACT_RULES,
+                                             CdsAuthorizationIndex,
+                                             cross_artifact_findings)
 from modules.reachability import ReachabilityIndex, stamp
 
 #: The vendored corpus plus our own. Kept in separate modules because
@@ -971,6 +974,11 @@ class AbapSourceScanner:
         #: place. Reported beside `metadata_skipped`, because a mis-lexed file that
         #: reports as clean is the one failure this scanner must never have.
         self.lex_degraded = 0
+        #: CDS/DCL/RAP artefacts indexed across the WHOLE tree, so the questions
+        #: no single file can answer — is this exposed view granted on by any
+        #: role, does this behaviour declare authorization anywhere — can be
+        #: asked once the walk is finished. See modules/cds_authorization_index.py.
+        self.cds_index = CdsAuthorizationIndex()
 
     def _pattern(self, rule: Dict[str, Any]):
         rid = rule["id"]
@@ -1045,7 +1053,14 @@ class AbapSourceScanner:
                 continue
             self.files_scanned += 1
             self.files_by_language[lang] = self.files_by_language.get(lang, 0) + 1
+            if lang == "cds":
+                # Indexed as well as matched. The per-file rules answer "what does
+                # this artefact say"; the index answers "what does this tree not
+                # contain", which is where missing access control lives.
+                self.cds_index.add_file(text, str(path), path.name.lower())
             findings.extend(self.scan_text(text, path, rules))
+
+        findings.extend(cross_artifact_findings(self.cds_index))
         return findings
 
     def scan_text(self, source: str, path: Path,
@@ -1813,6 +1828,85 @@ class AbapSastAuditor(BaseAuditor):
                          "unscanned_total": total,
                          "languages_read": sorted(scanner.files_by_language),
                          "reason": "language_not_covered"},
+            )
+
+        index = scanner.cds_index
+        if index.dcl_is_missing_entirely():
+            # THE FALSE POSITIVE THAT WOULD HAVE DISCREDITED THE CHECK.
+            # ABAP-CDS-003 reports an exposed view that no DCL role grants on. In
+            # an export that simply did not include the access-control artefacts —
+            # an abapGit checkout of one package, an interrupted pull — that is
+            # every view in the tree, at HIGH. The finding would be technically
+            # derived and completely wrong, and a reviewer who checked two of them
+            # would stop trusting the whole report. So the absence of ALL access
+            # control is treated as a missing input rather than a universal defect.
+            self._coverage_finding(
+                check_id="ABAP-COV-005",
+                title="No CDS access-control artefact was found, so view protection was not assessed",
+                description=(
+                    f"{len(index.exposed)} exposed CDS view(s) were found and NOT "
+                    "one access-control artefact (.asdcls / DCL) exists anywhere "
+                    "in this tree. Two very different situations produce that: "
+                    "either no view in this package is protected at all, or the "
+                    "export did not include the access controls. They are "
+                    "indistinguishable from here, and the second is far more "
+                    "common — so ABAP-CDS-003 did not run rather than report "
+                    "every view as unprotected on evidence it does not have. "
+                    "Read this as the check not having been performed."
+                ),
+                affected_items=[
+                    "%d exposed view(s), 0 DCL artefacts" % len(index.exposed),
+                    "views seen: %s" % ", ".join(sorted(index.exposed)[:20]),
+                ],
+                remediation=(
+                    "1. Confirm the export includes CDS access controls — in "
+                    "abapGit they are the .asdcls files, and a package filter or "
+                    "an interrupted pull is the usual reason they are absent.\n"
+                    "2. Re-export including DCL and re-run.\n"
+                    "3. If the package genuinely contains no access control, that "
+                    "is itself the finding — and it will be reported per view "
+                    "once the scan can tell the difference."
+                ),
+                details={"exposed_views": len(index.exposed),
+                         "dcl_files": 0,
+                         "reason": "no_access_control_artefacts"},
+            )
+        elif index.unexposed_roleless_views():
+            # Not a defect and not a pass: SAP's guidance is that a basic view
+            # consumed only through another view is SUPPOSED to have no role. The
+            # number is published so a reader knows how many views were set aside
+            # on that reasoning rather than examined.
+            skipped = index.unexposed_roleless_views()
+            self._coverage_finding(
+                check_id="ABAP-COV-006",
+                title="Views without an access-control role whose exposure could not be established",
+                description=(
+                    f"{skipped} CDS view(s) have no DCL role and no evidence in "
+                    "this tree of being exposed — not published as OData, not "
+                    "named by a service definition, not given a RAP behaviour. "
+                    "They are NOT reported as unprotected, because SAP's own "
+                    "guidance is that a view consumed only as a data source "
+                    "inside another view is supposed to have no role of its own: "
+                    "implicit access control applies to direct access, and "
+                    "wrapping an unprotected entity in a view that does carry a "
+                    "role is the documented pattern. But exposure was judged from "
+                    "what this tree contains, and a consumer outside it would not "
+                    "be visible. This is the population that judgement set aside."
+                ),
+                affected_items=["%d view(s) with no role and no exposure evidence"
+                                % skipped],
+                remediation=(
+                    "1. Confirm these views are consumed only through other CDS "
+                    "entities, and not read directly by ABAP, an OData service or "
+                    "an SADL query defined outside this export.\n"
+                    "2. Widen the export to include the consuming service "
+                    "definitions and behaviour definitions if it does not already, "
+                    "so exposure can be established rather than assumed.\n"
+                    "3. Any of these that IS reached directly needs a role, and "
+                    "the scan cannot tell you which from this tree alone."
+                ),
+                details={"roleless_unexposed_views": skipped,
+                         "reason": "exposure_not_established"},
             )
 
         if scanner.unreadable:

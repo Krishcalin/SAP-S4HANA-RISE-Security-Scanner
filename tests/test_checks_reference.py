@@ -61,17 +61,37 @@ def test_every_runtime_family_resolves_to_a_non_empty_table():
         assert family["source"], family["pattern"]
 
 
-def test_the_abap_family_covers_all_three_rule_tables():
-    """ABAP/UI5, JavaScript and BTP descriptors all emit into the `ABAP-`
-    namespace. Reading only ALL_ABAP_SAST_RULES undercounted by 15, and 118 is a
-    plausible enough number that nobody would have noticed."""
+def test_the_abap_family_covers_every_rule_table():
+    """ABAP/UI5, JavaScript, BTP descriptors and the cross-artefact checks all
+    emit into the `ABAP-` namespace. Reading only ALL_ABAP_SAST_RULES
+    undercounted by 15, and 118 is a plausible enough number that nobody would
+    have noticed.
+
+    CROSS_ARTIFACT_RULES was the fourth, and it arrived by a different route —
+    its ids live in `modules/cds_authorization_index.py`, which has no
+    `BaseAuditor` and is therefore skipped by `module_check_ids`. An id there is
+    invisible to every denominator until the day it first fails, which is the
+    defect the runtime-family machinery exists to end. The assertion is written
+    against the tables rather than a number so a fifth table cannot be added
+    without this failing."""
     from modules.abap_sast import (ALL_ABAP_SAST_RULES, ALL_BTP_CONFIG_RULES,
-                                   ALL_JS_RULES)
+                                   ALL_JS_RULES, CROSS_ARTIFACT_RULES)
     expected = (len(ALL_ABAP_SAST_RULES) + len(ALL_JS_RULES)
-                + len(ALL_BTP_CONFIG_RULES))
+                + len(ALL_BTP_CONFIG_RULES) + len(CROSS_ARTIFACT_RULES))
     abap = [f for f in gen.collect_dynamic_families()
             if f["pattern"].startswith("ABAP-")][0]
     assert abap["count"] == expected
+
+
+def test_a_cross_artefact_rule_reaches_the_denominator():
+    """The specific regression: these two ids are not literals in an auditor and
+    not patterns in a scanned table, so every automatic route to the denominator
+    misses them unless the family registration names their table."""
+    from modules.coverage import all_check_ids, check_catalogue
+    ids = {c for v in all_check_ids().values() for c in v}
+    for check in ("ABAP-CDS-003", "ABAP-RAP-005"):
+        assert check in ids, "%s is invisible to the denominator" % check
+        assert check_catalogue().get(check), "%s carries no category" % check
 
 
 def test_every_module_that_emits_a_check_appears():
