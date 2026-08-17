@@ -34,9 +34,18 @@ identifiers, SAP application-component keys, CVSS base scores, priority tiers,
 patch-day identifiers, note titles, and the configuration stores SAP's own policy
 reads to answer each note — parsed by
 [`tools/build_sap_notes_catalogue.py`](tools/build_sap_notes_catalogue.py) into
-`data/sap_notes_catalogue.json`. 1,728 notes across 154 patch days from 2016-01
+`data/sap_notes_catalogue.json`. 1,732 notes across 154 patch days from 2016-01
 onwards. Also taken is SAP's own declaration, in each policy header, of which notes
 that policy deliberately does **not** check.
+
+**And the affected-version facts.** SAP's `<compliant>` and `<noncompliant>` clauses
+encode which component release at which support-package level carries each fix —
+that note 3772411 is fixed in SAP_BASIS 750 at SP 0037. Those facts are extracted
+(6,637 component/release/SP triples across 837 notes); the SQL expressing them is
+**not** executed, not reproduced, and no Focused Run parity is claimed. The
+comparison against the customer's own component export is this project's own code.
+`between`-range predicates are deliberately left uninterpreted and counted in the
+file's metadata rather than guessed at.
 
 The two generators are separate because their consumers are: the Baseline catalogue
 feeds the server's coverage page, and the notes catalogue feeds

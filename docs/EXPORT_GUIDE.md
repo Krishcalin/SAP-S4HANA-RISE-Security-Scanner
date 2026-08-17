@@ -1796,6 +1796,37 @@ One row is enough. The path matters more than it looks: a system running a
 CommonCryptoLib from outside the kernel directory is patched on a schedule nobody
 is tracking.
 
+### Kernel release and patch level (`sap_kernel.csv`)
+**Source:** the kernel's own version report — `disp+work -v` at the OS, or
+*System* → *Status* → *Other kernel information* in the SAP GUI. Two rows are
+enough. *The exact invocation differs by kernel release and is not verified for
+this guide; use the one your Basis team documents.*
+
+Also accepted: `kernel_version.csv`, `disp_work.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `NAME` · `PARAMETER` | `KERN_REL` and `KERN_PATCHLEVEL` |
+| `VALUE` | the release (`753_REL`, `793_REL`) and the patch level (`1518`) |
+
+```
+NAME,VALUE
+KERN_REL,793_REL
+KERN_PATCHLEVEL,0410
+```
+
+**The smallest file in this guide, and one of the most consequential.** SAP's own
+note policies consult the kernel in 602 check items, and 62 security notes cannot
+be answered from any other export — including kernel notes at CVSS 9.9. This
+source was once measured as unlocking a single note and left unbuilt on that
+basis; the measurement was taken against a 43-note catalogue rather than against
+SAP's published record, and the denominator was wrong.
+
+Take it from the **same instance** the rest of the export came from. A landscape
+running several application servers can carry different kernel patch levels on
+each, and a finding attributed to the wrong host sends somebody to patch a
+machine that was already current.
+
 ### SNC parameters (`snc_config.csv`)
 **Source:** `RZ11` — the `snc/*` profile parameters. If you are already supplying
 `security_params.csv` you can skip this file; the check falls back to it.

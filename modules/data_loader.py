@@ -185,6 +185,11 @@ class DataLoader:
         "client_settings":         ["client_settings.csv", "scc4.csv"],
         "change_documents":        ["change_documents.csv", "cdhdr.csv"],
         "change_document_items":   ["change_document_items.csv", "cdpos.csv"],
+        # Kernel release and patch level. Small file, large consequence: SAP's
+        # own note policies use SAP_KERNEL in 602 check items, and without it 62
+        # notes cannot be answered at all.
+        "sap_kernel":              ["sap_kernel.csv", "kernel_version.csv",
+                                    "disp_work.csv"],
         # REGUH — what the payment program actually paid, and into which account.
         # The other half of MDC-BANK-001: a bank change is a register entry, a
         # payment into the changed account is an incident.

@@ -6,11 +6,11 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**413** check ids are written as literals in `modules/`, across **33** modules. A further **267** are built at runtime from shipped rule tables, giving **680** in total.
+**414** check ids are written as literals in `modules/`, across **33** modules. A further **267** are built at runtime from shipped rule tables, giving **681** in total.
 
 ## What this file does not claim
 
-**42 of the 413 titles and 18 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**42 of the 414 titles and 19 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -543,7 +543,7 @@ Category: RISE / BTP Security
 | `S4AUTHZ-007` | HIGH | Cloud Foundry privileged platform role over-assigned |
 | `S4AUTHZ-008` | MEDIUM | Birthright role collection auto-granted to all federated users |
 
-### `sap_hotnews` — 14 checks
+### `sap_hotnews` — 15 checks
 
 | Check | Severity | Title |
 |---|---|---|
@@ -560,6 +560,7 @@ Category: RISE / BTP Security
 | `HOTNEWS-010` | INFO | Exposure could not be established for some notes |
 | `HOTNEWS-011` | LOW | Note facts differ between this catalogue and SAP's published record |
 | `HOTNEWS-012` | HIGH | SAP-published HotNews notes absent from the applied-notes export |
+| `HOTNEWS-013` | *varies* — CRITICAL or HIGH | Installed component is below the support package that fixes an unpatched note |
 | `HOTNEWS-COVERAGE` | INFO | SAP note check ran against a curated subset, not the full patch history |
 
 ### `security_params` — 3 checks

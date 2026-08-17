@@ -136,20 +136,28 @@ def test_the_config_store_mapping_points_at_sources_the_loader_accepts(catalogue
 
 
 def test_an_unmapped_store_is_recorded_rather_than_dropped(catalogue):
-    """SAP_KERNEL has no export behind it yet. A note needing only that must
-    still say so — silently reporting it as unanswerable would hide what the
-    missing export costs."""
+    """A store with no export behind it must still be named, or a note blocked
+    only by it looks unanswerable in principle rather than for a reason somebody
+    could fix. SAP_KERNEL used to be the largest of these and now has an export;
+    HDB_VERSION and the UI5/BusinessObjects stores remain."""
     meta = catalogue["_meta"]
-    assert "SAP_KERNEL" in meta["config_store_unmapped"]
+    assert meta["config_store_unmapped"], "nothing is declared unmapped"
+    assert "HDB_VERSION" in meta["config_store_unmapped"]
     assert meta["counts"]["blocked_only_by_an_unmapped_store"] > 0
+    assert "SAP_KERNEL" in meta["config_store_sources"]
 
 
 def test_the_kernel_export_is_worth_far_more_than_the_old_measurement(catalogue):
     """It was measured against the 43-note catalogue as unlocking one note and
-    left unhooked on that basis. The number was right; the denominator was not."""
-    blocked = [n for n, r in catalogue["notes"].items()
-               if "SAP_KERNEL" in r["needs_unmapped_store"]]
-    assert len(blocked) > 20, len(blocked)
+    left unbuilt on that basis. The number was right; the denominator was not.
+    Now that it is mapped, the evidence of its worth is how many notes name it."""
+    from modules.data_loader import DataLoader
+    assert "sap_kernel" in DataLoader.FILE_MAP
+    named = [n for n, r in catalogue["notes"].items()
+             if "SAP_KERNEL" in r["config_stores"]]
+    assert len(named) > 50, len(named)
+    assert all("sap_kernel" in catalogue["notes"][n]["answerable_from"]
+               for n in named)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -204,7 +212,10 @@ def test_it_says_plainly_that_applicability_was_not_determined(shop):
     have, and stop trusting the ones that matter."""
     finding = shop["HOTNEWS-012"]
     assert finding["details"]["applicability_determined"] is False
-    assert "WORKLIST, NOT A VERDICT" in finding["description"]
+    assert "APPLICABILITY COULD NOT SETTLE" in finding["description"]
+    # And it has to say how many it DID settle, or a reader cannot tell whether
+    # a short list means a healthy system or an absent component export.
+    assert finding["details"]["settled_by_component_evidence"] > 0
 
 
 def test_its_scope_is_sap_s_own_tiering_not_ours(shop):
@@ -245,3 +256,110 @@ def test_both_checks_go_quiet_if_the_catalogue_cannot_be_read(monkeypatch):
     fired = _run({"applied_notes": [{"NOTE": "1", "STATUS": "Completely implemented"}]})
     assert "HOTNEWS-011" not in fired and "HOTNEWS-012" not in fired
     assert "HOTNEWS-001" in fired, "the rest of the module stopped working too"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  HOTNEWS-013 — the applicability engine, which is the point of all of it
+# ═════════════════════════════════════════════════════════════════════════════
+
+#: Note 3550708 (CVE-2025-0066) is fixed in SAP_BASIS 755 at SP 10, per SAP's
+#: own policy. A system at SP 4 is below it; a system at SP 12 is not.
+_NOTE = "3550708"
+
+
+def _with_components(rows):
+    return {"system_component": rows,
+            "applied_notes": [{"NOTE": "1", "STATUS": "Completely implemented"}]}
+
+
+def test_a_component_below_the_fix_level_is_a_determination_not_a_worklist(shop):
+    """The whole reason the predicates were read. Every other check reports that
+    a note is absent from an export; this reports that the software is older
+    than the fix, from SAP's published level and the customer's own export."""
+    finding = shop["HOTNEWS-013"]
+    assert finding["details"]["applicability_determined"] is True
+    assert finding["details"]["basis"] == "component_release_and_support_package"
+    assert finding["severity"] == "CRITICAL"
+
+
+def test_the_evidence_names_the_component_the_installed_sp_and_the_required_sp(shop):
+    """A finding a Basis team can act on without opening anything else."""
+    hit = [i for i in shop["HOTNEWS-013"]["affected_items"] if i.startswith(_NOTE)]
+    assert hit, "the sample landscape's SAP_BASIS 755 SP 0004 should be below"
+    assert "SAP_BASIS 755 is at SP 0004" in hit[0]
+    assert "the fix is in SP 0010" in hit[0]
+
+
+def test_a_component_above_the_fix_level_is_not_reported():
+    fired = _run(_with_components([
+        {"COMPONENT": "SAP_BASIS", "RELEASE": "755", "SP_LEVEL": "0012"}]))
+    listed = {i.split(" ", 1)[0] for i in
+              fired.get("HOTNEWS-013", {}).get("affected_items", [])}
+    assert _NOTE not in listed
+
+
+def test_a_release_sap_does_not_mention_is_not_a_verdict_either_way():
+    """SAP's list names the releases it knows. An installed release outside it
+    is unknown, not safe — and unknown belongs in HOTNEWS-012, not here."""
+    fired = _run(_with_components([
+        {"COMPONENT": "SAP_BASIS", "RELEASE": "999", "SP_LEVEL": "0001"}]))
+    listed = {i.split(" ", 1)[0] for i in
+              fired.get("HOTNEWS-013", {}).get("affected_items", [])}
+    assert _NOTE not in listed
+
+
+def test_an_unreadable_support_package_is_dropped_rather_than_read_as_zero():
+    """Defaulting an unparseable cell to 0 would put it below every fix level
+    SAP publishes and turn a broken export into a page of critical findings."""
+    fired = _run(_with_components([
+        {"COMPONENT": "SAP_BASIS", "RELEASE": "755", "SP_LEVEL": "n/a"}]))
+    assert "HOTNEWS-013" not in fired
+
+
+def test_a_note_already_implemented_is_never_reported_below_its_fix_level():
+    """A note whose correction was applied through SNOTE closes the finding even
+    though the component version has not moved. Reporting a patched system as
+    unpatched is the loudest false positive this check could produce."""
+    rows = [{"COMPONENT": "SAP_BASIS", "RELEASE": "755", "SP_LEVEL": "0004"}]
+    before = _run({"system_component": rows,
+                   "applied_notes": [{"NOTE": "1", "STATUS": "Completely implemented"}]})
+    assert _NOTE in {i.split(" ", 1)[0] for i in before["HOTNEWS-013"]["affected_items"]}
+    after = _run({"system_component": rows,
+                  "applied_notes": [{"NOTE": _NOTE, "STATUS": "Completely implemented"}]})
+    assert _NOTE not in {i.split(" ", 1)[0]
+                         for i in after.get("HOTNEWS-013", {}).get("affected_items", [])}
+
+
+def test_with_no_component_export_nothing_is_determined():
+    """The engine needs the customer's half of the evidence. Without it the
+    module falls back to the worklist and must not invent a verdict."""
+    fired = _run({"applied_notes": [{"NOTE": "1", "STATUS": "Completely implemented"}]})
+    assert "HOTNEWS-013" not in fired
+    assert "HOTNEWS-012" in fired
+    assert fired["HOTNEWS-012"]["details"]["settled_by_component_evidence"] == 0
+
+
+def test_the_two_checks_do_not_report_the_same_note(shop):
+    """HOTNEWS-013 is strictly stronger where it applies. Repeating a note in
+    the worklist would make the determination look like a duplicate."""
+    thirteen = {i.split(" ", 1)[0] for i in shop["HOTNEWS-013"]["affected_items"]}
+    twelve = {i.split(" ", 1)[0] for i in shop["HOTNEWS-012"]["affected_items"]}
+    assert not (thirteen & twelve)
+
+
+def test_the_fix_levels_are_sap_s_and_the_arithmetic_is_ours(catalogue):
+    """The line that moved, pinned. What is stored is a component, a release and
+    a support-package number — facts. No SQL, no operator, no expression."""
+    record = catalogue["notes"][_NOTE]
+    assert record["fix_levels"], "the fix levels went missing"
+    for row in record["fix_levels"]:
+        assert set(row) == {"component", "release", "min_sp"}
+        assert isinstance(row["min_sp"], int)
+
+
+def test_uninterpreted_ranges_are_counted_rather_than_silently_skipped(catalogue):
+    """SAP expresses some affected sets as `between SP A and SP B`, which needs
+    reasoning this product does not do. Skipping them is right; hiding how many
+    were skipped is not."""
+    assert catalogue["_meta"]["counts"][
+        "check_items_using_an_uninterpreted_range"] > 0

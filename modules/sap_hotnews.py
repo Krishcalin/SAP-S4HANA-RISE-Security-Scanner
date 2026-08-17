@@ -391,6 +391,7 @@ class SapHotNewsAuditor(BaseAuditor):
         # record is a defect in THIS PRODUCT, and it has to be visible in the
         # same report as the findings it would otherwise silently distort.
         self._report_catalogue_disagreement(catalog)
+        self._report_below_fix_level(present)
         self._report_sap_published_hotnews(catalog, present)
         # Only ABAP-assessable entries count as missing: the absence of an AS
         # Java note from this system's SNOTE export is not evidence about the
@@ -976,6 +977,179 @@ class SapHotNewsAuditor(BaseAuditor):
             scope="aggregate",
         )
 
+    # ── the applicability engine ────────────────────────────────────────────
+
+    def _installed_levels(self) -> Dict[str, Set[Tuple[str, int]]]:
+        """Installed components as {COMPONENT: {(release, sp_as_int)}}.
+
+        A component can legitimately appear at more than one release in an
+        export that spans systems, so the value is a set rather than a single
+        pair. A row whose support package will not parse as a number is dropped
+        rather than defaulted to zero: defaulting would read as SP 0, which is
+        below every fix level SAP publishes, and would turn an unreadable cell
+        into a critical finding.
+        """
+        out: Dict[str, Set[Tuple[str, int]]] = {}
+        for row in (self.data.get("system_component") or []):
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("COMPONENT", row.get("COMPONENT_NAME",
+                       row.get("NAME", "")))).strip().upper()
+            release = str(row.get("RELEASE", row.get("VERSION",
+                          row.get("REL", "")))).strip()
+            raw_sp = str(row.get("SP_LEVEL", row.get("SP",
+                         row.get("SUPPORT_PACKAGE",
+                         row.get("PATCH_LEVEL", ""))))).strip()
+            digits = "".join(c for c in raw_sp if c.isdigit())
+            if not name or not release or not digits:
+                continue
+            out.setdefault(name, set()).add((release, int(digits)))
+        return out
+
+    def _verdict(self, record: Dict[str, Any],
+                 installed: Dict[str, Set[Tuple[str, int]]]):
+        """Is this note's fix missing from an installed component? With evidence.
+
+        Returns (state, evidence) where state is "below", "fixed" or "unknown".
+
+        "unknown" is load-bearing and is returned in two different situations
+        that must not be collapsed into "not affected": the component is
+        installed at a release SAP's list does not mention, or the note carries
+        no extractable fix level at all (SAP expressed it as a `between` range,
+        which this product does not interpret). Neither is evidence that the
+        system is safe, and both are reported as coverage rather than silence.
+        """
+        levels = record.get("fix_levels") or []
+        if not levels:
+            return "unknown", []
+        below, fixed, unmatched = [], [], False
+        for row in levels:
+            pairs = installed.get(row["component"])
+            if not pairs:
+                continue
+            matched = False
+            for release, sp in pairs:
+                if release != row["release"]:
+                    continue
+                matched = True
+                if sp < row["min_sp"]:
+                    below.append("%s %s is at SP %04d; the fix is in SP %04d"
+                                 % (row["component"], release, sp, row["min_sp"]))
+                else:
+                    fixed.append("%s %s at SP %04d" % (row["component"], release, sp))
+            if not matched:
+                unmatched = True
+        if below:
+            return "below", below
+        if fixed:
+            return "fixed", fixed
+        if unmatched:
+            return "unknown", []
+        return "n/a", []
+
+    def _settled_notes(self, present: Set[str]) -> Dict[str, Any]:
+        """Notes this run could decide, cached: {note: (state, evidence)}."""
+        cached = getattr(self, "_settled_cache", None)
+        if cached is not None:
+            return cached
+        installed = self._installed_levels()
+        settled = {}
+        if installed:
+            for note, record in self._sap_catalogue().items():
+                if note in present:
+                    continue
+                state, evidence = self._verdict(record, installed)
+                if state in ("below", "fixed"):
+                    settled[note] = (state, evidence)
+        self._settled_cache = settled
+        return settled
+
+    # ── HOTNEWS-013: the verdict, not the worklist ──────────────────────────
+
+    def _report_below_fix_level(self, present: Set[str]):
+        """Installed components below the support package that carries the fix.
+
+        THIS IS THE CHECK THE WHOLE FRUN IMPORT EXISTS FOR. Everything else in
+        this module reports that a note is absent from an export; this reports
+        that the software on the system is demonstrably older than the fix, from
+        two facts that are both the customer's or SAP's and neither of them ours
+        — SAP publishes that note 3772411 is fixed in SAP_BASIS 750 at SP 37,
+        and `system_component.csv` says which release and support package is
+        installed. The arithmetic between those two is the only thing this
+        product contributes, and it is arithmetic.
+
+        Absence from the SNOTE export is still required. A note whose correction
+        was applied shows in `applied_notes`, and reporting a patched system as
+        unpatched because its component version has not moved would be the
+        loudest possible false positive.
+        """
+        settled = self._settled_notes(present)
+        below = {n: e for n, (s, e) in settled.items() if s == "below"}
+        if not below:
+            return
+        catalogue = self._sap_catalogue()
+        rows = sorted(below.items(),
+                      key=lambda kv: (-(catalogue[kv[0]].get("cvss") or 0), kv[0]))
+        items = []
+        for note, evidence in rows[:60]:
+            record = catalogue[note]
+            items.append(
+                "%s — %s (CVSS %s, %s): %s"
+                % (note, ", ".join(record["cve"]) or "no CVE",
+                   record.get("cvss") or "?",
+                   record.get("component") or "component not stated",
+                   "; ".join(evidence)))
+        critical = [n for n in below
+                    if (catalogue[n].get("cvss") or 0) >= 9.0
+                    or catalogue[n].get("priority") == 1]
+        self.finding(
+            check_id="HOTNEWS-013",
+            title="Installed component is below the support package that fixes an "
+                  "unpatched note",
+            severity=self.SEVERITY_CRITICAL if critical else self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=(
+                "%d SAP Security Note(s) are absent from this system's "
+                "applied-notes export AND the components they affect are "
+                "installed below the support-package level that carries the "
+                "fix. %d of them are HotNews or score 9.0 or above.\n\n"
+                "This is a determination, not a worklist. SAP publishes the "
+                "first support package carrying each fix — for note 3772411, "
+                "SAP_BASIS 750 at SP 0037, 752 at 0019, 753 at 0017 — and your "
+                "own component export states what is installed. Both facts come "
+                "from outside this product; comparing them is arithmetic. Where "
+                "an installed release is not in SAP's list, or SAP expressed the "
+                "affected range in a form this product does not interpret, the "
+                "note is NOT reported here and is counted in HOTNEWS-012 "
+                "instead — silence in this finding is never a statement that a "
+                "note does not apply."
+                % (len(below), len(critical))),
+            affected_items=items,
+            affected_objects=[{"type": "sap_note", "name": n} for n, _ in rows],
+            remediation=(
+                "1. Work these first: the component evidence means each one is "
+                "not a question of whether it applies.\n"
+                "2. Implement the note through SNOTE, or take the support "
+                "package to the level shown — the note is closed by either, and "
+                "the support package closes every other note fixed in it.\n"
+                "3. Where the note cannot be implemented now, check whether SAP "
+                "documents a workaround; HOTNEWS-008 reports the ones that have "
+                "one.\n"
+                "4. Re-run the scan. Both routes clear the finding: the note "
+                "appearing in the SNOTE export, or the component moving above "
+                "the fix level."),
+            references=[
+                "SAP-samples/frun-csa-policies-best-practices (Apache-2.0) — "
+                "the fix levels are SAP's own",
+                "SAP ONE Support Launchpad — Security Notes",
+            ],
+            details={"count": len(below), "critical_or_hotnews": len(critical),
+                     "basis": "component_release_and_support_package",
+                     "applicability_determined": True,
+                     "source": "SAP-samples/frun-csa-policies-best-practices"},
+            scope="aggregate",
+        )
+
     # ── HOTNEWS-012: SAP's HotNews list, beyond the curated forty-three ────
 
     def _report_sap_published_hotnews(self, catalog: List[Dict[str, Any]],
@@ -1005,9 +1179,15 @@ class SapHotNewsAuditor(BaseAuditor):
         if not published:
             return
         curated = {self._norm_note(e.get("note")) for e in catalog}
+        # Anything the component evidence settled belongs to HOTNEWS-013, in
+        # either direction: a note reported there as below the fix level, and a
+        # note whose components are demonstrably above it. Repeating the first
+        # would duplicate a stronger finding; repeating the second would report
+        # a note this run has evidence does not apply.
+        settled = self._settled_notes(present)
         missing = []
         for note, record in sorted(published.items(), key=lambda kv: kv[0]):
-            if note in curated or note in present:
+            if note in curated or note in present or note in settled:
                 continue
             if record.get("priority") != 1 or not record.get("cve"):
                 continue
@@ -1038,16 +1218,19 @@ class SapHotNewsAuditor(BaseAuditor):
                 "system's applied-notes export. They are beyond the %d entries "
                 "in this product's curated catalogue, which HOTNEWS-001 and -003 "
                 "cover separately with their exploitation context.\n\n"
-                "THIS IS A WORKLIST, NOT A VERDICT. Whether a note applies to "
-                "this system depends on which software components are installed "
-                "and at which support-package level, and SAP decides that by "
-                "evaluating SQL against Focused Run's configuration database. "
-                "Those predicates were deliberately not imported — this product "
-                "does not have that database and copying the expressions would "
-                "claim a parity it does not have. So some of the notes below "
-                "will not apply here. What is certain is that SAP published "
-                "them, that they are HotNews, and that nothing in the export "
-                "says they were implemented."
+                "THESE ARE THE ONES APPLICABILITY COULD NOT SETTLE. Where "
+                "SAP publishes the support package that carries a fix and your "
+                "component export names the installed release, this product "
+                "decides the question and reports the answer in HOTNEWS-013. "
+                "The notes below are what is left: SAP expressed the affected "
+                "range in a form this product does not interpret, or the "
+                "installed release is not one SAP's list mentions, or no "
+                "component export was supplied at all. So this remains a "
+                "worklist — some of it will not apply here. What is certain is "
+                "that SAP published these notes at HotNews priority and that "
+                "nothing in the export says they were implemented.\n\n"
+                "Supplying system_component.csv is what moves notes out of this "
+                "finding and into a determination."
                 % (len(missing), len(catalog))),
             affected_items=items,
             affected_objects=objects,
@@ -1070,6 +1253,7 @@ class SapHotNewsAuditor(BaseAuditor):
             details={"count": len(missing), "listed": len(items),
                      "scope": "sap_priority_1_with_cve_and_sap_checkable",
                      "applicability_determined": False,
+                     "settled_by_component_evidence": len(settled),
                      "source": "SAP-samples/frun-csa-policies-best-practices"},
             scope="aggregate",
         )

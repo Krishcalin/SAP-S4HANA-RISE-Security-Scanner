@@ -27,12 +27,31 @@ Taken: note numbers, CVE ids, component keys, CVSS scores, priority tiers,
 patch-day identifiers, titles, and which config stores SAP's own policy reads to
 answer each note.
 
-NOT taken: the SQL predicates. A CSA policy's `<compliant>` clause is SQL that
-runs against Focused Run's own configuration database — a database this product
-does not have and does not emulate. Copying those expressions would produce
-checks that cannot run and a claim of Focused Run parity that is not true. The
-checks in `modules/` read exported files and are this product's own; what comes
-from SAP here is the FACTS ABOUT NOTES, not the implementation.
+Also taken: the AFFECTED-VERSION FACTS the predicates encode — that note 3772411
+is fixed in SAP_BASIS 750 at support package 37, 752 at 19, 753 at 17, and so on.
+
+NOT taken: SAP's SQL as SQL. A CSA policy's `<compliant>` clause is a SQL
+expression evaluated against Focused Run's own configuration database, which
+this product does not have and does not emulate. Nothing here is executed, and
+no claim of Focused Run parity is made or implied.
+
+WHERE THAT LINE IS, AND WHY IT MOVED
+This tool originally took none of the predicates at all, on the reasoning that
+they were SAP's implementation. That was too broad. "Note 3772411 is fixed in
+SAP_BASIS 750 at SP 37" is a FACT about a note, of exactly the same kind as
+"note 3772411 is CVE-2026-58243" — it happens to be written in SQL because
+Focused Run needed it executable. Refusing to read a fact because of the
+notation it arrived in left this product unable to answer the only question that
+matters about a note, which is whether it applies here.
+
+So the fact is extracted and the comparison is this product's own Python,
+against the customer's own `system_component.csv`. What is still refused: running
+SAP's expressions, reproducing them verbatim, and saying we implement SAP's
+policies. `between`-range predicates are deliberately NOT interpreted — an
+"affected between SP 1 and SP 17" clause needs reasoning about whether a higher
+level is also affected, and guessing there would put a wrong verdict in front of
+somebody. Those are counted in the metadata as unextracted, not silently
+skipped.
 
 WHY THE CONFIG STORES ARE WORTH READING
 `<configstore name="...">` names the data SAP consults for a note, and its
@@ -118,6 +137,55 @@ CHECKITEM = re.compile(r'<checkitem[^>]*\bid="([^"]+)"', re.IGNORECASE)
 #: `<checkitem id="0003747367_k">` — note number, optionally suffixed.
 CHECKITEM_NOTE = re.compile(r"^0*(\d{6,10})")
 
+# ═════════════════════════════════════════════════════════════════════════════
+#  Fix levels — the affected-version facts, however the predicate spells them
+# ═════════════════════════════════════════════════════════════════════════════
+
+#: `COMPONENT = 'SAP_BASIS' and VERSION = '750'` opens a clause about one
+#: component at one release. Everything up to the next such pair belongs to it.
+_COMP_HEAD = re.compile(
+    r"COMPONENT\s*=\s*'([^']+)'\s*and\s*VERSION\s*=\s*'([^']+)'", re.IGNORECASE)
+#: The support-package threshold inside that clause. SAP writes it four ways —
+#: `not( lpad(SP,4,'0') < '0037' )` in a compliant clause, `to_integer(
+#: COALESCE(NULLIF(SP,''),'0') ) < 22` in a noncompliant one, the same wrapped in
+#: `not(...)`, and a REPLACE_REGEXPR variant — and the NUMBER MEANS THE SAME
+#: THING in all of them: the first support package that carries the fix. That is
+#: why one threshold pattern is enough and the surrounding SQL can be ignored.
+_SP_THRESHOLD = re.compile(r"(?:&lt;|<)\s*'?(\d{1,5})'?")
+#: An affected RANGE. Not interpreted — see the docstring.
+_BETWEEN = re.compile(r"\bbetween\b", re.IGNORECASE)
+
+#: `NAME = 'KERN_PATCHLEVEL' and lpad(VALUE,4,'0') >= '1518'`
+_KERN_PATCH = re.compile(
+    r"NAME\s*=\s*'KERN_PATCHLEVEL'\s*and\s*lpad\s*\(\s*VALUE\s*,\s*\d+\s*,"
+    r"\s*'0'\s*\)\s*(?:&gt;=|>=)\s*'(\d+)'", re.IGNORECASE)
+#: The kernel release the patch level applies to, from the joined store.
+_KERN_REL = re.compile(
+    r"NAME\s*=\s*'KERN_REL'\s*and\s*VALUE\s*(?:like|=)\s*'([^']+)'", re.IGNORECASE)
+
+_STORE_BLOCK = re.compile(
+    r'<configstore[^>]*\bname="([^"]+)"[^>]*>(.*?)</configstore>', re.S | re.I)
+_CHECKITEM_BLOCK = re.compile(
+    r'<checkitem[^>]*\bid="([^"]+)"[^>]*>(.*?)</checkitem>', re.S | re.I)
+_COMPLIANT = re.compile(r"<compliant>(.*?)</compliant>", re.S | re.I)
+_NONCOMPLIANT = re.compile(r"<noncompliant>(.*?)</noncompliant>", re.S | re.I)
+
+
+def _component_levels(blob: str):
+    """(component, release, first-fixed-SP) triples from one predicate blob."""
+    out, heads = [], [(m.start(), m.group(1).upper(), m.group(2))
+                      for m in _COMP_HEAD.finditer(blob)]
+    for index, (start, component, release) in enumerate(heads):
+        end = heads[index + 1][0] if index + 1 < len(heads) else len(blob)
+        window = blob[start:end]
+        if _BETWEEN.search(window):
+            continue
+        threshold = _SP_THRESHOLD.search(window)
+        if threshold:
+            out.append((component, release, int(threshold.group(1))))
+    return out
+
+
 #: SAP's config-store names against the export this product reads to answer the
 #: same question. Only the stores that appear in the notes policies are mapped;
 #: a store with no entry here is recorded as unmapped rather than guessed at.
@@ -131,12 +199,12 @@ CONFIGSTORE_SOURCES = {
     "HDB_PARAMETER": "hana_parameters",
     "GW_REGINFO": "gw_reginfo",
     "GW_SECINFO": "gw_secinfo",
+    "SAP_KERNEL": "sap_kernel",
 }
 #: Config stores with no export behind them yet, and what each would need. Kept
 #: explicit so the catalogue can count what a missing export costs rather than
 #: leaving the note looking unanswerable.
 CONFIGSTORE_UNMAPPED = {
-    "SAP_KERNEL": "kernel release and patch level (KERN_REL / KERN_PATCHLEVEL)",
     "HDB_VERSION": "HANA revision",
     "SAPUI5_VERSION": "SAPUI5 version",
     "BOBJ_VERSION": "BusinessObjects version",
@@ -212,6 +280,34 @@ def parse_policy(path: Path, strict_errors: list) -> dict:
             "title": _clean_title(rest) or None,
         })
 
+    # Fix levels, per note, from whichever clause the item carries. 1,220 items
+    # use a `between` range and are counted rather than guessed at.
+    levels: dict = {}
+    ranges = 0
+    for store_name, block in _STORE_BLOCK.findall(text):
+        for item_id, item in _CHECKITEM_BLOCK.findall(block):
+            note_match = CHECKITEM_NOTE.match(item_id)
+            if not note_match:
+                continue
+            note = note_match.group(1)
+            blob = (" ".join(_COMPLIANT.findall(item))
+                    or " ".join(_NONCOMPLIANT.findall(item)))
+            if not blob:
+                continue
+            if store_name == "COMP_LEVEL":
+                if _BETWEEN.search(blob):
+                    ranges += 1
+                for triple in _component_levels(blob):
+                    levels.setdefault(note, {}).setdefault(
+                        "components", set()).add(triple)
+            elif store_name == "SAP_KERNEL":
+                patch = _KERN_PATCH.search(blob)
+                if patch:
+                    releases = _KERN_REL.findall(item) or ["*"]
+                    for release in releases:
+                        levels.setdefault(note, {}).setdefault(
+                            "kernel", set()).add((release, int(patch.group(1))))
+
     # Config stores, attributed to the note whose check item names them. A
     # <configstore> element wraps its check items, so the nearest preceding
     # store name is the one that applies.
@@ -227,7 +323,8 @@ def parse_policy(path: Path, strict_errors: list) -> dict:
             stores.setdefault(note.group(1), set()).add(current)
 
     return {"patchday": patchday, "stack": _stack(path), "file": path.name,
-            "entries": entries, "stores": stores}
+            "entries": entries, "stores": stores, "levels": levels,
+            "ranges": ranges}
 
 
 def build(source: Path, strict: bool = False) -> str:
@@ -249,14 +346,17 @@ def build(source: Path, strict: bool = False) -> str:
     strict_errors: list = []
     notes: dict = {}
     patchdays = set()
+    range_items = 0
     for path in files:
         policy = parse_policy(path, strict_errors)
         patchdays.add(policy["patchday"])
+        range_items += policy["ranges"]
         for entry in policy["entries"]:
             rec = notes.setdefault(entry["note"], {
                 "cve": [], "component": None, "cvss": None, "priority": None,
                 "title": None, "patch_days": [], "stacks": [],
                 "checked_by_sap_policy": False, "config_stores": [],
+                "fix_levels": [], "kernel_fix": [],
             })
             if entry.get("cve") and entry["cve"] not in rec["cve"]:
                 rec["cve"].append(entry["cve"])
@@ -268,6 +368,18 @@ def build(source: Path, strict: bool = False) -> str:
             if policy["stack"] not in rec["stacks"]:
                 rec["stacks"].append(policy["stack"])
             rec["checked_by_sap_policy"] |= bool(entry["checked"])
+        for note, found in policy["levels"].items():
+            rec = notes.get(note)
+            if rec is None:
+                continue
+            for component, release, sp in sorted(found.get("components", ())):
+                row = {"component": component, "release": release, "min_sp": sp}
+                if row not in rec["fix_levels"]:
+                    rec["fix_levels"].append(row)
+            for release, patch in sorted(found.get("kernel", ())):
+                row = {"release": release, "min_patch": patch}
+                if row not in rec["kernel_fix"]:
+                    rec["kernel_fix"].append(row)
         for note, stores in policy["stores"].items():
             rec = notes.get(note)
             if rec is None:
@@ -277,6 +389,8 @@ def build(source: Path, strict: bool = False) -> str:
                     rec["config_stores"].append(store)
 
     for rec in notes.values():
+        rec["fix_levels"].sort(key=lambda r: (r["component"], r["release"]))
+        rec["kernel_fix"].sort(key=lambda r: r["release"])
         rec["cve"].sort()
         rec["patch_days"].sort()
         rec["stacks"].sort()
@@ -331,7 +445,21 @@ def build(source: Path, strict: bool = False) -> str:
             "blocked_only_by_an_unmapped_store": sum(
                 1 for r in notes.values()
                 if r["needs_unmapped_store"] and not r["answerable_from"]),
+            "with_component_fix_levels": sum(
+                1 for r in notes.values() if r["fix_levels"]),
+            "component_release_sp_triples": sum(
+                len(r["fix_levels"]) for r in notes.values()),
+            "with_kernel_fix_levels": sum(
+                1 for r in notes.values() if r["kernel_fix"]),
+            "check_items_using_an_uninterpreted_range": range_items,
         },
+        "fix_levels": (
+            "The first support package carrying the fix, per component and "
+            "release, extracted from the affected-version facts SAP's predicates "
+            "encode. SAP's SQL is neither executed nor reproduced; the "
+            "comparison against system_component.csv is this product's own. "
+            "`between`-range predicates are not interpreted and are counted "
+            "above as check_items_using_an_uninterpreted_range."),
         "config_store_usage": dict(store_counts.most_common()),
         "config_store_sources": CONFIGSTORE_SOURCES,
         "config_store_unmapped": CONFIGSTORE_UNMAPPED,
@@ -363,9 +491,12 @@ def main(argv=None) -> int:
     OUT.write_text(text, encoding="utf-8")
     meta = json.loads(text)["_meta"]["counts"]
     print("Wrote %s: %d notes from %d policy files over %d patch days "
-          "(%d with a CVE, %d answerable from an export you already supply)"
+          "(%d with a CVE, %d answerable from an export you already supply, "
+          "%d with component fix levels over %d component/release/SP triples)"
           % (OUT.name, meta["notes"], meta["policy_files"], meta["patch_days"],
-             meta["with_cve"], meta["answerable_from_a_supplied_export"]))
+             meta["with_cve"], meta["answerable_from_a_supplied_export"],
+             meta["with_component_fix_levels"],
+             meta["component_release_sp_triples"]))
     return 0
 
 
