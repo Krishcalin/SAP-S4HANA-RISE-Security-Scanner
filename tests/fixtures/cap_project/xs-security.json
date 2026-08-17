@@ -1,0 +1,94 @@
+{
+  "xsappname": "acme-bookshop",
+  "tenant-mode": "shared",
+  "description": "Security profile of the ACME bookshop CAP application",
+  "scopes": [
+    {
+      "name": "$XSAPPNAME.Viewer",
+      "description": "Read the catalogue"
+    },
+    {
+      "name": "$XSAPPNAME.Vendor",
+      "description": "Maintain own titles"
+    },
+    {
+      "name": "$XSAPPNAME.Admin",
+      "description": "Administer the bookshop",
+      "grant-as-authority-to-apps": [
+        "$XSAPPNAME(application,acme-reporting)"
+      ]
+    },
+    {
+      "name": "$XSAPPNAME.Replication",
+      "description": "Technical replication user",
+      "granted-apps": [
+        "$XSAPPNAME(application,acme-integration)"
+      ]
+    }
+  ],
+  "attributes": [
+    {
+      "name": "Country",
+      "description": "Country the user may see titles for",
+      "valueType": "string",
+      "valueRequired": false
+    },
+    {
+      "name": "CostCenter",
+      "description": "Cost centre",
+      "valueType": "string",
+      "valueRequired": true
+    }
+  ],
+  "role-templates": [
+    {
+      "name": "Viewer",
+      "description": "View the catalogue",
+      "default-role-name": "Bookshop Viewer",
+      "scope-references": ["$XSAPPNAME.Viewer", "uaa.user"],
+      "attribute-references": ["Country"]
+    },
+    {
+      "name": "Vendor",
+      "description": "Maintain own titles",
+      "scope-references": ["$XSAPPNAME.Vendor"],
+      "attribute-references": [
+        {"name": "CostCenter", "default-values": ["CC-1000"]}
+      ]
+    },
+    {
+      "name": "Admin",
+      "description": "Administer the bookshop",
+      "scope-references": ["$XSAPPNAME.Admin", "$XSAPPNAME.Auditing"]
+    },
+    {
+      "name": "Replicator",
+      "description": "Technical replication",
+      "scope-references": ["$XSAPPNAME.Replication"]
+    }
+  ],
+  "role-collections": [
+    {
+      "name": "Bookshop_Viewer",
+      "description": "Everyone may browse the catalogue",
+      "role-template-references": ["$XSAPPNAME.Viewer"]
+    },
+    {
+      "name": "Bookshop_Admin",
+      "description": "Bookshop administrators",
+      "role-template-references": ["$XSAPPNAME.Admin", "$XSAPPNAME.Superuser"]
+    }
+  ],
+  "authorities": ["$ACCEPT_GRANTED_AUTHORITIES"],
+  "oauth2-configuration": {
+    "token-validity": 86400,
+    "refresh-token-validity": 2592000,
+    "redirect-uris": [
+      "https://acme-bookshop.cfapps.eu10.hana.ondemand.com/**",
+      "https://*.cfapps.eu10.hana.ondemand.com/callback",
+      "http://localhost:4004/callback"
+    ],
+    "credential-types": ["instance-secret", "binding-secret"],
+    "system-attributes": ["groups", "rolecollections"]
+  }
+}

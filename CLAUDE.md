@@ -111,6 +111,7 @@ python sap_scanner.py --data-dir ./sample_data --output report.html --format all
 python sap_scanner.py --data-dir ./sample_data --output report.html --format both --crq \
     --crq-revenue 2000000000 --crq-industry manufacturing --crq-org-name "Acme Mfg"   # + FAIR $ loss exposure
 python sap_scanner.py --data-dir ./exports --abap-src ./abapgit_export --modules cva   # ABAP source scan
+python sap_scanner.py --data-dir ./exports --cap-src ./bookshop --modules capxsuaa     # CAP project scan
 python sap_scanner.py --data-dir ./exports --deployment-mode rise_pce                  # ECS rules apply
 python sap_scanner.py --data-dir ./exports --gate --gate-baseline gate-baseline.json   # decide: exit 0/1/2
 ```
@@ -709,6 +710,7 @@ wrong in that way.
 | `atc` | atc_import | SAP's own ATC/CVA results, ingested rather than re-derived |
 | `cva` | abap_sast | **our** ABAP/CDS/BDEF scanner — **133 rules dispatched by file type** (118 ABAP/CDS/RAP, 7 JS/UI5, 8 BTP descriptor), statement lexer, intra-procedural taint. `ABAP-XSS-006` is retired and `ABAP-AUTH-003` is handled in the engine, so 116 of the 118 fire from the rule table |
 | `logreview` | log_review | retrospective SM20 review: what the audit log actually recorded |
+| `capxsuaa` | cap_xsuaa | **CAP project as written** (`--cap-src`): `xs-security.json` exactly + CDS model lexically. Traces scope ← role-template ← role-collection ← IdP group; `CAPX-TOK-001` closes the application-override blind spot `BTP-TOK-*` declares |
 | `codeinv` | code_inventory_report | custom-code estate: size by type, unreachable, dormant, unknown-kept-separate |
 | `resilience` | resilience_posture | backup recency/failure posture, DR test evidence, recovery objectives (RES-*) |
 | `snc` | snc_posture | **the SNC family as one model** — 18 params incl. the ECS-mandated ones |

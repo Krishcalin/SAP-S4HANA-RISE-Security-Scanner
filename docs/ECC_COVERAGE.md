@@ -22,18 +22,18 @@ considered). Both are things an ECC 6.0 estate genuinely has and a Basis team ca
 genuinely export, so both are Tier A, and `vendor_master` runs on ECC exactly as
 it runs on S/4. The estimate was conservative, not mistaken.
 
-| | of 32 |
+| | of 33 |
 |---|---:|
 | identical to the full sample — *"runs with no code change"* | **15** |
 | produce findings, but fewer than with full data | 7 |
 | **produce findings at all** | **22** |
-| cannot exist on ECC (no HANA, Fiori, BTP, CDS, S/4 business roles) | 5 |
+| cannot exist on ECC (no HANA, Fiori, BTP, CDS, S/4 business roles) | 6 |
 | optional tooling — could run if the customer exports it (GRC, FI config) | 2 |
 | no file inputs (`abap_sast` reads `--abap-src`) | 1 |
 | silent even with full data | 2 |
 
 The number is not the whole story, so two more are published beside it. **22 of
-32** produce something useful — the seven "partial" modules are degraded and
+33** produce something useful — the seven "partial" modules are degraded and
 still worth running. Which number is right depends on what "runs" is taken to
 mean, and this table exists so that nobody has to guess. The per-module table
 below is regenerated from the measurement rather than maintained by hand, because
@@ -128,6 +128,7 @@ about whether 6 is all of them.
 | `role_governance` | degraded | 2 | 3 | partial — 2 of 3 |
 | `master_data_changes` | complete | 1 | 2 | partial — 1 of 2 |
 | `btp_cloud_surface` | skipped | 0 | 32 | **cannot exist on ECC** |
+| `cap_xsuaa` | skipped | 0 | 0 | **cannot exist on ECC** (CAP/BTP only) |
 | `hana_db_security` | skipped | 0 | 18 | **cannot exist on ECC** |
 | `rise_btp_checks` | skipped | 0 | 8 | **cannot exist on ECC** |
 | `s4_business_authz` | skipped | 0 | 8 | **cannot exist on ECC** |

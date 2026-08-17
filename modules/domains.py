@@ -246,6 +246,12 @@ DOMAINS: List[Dict[str, Any]] = [
 #: findings this product produces, and a taxonomy that silently dropped them
 #: would understate the product while claiming to summarise it.
 UNPLACED_CATEGORIES: Dict[str, str] = {
+    "CAP & XSUAA Application Security":
+        "Design-time application security: what a CAP project's own source and "
+        "security descriptor declare, before any of it is deployed. It is not a "
+        "property of a running SAP system, which is what all twelve domains "
+        "describe, and filing it under one of them would say a system was "
+        "measured when a repository was.",
     "BTP Cloud Attack Surface":
         "SAP BTP is a different estate from the ABAP stack these twelve domains "
         "describe, and folding it into them would hide which system a finding is "

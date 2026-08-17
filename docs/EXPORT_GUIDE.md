@@ -1167,6 +1167,64 @@ field names and leave anything else untouched.
 
 ---
 
+## The CAP project itself (the `capxsuaa` module)
+
+This one is not an export. It is the application's own source tree, and it is
+supplied with a path rather than a file:
+
+```bash
+python sap_scanner.py --data-dir ./export --cap-src /path/to/cap-project
+```
+
+Point `--cap-src` at the **project root** — the directory holding `srv/`, `db/` and
+the `mta.yaml` or `package.json`. `node_modules/`, `gen/`, `dist/` and the other
+build directories are skipped, so pointing at a working checkout is fine and no
+cleaning step is needed.
+
+**Why a source tree at all, when everything else here is an export.** Several
+authorization facts exist only at design time and appear in no runtime export
+anywhere:
+
+| Fact | Where it lives | Nothing else can see it because |
+|---|---|---|
+| A wildcard OAuth redirect URI | `xs-security.json` | The subaccount shows the client, not its redirect list |
+| An application-level token lifetime | `xs-security.json` | It **overrides** the subaccount policy `BTP-TOK-*` measures |
+| A scope granted to another application | `xs-security.json` | It is held by an app, so it is in no role collection |
+| A CAP service with no access control | `srv/*.cds` | The deployed service looks identical either way |
+| Which scopes a role collection delivers | both | The subaccount export carries counts, not the chain |
+
+The last row is the one worth supplying both halves for. Export
+`btp_role_collections.json` (file 3 above, in its **detailed** form) alongside the
+project, and `CAPX-GRAPH-002` can follow the whole chain — scope → role-template →
+role-collection → IdP group — and tell you which application privileges every
+federated user holds by birthright. Neither side answers that alone: the descriptor
+knows what a collection grants and not who has it; the subaccount knows who has it
+and not what it grants.
+
+> **Two parsers, two confidence levels, and the report says which.**
+> `xs-security.json` is JSON, so those findings quote values that are literally in
+> the file. The CDS model is read **lexically** — this product is offline and
+> stdlib-only, so there is no CDS compiler here to ask. That is enough to find a
+> service nobody protected and it is **not** enough to prove a service *is*
+> protected, so the CDS checks only ever report what they positively found, and
+> `CAPX-COV-001` lists every construct the parser could not resolve. If it could not
+> read something, it says so rather than passing over it.
+
+Annotations applied from a separate file (`annotate CatalogService with …`, the
+usual CAP layout) are resolved to their target, so keeping restrictions in
+`annotations.cds` works as expected.
+
+### Which checks this makes possible
+
+| Input | Checks |
+|---|---|
+| `xs-security.json` | `CAPX-GRAPH-001` (broken chain), `CAPX-SCOPE-001`, `CAPX-AUTH-001`, `CAPX-ATTR-001`, `CAPX-TOK-001`, `CAPX-URI-001`, `CAPX-CRED-001`, `CAPX-TEN-001` |
+| `srv/**/*.cds`, `db/**/*.cds` | `CAPX-CDS-001` (unprotected service), `CAPX-CDS-002` (privilege with no audience) |
+| both together | `CAPX-CDS-003` (model enforces a role no descriptor grants) |
+| both **plus** `btp_role_collections.json` | `CAPX-GRAPH-002` (who holds the scopes), `CAPX-GRAPH-003` (undeliverable role template) |
+
+---
+
 ## SAP Cloud ALM — Configuration & Security Analysis (CSA) exports
 
 SAP Cloud ALM is included with a RISE subscription through Enterprise Support at no

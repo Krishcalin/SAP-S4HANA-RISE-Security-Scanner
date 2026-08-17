@@ -241,6 +241,28 @@ def _count(value: Any) -> int:
     return len(value) if isinstance(value, list) else 0
 
 
+def _role_template_names(record: Dict[str, Any]) -> List[str]:
+    """The role-template names inside one role collection, deduplicated.
+
+    `roleTemplateName` is preferred over `name` because they differ: `name` is
+    the ROLE built from the template and can be renamed by an administrator,
+    while `roleTemplateName` is the template the application declared and is the
+    key an `xs-security.json` can be joined on. Reading `name` first would break
+    the join on exactly the collections somebody has curated.
+    """
+    out: List[str] = []
+    for reference in (record.get("roleReferences") or []):
+        if isinstance(reference, str):
+            value = reference.strip()
+        elif isinstance(reference, dict):
+            value = _s(reference, "roleTemplateName", "name", "roleName")
+        else:
+            continue
+        if value and value not in out:
+            out.append(value)
+    return out
+
+
 def _date_string(value: Any) -> str:
     """Normalise a timestamp to ``YYYY-MM-DD``, or pass it through unchanged.
 
@@ -466,6 +488,13 @@ def import_role_collections(raw: Any) -> Optional[List[Dict[str, Any]]]:
             "READ_ONLY": _s(record, "isReadOnly", "readOnly"),
             "ROLE_COUNT": str(_count(record.get("roleReferences"))),
             "USER_COUNT": str(_count(record.get("userReferences"))),
+            # The role TEMPLATES inside the collection, not just how many. The
+            # count alone answers "is this collection empty"; the names answer
+            # "can this application's role-template be assigned to anybody",
+            # which is what CAPX-GRAPH-003 needs and what a role collection
+            # assembled in the cockpit — rather than declared in an
+            # xs-security.json — can only be established from.
+            "ROLE_NAMES": ";".join(_role_template_names(record)),
         }
 
         mappings: List[Tuple[str, str, str]] = []   # (group, origin, kind)

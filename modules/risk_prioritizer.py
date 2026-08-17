@@ -60,6 +60,7 @@ _UNREACHABLE = "unreachable"
 _EXPOSURE_CATEGORIES = {
     "Network & Service Exposure", "Network & Integration Layer",
     "RISE / BTP Security", "BTP Cloud Attack Surface", "Fiori & UI Layer",
+    "CAP & XSUAA Application Security",
 }
 _EXPOSURE_KW = re.compile(
     r"\b(internet|external|publicly|public[- ](?:facing|internet)|0\.0\.0\.0|exposed|"

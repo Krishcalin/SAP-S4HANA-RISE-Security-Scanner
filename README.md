@@ -289,6 +289,7 @@ absent parameter be judged rather than merely disclosed, is in
 | 🔗 **System Trust & Standard Users** | TRUST-001→008 + TRUST-010, STDUSR-001→003 (12) | Trusted/trusting RFC (inbound trust from a lower tier, self-trust, unmigrated 2020 method, trusted destination with a fixed user), SAProuter wildcard routes, message-server port separation, UCON RFC allowlist, gateway proxy ACL — plus standard users (SAP* kernel auto-logon, default passwords, unlocked SAP*/DDIC/SAPCPIC/EARLYWATCH/TMSADM) |
 | 🧱 **Security Baseline Parameters** | BASELINE-001→012 + BASELINE-SNC-DEFERRED (13) | SAP Security Baseline / DSAG / CIS profile parameters the other modules don't cover: RFC authorization engine (auth/rfc_authority_check, auth/no_check_in_some_cases), SNC insecure-connection fallback, SAP GUI Scripting, weak legacy password hashes (downwards compatibility) and weak password hash algorithm (login/password_hash_algorithm), sapstartsrv / Host-Agent web methods, gateway ACL mode, SSO ticket & session-cookie transport, ICM security log & error disclosure |
 | 🧩 **S/4HANA & Cloud Authorization** | S4AUTHZ-001→008 (8) | The cloud-era authorization layer: super-admin business-role templates (SAP_BR_ADMINISTRATOR*), business-role restrictions left 'Unrestricted', business-catalog sprawl, CDS views with @AccessControl.authorizationCheck disabled, published OData V4 service groups without S_SERVICE, Cloud Connector system mappings without principal propagation, over-assigned Cloud Foundry Org Manager / Space Developer, and birthright role collections mapped to the Default IdP group |
+| 🧬 **CAP & XSUAA Application Security** | CAPX-CDS/GRAPH/SCOPE/AUTH/ATTR/TOK/URI/CRED/TEN (13) | The application as **written**, not as deployed — supplied with `--cap-src`. Follows the chain that decides who can call what: scope ← role-template ← role-collection ← IdP group. Reads `xs-security.json` exactly (broken references in the chain, scopes granted to other applications, `$ACCEPT_GRANTED_AUTHORITIES`, `valueRequired:false` attributes that build unrestricted roles, token lifetimes that **override** the subaccount policy `BTP-TOK-*` cannot see, wildcard OAuth redirect URIs, unrotatable instance secrets, shared tenant mode) and the CDS model lexically (services with no `@requires`/`@restrict`, `@restrict` privileges with no `to:` — which SAP documents as granting to *every* user — and roles the model enforces that no descriptor grants). Joined to `btp_role_collections.json` it answers the question an auditor actually asks: which application scopes does every federated user already hold. |
 | ⚖️ **Access Risk Analysis (SoD)** | ARA-* (27 risks + user score) | GRC-style **offline Segregation-of-Duties** from AGR_1251 + AGR_USERS. Resolves each user's transactions **and** authorization object/field/activity across all roles, then evaluates a verified ruleset at the **permission level** (so display-only access is not a false positive): 25 SoD conflicts across Procure-to-Pay, Order-to-Cash, Record-to-Report, Hire-to-Retire and Basis/Security, plus 2 HR critical accesses. Honours documented **mitigating controls** (with expiry) and produces a **per-user risk profile**. Extensible via a custom ruleset JSON. (Supersedes the coarse transaction-level SoD in Advanced IAM, which now defers to this module when AGR_1251 is available.) |
 | ⚙️ **Basis Jobs & OS Commands** | JOBCMD-CMD/JOB-* (11) | The realised **host-command-execution** surface: external OS-command definitions (SM69 / SXPGCOSTAB) that wrap a shell/interpreter, allow runtime argument injection (ADDPAR), resolve to an unqualified/user-writable path, or wrap a destructive/exfil utility — plus armed background jobs (TBTCO/TBTCP) whose step user (AUTHCKNAM) is SAP*/DDIC/SAP_ALL, that shell out to an OS command/program, that run RSBDCOS0 (SM69-allowlist bypass) or unreviewed custom code, whose step user is deleted/locked/dialog, or differs from the scheduler (identity borrowing). Reuses `users`/`profiles` to resolve privileged step users. Complements the ABAP Authorization module (which covers who *can* act) with what is *actually* defined and scheduled. |
 | 🚨 **GRC Access Control** | GRC-FF/ARM/ARA/MIT/RS (13) | The **SAP GRC Access Control** process layer (not just configuration): Emergency Access Management / Firefighter usage without owner review, self-owned firefighter IDs, uncontrolled Firefighter logon; Access Request Management approvals bypassing SoD risk analysis, auto-provisioned requests, missing risk analysis; GRC-native SoD violations left open past SLA; mitigating controls without a monitor or past validity; and SoD-ruleset governance (blank/critical risk levels, ruleset currency). |
@@ -461,6 +462,37 @@ SoD checks support three data strategies: pre-computed matrix (`sod_matrix.csv`)
 | Check | Description | Severity |
 |-------|-------------|----------|
 | BTP-MIG-001 | Apps still using XSUAA (not migrated to IAS) | MEDIUM |
+
+## CAP & XSUAA Application Security (`--cap-src`)
+
+The application as written, from its own source tree. Design-time facts that
+appear in no runtime export.
+
+### The authorization chain (CAPX-GRAPH-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| CAPX-GRAPH-001 | Broken reference in the scope ← role-template ← role-collection chain | HIGH |
+| CAPX-GRAPH-002 | Application scopes granted to every federated user by birthright | HIGH |
+| CAPX-GRAPH-003 | Role template no role collection can deliver | MEDIUM |
+
+### The CDS model (CAPX-CDS-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| CAPX-CDS-001 | CAP service exposed with no access control | HIGH |
+| CAPX-CDS-002 | `@restrict` privilege with no `to:` — grants to every user | HIGH |
+| CAPX-CDS-003 | Model enforces a role no security descriptor grants | MEDIUM |
+
+### The security descriptor (`xs-security.json`)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| CAPX-TOK-001 | Application overrides the subaccount token policy | HIGH |
+| CAPX-URI-001 | OAuth redirect URI broader than a specific host | HIGH |
+| CAPX-SCOPE-001 | Scope granted directly to another application | MEDIUM |
+| CAPX-AUTH-001 | `$ACCEPT_GRANTED_AUTHORITIES` — accepts every grant, unnamed | MEDIUM |
+| CAPX-ATTR-001 | `valueRequired:false` builds an unrestricted role | MEDIUM |
+| CAPX-CRED-001 | Instance secret requested, which cannot be rotated | MEDIUM |
+| CAPX-TEN-001 | Shared tenant mode — one client secret in every subaccount | MEDIUM |
+| CAPX-COV-001 | Parts of the project could not be read | INFO |
 
 </details>
 
@@ -1042,6 +1074,9 @@ python sap_scanner.py --data-dir ./exports --deployment-mode rise_pce
 # Scan custom ABAP from an abapGit offline export (the `cva` module)
 python sap_scanner.py --data-dir ./exports --abap-src ./abapgit_export --modules cva
 
+# Scan a CAP project's own source — xs-security.json and the CDS model (the `capxsuaa` module)
+python sap_scanner.py --data-dir ./exports --cap-src ./bookshop --modules capxsuaa
+
 # Use it as a release gate in CI — exits 0 pass / 1 blocked / 2 could not assess
 python sap_scanner.py --data-dir ./exports --gate-write-baseline gate-baseline.json   # once
 python sap_scanner.py --data-dir ./exports --gate --gate-baseline gate-baseline.json  # every build
@@ -1075,6 +1110,7 @@ rolegov   — Role Design & Governance (RG-*)
 fincontrols — Financial Controls / SOX (FIN-*)
 atc       — SAP ATC / CVA result import (ATC-*)
 cva       — Custom-code ABAP/CDS/RAP scanner (ABAP-*)   ← needs --abap-src
+capxsuaa  — CAP & XSUAA application security (CAPX-*)   ← needs --cap-src
 logreview — Security Audit Log retrospective review (LREV-*)
 codeinv   — Custom-code inventory & dead code (CODE-INV-*)
 resilience— Backup / DR / recovery posture (RES-*)

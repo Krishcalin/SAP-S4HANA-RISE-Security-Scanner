@@ -84,6 +84,7 @@ AUDITORS: List[Tuple[str, str]] = [
     ("financial_controls", "FinancialControlsAuditor"),
     ("master_data_changes", "MasterDataChangeAuditor"),
     ("vendor_master", "VendorMasterAuditor"),
+    ("cap_xsuaa", "CapXsuaaAuditor"),
 ]
 
 #: Module KEYS (the CLI's `--modules` vocabulary), for `BaseAuditor.run_context`.
@@ -95,7 +96,7 @@ MODULE_KEYS = frozenset({
     "users", "params", "network", "rise", "iam", "btpcloud", "intglayer",
     "dataprot", "codetrans", "atc", "cva", "logmon", "logreview", "fiori", "crypto", "hanadb",
     "hotnews", "authz", "systrust", "baseline", "s4authz", "ara", "jobcmd",
-    "grcac", "rolegov", "fincontrols", "mdchange", "vendormaster", "codeinv",
+    "grcac", "rolegov", "fincontrols", "mdchange", "vendormaster", "capxsuaa", "codeinv",
     "resilience", "snc",
     "ecsconfig",
 })

@@ -55,6 +55,7 @@ from modules.role_governance import RoleGovernanceAuditor
 from modules.financial_controls import FinancialControlsAuditor
 from modules.master_data_changes import MasterDataChangeAuditor
 from modules.vendor_master import VendorMasterAuditor
+from modules.cap_xsuaa import CapXsuaaAuditor
 from modules.baseline_params import BaselineParamAuditor
 from modules.s4_business_authz import S4BusinessAuthzAuditor
 from modules.access_risk_analysis import AccessRiskAnalysisAuditor
@@ -122,6 +123,13 @@ def main():
              "RISE system without OS access or an SAP ticket."
     )
     parser.add_argument(
+        "--cap-src", default=None, metavar="DIR",
+        help="SAP Cloud Application Programming Model project root to scan "
+             "with the `capxsuaa` module. Reads xs-security.json and the CDS "
+             "model, which hold authorization facts that exist in no runtime "
+             "export."
+    )
+    parser.add_argument(
         "--output", default="sap_security_report.html", metavar="FILE",
         help="Output HTML report filename (default: sap_security_report.html)"
     )
@@ -132,7 +140,7 @@ def main():
     )
     parser.add_argument(
         "--modules", nargs="+",
-        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "atc", "cva", "logmon", "logreview", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust", "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov", "fincontrols", "mdchange", "vendormaster", "codeinv", "resilience", "snc", "ecsconfig", "all"],
+        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "atc", "cva", "logmon", "logreview", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust", "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov", "fincontrols", "mdchange", "vendormaster", "capxsuaa", "codeinv", "resilience", "snc", "ecsconfig", "all"],
         default=["all"],
         help="Which audit modules to run (default: all)"
     )
@@ -245,6 +253,8 @@ def main():
     # auditor through the same dict rather than through DataLoader's FILE_MAP.
     if getattr(args, "abap_src", None):
         data["abap_source_dir"] = args.abap_src
+    if getattr(args, "cap_src", None):
+        data["cap_project_dir"] = args.cap_src
 
     # Load custom baseline if provided
     baseline_overrides = {}
@@ -256,7 +266,7 @@ def main():
     run_modules = args.modules if "all" not in args.modules else [
         "users", "params", "network", "rise", "iam", "btpcloud",
         "intglayer", "dataprot", "codetrans", "atc", "cva", "logmon", "logreview", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust",
-        "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov", "fincontrols", "mdchange", "vendormaster", "codeinv", "resilience", "snc", "ecsconfig"
+        "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov", "fincontrols", "mdchange", "vendormaster", "capxsuaa", "codeinv", "resilience", "snc", "ecsconfig"
     ]
 
     # Every ECS-aware check reads the mode from here. Built once so two auditors
@@ -550,6 +560,14 @@ def main():
     if "vendormaster" in run_modules:
         print("[*] Running Vendor & Bank Master Integrity Checks (shared accounts, sole maintenance)...")
         auditor = VendorMasterAuditor(data, baseline_overrides, run_ctx)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- CAP / XSUAA application security (--cap-src) ---
+    if "capxsuaa" in run_modules:
+        print("[*] Running CAP & XSUAA Application Security Checks (scope -> role -> collection -> user)...")
+        auditor = CapXsuaaAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")

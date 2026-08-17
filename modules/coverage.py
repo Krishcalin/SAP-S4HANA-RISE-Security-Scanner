@@ -103,6 +103,7 @@ RISE_MODULE_SCOPE: Dict[str, str] = {
     "financial_controls": "in_scope",
     "master_data_changes": "in_scope",
     "vendor_master": "in_scope",
+    "cap_xsuaa": "in_scope",
     "baseline_params": "read_only",
     "s4_business_authz": "in_scope",
     "access_risk_analysis": "in_scope",
@@ -159,6 +160,7 @@ CLI_MODULE_ALIASES: Dict[str, str] = {
     "fincontrols": "financial_controls",
     "mdchange": "master_data_changes",
     "vendormaster": "vendor_master",
+    "capxsuaa": "cap_xsuaa",
 }
 
 #: Logical sources a RISE customer cannot produce, because they are read from the

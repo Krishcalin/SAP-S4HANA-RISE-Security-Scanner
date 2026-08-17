@@ -118,7 +118,7 @@ def test_every_auditor_is_visible_to_the_coverage_manifest():
     assert not invisible, (
         f"these auditors have no coverage entry, so the manifest says nothing "
         f"about them: {invisible}")
-    assert len(auditors) == 32, f"auditor count moved to {len(auditors)}"
+    assert len(auditors) == 33, f"auditor count moved to {len(auditors)}"
 
 
 def test_a_required_source_is_always_one_the_loader_knows():

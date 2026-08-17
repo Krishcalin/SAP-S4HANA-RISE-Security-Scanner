@@ -34,7 +34,7 @@ clean — see chapter 13 of the architecture guide.
 | `btp_destinations` | `btp_destinations.json`, `destinations.json` | `btp_cloud_surface` | **not yet written** |
 | `btp_entitlements` | `btp_entitlements.json`, `entitlements.json` | `btp_cloud_surface` | **not yet written** |
 | `btp_network` | `btp_network.json`, `private_link.json` | `btp_cloud_surface` | **not yet written** |
-| `btp_role_collection_mappings` | `btp_role_collection_mappings.csv`, `role_collection_groups.csv`, `btp_role_collections.json`, `security_role_collection.json` | `s4_business_authz` | documented |
+| `btp_role_collection_mappings` | `btp_role_collection_mappings.csv`, `role_collection_groups.csv`, `btp_role_collections.json`, `security_role_collection.json` | `cap_xsuaa`, `s4_business_authz` | documented |
 | `btp_security_settings` | `btp_security_settings.json`, `security_settings.json` | `btp_cloud_surface` | documented |
 | `btp_service_bindings` | `btp_service_bindings.json`, `service_bindings.json` | `btp_cloud_surface` | **not yet written** |
 | `btp_subaccounts` | `btp_subaccounts.json`, `subaccounts.json`, `btp_accounts_subaccount.json`, `accounts_subaccount.json` | `btp_cloud_surface` | documented |

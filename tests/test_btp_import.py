@@ -379,6 +379,7 @@ def test_role_collection_without_references_asserts_nothing():
         [{"name": "Z_Thing", "isReadOnly": False, "roleReferences": []}])
     assert rows == [{"ROLE_COLLECTION": "Z_Thing", "DESCRIPTION": "",
                      "READ_ONLY": "false", "ROLE_COUNT": "0", "USER_COUNT": "0",
+                     "ROLE_NAMES": "",
                      "IDP_GROUP": "", "ORIGIN": "", "MAPPING_TYPE": ""}]
     findings = S4BusinessAuthzAuditor({"btp_role_collection_mappings": rows},
                                       {}).run_all_checks()

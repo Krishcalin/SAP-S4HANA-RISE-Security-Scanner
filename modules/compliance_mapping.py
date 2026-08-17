@@ -100,6 +100,9 @@ class ComplianceMapper:
     CATEGORY_THEMES = {
         "BTP Cloud Attack Surface": ["access-control", "authentication", "network-security",
                                      "supplier-cloud", "secure-config"],
+        "CAP & XSUAA Application Security": ["access-control", "authentication",
+                                            "secure-development", "secure-config",
+                                            "sod"],
         "Network & Integration Layer": ["network-security", "app-runtime", "access-control"],
         "Code & Transport Security": ["secure-development", "change-management", "secure-config"],
         "Data Protection & Privacy": ["data-protection", "logging-monitoring"],
