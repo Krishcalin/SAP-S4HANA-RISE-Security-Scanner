@@ -61,9 +61,9 @@ product became client-server**, deliberately and one-way. It has NOT been relaxe
 
 Background and the full plan: [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md),
 [`docs/BUILD_ROADMAP.md`](docs/BUILD_ROADMAP.md).
-- **~600 checks across 30 audit modules.** Measure, never estimate — and know which number you
-  are quoting. `modules/` holds 50 files, of which **30 emit findings**; the other 20 are rule
-  tables, loaders, importers and report writers. Those 30 are exactly `sap_scanner.py`'s
+- **664 checks across 33 audit modules.** Measure, never estimate — and know which number you
+  are quoting. `modules/` holds 62 files, of which **33 emit findings**; the other 29 are rule
+  tables, loaders, importers and report writers. Those 33 are exactly `sap_scanner.py`'s
   `--modules` choices. Check IDs: **363** are written as literals, and **621** exist once the
   five runtime-generated families resolve against their shipped rulesets — `PARAM-<param>` (78),
   the SAST rule ids (133), `ARA-<risk>` (27), `IAM-<sod_rule>` (10) and `ATC-<family>` (10),
@@ -617,7 +617,7 @@ wrong in that way.
   which half of a partial input a finding came from, and treating degraded as blind would freeze
   most of the backlog open.
 - *Degrade, never drop.* A module that raises is recorded with its traceback and the run
-  continues. Losing 29 modules because the 30th hit a bad row is far worse than an incomplete
+  continues. Losing 32 modules because the 33rd hit a bad row is far worse than an incomplete
   run that says it is incomplete.
 - *An empty explicit row scope means NOTHING, not everything.* `scope_clause([])` returns
   `FALSE`. Returning `TRUE` would hand a deliberately-restricted user the whole estate.
@@ -681,7 +681,7 @@ wrong in that way.
   `None → TRUE` / `[] → FALSE` semantics, different join). Two implementations of the access
   boundary is one more than is safe; do not add a third.
 
-### The 30 modules (module key → class → focus)
+### The 33 modules (module key → class → focus)
 
 | key | module | focus |
 |---|---|---|
@@ -900,7 +900,7 @@ nothing gets exit 2, which is the honest reading of "we have no idea how much wa
 - **CSV header normalization:** the loader upper-cases headers and replaces spaces with `_`,
   so match `row.get("USER_NAME")` etc. Values are stripped but keep their case.
 - **Tests + CI exist** (`tests/`, `.github/workflows/tests.yml`, `requirements-dev.txt`). About
-  **2,365** tests; no SAP system needed. ⚠️ **`requirements-dev.txt` alone is not enough to run
+  **3,253** tests; no SAP system needed. ⚠️ **`requirements-dev.txt` alone is not enough to run
   the whole suite** — it is only `pytest`, and the server-tier suites import psycopg/starlette
   at module level, which aborts collection rather than skipping. Install both:
   ```bash

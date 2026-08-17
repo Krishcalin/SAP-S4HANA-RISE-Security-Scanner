@@ -328,7 +328,7 @@ A useful way to understand any security product is to ask which questions it can
 
 |  | Question | How it is answered |
 |---|---|---|
-| 1 | **What is wrong?** | 664 checks across 30 subject areas produce a list of findings, each naming the specific accounts, roles, settings or connections involved. |
+| 1 | **What is wrong?** | 664 checks across 33 subject areas produce a list of findings, each naming the specific accounts, roles, settings or connections involved. |
 | 2 | **How bad is each one?** | A severity from Critical to Low, assigned by the check itself according to what an attacker could achieve. |
 | 3 | **What should we do first?** | A priority from P1 to P4 that combines severity with whether the flaw is known to be exploited, how exposed it is, and how much privilege it confers. |
 | 4 | **What exactly do we do?** | A numbered remediation procedure naming the specific SAP transaction, parameter or table to change, how to verify it worked, and what to be careful of. |
@@ -730,11 +730,11 @@ Nothing in that report is a lie. It is nonetheless the most dangerous document s
 
 **Without a coverage statement** — “12 findings. 2 critical.”
   - The reader concludes: not bad.
-  - In truth 18 of 30 subject areas were never examined, because the files they need were not supplied. Every sentence is accurate. The document is still false.
+  - In truth 21 of 33 subject areas were never examined, because the files they need were not supplied. Every sentence is accurate. The document is still false.
 
 **With a coverage statement** — “12 findings. 2 critical.”
   - “You supplied 41 of 128 sources.”
-  - “18 areas were not assessed.”
+  - “21 areas were not assessed.”
   - “1 source cannot be obtained in RISE at all.”
   - The reader concludes: we have looked at a third of the building.
 
@@ -2075,7 +2075,7 @@ The analysis still runs, and still tells you which scenarios dominate. What it w
 
 **Provenance and caveat.** This book was written from the repository’s documentation and its top-level program, at [github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner](https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner). Module names, the command-line surface, the pipeline order, the corpus-split rule, the gate rules and the deployment-mode behaviour are taken from the source and documentation. Descriptions of the internal structure of individual inspectors, the exact shape of a finding record, and the illustrative code in Appendix E are reconstructions written to be faithful in substance rather than literal in syntax; verify against the source before quoting them. All diagrams are architectural rather than exhaustive.
 
-The counts this document states — 664 checks, 400 written as literals, 264 generated at run time from 5 rule families, 30 modules, 133 custom-code rules, 27 duty-separation risks, 78 profile parameters and 128 logical sources — are derived from the code by `tests/test_architecture_doc.py`, which fails the build if this page and the source disagree. Edition 1.1 corrected three figures that had drifted from the source.
+The counts this document states — 664 checks, 400 written as literals, 264 generated at run time from 5 rule families, 33 modules, 133 custom-code rules, 27 duty-separation risks, 78 profile parameters and 128 logical sources — are derived from the code by `tests/test_architecture_doc.py`, which fails the build if this page and the source disagree. Edition 1.1 corrected three figures that had drifted from the source.
 
 **Confidential.** This document is not for publication. It describes the internal design, the current limitations and the forward direction of a commercial product; treat it as you would any other confidential product document.
 

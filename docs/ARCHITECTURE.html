@@ -712,7 +712,7 @@ pre .kw{color:#8FB8F0}
   <rect class="box" x="664" y="34" width="250" height="118" rx="4"/>
   <text class="sv-h" x="686" y="74">MonitorRisk</text>
   <text class="sv-ms" x="686" y="104">664 checks</text>
-  <text class="sv-ms" x="686" y="128">30 modules</text>
+  <text class="sv-ms" x="686" y="128">33 modules</text>
 
   <path class="ln" d="M914 93 H 984" marker-end="url(#ar)"/>
 
@@ -729,7 +729,7 @@ pre .kw{color:#8FB8F0}
 
 <div class="tw"><table>
   <tr><th class="k" style="width:4%"></th><th style="width:26%">Question</th><th>How it is answered</th></tr>
-  <tr><td class="k">1</td><td><strong>What is wrong?</strong></td><td>664 checks across 30 subject areas produce a list of findings, each naming the specific accounts, roles, settings or connections involved.</td></tr>
+  <tr><td class="k">1</td><td><strong>What is wrong?</strong></td><td>664 checks across 33 subject areas produce a list of findings, each naming the specific accounts, roles, settings or connections involved.</td></tr>
   <tr><td class="k">2</td><td><strong>How bad is each one?</strong></td><td>A severity from Critical to Low, assigned by the check itself according to what an attacker could achieve.</td></tr>
   <tr><td class="k">3</td><td><strong>What should we do first?</strong></td><td>A priority from P1 to P4 that combines severity with whether the flaw is known to be exploited, how exposed it is, and how much privilege it confers.</td></tr>
   <tr><td class="k">4</td><td><strong>What exactly do we do?</strong></td><td>A numbered remediation procedure naming the specific SAP transaction, parameter or table to change, how to verify it worked, and what to be careful of.</td></tr>
@@ -1267,14 +1267,14 @@ J_PATEL,A,64,20240119,,SALES
         <span class="plbl">Without a coverage statement</span>
         <span class="ph">“12 findings. 2 critical.”</span>
         <p>The reader concludes: not bad.</p>
-        <p class="fine">In truth 18 of 30 subject areas were never examined, because the files they need were not supplied. Every sentence is accurate. The document is still false.</p>
+        <p class="fine">In truth 21 of 33 subject areas were never examined, because the files they need were not supplied. Every sentence is accurate. The document is still false.</p>
       </div>
       <div class="panel teal">
         <span class="plbl">With a coverage statement</span>
         <span class="ph">“12 findings. 2 critical.”</span>
         <ul>
           <li>“You supplied 41 of 128 sources.”</li>
-          <li>“18 areas were not assessed.”</li>
+          <li>“21 areas were not assessed.”</li>
           <li>“1 source cannot be obtained in RISE at all.”</li>
         </ul>
         <p class="fine">The reader concludes: we have looked at a third of the building.</p>
@@ -2714,7 +2714,7 @@ fair_findings = list(all_findings)
 
 <p style="font-size:15px;color:var(--ink2);max-width:80ch"><strong>Provenance and caveat.</strong> This book was written from the repository’s documentation and its top-level program, at <a href="https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner">github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner</a>. Module names, the command-line surface, the pipeline order, the corpus-split rule, the gate rules and the deployment-mode behaviour are taken from the source and documentation. Descriptions of the internal structure of individual inspectors, the exact shape of a finding record, and the illustrative code in Appendix E are reconstructions written to be faithful in substance rather than literal in syntax; verify against the source before quoting them. All diagrams are architectural rather than exhaustive.</p>
 
-<p style="font-size:15px;color:var(--ink2);max-width:80ch">The counts this document states — 664 checks, 400 written as literals, 264 generated at run time from 5 rule families, 30 modules, 133 custom-code rules, 27 duty-separation risks, 78 profile parameters and 128 logical sources — are derived from the code by <code>tests/test_architecture_doc.py</code>, which fails the build if this page and the source disagree. Edition 1.1 corrected three figures that had drifted from the source.</p>
+<p style="font-size:15px;color:var(--ink2);max-width:80ch">The counts this document states — 664 checks, 400 written as literals, 264 generated at run time from 5 rule families, 33 modules, 133 custom-code rules, 27 duty-separation risks, 78 profile parameters and 128 logical sources — are derived from the code by <code>tests/test_architecture_doc.py</code>, which fails the build if this page and the source disagree. Edition 1.1 corrected three figures that had drifted from the source.</p>
 
 <p style="font-size:15px;color:var(--ink2)"><strong>Confidential.</strong> This document is not for publication. It describes the internal design, the current limitations and the forward direction of a commercial product; treat it as you would any other confidential product document.</p>
 

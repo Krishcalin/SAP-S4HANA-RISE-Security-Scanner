@@ -12,15 +12,26 @@ Phase 3.
 auditors produced findings on the ECC fixture **identical** to what they produced
 on the full sample — the estimate the plan rested on, confirmed on its own terms.
 
-**The number has since moved to fifteen of thirty-two, and the reason is not that
-the estimate was wrong.** The product grew: two auditors were added
-(`master_data_changes`, `vendor_master`), and with them ECC-native sources the
-original fixture had no reason to carry — vendor master and bank details
-(`LFA1` / `LFBK`) and change-document items (`CDPOS`, whose header table `CDHDR`
-was in the fixture from the start, making its absence arbitrary rather than
-considered). Both are things an ECC 6.0 estate genuinely has and a Basis team can
-genuinely export, so both are Tier A, and `vendor_master` runs on ECC exactly as
-it runs on S/4. The estimate was conservative, not mistaken.
+**The number has since moved to fifteen of thirty-three, and the reason is not
+that the estimate was wrong.** The product grew, in two different ways.
+
+Two auditors were added that ECC *can* feed — `master_data_changes` and
+`vendor_master` — and with them ECC-native sources the original fixture had no
+reason to carry: vendor master and bank details (`LFA1` / `LFBK`) and
+change-document items (`CDPOS`, whose header table `CDHDR` was in the fixture
+from the start, making its absence arbitrary rather than considered). Both are
+things an ECC 6.0 estate genuinely has and a Basis team can genuinely export, so
+both are Tier A, and `vendor_master` runs on ECC exactly as it runs on S/4.
+
+A third, `cap_xsuaa`, was added that ECC **cannot** feed at any effort: it reads a
+CAP project's `xs-security.json` and CDS model, which are BTP artefacts that do
+not exist in an ECC estate. It moves the denominator without moving the
+numerator, which is why the headline ratio changed while nothing about ECC did.
+That is the honest way for this number to move, and it is worth stating plainly:
+adding modules an ECC customer can never use makes this figure look worse without
+making their scan worse.
+
+The estimate was conservative, not mistaken.
 
 | | of 33 |
 |---|---:|

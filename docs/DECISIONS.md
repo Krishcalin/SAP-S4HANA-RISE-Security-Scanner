@@ -106,6 +106,16 @@ keeping.
 > and `tests/test_collect.py` asserts that nothing in `server/` or `modules/`
 > imports it and that `sap_scanner.py` has grown no `--connect` flag. The first
 > connector speaks sapstartsrv over SOAP; see D3 for what that reaches.
+>
+> **Four collectors now: `sapcontrol`, `icf`, `rfc`, `btp`.** The last one closes
+> the loop on the reversal this decision records — the capability removed from
+> this codebase was a BTP live-OAuth scanner, and `collect/btp.py` is that
+> capability rebuilt in the permitted form: out of process, stdlib-only, a path
+> allowlist checked before a request is built, no credential accepted on the
+> command line, and its only output a file the offline path already reads. It
+> earned its place immediately by proving `BTP-DST-001` had been written against
+> an authentication-type spelling the real Destination service never returns —
+> a defect no fixture could have surfaced.
 
 ## D3 — Is RFC declined permanently?
 

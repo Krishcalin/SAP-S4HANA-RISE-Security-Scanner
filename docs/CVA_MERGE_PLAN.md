@@ -174,6 +174,13 @@ Nine of its predicates are worth keeping as *new branches inside existing host
 checks* — notably three that read `accessTokenValidity` / `refreshTokenValidity`,
 which `btp_import.py` already ingests and no check currently reads. **[read]**
 
+> **Closed, 2026-08-17.** Those three shipped as `BTP-TOK-001/002/003` in
+> `modules/btp_cloud_surface.py`, together with `BTP-FRM-*`, `BTP-IDL-001` and
+> `BTP-AUD-001` over the other fields the same importer had been ingesting
+> unread. `CAPX-TOK-001` in `modules/cap_xsuaa.py` then closed the other half:
+> the per-application `xs-security.json` override that the subaccount-level
+> checks declare they cannot see.
+
 ---
 
 ## 3. Identity — smaller than feared

@@ -16,7 +16,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/SAP%20Note%203250501-92%2F92%20parameters-0FAAFF?style=flat-square&logo=sap&logoColor=white" alt="SAP Note 3250501: 92/92"/>
-  <img src="https://img.shields.io/badge/checks-600%2B%20across%2030%20modules-red?style=flat-square" alt="600+ checks, 30 modules"/>
+  <img src="https://img.shields.io/badge/checks-664%20across%2033%20modules-red?style=flat-square" alt="664 checks, 33 modules"/>
   <img src="https://img.shields.io/badge/custom%20code-133%20ABAP%2FJS%2FBTP%20rules%20%2B%20taint-8A2BE2?style=flat-square" alt="133 static-analysis rules with taint analysis"/>
   <img src="https://img.shields.io/badge/reports-HTML%20%C2%B7%20PDF%20%C2%B7%20PPTX-555?style=flat-square" alt="HTML · PDF · PPTX Reports"/>
   <img src="https://img.shields.io/badge/server-FastAPI%20%2B%20PostgreSQL%2016-336791?style=flat-square&logo=postgresql&logoColor=white" alt="Server: FastAPI + PostgreSQL 16"/>
@@ -54,12 +54,12 @@
 - **[Server mode — quick start](#server-mode--quick-start)**
 - **[Connected mode](#connected-mode)**
   - [What the server adds over the CLI](#what-the-server-adds-over-the-cli)
-- **[Audit Modules](#audit-modules)** &nbsp;<sub>30 modules · 73 documented families</sub>
+- **[Audit Modules](#audit-modules)** &nbsp;<sub>33 modules · 80 documented families</sub>
   <details><summary><sub>expand by family</sub></summary>
 
   - **Identity & Access** &nbsp; [Segregation of Duties](#segregation-of-duties-iam-sod-) · [Firefighter / Emergency Access](#firefighter--emergency-access-iam-ff-) · [Role Expiry & Validity](#role-expiry--validity-iam-exp-) · [Cross-System Identity](#cross-system-identity-iam-xid-) · [Access Review Compliance](#access-review-compliance-iam-rev-) · [Role Design Quality](#role-design-quality-iam-role-)
   - **Identity & Access (cont.)** &nbsp; [Other IAM Checks](#other-iam-checks) · [Critical access + risk profile](#critical-access--risk-profile)
-  - **BTP / Cloud** &nbsp; [Cloud Connector](#cloud-connector-btp-cc-) · [Service Bindings](#service-bindings-btp-sb-) · [Destination Service](#destination-service-btp-dst-) · [Identity Authentication Service](#identity-authentication-service-btp-ias-) · [Entitlement Governance](#entitlement-governance-btp-ent-) · [Event Mesh](#event-mesh-btp-em-) · [Cloud Integration / CPI](#cloud-integration--cpi-btp-cpi-) · [Network Isolation](#network-isolation-btp-net-) · [Subaccount Governance](#subaccount-governance-btp-gov-) · [XSUAA Migration](#xsuaa-migration-btp-mig-)
+  - **BTP / Cloud** &nbsp; [Cloud Connector](#cloud-connector-btp-cc-) · [Service Bindings](#service-bindings-btp-sb-) · [Destination Service](#destination-service-btp-dst-) · [Identity Authentication Service](#identity-authentication-service-btp-ias-) · [Entitlement Governance](#entitlement-governance-btp-ent-) · [Event Mesh](#event-mesh-btp-em-) · [Cloud Integration / CPI](#cloud-integration--cpi-btp-cpi-) · [Network Isolation](#network-isolation-btp-net-) · [Subaccount Governance](#subaccount-governance-btp-gov-) · [Audit-Log Coverage](#audit-log-coverage-btp-aud-) · [Token Policy](#token-policy-btp-tok-) · [Iframe Embedding / Clickjacking](#iframe-embedding--clickjacking-btp-frm-) · [Identity Linking](#identity-linking-btp-idl-) · [XSUAA Migration](#xsuaa-migration-btp-mig-)
   - **Integration Layer** &nbsp; [API Management](#api-management-intg-apim-) · [IDOC Port & Partner Security](#idoc-port--partner-security-intg-idoc-) · [Web Services / SOAMANAGER](#web-services--soamanager-intg-ws-) · [Webhook & Callback Security](#webhook--callback-security-intg-wh-) · [Gateway ACL Deep Analysis](#gateway-acl-deep-analysis-intg-gw-) · [Integration Monitoring](#integration-monitoring-intg-mon-) · [CPI Data Stores](#cpi-data-stores-intg-cpi-ds-) · [OAuth Client Governance](#oauth-client-governance-intg-oauth-) · [Integration Topology](#integration-topology-intg-topo-)
   - **Data Protection & Privacy** &nbsp; [Read Access Logging](#read-access-logging-dpp-ral-) · [Information Lifecycle Management](#information-lifecycle-management-dpp-ilm-) · [Data Masking — Non-Production](#data-masking--non-production-dpp-mask-) · [DPP Toolkit](#dpp-toolkit-dpp-toolkit-) · [Purpose of Processing](#purpose-of-processing-dpp-pop-) · [Sensitive Field Inventory](#sensitive-field-inventory-dpp-field-) · [Data Residency & Cross-Border](#data-residency--cross-border-dpp-res-) · [Data Subject Requests](#data-subject-requests-dpp-del-) · [System Landscape](#system-landscape-dpp-land-)
   - **Code & Transport** &nbsp; [Code Injection / SQL Injection](#code-injection--sql-injection-code-inj-) · [Dangerous Statements](#dangerous-statements-code-stmt-) · [ATC / Code Inspector](#atc--code-inspector-code-atc-) · [Transport Management](#transport-management-code-tms-) · [Client Configuration](#client-configuration-code-client-) · [Change Documents](#change-documents-code-chg-) · [Development Access](#development-access-code-dev-) · [SAP Modifications](#sap-modifications-code-mod-) · [Dead Code](#dead-code-code-dead-)
@@ -70,11 +70,12 @@
   - **Standard Users** &nbsp; [Standard / Default Users](#standard--default-users-stdusr-)
   - **System Trust** &nbsp; [System Trust](#system-trust-trust-)
   - **Access Risk Analysis** &nbsp; [Segregation-of-Duties conflicts](#segregation-of-duties-conflicts-25)
+  - **CAP & XSUAA** &nbsp; [The Authorization Chain](#the-authorization-chain-capx-graph-) · [The CDS Model](#the-cds-model-capx-cds-) · [Security Descriptor Configuration](#security-descriptor-configuration-capx-)
   - **Basis Jobs & OS Commands** &nbsp; [External OS-command definitions (JOBCMD-CMD-*) — from SM69 / SXPGCOSTAB](#external-os-command-definitions-jobcmd-cmd---from-sm69--sxpgcostab) · [Background jobs & step users (JOBCMD-JOB-*) — from TBTCO / TBTCP](#background-jobs--step-users-jobcmd-job---from-tbtco--tbtcp)
 
   </details>
 - **[Quick Start](#quick-start)**
-  - [Available Modules](#available-modules) &nbsp;<sub>all 30 keys</sub>
+  - [Available Modules](#available-modules) &nbsp;<sub>all 33 keys</sub>
 - **[Release Gate](#release-gate)** &nbsp;<sub>exit 0 · 1 · 2</sub>
 - **[Reports](#reports)** &nbsp;<sub>4 sections</sub>
   <details><summary><sub>expand</sub></summary>
@@ -101,7 +102,7 @@
 |---|---|
 | [**`docs/ARCHITECTURE.md`**](docs/ARCHITECTURE.md) <br><sub>**Confidential** · not published. Renders here on GitHub; [`ARCHITECTURE.html`](docs/ARCHITECTURE.html) is the same document styled for print and offline reading, generated from the same source.</sub> | How the system is put together and why, explained from first principles for readers who are not software engineers. Seven parts and 35 chapters: the problem RISE creates, the trust boundary, the seven-stage pipeline, the thirty inspectors, what to fix first, risk in money terms, and a full chapter on what the product cannot do. Start here. |
 | [`docs/EXPORT_GUIDE.md`](docs/EXPORT_GUIDE.md) | How to produce the exports this tool reads |
-| [`docs/EXPORT_SOURCES.md`](docs/EXPORT_SOURCES.md) | Every one of the 123 logical sources, what it feeds, and whether a procedure is written yet |
+| [`docs/EXPORT_SOURCES.md`](docs/EXPORT_SOURCES.md) | Every one of the 128 logical sources, what it feeds, and whether a procedure is written yet |
 | [`docs/CHECKS_REFERENCE.md`](docs/CHECKS_REFERENCE.md) | Per-check reference |
 | [`docs/RELEASE_GATE.md`](docs/RELEASE_GATE.md) | Using the scanner as a CI gate — adoption order and policy |
 | [`docs/RISE_SECURITY_MODEL.md`](docs/RISE_SECURITY_MODEL.md) | Who can actually fix what in RISE, and why it decides the finding text |
@@ -128,7 +129,7 @@ It runs in **two modes that share one scanner core**:
 
 - **No direct system connection required** — offline & agentless by default. Nothing is ever installed in the SAP system and no RFC user is created, in either mode.
 - **Connected mode is optional and separately invoked.** `python -m collect …` reads from a system you authorise and writes the same export files the offline path consumes — read-only, enforced in the transport rather than promised. The scanner itself still connects to nothing. See [Connected mode](#connected-mode). In RISE, third-party ABAP add-ons are an Excluded Task requiring an additional SKU and a multi-week evaluation; an export bundle needs none of that.
-- **~600 security checks across 30 audit modules** — ABAP authorizations, HANA DB, BTP/Cloud, GRC Access Control, SOX financial-config controls, permission-level Segregation of Duties, and a custom-code scanner. Precisely: **363** check IDs are written as literals and **621** exist once the five runtime-generated families (profile parameters, ABAP rules, SoD risks, ATC families) resolve against their shipped rulesets.
+- **664 security checks across 33 audit modules** — ABAP authorizations, HANA DB, BTP/Cloud, GRC Access Control, SOX financial-config controls, permission-level Segregation of Duties, and a custom-code scanner. Precisely: **400** check IDs are written as literals and **664** exist once the five runtime-generated families (profile parameters, ABAP rules, SoD risks, ATC families, conflicting-duty pairs) resolve against their shipped rulesets.
 - **Complete against SAP's mandatory ECS baseline** — **92 of 92** profile parameters from **SAP Note 3250501** (the hardening requirements SAP makes mandatory for AS ABAP in Enterprise Cloud Services), plus its configuration half. Every value is read from a recorded extract of the note, never hand-typed, because a transcription typo tells a customer they are compliant when they are not.
 - **Deployment-aware** — `--deployment-mode` decides what *compliant* means. `snc/accept_insecure_gui = 1` is **SAP's own mandated value** in ECS, `rfc/callback_security_method = 1` is a **documented exception** SAP permits (the ECS standard is `3`), and an unlocked `DDIC` is explicitly not required to be locked. All three are findings on classic on-premise ABAP. A RISE-specific scanner that flags SAP's own baseline is confidently wrong on every compliant system.
 - **Custom code (CVA)** — **133 rules dispatched by file type** (118 ABAP/CDS/RAP, 7 JavaScript/UI5, 8 BTP descriptor) over a statement-level lexer with intra-procedural taint analysis, so a finding is graded `confirmed` / `tentative` / `pattern-only` rather than asserted. ABAP statements end at a period and span lines; matching them one line at a time loses real injections and invents false ones.
@@ -433,11 +434,15 @@ SoD checks support three data strategies: pre-computed matrix (`sod_matrix.csv`)
 | BTP-NET-001 | Services using public internet endpoints | MEDIUM |
 | BTP-NET-002 | Critical services without Private Link | HIGH |
 
-### Subaccount Governance (BTP-GOV-*, BTP-AUD-*)
+### Subaccount Governance (BTP-GOV-*)
 | Check | Description | Severity |
 |-------|-------------|----------|
 | BTP-GOV-001 | Subaccounts without audit logging | HIGH |
 | BTP-GOV-002 | Subaccounts using default SAP IDP only | MEDIUM |
+
+### Audit-Log Coverage (BTP-AUD-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
 | BTP-AUD-001 | Subaccounts whose audit-log state no export settles | INFO |
 
 ### Token Policy (BTP-TOK-*)
@@ -468,21 +473,21 @@ SoD checks support three data strategies: pre-computed matrix (`sod_matrix.csv`)
 The application as written, from its own source tree. Design-time facts that
 appear in no runtime export.
 
-### The authorization chain (CAPX-GRAPH-*)
+### The Authorization Chain (CAPX-GRAPH-*)
 | Check | Description | Severity |
 |-------|-------------|----------|
 | CAPX-GRAPH-001 | Broken reference in the scope ← role-template ← role-collection chain | HIGH |
 | CAPX-GRAPH-002 | Application scopes granted to every federated user by birthright | HIGH |
 | CAPX-GRAPH-003 | Role template no role collection can deliver | MEDIUM |
 
-### The CDS model (CAPX-CDS-*)
+### The CDS Model (CAPX-CDS-*)
 | Check | Description | Severity |
 |-------|-------------|----------|
 | CAPX-CDS-001 | CAP service exposed with no access control | HIGH |
 | CAPX-CDS-002 | `@restrict` privilege with no `to:` — grants to every user | HIGH |
 | CAPX-CDS-003 | Model enforces a role no security descriptor grants | MEDIUM |
 
-### The security descriptor (`xs-security.json`)
+### Security Descriptor Configuration (CAPX-*)
 | Check | Description | Severity |
 |-------|-------------|----------|
 | CAPX-TOK-001 | Application overrides the subaccount token policy | HIGH |
@@ -1119,7 +1124,7 @@ ecsconfig — ECS mandatory configuration, Note 3250501 (…-ECS-*)
 all       — Run everything (default)
 ```
 
-That is the complete list — all 30 keys, matching `--modules` exactly.
+That is the complete list — all 33 keys, matching `--modules` exactly.
 
 Examples with the newer modules:
 
@@ -1548,7 +1553,7 @@ SAP-S4HANA-RISE-Security-Scanner/
 │   └── extract.py                  # writes the same export files the offline path reads
 ├── modules/
 │   ├── base_auditor.py             # BaseAuditor: finding()/get_config() + severity constants
-│   ├── data_loader.py              # CSV/JSON loader (auto-delimiter, header normalize; 123 logical sources)
+│   ├── data_loader.py              # CSV/JSON loader (auto-delimiter, header normalize; 128 logical sources)
 │   ├── report_generator.py         # Interactive HTML dashboard (light theme, XSS-safe, weighted risk score, compliance panel)
 │   ├── pdf_report.py               # Multi-page PDF report (cover → priority → categories → compliance → fix-first findings)
 │   ├── pdf_writer.py               # Dependency-free PDF engine (standard-14 fonts, wrapping, tables)
@@ -1627,12 +1632,12 @@ SAP-S4HANA-RISE-Security-Scanner/
 ├── sample_data_cloudalm/           # SAP Cloud ALM export fixture (same-fingerprint proof)
 ├── tools/                          # build_brand_assets.py, build_abap_rules.py, add_code_kb_entries.py
 ├── data/
-│   ├── finding_details.json        # Knowledge base: 352 entries — detailed risk + remediation per check
+│   ├── finding_details.json        # Knowledge base: 373 entries — detailed risk + remediation per check
 │   ├── fair_scenarios.json         # FAIR catalog: 5 SAP loss scenarios + factor/loss ranges (--crq)
 │   ├── attack_paths.json           # 7 SAP attack-path templates (content, not code)
 │   ├── ecs_hardening_3250501.json  # SAP Note 3250501: 92 parameters + 18 config items, facts only
 │   └── sap_baseline_requirements.json  # Derived from SAP's published CSA policies; CI fails on drift
-├── tests/                          # ~1,975 tests across 50 files
+├── tests/                          # 3,253 tests across 96 files
 │   ├── conftest.py                 # pytest fixtures (DataLoader over sample_data)
 │   ├── test_scanner.py             # per-module + full-pipeline + CLI tests
 │   ├── test_identity.py            # fingerprint semantics, against the REAL sample_data
@@ -1770,7 +1775,7 @@ If you check the repo out and start the server **without building the console**,
 
 ## Testing
 
-About **1,975 tests** across 50 files. The suite runs every audit module against the bundled
+About **3,253 tests** across 96 files. The suite runs every audit module against the bundled
 `sample_data` (crafted to trigger each check) and validates the full pipeline —
 no SAP system needed. It checks that each module fires, handles empty input
 without crashing, honours the finding contract (field types / severities — this

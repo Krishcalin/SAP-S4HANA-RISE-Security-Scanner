@@ -6,11 +6,15 @@
 > outstanding. A great deal has shipped since they were written, and this document
 > has not been rewritten phase by phase:
 >
-> - **30 audit modules** (these documents say 23), 621 check ids, 123 logical sources.
-> - **Connected mode exists** — `collect/` with two read-only connectors. It was
->   the *last* phase in the coverage plan and was built early.
-> - **The ECC axis is measured, not estimated**: 14 of 30 auditors produce
->   identical findings on an ECC export. See [ECC_COVERAGE.md](ECC_COVERAGE.md).
+> - **33 audit modules** (these documents say 23), 664 check ids, 128 logical sources.
+> - **Connected mode exists** — `collect/` with four read-only collectors:
+>   `sapcontrol` (sapstartsrv SOAP), `icf` (HTTP service surface + OData
+>   catalogue), `rfc` (users, roles, authorisations) and `btp` (platform REST
+>   APIs + Cloud Connector). It was the *last* phase in the coverage plan and
+>   was built early.
+> - **The ECC axis is measured, not estimated**: 15 of 33 auditors produce
+>   identical findings on an ECC export, and 22 produce something. See
+>   [ECC_COVERAGE.md](ECC_COVERAGE.md).
 > - **Release gating, the tenant model and the schema-upgrade CI job have all
 >   landed.** See [DECISIONS.md](DECISIONS.md) for D1–D8 and what each one changed.
 >
@@ -475,7 +479,8 @@ catalogue refreshes from SAP in CI rather than by hand.
 | Retrospective Security Audit Log review | `modules/log_review.py` (`logreview`) | ✅ |
 | Export guidance for all three | `docs/EXPORT_GUIDE.md` | ✅ |
 
-**2,365 tests collected** (401 unit, 64 against real PostgreSQL 16).
+**2,365 tests collected** (401 unit, 64 against real PostgreSQL 16) — *measured when this
+phase closed; the suite stands at 3,253 today.*
 
 ### Deliberately NOT built: live API clients *inside the product*
 
@@ -546,9 +551,12 @@ the cut is genuinely evidenced.
 - [ ] **SAP Cloud ALM CSA** ingestion — already switched on in most RISE tenants; no transport,
       no RFC user, no agent. *Verify first:* whether its API returns raw store values or only
       compliance verdicts. That determines whether it unlocks our 350 checks or only SAP's
-- [ ] **BTP collectors** — `btp` CLI output, `auditlog-management`
-      (`/auditlog/v2/auditlogrecords`, handle pagination, 4–8 req/s), Cloud Connector
-      `/api/v1/configuration`. The one area automatable end-to-end
+- [x] **BTP collectors** — **SHIPPED** as `collect/btp.py`: destinations, subaccounts,
+      `auditlog-management` (`/auditlog/v2/auditlogrecords`) and the Cloud Connector
+      `/api/v1/configuration`, all read-only behind a path allowlist checked before a
+      request is built. Out of process under `collect/`, per Decision D2 — the objection
+      recorded below was to a network client inside the stdlib-only boundary, and that
+      still stands in that form
 - [ ] **Retrospective threat review** over an exported Security Audit Log window. Prerequisite:
       log-source health checks. Wording discipline: *"retrospective detection over the exported
       window"*, **never** *"monitoring"*

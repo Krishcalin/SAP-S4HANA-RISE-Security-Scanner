@@ -413,6 +413,18 @@ combination lists, already in CSV, the exact format our loader reads.
 
 ## 4. Scoping our 23 modules against RISE
 
+> **The table below is the scoping AS IT WAS REASONED, on 2026-08-05, when there were
+> 23 modules. There are now 33.** It is kept because the *justifications* are the
+> value here — each verdict is argued from §2 and §3 of this document, and that
+> reasoning does not expire when a module is added.
+>
+> **The live verdict for every module is `RISE_MODULE_SCOPE` in
+> [`modules/coverage.py`](../modules/coverage.py)**, which the scanner actually
+> reads and which a test holds to cover all 33 auditors with no gaps. Where this
+> table and that map disagree, the map is right. Do not re-derive a verdict from
+> this table for a module added after the date above — derive it from §2 and §3
+> and record it in the map.
+
 Verdicts: **IN SCOPE** (customer-owned and actionable) · **PARTIAL / SPLIT** (mixed ownership, or
 read-only) · **OUT** (SAP-operated; suppress or mark not-applicable) · **INFORMATIONAL** (real
 finding, no customer action).
