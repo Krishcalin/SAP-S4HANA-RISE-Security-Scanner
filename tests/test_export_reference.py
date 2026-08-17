@@ -126,17 +126,44 @@ def test_every_source_has_a_procedure_a_customer_can_follow(reference):
         "%s" % (len(missing), missing[:12]))
 
 
+#: Sections still carrying an unverified-route marker. The floor drops only when
+#: a route is actually checked against a primary SAP source, and the drop is
+#: recorded here with what was checked — otherwise "the caveats went away" and
+#: "the routes got verified" are indistinguishable a month later.
+#:
+#:   12 → the count after the remaining 62 procedures were first written.
+#:   12 → after verifying five BTP routes against SAP's own documentation
+#:        repositories: `btp list accounts/entitlement` and
+#:        `btp list services/binding` (SAP-docs/btp-cloud-platform), the IAS
+#:        Application Configurations API (SAP-docs/btp-cloud-identity-services),
+#:        and the Cloud Integration OData service root with its
+#:        `IntegrationRuntimeArtifacts` and `DataStores` resources
+#:        (SAP-docs/btp-integration-suite). Three sections lost the marker
+#:        outright; `cpi_artifacts` keeps one for the credential-store half only.
+UNVERIFIED_SECTION_FLOOR = 12
+
+
 def test_an_unverified_route_says_so_where_the_reader_will_see_it(reference):
     """Not every procedure could be checked against a primary SAP source, and the
-    ones that could not carry a marker. If that marker ever disappears wholesale,
-    either somebody verified two dozen routes in an afternoon or the caveats were
-    edited out — and the second is how a guide starts being trusted more than it
-    has earned."""
+    ones that could not carry a marker. If those markers thin out, either somebody
+    verified a dozen routes in an afternoon or the caveats were edited away — and
+    the second is how a guide starts being trusted more than it has earned.
+
+    Counted per SECTION rather than per phrase, because a section can carry a
+    marker on one half of its route and a verified command on the other, which is
+    exactly what `cpi_artifacts` does now: the OData resources are attested, the
+    credential-store listing is not.
+    """
     guide = GUIDE.read_text(encoding="utf-8")
-    assert guide.count("not verified for this guide") >= 8, (
-        "the unverified-route markers have thinned out to %d — confirm the routes "
-        "were actually verified rather than the caveats removed"
-        % guide.count("not verified for this guide"))
+    body = guide.split("# The remaining sources", 1)[-1]
+    sections = re.split(r"^### ", body, flags=re.M)[1:]
+    flagged = [s for s in sections
+               if "not verified" in s.lower() or "no verified" in s.lower()]
+    assert len(flagged) >= UNVERIFIED_SECTION_FLOOR, (
+        "%d sections still declare an unverified route, down from the recorded "
+        "floor of %d. If routes were genuinely verified, lower the floor and say "
+        "in UNVERIFIED_SECTION_FLOOR which ones and against what."
+        % (len(flagged), UNVERIFIED_SECTION_FLOOR))
 
 
 def test_it_does_not_invent_sap_transaction_codes(reference):

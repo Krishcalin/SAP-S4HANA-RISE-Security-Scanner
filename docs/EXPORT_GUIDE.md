@@ -2112,8 +2112,17 @@ an encrypted link to whoever is on the path — and it is set, routinely, to get
 destination working against a self-signed certificate and then never unset.
 
 ### Entitlements (`btp_entitlements.json`)
-**Source:** BTP cockpit → *Entitlements* → *Entity Assignments*, exported per
-subaccount. *A `btp` CLI verb for this is not verified for this guide.*
+**Source:** the `btp` CLI.
+
+```bash
+btp --format json list accounts/entitlement > btp_entitlements.json
+```
+
+SAP documents this verb as *"Get all the entitlements and quota assignments for a
+global account, directories, and subaccounts"*, so one call covers the whole
+account rather than one subaccount at a time. It runs against the global account
+you are logged into unless you narrow it first with `btp target`. The cockpit
+route is *Entitlements* → *Entity Assignments* if you would rather export by hand.
 
 Also accepted: `entitlements.json`
 
@@ -2135,15 +2144,21 @@ appears on no inventory. Without `used`, an unspent entitlement and a fully
 consumed one look the same.
 
 ### Service instance bindings (`btp_service_bindings.json`)
-**Source:** BTP cockpit → *Instances and Subscriptions*, or the Cloud Foundry CLI
-where the instances live in a CF space:
+**Source:** the `btp` CLI.
 
 ```bash
-cf curl /v3/service_credential_bindings > btp_service_bindings.json
+btp target --subaccount <subaccount-id>
+btp --format json list services/binding > btp_service_bindings.json
 ```
 
-*A `btp` CLI verb for this is not verified for this guide.* Also accepted:
-`service_bindings.json`
+SAP documents this verb as *"List all service bindings associated with the current
+subaccount"* — so unlike the entitlement call it is per subaccount, and `btp
+target` decides which one. `btp get services/binding` returns one binding in full
+where the list form is too thin. Where the instances live in a Cloud Foundry space
+you can equally use `cf curl /v3/service_credential_bindings`, and the cockpit
+route is *Instances and Subscriptions*.
+
+Also accepted: `service_bindings.json`
 
 Keys read: `bindings` / `serviceBindings` / `items`, then `name` / `bindingName`,
 `service` / `serviceName` / `service_instance`, `created` / `createdAt` /
@@ -2159,7 +2174,15 @@ differently from "rotated three years ago", and the second is a claim.
 
 ### Private Link and network isolation (`btp_network.json`)
 **Source:** BTP cockpit → the Private Link service instances and your connectivity
-configuration. *No verified export route is recorded for this one.*
+configuration.
+
+*No verified export route is recorded for this one, and that is a searched-for
+absence rather than an untried one:* SAP's public documentation repositories carry
+no Private Link page at all — not in `btp-cloud-platform`, not in
+`btp-integration-suite` — so the CLI verb and API path are not stated here.
+Private Link instances are Service Manager instances, so `btp list
+services/instance` filtered to the Private Link offering is the obvious first
+thing to try; confirm it before you build a job around it.
 
 Also accepted: `private_link.json`
 
@@ -2175,10 +2198,19 @@ Keys read: `endpoints` / `privateLinks` / `configurations` / `connectivity`, the
 `privateLinkEnabled` / `private_endpoint`, `url` / `endpoint`.
 
 ### Identity Authentication configuration (`ias_config.json`)
-**Source:** the IAS Administration Console — *Applications & Resources* for the
-application list and their authentication policies, and the tenant's own password
-policy. *The IAS REST API is not named here because its path is not verified for
-this guide.*
+**Source:** the **Application Configurations API**, which SAP publishes on the SAP
+Business Accelerator Hub as `SCI_Application_Directory`; or the IAS Administration
+Console — *Applications & Resources* for the application list and their
+authentication policies, and the tenant's own password policy.
+
+> **The two do not return the same list, by design.** SAP: *"the Application
+> Configurations API may return a higher number of applications than those
+> displayed in the administration console. Some applications are used for internal
+> purposes and are not shown in the admin console."* So an API export will name
+> applications an administrator has never seen. That is not an error and they
+> should not be filtered out — an internal application with a weak authentication
+> policy is still an authentication path into the tenant. Say which route you used,
+> because a console export that is missing them is not the same evidence.
 
 Also accepted: `ias_applications.json`
 
@@ -2205,10 +2237,27 @@ password. `enforced` and `localFallbackAllowed` are the two keys that settle it.
 still on the older trust chain are named so the migration has a list.
 
 ### Cloud Integration artifacts (`cpi_artifacts.json`)
-**Source:** Cloud Integration → *Monitor* → *Manage Security Material* for the
-credential store, and *Manage Integration Content* for the deployed iFlows. *The
-OData API these screens sit on is not named here — the path is not verified for
-this guide.*
+**Source:** Cloud Integration's OData API, whose service root SAP documents as
+`https://<host address>/api/v1/` — on an Edge Integration Cell,
+`https://<host address>/location/<runtime location id>/api/v1/`. The resources
+this file is built from:
+
+| Resource | What it gives you |
+|---|---|
+| `IntegrationRuntimeArtifacts` | the deployed content — *"read, deploy, and undeploy integration content"*, and the error information for each |
+| `IntegrationDesigntimeArtifacts` | the iFlows themselves, and their configurations |
+
+An API client needs the **`MonitoringDataRead`** role template, and inbound HTTP
+access has to be set up for it first — that is the step people miss, and it fails
+as a 401 that reads like a wrong password. Example requests are on the SAP
+Business Accelerator Hub under *Integration Content*.
+
+The **credential store** is the other half and does not come from the same place:
+the tenant keystore and certificates have their own *Security Content* OData API
+on the Hub, and the deployed user-credential artifacts are listed in *Monitor* →
+*Manage Security* → *Security Material*. *The API resource for listing deployed
+user credentials is not verified for this guide* — export that half from the
+Monitor screen and say so.
 
 Also accepted: `cpi_security.json`
 
@@ -2306,8 +2355,17 @@ credential with no owner and no purpose, and it will not appear in any user acce
 review because it is not a user.
 
 ### CPI data stores and variables (`cpi_datastores.json`)
-**Source:** Cloud Integration → *Monitor* → *Manage Stores*. *The OData API path
-is not verified for this guide.*
+**Source:** the same Cloud Integration OData API as above, service root
+`https://<host address>/api/v1/`, resource `DataStores`. SAP's own example request
+is the one worth starting from:
+
+```http
+GET /DataStores?overdueonly=true
+```
+
+`overdueonly=true` narrows it to stores holding messages past their retention,
+which is the sharp end of this check; drop the parameter for the full inventory,
+which is what the scanner wants. The cockpit route is *Monitor* → *Manage Stores*.
 
 Also accepted: `cpi_variables.json`
 
