@@ -6,11 +6,11 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**380** check ids are written as literals in `modules/`, across **32** modules. A further **264** are built at runtime from shipped rule tables, giving **644** in total.
+**387** check ids are written as literals in `modules/`, across **32** modules. A further **264** are built at runtime from shipped rule tables, giving **651** in total.
 
 ## What this file does not claim
 
-**42 of the 380 titles and 16 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**42 of the 387 titles and 16 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -102,12 +102,13 @@ Category: Code & Transport Security
 | `JOBCMD-JOB-005` | MEDIUM | Background job step user differs from scheduler (identity borrowing) |
 | `JOBCMD-JOB-001B` | HIGH | Armed background job runs under a standard/technical step user |
 
-### `btp_cloud_surface` — 35 checks
+### `btp_cloud_surface` — 42 checks
 
 Category: BTP Cloud Attack Surface
 
 | Check | Severity | Title |
 |---|---|---|
+| `BTP-AUD-001` | INFO | Audit-log state could not be determined for some subaccounts |
 | `BTP-CC-001` | CRITICAL | Cloud Connector backends with wildcard resource mappings |
 | `BTP-CC-002` | HIGH | High-risk backend services exposed via Cloud Connector |
 | `BTP-CC-003` | MEDIUM | *varies* — Excessive Cloud Connector backend systems (…) |
@@ -130,6 +131,8 @@ Category: BTP Cloud Attack Surface
 | `BTP-EM-003` | MEDIUM | Event Mesh queues subscribing to foreign namespaces |
 | `BTP-ENT-001` | LOW | BTP services entitled but never provisioned |
 | `BTP-ENT-002` | MEDIUM | Security-critical BTP services entitled but not provisioned |
+| `BTP-FRM-001` | HIGH | Subaccount login pages may be framed by an unrestricted origin |
+| `BTP-FRM-002` | MEDIUM | Iframe embedding enabled for the subaccount (SAP default is off) |
 | `BTP-GOV-001` | HIGH | BTP subaccounts without audit logging |
 | `BTP-GOV-002` | MEDIUM | BTP subaccounts using default SAP IDP only |
 | `BTP-IAS-001` | MEDIUM | IAS applications without conditional authentication rules |
@@ -137,12 +140,16 @@ Category: BTP Cloud Attack Surface
 | `BTP-IAS-003` | HIGH | IAS applications without multi-factor authentication |
 | `BTP-IAS-004` | *varies* | IAS password policy for local users is weak |
 | `BTP-IAS-005` | HIGH | Corporate IdP not enforced — local password fallback allowed |
+| `BTP-IDL-001` | MEDIUM | Email address links identities across multiple identity providers |
 | `BTP-MIG-001` | MEDIUM | Applications still using XSUAA authentication (not migrated to IAS) |
 | `BTP-NET-001` | MEDIUM | BTP services using public internet endpoints |
 | `BTP-NET-002` | HIGH | Critical BTP services without Private Link |
 | `BTP-SB-001` | HIGH | *varies* — Service bindings not rotated in …+ days |
 | `BTP-SB-002` | HIGH | Service bindings with admin-level scopes |
 | `BTP-SB-003` | MEDIUM | Orphaned service bindings (deleted/failed instances) |
+| `BTP-TOK-001` | HIGH | OAuth token validity relaxed beyond the SAP default |
+| `BTP-TOK-002` | LOW | OAuth token validity left at the SAP default (12 hours / 7 days) |
+| `BTP-TOK-003` | LOW | OAuth token validity set below the 30-minute floor SAP states |
 
 ### `code_inventory_report` — 5 checks
 

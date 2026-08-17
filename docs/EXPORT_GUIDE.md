@@ -1027,8 +1027,12 @@ btp --format json list security/settings > btp_security_settings.json
 
 Returns the subaccount's security settings: `defaultIdentityProvider`,
 `treatUsersWithSameEmailAsSameUser`, `accessTokenValidity`, `refreshTokenValidity`,
-`iframeDomains` / `iframeDomainsList`, `customEmailDomains`. This is what settles
-whether a subaccount still logs on through the default SAP ID service.
+`iframeDomains` / `iframeDomainsList`, `customEmailDomains`. This settles whether a
+subaccount still logs on through the default SAP ID service, and it is the only
+source for four further checks: the OAuth token lifetimes against SAP's published
+defaults (`BTP-TOK-*`), which origins may embed the login page in an iframe
+(`BTP-FRM-*`), and — read together with `btp_trust.json` — whether an email address
+links identities across identity providers (`BTP-IDL-001`).
 
 > **Run it once per subaccount.** The command reports on the subaccount you are
 > currently targeted at, and the output is not guaranteed to repeat that subaccount's
@@ -1093,6 +1097,12 @@ fine, and so is leaving each page's `{"handle": …, "records": […]}` wrapper 
 > pull would be a fabricated measurement. And a subaccount missing from the export is
 > not marked as lacking audit logging — an export scoped to one subaccount says
 > nothing about the others.
+>
+> **Those subaccounts are named rather than dropped.** `BTP-AUD-001` lists every
+> subaccount whose audit-log state neither this file nor the subaccount export
+> settles, and carries `degrades_coverage` so `--gate` will not return a clean build
+> on the strength of them. A subaccount that appears in neither `BTP-GOV-001` nor
+> `BTP-AUD-001` is one this scan positively confirmed is logging.
 
 ### 5. Cloud Connector configuration (`cloud_connector_configuration.json`)
 
@@ -1144,10 +1154,10 @@ certificate expiry it carries.
 
 | File | Checks it makes possible |
 |---|---|
-| `btp_accounts_subaccount.json` | `BTP-GOV-001`, `BTP-GOV-002` (with files 2 and 4) |
-| `btp_security_settings.json` | `BTP-GOV-002` |
+| `btp_accounts_subaccount.json` | `BTP-GOV-001`, `BTP-GOV-002` (with files 2 and 4), `BTP-AUD-001` |
+| `btp_security_settings.json` | `BTP-GOV-002`, `BTP-TOK-001…003` (token policy), `BTP-FRM-001/002` (iframe embedding), `BTP-IDL-001` (with `btp_trust.json`) |
 | `btp_role_collections.json` | `S4AUTHZ-008` (birthright role collections) |
-| `btp_audit_log_records.json` | `BTP-GOV-001` (evidence that logging is on) |
+| `btp_audit_log_records.json` | `BTP-GOV-001` (evidence that logging is on), `BTP-AUD-001` (which subaccounts it leaves unsettled) |
 | `cloud_connector_configuration.json` | `BTP-CC-001` … `BTP-CC-008`, `S4AUTHZ-006` |
 
 Hand-made files in the scanner's own shape (`cloud_connector.json`,

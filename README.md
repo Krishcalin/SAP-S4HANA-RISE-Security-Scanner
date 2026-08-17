@@ -432,11 +432,30 @@ SoD checks support three data strategies: pre-computed matrix (`sod_matrix.csv`)
 | BTP-NET-001 | Services using public internet endpoints | MEDIUM |
 | BTP-NET-002 | Critical services without Private Link | HIGH |
 
-### Subaccount Governance (BTP-GOV-*)
+### Subaccount Governance (BTP-GOV-*, BTP-AUD-*)
 | Check | Description | Severity |
 |-------|-------------|----------|
 | BTP-GOV-001 | Subaccounts without audit logging | HIGH |
 | BTP-GOV-002 | Subaccounts using default SAP IDP only | MEDIUM |
+| BTP-AUD-001 | Subaccounts whose audit-log state no export settles | INFO |
+
+### Token Policy (BTP-TOK-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| BTP-TOK-001 | Token validity relaxed beyond the SAP default (12 h / 7 d) | HIGH |
+| BTP-TOK-002 | Token validity left at the SAP default | LOW |
+| BTP-TOK-003 | Token validity below the 30-minute floor SAP states | LOW |
+
+### Iframe Embedding / Clickjacking (BTP-FRM-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| BTP-FRM-001 | Login pages framable from a wildcard or plain-HTTP origin | HIGH |
+| BTP-FRM-002 | Iframe embedding enabled (SAP ships it disabled) | MEDIUM |
+
+### Identity Linking (BTP-IDL-*)
+| Check | Description | Severity |
+|-------|-------------|----------|
+| BTP-IDL-001 | Email links identities across multiple identity providers | MEDIUM |
 
 ### XSUAA Migration (BTP-MIG-*)
 | Check | Description | Severity |

@@ -35,10 +35,10 @@ clean — see chapter 13 of the architecture guide.
 | `btp_entitlements` | `btp_entitlements.json`, `entitlements.json` | `btp_cloud_surface` | **not yet written** |
 | `btp_network` | `btp_network.json`, `private_link.json` | `btp_cloud_surface` | **not yet written** |
 | `btp_role_collection_mappings` | `btp_role_collection_mappings.csv`, `role_collection_groups.csv`, `btp_role_collections.json`, `security_role_collection.json` | `s4_business_authz` | documented |
-| `btp_security_settings` | `btp_security_settings.json`, `security_settings.json` | — | documented |
+| `btp_security_settings` | `btp_security_settings.json`, `security_settings.json` | `btp_cloud_surface` | documented |
 | `btp_service_bindings` | `btp_service_bindings.json`, `service_bindings.json` | `btp_cloud_surface` | **not yet written** |
 | `btp_subaccounts` | `btp_subaccounts.json`, `subaccounts.json`, `btp_accounts_subaccount.json`, `accounts_subaccount.json` | `btp_cloud_surface` | documented |
-| `btp_trust` | `btp_trust.json` | `iam_advanced`, `rise_btp_checks` | documented |
+| `btp_trust` | `btp_trust.json` | `btp_cloud_surface`, `iam_advanced`, `rise_btp_checks` | documented |
 | `btp_users` | `btp_users.json` | `iam_advanced` | documented |
 | `business_role_catalogs` | `business_role_catalogs.csv` | `s4_business_authz` | **not yet written** |
 | `business_role_restrictions` | `business_role_restrictions.csv` | `s4_business_authz` | **not yet written** |

@@ -689,7 +689,7 @@ pre .kw{color:#8FB8F0}
 <p class="lede">If you read nothing else, read this. Everything after it is elaboration.</p>
 
 <h4>The idea in three sentences</h4>
-<p>Somebody takes a set of photographs of how the SAP system is currently configured — lists of users, roles, settings, connections, and so on — and saves them as ordinary files. MonitorRisk reads those files on a computer that has no connection to SAP at all, and applies <strong>644 checks</strong> written by people who know SAP well. It produces a report that says what is wrong, how bad it is, what to do about it, who is able to do it, and what it is worth in money.</p>
+<p>Somebody takes a set of photographs of how the SAP system is currently configured — lists of users, roles, settings, connections, and so on — and saves them as ordinary files. MonitorRisk reads those files on a computer that has no connection to SAP at all, and applies <strong>651 checks</strong> written by people who know SAP well. It produces a report that says what is wrong, how bad it is, what to do about it, who is able to do it, and what it is worth in money.</p>
 
 <figure>
   <div class="cap"><span class="fid">FIG. 5.1</span><span class="ftx">The whole idea</span></div>
@@ -711,7 +711,7 @@ pre .kw{color:#8FB8F0}
 
   <rect class="box" x="664" y="34" width="250" height="118" rx="4"/>
   <text class="sv-h" x="686" y="74">MonitorRisk</text>
-  <text class="sv-ms" x="686" y="104">644 checks</text>
+  <text class="sv-ms" x="686" y="104">651 checks</text>
   <text class="sv-ms" x="686" y="128">30 modules</text>
 
   <path class="ln" d="M914 93 H 984" marker-end="url(#ar)"/>
@@ -729,7 +729,7 @@ pre .kw{color:#8FB8F0}
 
 <div class="tw"><table>
   <tr><th class="k" style="width:4%"></th><th style="width:26%">Question</th><th>How it is answered</th></tr>
-  <tr><td class="k">1</td><td><strong>What is wrong?</strong></td><td>644 checks across 30 subject areas produce a list of findings, each naming the specific accounts, roles, settings or connections involved.</td></tr>
+  <tr><td class="k">1</td><td><strong>What is wrong?</strong></td><td>651 checks across 30 subject areas produce a list of findings, each naming the specific accounts, roles, settings or connections involved.</td></tr>
   <tr><td class="k">2</td><td><strong>How bad is each one?</strong></td><td>A severity from Critical to Low, assigned by the check itself according to what an attacker could achieve.</td></tr>
   <tr><td class="k">3</td><td><strong>What should we do first?</strong></td><td>A priority from P1 to P4 that combines severity with whether the flaw is known to be exploited, how exposed it is, and how much privilege it confers.</td></tr>
   <tr><td class="k">4</td><td><strong>What exactly do we do?</strong></td><td>A numbered remediation procedure naming the specific SAP transaction, parameter or table to change, how to verify it worked, and what to be careful of.</td></tr>
@@ -883,7 +883,7 @@ pre .kw{color:#8FB8F0}
     <div class="bands">
       <div class="band sap"><span class="bn">1</span><span><span class="bt">LOAD</span><span class="bd">open every export file and put its contents in memory</span></span></div>
       <div class="band"><span class="bn">2</span><span><span class="bt">INSPECT</span><span class="bd">thirty specialist inspectors each examine their own subject area</span></span></div>
-      <div class="band"><span class="bn">3</span><span><span class="bt">CHECK</span><span class="bd">644 individual rules produce a list of findings</span></span></div>
+      <div class="band"><span class="bn">3</span><span><span class="bt">CHECK</span><span class="bd">651 individual rules produce a list of findings</span></span></div>
       <div class="band"><span class="bn">4</span><span><span class="bt">RANK</span><span class="bd">sort into a fix-first order: P1 now, P4 backlog</span></span></div>
       <div class="band"><span class="bn">5</span><span><span class="bt">MAP</span><span class="bd">translate each finding into the language of eight audit frameworks</span></span></div>
       <div class="band vio"><span class="bn">6</span><span><span class="bt">QUANTIFY — optional</span><span class="bd">convert the picture into an expected annual loss in money</span></span></div>
@@ -906,7 +906,7 @@ pre .kw{color:#8FB8F0}
 <h5>Stage 2 — INSPECT</h5>
 <p>Thirty modules run, each an expert in one subject: one knows about user accounts, one about the HANA database, one about cloud connections, one about custom code. Each is handed the same body of information and takes what it needs.</p>
 <h5>Stage 3 — CHECK</h5>
-<p>Within each module sit individual rules — 644 in total. Each rule asks one question and, if the answer is unsatisfactory, writes one finding. A finding is a small record, not a sentence: it names the objects involved, so later stages can work with it mechanically.</p>
+<p>Within each module sit individual rules — 651 in total. Each rule asks one question and, if the answer is unsatisfactory, writes one finding. A finding is a small record, not a sentence: it names the objects involved, so later stages can work with it mechanically.</p>
 <h5>Stage 4 — RANK</h5>
 <p>Findings arrive unordered. This stage sorts them into what to do first, using more than severity alone (chapter <a href="#ch19">19</a>).</p>
 <h5>Stage 5 — MAP</h5>
@@ -965,7 +965,7 @@ pre .kw{color:#8FB8F0}
 </figure>
 
 <h4>Why the engine is shared and not duplicated</h4>
-<p>It would have been easier to build the web version separately. It would also have been a serious mistake. Two copies of 644 security rules drift apart: a rule is improved in one and not the other, and eventually the laptop and the console disagree about the same system on the same day. When that happens, the customer stops trusting both.</p>
+<p>It would have been easier to build the web version separately. It would also have been a serious mistake. Two copies of 651 security rules drift apart: a rule is improved in one and not the other, and eventually the laptop and the console disagree about the same system on the same day. When that happens, the customer stops trusting both.</p>
 <p>So the web application does not re-implement a single check. It calls the same engine. The briefcase and the control room can differ in what they remember and how they present things; they cannot differ about what is true.</p>
 
 <h4>What the control room adds</h4>
@@ -1175,7 +1175,7 @@ J_PATEL,A,64,20240119,,SALES
 <p>When the customer supplies one, a further module unpacks it and analyses the code itself, applying <strong>133 rules</strong> for the classic weaknesses described in chapter 3, family 6.</p>
 
 <h4>Why convergence matters more than it sounds</h4>
-<p>Because all three routes produce the same shape of information, none of the 644 checks contains any logic about provenance. There is no “if this came from the collector, be more careful” branch anywhere. Adding Route B required no changes to the checking logic at all, and required no new tests of the checks, because the checks could not tell the difference.</p>
+<p>Because all three routes produce the same shape of information, none of the 651 checks contains any logic about provenance. There is no “if this came from the collector, be more careful” branch anywhere. Adding Route B required no changes to the checking logic at all, and required no new tests of the checks, because the checks could not tell the difference.</p>
 <p>This is a general principle worth naming, since it recurs later in the book: <strong>push variation to the edges</strong>. Let the outside of the system deal with the messy diversity of the real world, and let the middle see one clean, uniform thing.</p>
 
 <div class="call takeaway">
@@ -1373,8 +1373,8 @@ DORMANT_DAYS = 90                       <span class="c"># the threshold, overrid
   <tr><td class="k">self.finding(…)</td><td>Write one note. Note that it records the <em>account name</em> and the concrete evidence — never a vague statement. Chapter <a href="#ch27">27</a> shows why naming objects is what makes tracking over time possible.</td></tr>
 </table></div>
 
-<h4>Why 644 of these are hard</h4>
-<p>If one check is fifteen lines, 644 checks are not simply nine thousand lines of the same thing. The difficulty is elsewhere:</p>
+<h4>Why 651 of these are hard</h4>
+<p>If one check is fifteen lines, 651 checks are not simply nine thousand lines of the same thing. The difficulty is elsewhere:</p>
 <ul>
   <li><strong>Knowing what to check.</strong> Most of the value is the accumulated knowledge of which settings matter and why. A cryptic permission with a wildcard value can mean “may impersonate any user from a trusted system”. Knowing that is decades of SAP experience, not programming.</li>
   <li><strong>Knowing when not to fire.</strong> A check that reports something harmless trains the reader to ignore it. The single most common cause of a security tool being abandoned is false alarms.</li>
@@ -1490,7 +1490,7 @@ DORMANT_DAYS = 90                       <span class="c"># the threshold, overrid
 <p>The long explanation of why something is dangerous, and the step-by-step instructions for fixing it, are not stored in the finding. They live in a separate knowledge base, looked up by check identifier when a report is written (chapter <a href="#ch20">20</a>). Two reasons:</p>
 <ul>
   <li>The same finding may appear five hundred times in one scan — once per affected role. Storing a page of narrative five hundred times would be wasteful and would make the record awkward to move around.</li>
-  <li>Improving the guidance for 644 checks becomes an edit to a content file rather than a change to thirty programs, which means it can be done by the person who knows SAP best rather than the person who writes code best.</li>
+  <li>Improving the guidance for 651 checks becomes an edit to a content file rather than a change to thirty programs, which means it can be done by the person who knows SAP best rather than the person who writes code best.</li>
 </ul>
 
 <div class="call takeaway">
@@ -1620,7 +1620,7 @@ DORMANT_DAYS = 90                       <span class="c"># the threshold, overrid
 <section class="part" id="part5">
   <div class="pnum">Part five</div>
   <h2 class="parth">Making sense of the results</h2>
-  <p class="pintro">644 checks against a real estate can produce thousands of findings. An undifferentiated list of thousands of problems is not information; it is a way of guaranteeing that nothing gets fixed. This part is about turning the list into decisions.</p>
+  <p class="pintro">651 checks against a real estate can produce thousands of findings. An undifferentiated list of thousands of problems is not information; it is a way of guaranteeing that nothing gets fixed. This part is about turning the list into decisions.</p>
   <ol class="plist">
     <li><b>19</b><a href="#ch19">What to fix first</a></li>
     <li><b>20</b><a href="#ch20">Telling people what to actually do</a></li>
@@ -1763,7 +1763,7 @@ DORMANT_DAYS = 90                       <span class="c"># the threshold, overrid
   </div>
 </figure>
 
-<p>Keeping the words out of the code has three practical effects. The people who write the guidance are SAP specialists, not programmers, and they can improve 644 entries without touching a line of code. The same entry serves the web page, the PDF and the slide deck, so the three cannot drift apart. And when no entry exists yet for a new check, the report falls back to the finding’s own description and a generic remediation — so a missing entry produces a thinner page, never a blank one.</p>
+<p>Keeping the words out of the code has three practical effects. The people who write the guidance are SAP specialists, not programmers, and they can improve 651 entries without touching a line of code. The same entry serves the web page, the PDF and the slide deck, so the three cannot drift apart. And when no entry exists yet for a new check, the report falls back to the finding’s own description and a generic remediation — so a missing entry produces a thinner page, never a blank one.</p>
 
 <h4>What good guidance avoids</h4>
 <div class="tw"><table>
@@ -2344,7 +2344,7 @@ python sap_scanner.py --data-dir ./exports --gate --gate-baseline baseline.json<
 <p class="lede">A security tool that is wrong is worse than no tool, because it produces confident false assurance. This chapter is about how correctness is demonstrated rather than asserted.</p>
 
 <h4>The central difficulty</h4>
-<p>Normally you would test a security scanner against a real system with real problems. Here that is almost impossible: you would need a licensed SAP estate, deliberately misconfigured in 644 distinct ways, and you would need it to stay that way.</p>
+<p>Normally you would test a security scanner against a real system with real problems. Here that is almost impossible: you would need a licensed SAP estate, deliberately misconfigured in 651 distinct ways, and you would need it to stay that way.</p>
 
 <h4>The solution: the whole engine is a pure function</h4>
 <p>Because the system reads files and produces findings, with no live connection and no hidden state, it can be tested completely without any SAP system at all. The project ships a body of sample data — crafted so that every single check has something to fire on — and the automated tests run every module against it.</p>
@@ -2583,7 +2583,7 @@ python sap_scanner.py --data-dir ./exports --gate --gate-baseline baseline.json<
 
 <div class="call amber">
   <span class="k">One honest note about counting</span>
-  <p>The headline “644 checks” needs a footnote. <strong>380</strong> check identifiers are written out individually in the source. A further <strong>264</strong> come from <strong>five families generated at run time</strong> from shipped rule lists — one check per technical parameter (78), one per code rule (133), one per duty-separation risk (27), one per imported code family (10), one per conflicting-duty pair (7). Both numbers are true; stating both is more useful than picking whichever is larger.</p>
+  <p>The headline “651 checks” needs a footnote. <strong>387</strong> check identifiers are written out individually in the source. A further <strong>264</strong> come from <strong>five families generated at run time</strong> from shipped rule lists — one check per technical parameter (78), one per code rule (133), one per duty-separation risk (27), one per imported code family (10), one per conflicting-duty pair (7). Both numbers are true; stating both is more useful than picking whichever is larger.</p>
   <p>These figures are derived from the code rather than typed here, and the test suite fails if this page and the source ever disagree.</p>
 </div>
 
@@ -2714,7 +2714,7 @@ fair_findings = list(all_findings)
 
 <p style="font-size:15px;color:var(--ink2);max-width:80ch"><strong>Provenance and caveat.</strong> This book was written from the repository’s documentation and its top-level program, at <a href="https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner">github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner</a>. Module names, the command-line surface, the pipeline order, the corpus-split rule, the gate rules and the deployment-mode behaviour are taken from the source and documentation. Descriptions of the internal structure of individual inspectors, the exact shape of a finding record, and the illustrative code in Appendix E are reconstructions written to be faithful in substance rather than literal in syntax; verify against the source before quoting them. All diagrams are architectural rather than exhaustive.</p>
 
-<p style="font-size:15px;color:var(--ink2);max-width:80ch">The counts this document states — 644 checks, 380 written as literals, 264 generated at run time from 5 rule families, 30 modules, 133 custom-code rules, 27 duty-separation risks, 78 profile parameters and 128 logical sources — are derived from the code by <code>tests/test_architecture_doc.py</code>, which fails the build if this page and the source disagree. Edition 1.1 corrected three figures that had drifted from the source.</p>
+<p style="font-size:15px;color:var(--ink2);max-width:80ch">The counts this document states — 651 checks, 387 written as literals, 264 generated at run time from 5 rule families, 30 modules, 133 custom-code rules, 27 duty-separation risks, 78 profile parameters and 128 logical sources — are derived from the code by <code>tests/test_architecture_doc.py</code>, which fails the build if this page and the source disagree. Edition 1.1 corrected three figures that had drifted from the source.</p>
 
 <p style="font-size:15px;color:var(--ink2)"><strong>Confidential.</strong> This document is not for publication. It describes the internal design, the current limitations and the forward direction of a commercial product; treat it as you would any other confidential product document.</p>
 

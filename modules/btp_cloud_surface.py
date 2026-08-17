@@ -21,6 +21,10 @@ Covers:
   - Network isolation (Private Link / service endpoint config)
   - BTP subaccount governance (multi-environment consistency)
   - XSUAA vs IAS migration status
+  - XSUAA token policy against SAP's published defaults (BTP-TOK-*)
+  - Iframe embedding / clickjacking exposure of the login page (BTP-FRM-*)
+  - Email as a cross-identity-provider join key (BTP-IDL-001)
+  - Which subaccounts the audit-log export leaves unassessed (BTP-AUD-001)
 
 Data sources:
   - cloud_connector.json    → SCC config export (backends, ACLs, certs)
@@ -32,6 +36,14 @@ Data sources:
   - cpi_artifacts.json      → CPI iFlow and credential store data
   - btp_network.json        → Private Link / connectivity config
   - btp_subaccounts.json    → Multi-subaccount governance data
+  - btp_security_settings.json → Token policy, iframe domains, email linking
+  - btp_trust.json          → Active identity provider trusts (BTP-IDL-001)
+  - btp_audit_log_records.json → Per-tenant logging evidence, via btp_import
+
+The last three arrive through `modules/btp_import.py`, which normalises raw btp
+CLI and API output and merges the settings onto the subaccounts they describe.
+Those fields were ingested long before anything read them; see the section
+"Subaccount security settings" below for why that was worse than not having them.
 """
 
 from typing import Dict, List, Any, Set
@@ -50,6 +62,43 @@ def _norm_auth(value: Any) -> str:
     silent on whichever half of the estate it was not written against.
     """
     return "".join(ch for ch in str(value or "").upper() if ch.isalnum())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Subaccount security settings — the numbers SAP publishes, not ones we chose
+#
+#  Every threshold below is quoted from SAP's own documentation of the SAP
+#  Authorization and Trust Management service (XSUAA), section "Setting Token
+#  Policy" [verified]. That matters more here than in most checks: a token
+#  lifetime has no natural right answer, so a threshold this product invented
+#  would be an opinion presented as a measurement. These are the vendor's.
+#
+#  Source: "Security Considerations for the SAP Authorization and Trust
+#  Management Service", SAP BTP documentation.
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: "Access tokens — Default: 43200 seconds (12 hours)."
+_ACCESS_TOKEN_DEFAULT = 43200
+
+#: "Refresh tokens — Default: 604800 seconds (7 days)."
+_REFRESH_TOKEN_DEFAULT = 604800
+
+#: "Keep token validity as short as possible, but not less than 30 minutes."
+_TOKEN_VALIDITY_FLOOR = 1800
+
+#: The fields `btp list security/settings` returns, as `btp_import` normalises
+#: them. Presence of ANY of these is what makes a record a settings record.
+_SETTINGS_FIELDS = ("accessTokenValidity", "refreshTokenValidity",
+                    "iframeDomains", "iframeDomainsList", "customEmailDomains",
+                    "treatUsersWithSameEmailAsSameUser")
+
+#: The identity fields a subaccount can be named by, in the order `btp_import`
+#: matches them. Kept in step with `btp_import._match_subaccount` deliberately:
+#: if the two disagree, a settings record merged onto a subaccount there would
+#: be read a SECOND time here as unattributed, and one subaccount's token policy
+#: would be reported twice.
+_SUBACCOUNT_KEYS = ("id", "subaccountId", "guid", "subdomain", "name",
+                    "displayName")
 
 
 class BtpCloudSurfaceAuditor(BaseAuditor):
@@ -122,6 +171,10 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
         self.check_network_isolation()
         self.check_subaccount_governance()
         self.check_xsuaa_migration()
+        self.check_token_policy()
+        self.check_iframe_domains()
+        self.check_email_identity_linking()
+        self.check_audit_log_coverage()
         return self.findings
 
     # ════════════════════════════════════════════════════════════════
@@ -1959,18 +2012,19 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
             name = sa.get("name", sa.get("displayName", "unknown"))
             sa_id = sa.get("id", sa.get("subaccountId", ""))
             region = sa.get("region", sa.get("dataCenter", ""))
-            audit_enabled = sa.get("auditLogEnabled",
-                           sa.get("hasAuditLog", False))
             custom_idp = sa.get("customIdp", sa.get("identityProvider",
                         sa.get("trustConfiguration", "")))
             environment = sa.get("environment", sa.get("env", ""))
 
             label = f"{name} ({sa_id}, region: {region})"
 
-            # Missing audit log
-            if not audit_enabled or str(audit_enabled).lower() in (
-                "false", "0", "no", ""
-            ):
+            # Missing audit log — and ONLY when that is actually known. This read
+            # `sa.get("auditLogEnabled", ..., False)`, so a subaccount whose
+            # export never carried the field was reported as HIGH "no audit
+            # logging" on the strength of a default argument. `_audit_state`
+            # returns None for that case and BTP-AUD-001 reports it as
+            # unassessed, which is what it is.
+            if self._audit_state(sa) is False:
                 no_audit.append(label)
                 # The subaccount id is preferred over the display name: it is the
                 # stable key, it survives a rename, and it is the same string the
@@ -2103,6 +2157,888 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                 # app must not retire the finding tracking the remaining backlog.
                 scope="aggregate",
             )
+
+    # ════════════════════════════════════════════════════════════════
+    #  Subaccount security settings — reading what was already ingested
+    #
+    #  `btp_import` has normalised and merged these fields since it was
+    #  written, and until now nothing read them. An ingested field with no
+    #  consumer is worse than an absent one: the export guide asks a customer
+    #  to run a command and send a file, the manifest confirms the file
+    #  arrived, and the scan then says nothing about it. That reads as "we
+    #  looked and found nothing wrong".
+    # ════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def _subaccount_records(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """The subaccount dicts inside whatever `btp_subaccounts` holds.
+
+        The same three envelopes `btp_import._subaccount_list` unwraps, because
+        these checks and that merge have to agree on what a subaccount is.
+        """
+        payload = data.get("btp_subaccounts")
+        if isinstance(payload, list):
+            return [r for r in payload if isinstance(r, dict)]
+        if isinstance(payload, dict):
+            for key in ("subaccounts", "items", "value"):
+                found = payload.get(key)
+                if isinstance(found, list):
+                    return [r for r in found if isinstance(r, dict)]
+        return []
+
+    def _settings_scopes(self) -> List[Dict[str, Any]]:
+        """Every subaccount security-settings record, counted exactly once.
+
+        Two places hold the same fields. `btp_import._merge_settings` folds a
+        `btp list security/settings` payload onto the subaccount it names, so an
+        ATTRIBUTED record appears both on the subaccount and in the raw
+        `btp_security_settings` list. Reading both would report one subaccount's
+        token policy twice; reading only the raw list would lose the subaccount's
+        name from every finding.
+
+        So the subaccount wins, and a raw record is read only when it was never
+        attributed to one. Those are still real measurements of a real
+        subaccount and are not discarded — but they are labelled as
+        unattributed, so the report never puts a subaccount's name against
+        settings that might belong to a different one.
+        """
+        records = self._subaccount_records(self.data)
+        known = set()
+        for sa in records:
+            for field in _SUBACCOUNT_KEYS:
+                value = sa.get(field)
+                if value not in (None, ""):
+                    known.add(str(value).strip().lower())
+
+        scopes: List[Dict[str, Any]] = []
+        for sa in records:
+            if not any(field in sa for field in _SETTINGS_FIELDS):
+                continue
+            sa_id = sa.get("id") or sa.get("subaccountId") or sa.get("guid") or ""
+            name = sa.get("name") or sa.get("displayName") or ""
+            if name and sa_id:
+                label = "%s (%s)" % (name, sa_id)
+            else:
+                label = str(name or sa_id or "unnamed subaccount")
+            scopes.append({"label": label, "name": str(sa_id or name),
+                           "settings": sa, "attributed": True})
+
+        raw = self.data.get("btp_security_settings")
+        if not isinstance(raw, list):
+            return scopes
+        for row in raw:
+            if not isinstance(row, dict):
+                continue
+            key = str(row.get("subaccount") or "").strip()
+            if key and key.lower() in known:
+                continue            # already read off the subaccount it merged onto
+            if not key and len(records) == 1:
+                continue            # merged onto the only subaccount there is
+            scopes.append({
+                "label": ("security settings for subaccount %s (no such "
+                          "subaccount in this export)" % key) if key else
+                         "security settings that name no subaccount",
+                # No object name: an id nothing in the export corresponds to is
+                # not a node, and "unattributed" as a name would merge every such
+                # record in the estate into one.
+                "name": "",
+                "settings": row, "attributed": False})
+        return scopes
+
+    @staticmethod
+    def _token_seconds(settings: Dict[str, Any], key: str):
+        """The explicit token lifetime in seconds, or None for "not stated".
+
+        None is not an error and not a zero — it means this subaccount sets no
+        lifetime of its own, which leaves SAP's documented default in force.
+        Three inputs reduce to it: the key is absent (the export never carried
+        the field), the value is not a number, or the value is not positive.
+
+        That last one is the load-bearing case. The cockpit and the Security
+        Settings API write a non-positive sentinel where nothing has been set,
+        and the exports seen here carry `-1`. Rather than hard-code a sentinel
+        this product cannot cite, it takes the weaker and safer reading: a
+        negative or zero number of seconds is not a lifetime under any
+        interpretation, so it is treated as unset. If SAP ever gave `-1` some
+        other meaning, this check would understate rather than fabricate.
+        """
+        if key not in settings:
+            return None
+        raw = settings[key]
+        if isinstance(raw, bool):
+            return None
+        try:
+            seconds = int(str(raw).strip())
+        except (TypeError, ValueError):
+            return None
+        return seconds if seconds > 0 else None
+
+    @staticmethod
+    def _duration(seconds: int) -> str:
+        """`43200 s (12 hours)` — the number and a human reading of it."""
+        if seconds % 86400 == 0 and seconds >= 86400:
+            unit, count = "day", seconds // 86400
+        elif seconds % 3600 == 0 and seconds >= 3600:
+            unit, count = "hour", seconds // 3600
+        elif seconds % 60 == 0 and seconds >= 60:
+            unit, count = "minute", seconds // 60
+        else:
+            return "%d s" % seconds
+        return "%d s (%d %s%s)" % (seconds, count, unit, "" if count == 1 else "s")
+
+    # ════════════════════════════════════════════════════════════════
+    #  BTP-TOK-*: XSUAA token policy
+    # ════════════════════════════════════════════════════════════════
+
+    def check_token_policy(self):
+        """Audit the subaccount-wide OAuth token lifetimes.
+
+        SAP states the risk itself, and states it as the reason the setting
+        exists: "increasing the token validity also means that if a malicious
+        user manages to steal a token, that malicious user has access until the
+        token expires."
+
+        Three separate verdicts, because they call for three different actions:
+        a lifetime relaxed past SAP's own default was chosen by somebody and can
+        be un-chosen; a lifetime left at the default was never considered; and a
+        lifetime under SAP's stated floor is a different mistake in the opposite
+        direction.
+
+        WHAT THIS CHECK CANNOT SEE, and every finding says so: the subaccount
+        setting applies only to "service instances in the subaccount that
+        haven't set a specific value in the application security descriptor
+        (xs-security.json)". An individual application can override it in either
+        direction, and no export in this product's reach carries those
+        overrides. A clean result here is therefore a clean result about the
+        subaccount default, not about every token the subaccount issues.
+        """
+        scopes = self._settings_scopes()
+        if not scopes:
+            return
+
+        relaxed, relaxed_objects = [], []
+        defaulted, defaulted_objects = [], []
+        under_floor, under_floor_objects = [], []
+
+        for scope in scopes:
+            settings = scope["settings"]
+            stated = [k for k in ("accessTokenValidity", "refreshTokenValidity")
+                      if k in settings]
+            if not stated:
+                # The export carried settings but not these fields. Silence is
+                # the only honest verdict: nothing was measured.
+                continue
+
+            pairs = (
+                ("accessTokenValidity", "access token",
+                 self._token_seconds(settings, "accessTokenValidity"),
+                 _ACCESS_TOKEN_DEFAULT),
+                ("refreshTokenValidity", "refresh token",
+                 self._token_seconds(settings, "refreshTokenValidity"),
+                 _REFRESH_TOKEN_DEFAULT),
+            )
+
+            over = ["%s %s — SAP default is %s"
+                    % (what, self._duration(value), self._duration(default))
+                    for _k, what, value, default in pairs
+                    if value is not None and value > default]
+            short = ["%s %s" % (what, self._duration(value))
+                     for _k, what, value, _d in pairs
+                     if value is not None and value < _TOKEN_VALIDITY_FLOOR]
+            # `key in settings` is load-bearing, not defensive. Without it a
+            # settings export trimmed to one of the two fields would be reported
+            # as having left the OTHER at the SAP default — a claim about a field
+            # that was never in the file, which is the same fabrication as
+            # reading an absent auditLogEnabled as "logging is off", at a lower
+            # severity. Only a field that is present and holds no positive
+            # lifetime is evidence that no lifetime was set.
+            #
+            # Each one also names ITS OWN default: listing both whenever either
+            # was unset would tell a subaccount that had set a 30-minute access
+            # token that it was running on SAP's 12-hour one.
+            unset = ["%s at %s" % (what, self._duration(default))
+                     for key, what, value, default in pairs
+                     if key in settings and value is None]
+
+            if over:
+                relaxed.append("%s — %s" % (scope["label"], "; ".join(over)))
+                self._add_object(relaxed_objects, "subaccount", scope["name"],
+                                 "; ".join(over))
+            if short:
+                under_floor.append("%s — %s" % (scope["label"], "; ".join(short)))
+                self._add_object(under_floor_objects, "subaccount", scope["name"],
+                                 "; ".join(short))
+            if unset and not over:
+                # Only when nothing was relaxed. A subaccount that lengthened its
+                # access token and left the refresh token at the default belongs
+                # in the finding about the change, not in the backlog one.
+                defaulted.append("%s — left at the SAP default: %s"
+                                 % (scope["label"], " and ".join(unset)))
+                self._add_object(defaulted_objects, "subaccount", scope["name"],
+                                 "token policy not set")
+
+        override_caveat = (
+            "Note: this is the subaccount-wide setting. It applies to service "
+            "instances that do not set token-validity or refresh-token-validity "
+            "in their own xs-security.json, and this scan cannot see those "
+            "application-level overrides."
+        )
+
+        if relaxed:
+            self.finding(
+                check_id="BTP-TOK-001",
+                title="OAuth token validity relaxed beyond the SAP default",
+                severity=self.SEVERITY_HIGH,
+                category="BTP Cloud Attack Surface",
+                description=(
+                    f"{len(relaxed)} BTP subaccount(s) issue OAuth tokens that "
+                    "stay valid longer than SAP's own documented default of "
+                    f"{self._duration(_ACCESS_TOKEN_DEFAULT)} for access tokens "
+                    f"and {self._duration(_REFRESH_TOKEN_DEFAULT)} for refresh "
+                    "tokens. SAP's guidance on this setting: 'increasing the "
+                    "token validity also means that if a malicious user manages "
+                    "to steal a token, that malicious user has access until the "
+                    "token expires.' A token lifted from a log, a browser "
+                    "session, a CI variable or a bound application therefore "
+                    "buys the holder that much unauthenticated access, and "
+                    "revoking the user's credentials does not shorten it. "
+                    "A relaxed lifetime is a deliberate change: the default had "
+                    f"to be raised for this to be true. {override_caveat}"),
+                affected_items=relaxed,
+                remediation=(
+                    "1. In the BTP cockpit, open Security > Settings > Token "
+                    "Validity for each subaccount named, and record the current "
+                    "values before changing them.\n"
+                    "2. Identify why the lifetime was raised — it is usually one "
+                    "integration that could not refresh — and fix that "
+                    "integration to use the refresh flow.\n"
+                    "3. Lower the access token validity to SAP's example value "
+                    "of 1800 seconds and the refresh token validity to 43200 "
+                    "seconds, or to the shortest values your integrations "
+                    "tolerate.\n"
+                    "4. Never set either below 1800 seconds: SAP states 'keep "
+                    "token validity as short as possible, but not less than 30 "
+                    "minutes'.\n"
+                    "5. Check the bound applications' xs-security.json for "
+                    "token-validity overrides, which this scan cannot see and "
+                    "which take precedence over the subaccount value.\n"
+                    "6. Re-run the scan to confirm the subaccount default is "
+                    "back within the SAP baseline."),
+                references=[
+                    "SAP BTP — Configure Token Policy for SAP Authorization and "
+                    "Trust Management Service",
+                    "SAP BTP — Security Considerations for the SAP Authorization "
+                    "and Trust Management Service (Setting Token Policy)",
+                ],
+                affected_objects=relaxed_objects,
+                details={"access_token_default_seconds": _ACCESS_TOKEN_DEFAULT,
+                         "refresh_token_default_seconds": _REFRESH_TOKEN_DEFAULT,
+                         "application_overrides_not_visible": True},
+                # Summary of every subaccount over the SAP default; tightening one
+                # must not retire the finding covering the rest.
+                scope="aggregate",
+            )
+
+        if defaulted:
+            self.finding(
+                check_id="BTP-TOK-002",
+                title="OAuth token validity left at the SAP default (12 hours / 7 days)",
+                severity=self.SEVERITY_LOW,
+                category="BTP Cloud Attack Surface",
+                description=(
+                    f"{len(defaulted)} BTP subaccount(s) set no token lifetime "
+                    "of their own, so SAP's defaults apply: "
+                    f"{self._duration(_ACCESS_TOKEN_DEFAULT)} for access tokens "
+                    f"and {self._duration(_REFRESH_TOKEN_DEFAULT)} for refresh "
+                    "tokens. This is not a misconfiguration — it is the shipped "
+                    "state — but SAP's own recommendation for the setting is to "
+                    "'keep token validity as short as possible, but not less "
+                    "than 30 minutes', and a week-long refresh token in a "
+                    "production subaccount is a long way from as short as "
+                    "possible. It is raised at LOW severity for that reason: the "
+                    "finding is that the decision was never made, not that a "
+                    f"wrong one was. {override_caveat}"),
+                affected_items=defaulted,
+                remediation=(
+                    "1. Decide a token policy per environment rather than per "
+                    "subaccount ad hoc — production subaccounts warrant shorter "
+                    "lifetimes than sandboxes.\n"
+                    "2. In the BTP cockpit, Security > Settings > Token "
+                    "Validity, set the access token validity toward SAP's "
+                    "example of 1800 seconds and the refresh token validity "
+                    "toward 43200 seconds.\n"
+                    "3. Do not go below 1800 seconds for either.\n"
+                    "4. Roll the change out to a non-production subaccount "
+                    "first: a shortened refresh token surfaces any integration "
+                    "that was silently relying on a long-lived one.\n"
+                    "5. Record the chosen values in your BTP subaccount "
+                    "provisioning blueprint so new subaccounts inherit them "
+                    "instead of the defaults.\n"
+                    "6. Re-run the scan to confirm each subaccount now states a "
+                    "policy of its own."),
+                references=[
+                    "SAP BTP — Configure Token Policy for SAP Authorization and "
+                    "Trust Management Service",
+                ],
+                affected_objects=defaulted_objects,
+                details={"access_token_default_seconds": _ACCESS_TOKEN_DEFAULT,
+                         "refresh_token_default_seconds": _REFRESH_TOKEN_DEFAULT,
+                         "application_overrides_not_visible": True},
+                # Summary of the subaccounts that never set a policy.
+                scope="aggregate",
+            )
+
+        if under_floor:
+            self.finding(
+                check_id="BTP-TOK-003",
+                title="OAuth token validity set below the 30-minute floor SAP states",
+                severity=self.SEVERITY_LOW,
+                category="BTP Cloud Attack Surface",
+                description=(
+                    f"{len(under_floor)} BTP subaccount(s) set a token lifetime "
+                    f"shorter than {self._duration(_TOKEN_VALIDITY_FLOOR)}, "
+                    "against SAP's explicit instruction to 'keep token validity "
+                    "as short as possible, but not less than 30 minutes'. This "
+                    "is over-tightening rather than a weakness, and it is "
+                    "reported because it does not fail safely: the SAP "
+                    "Authorization and Trust Management service has its own "
+                    "30-minute session timeout, after which it stops forwarding "
+                    "logoff requests to the identity provider, and lifetimes "
+                    "below that floor put the two out of step. The practical "
+                    "result is users re-authenticating mid-task and "
+                    "integrations failing intermittently — which is how a "
+                    "well-intentioned tightening gets reverted to something "
+                    f"longer than it started. {override_caveat}"),
+                affected_items=under_floor,
+                remediation=(
+                    "1. Raise the affected token validity to at least 1800 "
+                    "seconds in Security > Settings > Token Validity.\n"
+                    "2. If the short lifetime was set to limit exposure for one "
+                    "sensitive application, move that limit into the "
+                    "application's own xs-security.json rather than applying it "
+                    "to the whole subaccount.\n"
+                    "3. Check whether users of this subaccount have been "
+                    "reporting unexpected re-authentication, which confirms the "
+                    "setting is the cause.\n"
+                    "4. Re-run the scan to confirm the subaccount sits at or "
+                    "above the floor."),
+                references=[
+                    "SAP BTP — Configure Token Policy for SAP Authorization and "
+                    "Trust Management Service",
+                    "SAP BTP — Security Considerations for the SAP Authorization "
+                    "and Trust Management Service (Training Business Users How "
+                    "to Handle Session Timeouts)",
+                ],
+                affected_objects=under_floor_objects,
+                details={"floor_seconds": _TOKEN_VALIDITY_FLOOR},
+                scope="aggregate",
+            )
+
+    # ════════════════════════════════════════════════════════════════
+    #  BTP-FRM-*: iframe embedding / clickjacking exposure
+    # ════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def _iframe_origins(settings: Dict[str, Any]) -> List[str]:
+        """Every origin permitted to frame this subaccount's pages.
+
+        Both spellings are read, and both have to be. `iframeDomains` is ONE
+        string holding all of them — SAP's own Terraform provider documents it
+        as "Enter as string. To provide multiple domains, separate them by
+        spaces" — while `iframeDomainsList` is the newer list form of the same
+        setting, which the provider recommends in its place. An export can carry
+        either. Reading only one would report half the estates as having framing
+        switched off when it is switched on.
+        """
+        origins: List[str] = []
+        raw = settings.get("iframeDomains")
+        if isinstance(raw, str):
+            origins.extend(part for part in raw.split() if part)
+        listed = settings.get("iframeDomainsList")
+        if isinstance(listed, list):
+            origins.extend(str(item).strip() for item in listed
+                           if str(item or "").strip())
+
+        seen, unique = set(), []
+        for origin in origins:
+            if origin not in seen:
+                seen.add(origin)
+                unique.append(origin)
+        return unique
+
+    @staticmethod
+    def _origin_is_broad(origin: str) -> str:
+        """Why this framing origin is worse than a named HTTPS host, or ``""``.
+
+        Everything decided here is a property of the string itself, so nothing
+        is looked up and nothing is assumed about the estate. Two properties
+        matter. A wildcard that covers a whole domain space means the permitted
+        framer is not a host at all, and SAP's guidance is that it has to be one
+        you can vouch for: "Ensure that no attacker can add malicious web pages
+        or Javascript to any of the hosts allowed to frame the applications."
+        A plain-HTTP origin means the framing page can be rewritten in transit,
+        so its trustworthiness is not a property anyone controls.
+
+        `https://*.example.com` is NOT flagged. SAP documents exactly that form
+        as legitimate, and a subdomain wildcard inside a domain the customer owns
+        is a different thing from a wildcard over `*.com`.
+        """
+        text = str(origin or "").strip()
+        if not text:
+            return ""
+        lowered = text.lower()
+        host = lowered.split("://", 1)[-1].split("/", 1)[0].strip()
+        if not host or host.strip("*.") == "":
+            return "any origin may frame these pages"
+        if host.startswith("*.") and host.count(".") <= 1:
+            return "wildcard spans an entire top-level domain"
+        if lowered.startswith("http://"):
+            return "framing origin is plain HTTP and can be rewritten in transit"
+        return ""
+
+    def check_iframe_domains(self):
+        """Audit which origins may embed the subaccount's pages in an iframe.
+
+        SAP ships this closed: "By default, applications of the subaccount,
+        including login pages of the SAP Authorization and Trust Management
+        service can't be framed by other applications for security reasons."
+        Configuring a trusted domain opens it, by sending a content security
+        policy header that permits framing from that origin — and the page most
+        worth framing is the login page.
+
+        SAP lists the consequences: "Clickjacking attacks on the application as
+        the URL of the application isn't visible", JavaScript-based cross-site
+        scripting on older browsers, and a third-party-cookie dependency. The
+        first is the one that matters here: a user typing corporate credentials
+        into an invisible frame over an attacker's page cannot see the address
+        bar that would tell them where the credentials are going.
+        """
+        scopes = self._settings_scopes()
+        if not scopes:
+            return
+
+        broad, broad_objects = [], []
+        enabled, enabled_objects = [], []
+
+        for scope in scopes:
+            settings = scope["settings"]
+            if not any(k in settings for k in ("iframeDomains", "iframeDomainsList")):
+                continue
+            origins = self._iframe_origins(settings)
+            if not origins:
+                # Explicitly empty is the SAP default and the secure state. It is
+                # a pass, and a pass is not a finding.
+                continue
+
+            offending = [(o, self._origin_is_broad(o)) for o in origins]
+            wide = [(o, why) for o, why in offending if why]
+            if wide:
+                broad.append("%s — %s" % (scope["label"], "; ".join(
+                    "%s (%s)" % (o, why) for o, why in wide)))
+                self._add_object(broad_objects, "subaccount", scope["name"],
+                                 "framing allowed from " +
+                                 ", ".join(o for o, _w in wide))
+            else:
+                enabled.append("%s — framing allowed from: %s"
+                               % (scope["label"], ", ".join(origins)))
+                self._add_object(enabled_objects, "subaccount", scope["name"],
+                                 "framing allowed from %d origin(s)" % len(origins))
+
+        if broad:
+            self.finding(
+                check_id="BTP-FRM-001",
+                title="Subaccount login pages may be framed by an unrestricted origin",
+                severity=self.SEVERITY_HIGH,
+                category="BTP Cloud Attack Surface",
+                description=(
+                    f"{len(broad)} BTP subaccount(s) permit iframe embedding "
+                    "from an origin that is not a specific HTTPS host — a "
+                    "wildcard covering a whole domain space, or a plain-HTTP "
+                    "origin. SAP disables framing by default precisely because "
+                    "of this, and names clickjacking as the consequence: the "
+                    "framed page's URL is not visible to the user. The page "
+                    "worth framing is the SAP Authorization and Trust "
+                    "Management service login page, so the attack is a "
+                    "convincing overlay that harvests corporate credentials, or "
+                    "an invisible frame that captures a click intended for "
+                    "something else — a consent, an approval, a role "
+                    "assignment. SAP's requirement for any permitted origin is "
+                    "that 'no attacker can add malicious web pages or "
+                    "Javascript' to it, which is a claim nobody can make about "
+                    "a wildcard."),
+                affected_items=broad,
+                remediation=(
+                    "1. In the BTP cockpit, open Security > Settings > Trusted "
+                    "Domains for each subaccount named.\n"
+                    "2. Remove the wildcard or plain-HTTP entry and replace it "
+                    "with the specific HTTPS origins that genuinely embed these "
+                    "pages.\n"
+                    "3. If nothing embeds them, remove every entry and restore "
+                    "the SAP default of no framing at all.\n"
+                    "4. Where framing is genuinely required, prefer SAP's own "
+                    "guidance and put the framing application on the same domain "
+                    "using the SAP Custom Domain Service, which removes the need "
+                    "for a trusted-domain entry entirely.\n"
+                    "5. For each origin you keep, confirm with its owner that no "
+                    "third party can publish content on that host — including "
+                    "anything behind it if it is a reverse proxy.\n"
+                    "6. Verify by loading the login page inside a test iframe on "
+                    "a non-listed origin and confirming the browser refuses it.\n"
+                    "7. Re-run the scan to confirm only specific HTTPS origins "
+                    "remain."),
+                references=[
+                    "SAP BTP — Security Considerations for the SAP Authorization "
+                    "and Trust Management Service (Implications of Using IFrames)",
+                    "SAP BTP — Configure Trusted Domains for Multi-Environment "
+                    "Subaccounts",
+                    "W3C — Content Security Policy Level 2",
+                ],
+                affected_objects=broad_objects,
+                scope="aggregate",
+            )
+
+        if enabled:
+            self.finding(
+                check_id="BTP-FRM-002",
+                title="Iframe embedding enabled for the subaccount (SAP default is off)",
+                severity=self.SEVERITY_MEDIUM,
+                category="BTP Cloud Attack Surface",
+                description=(
+                    f"{len(enabled)} BTP subaccount(s) permit iframe embedding "
+                    "from specific HTTPS origins. Every origin named is a "
+                    "specific host, which is the supported way to configure "
+                    "this — so this is a review item, not a defect. It is "
+                    "reported because SAP ships framing disabled and each entry "
+                    "moves part of the subaccount's security onto a host "
+                    "outside it: SAP's stated requirement is to 'ensure that no "
+                    "attacker can add malicious web pages or Javascript to any "
+                    "of the hosts allowed to frame the applications', and that "
+                    "'also includes hosts that act as reverse proxies, where an "
+                    "attacker can put their content on a different host behind "
+                    "the reverse proxy'. Trusted-domain lists outlive the "
+                    "integration that justified them, and an entry for a "
+                    "hostname the company no longer controls is a live "
+                    "clickjacking path."),
+                affected_items=enabled,
+                remediation=(
+                    "1. For each origin listed, identify the application that "
+                    "embeds these pages and confirm the integration is still in "
+                    "use.\n"
+                    "2. Remove entries whose integration has been "
+                    "decommissioned.\n"
+                    "3. Confirm every retained hostname is still registered to "
+                    "your organisation and that no third party can publish "
+                    "content on it, including behind any reverse proxy.\n"
+                    "4. Where the framing application could instead run on the "
+                    "same domain via the SAP Custom Domain Service, migrate it "
+                    "and drop the entry.\n"
+                    "5. Add the trusted-domain list to your periodic subaccount "
+                    "review so it is re-confirmed rather than inherited.\n"
+                    "6. Re-run the scan to confirm the remaining list is the one "
+                    "you intended."),
+                references=[
+                    "SAP BTP — Security Considerations for the SAP Authorization "
+                    "and Trust Management Service (Implications of Using IFrames)",
+                    "SAP BTP — Configure Trusted Domains for Multi-Environment "
+                    "Subaccounts",
+                ],
+                affected_objects=enabled_objects,
+                scope="aggregate",
+            )
+
+    # ════════════════════════════════════════════════════════════════
+    #  BTP-IDL-*: email as a cross-identity-provider join key
+    # ════════════════════════════════════════════════════════════════
+
+    def _active_trusts(self) -> List[Dict[str, str]]:
+        """The identity providers a `btp_trust` export shows as active.
+
+        Unwrapped exactly as `rise_btp_checks.check_btp_trust_config` and
+        `iam_advanced._trust_rows` unwrap it, and keyed on `originKey` for the
+        same reason they are: the origin is the technical key and
+        `identityProvider` is an editable label, so keying on the origin keeps
+        every module pointing at one node per trust.
+        """
+        trust = self.data.get("btp_trust")
+        if isinstance(trust, list):
+            rows = trust
+        elif isinstance(trust, dict):
+            rows = trust.get("trusts", trust.get("trust_configurations"))
+            if not isinstance(rows, list):
+                rows = [trust]
+        else:
+            return []
+
+        active = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            enabled = row.get("status", row.get("enabled", True))
+            if str(enabled).strip().lower() in ("false", "0", "no", "off",
+                                                "inactive", "disabled"):
+                continue
+            origin = str(row.get("originKey", row.get("origin", "")) or "").strip()
+            name = str(row.get("identityProvider",
+                               row.get("idp_name", row.get("name", ""))) or "").strip()
+            if not origin and not name:
+                continue
+            active.append({"origin": origin, "name": name or origin})
+        return active
+
+    def check_email_identity_linking(self):
+        """Audit email-based identity linking across identity providers.
+
+        `treatUsersWithSameEmailAsSameUser` does what it says: SAP's own
+        Terraform provider documents it as "If set to true, users with the same
+        email are treated as same users." With ONE identity provider that is
+        ordinary convenience. With more than one it makes the email address a
+        join key BETWEEN identity providers, and the security of every account
+        in the subaccount becomes the security of the weakest provider's
+        account-creation process — because an account created there with a
+        matching email address resolves to the same user.
+
+        `customEmailDomains` is what bounds it. SAP's provider documents that
+        field as "Set of domains that are allowed to be used for user
+        authentication", so a populated list confines the linking to domains the
+        customer named, and an empty one does not confine it at all. Both states
+        are reported, at the same severity but with different text, because the
+        remediation differs: one is a list to review, the other is a list to
+        create.
+
+        THE CONDITION IS DELIBERATELY NARROW. Linking is only reported when the
+        export ACTUALLY SHOWS a second active trust. A subaccount whose trust
+        configuration was not exported is not reported at all — there is no way
+        to tell a single-provider subaccount from an unexported one, and
+        guessing in either direction would be wrong.
+        """
+        scopes = self._settings_scopes()
+        if not scopes:
+            return
+
+        trusts = self._active_trusts()
+        if len(trusts) < 2:
+            # One provider, or no trust export at all. Neither is a finding: with
+            # one provider there is nothing to join across, and with no export
+            # there is nothing to say. See the docstring.
+            return
+
+        linked, linked_objects = [], []
+        for scope in scopes:
+            settings = scope["settings"]
+            if "treatUsersWithSameEmailAsSameUser" not in settings:
+                continue
+            value = settings["treatUsersWithSameEmailAsSameUser"]
+            if isinstance(value, bool):
+                on = value
+            else:
+                on = str(value).strip().lower() in ("true", "yes", "1", "on")
+            if not on:
+                continue
+
+            domains = settings.get("customEmailDomains")
+            domains = [str(d).strip() for d in domains
+                       if str(d or "").strip()] if isinstance(domains, list) else []
+            bound = ("bounded to %s" % ", ".join(domains) if domains
+                     else "no custom email domains configured — unbounded")
+            linked.append("%s — %s" % (scope["label"], bound))
+            self._add_object(linked_objects, "subaccount", scope["name"],
+                             "email identity linking across %d identity providers"
+                             % len(trusts))
+
+        if not linked:
+            return
+
+        idp_list = ", ".join(sorted(t["name"] for t in trusts))
+        self.finding(
+            check_id="BTP-IDL-001",
+            title="Email address links identities across multiple identity providers",
+            severity=self.SEVERITY_MEDIUM,
+            category="BTP Cloud Attack Surface",
+            description=(
+                f"{len(linked)} BTP subaccount(s) treat users with the same "
+                "email address as the same user, and this export shows "
+                f"{len(trusts)} active identity provider trust(s): {idp_list}. "
+                "The email address is therefore a join key between them, and "
+                "an account created in any one of those providers with an "
+                "email address matching an existing user resolves to that "
+                "user's identity and role collections. The account-creation "
+                "process of the weakest trusted provider becomes the "
+                "account-creation process of the subaccount — which matters "
+                "most where the SAP ID Service is still trusted alongside a "
+                "corporate provider, because its accounts are self-registered "
+                "and its email verification is not your process. Subaccounts "
+                "with no custom email domain list bound the linking to nothing "
+                "at all."),
+            affected_items=linked,
+            remediation=(
+                "1. In Security > Trust Configuration, list the identity "
+                "providers this subaccount trusts and remove any that are no "
+                "longer required — in particular the default SAP ID Service "
+                "where a corporate provider is in place.\n"
+                "2. In Security > Settings, populate the custom email domains "
+                "with the domains your organisation actually owns, so linking "
+                "cannot occur on an address at a domain you do not control.\n"
+                "3. For each remaining provider, confirm that email addresses "
+                "are verified at account creation and cannot be self-asserted.\n"
+                "4. If any trusted provider cannot guarantee that, turn off "
+                "'treat users with the same email as the same user' for the "
+                "subaccount and accept the duplicate shadow users instead.\n"
+                "5. Review existing shadow users for the same email address "
+                "appearing under more than one origin, which shows where "
+                "linking has already happened.\n"
+                "6. Re-run the scan to confirm the trust list and the email "
+                "domain list are the ones you intended."),
+            references=[
+                "SAP BTP — Managing Security Settings",
+                "SAP BTP — Managing Trust from SAP BTP to an SAP Cloud Identity "
+                "Services Tenant",
+            ],
+            affected_objects=linked_objects,
+            details={"active_trusts": [t["origin"] or t["name"] for t in trusts]},
+            # Summary of every subaccount linking on email; fixing one subaccount
+            # must not retire the finding covering the others.
+            scope="aggregate",
+        )
+
+    # ════════════════════════════════════════════════════════════════
+    #  BTP-AUD-*: what the audit-log export does and does not settle
+    # ════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def _audit_state(sa: Dict[str, Any]):
+        """True / False / None for one subaccount's audit-log enablement.
+
+        None is the whole reason this helper exists. Three inputs produce it:
+        the field is absent (`btp list accounts/subaccount` does not carry audit
+        enablement at all), the field holds the `unknown` sentinel `btp_import`
+        writes for a subaccount the audit-log export did not cover, or the field
+        holds a string nothing can be made of.
+
+        The code this replaced read all three as False and reported them as "does
+        not have the audit log service enabled" — a HIGH finding manufactured out
+        of a field that was never in the export. That is the exact failure this
+        product is built to refuse, and it survived because the subaccount
+        fixtures all happened to carry explicit booleans.
+        """
+        for key in ("auditLogEnabled", "hasAuditLog"):
+            if key not in sa:
+                continue
+            value = sa[key]
+            if isinstance(value, bool):
+                return value
+            text = str(value if value is not None else "").strip().lower()
+            if text in ("true", "yes", "1", "on", "enabled"):
+                return True
+            if text in ("false", "no", "0", "off", "disabled"):
+                return False
+        return None
+
+    def check_audit_log_coverage(self):
+        """Report the subaccounts whose audit-log state nothing settled.
+
+        BTP-GOV-001 names the subaccounts KNOWN to have no audit logging. This
+        names the other group — the ones where neither export answered the
+        question — because a subaccount that appears in neither finding reads as
+        one that was checked and passed.
+
+        `btp_import` already refuses to infer here: a subaccount missing from a
+        scoped audit-log export is marked unknown rather than disabled, and that
+        refusal is correct. But a refusal nobody is told about is
+        indistinguishable from a pass. This finding is where the refusal becomes
+        visible, and it carries `degrades_coverage` so `--gate` will not return a
+        clean build on the strength of subaccounts that were never assessed.
+
+        It also states what the audit-log export DID prove, from the summary
+        `btp_import` builds. Deliberately not stated: retention. The span of an
+        export is chosen by whoever ran the query, so reading a retention period
+        out of it would be a measurement of the operator, not of the tenant.
+        """
+        records = self._subaccount_records(self.data)
+        if not records:
+            return
+
+        unknown, unknown_objects = [], []
+        evidenced = 0
+        for sa in records:
+            state = self._audit_state(sa)
+            if state is True:
+                evidenced += 1
+                continue
+            if state is False:
+                continue                        # BTP-GOV-001 has this one
+            sa_id = sa.get("id") or sa.get("subaccountId") or sa.get("guid") or ""
+            name = sa.get("name") or sa.get("displayName") or ""
+            region = sa.get("region") or sa.get("dataCenter") or ""
+            label = "%s (%s)" % (name or "unnamed", sa_id or "no id")
+            if region:
+                label += ", region: %s" % region
+            unknown.append(label)
+            self._add_object(unknown_objects, "subaccount", sa_id or name)
+
+        if not unknown:
+            return
+
+        audit = self.data.get("btp_audit_log")
+        if isinstance(audit, dict) and audit.get("record_count"):
+            tenants = audit.get("tenants") or []
+            windows = sorted(
+                "%s (%s records, %s to %s)"
+                % (t.get("tenant") or "unnamed tenant", t.get("records", 0),
+                   t.get("earliest") or "?", t.get("latest") or "?")
+                for t in tenants if isinstance(t, dict))
+            covered = (
+                "An audit-log export was supplied and proves logging is running "
+                "for %d tenant(s): %s. It says nothing about the subaccounts "
+                "below, which it does not cover."
+                % (len(tenants), "; ".join(windows) or "no tenant named"))
+        else:
+            covered = ("No audit-log export was supplied, so nothing in this "
+                       "scan can confirm whether these subaccounts produce "
+                       "audit records.")
+
+        self.finding(
+            check_id="BTP-AUD-001",
+            title="Audit-log state could not be determined for some subaccounts",
+            severity=self.SEVERITY_INFO,
+            category="BTP Cloud Attack Surface",
+            description=(
+                f"{len(unknown)} of {len(records)} BTP subaccount(s) were NOT "
+                "assessed for audit logging, because no export settles the "
+                f"question for them ({evidenced} were confirmed as logging). "
+                f"{covered} These subaccounts are absent from BTP-GOV-001 "
+                "because they are unknown, not because they passed. Read this "
+                "finding as the boundary of that check: a subaccount listed "
+                "here may or may not be logging, and this scan is not evidence "
+                "either way."),
+            affected_items=unknown,
+            remediation=(
+                "1. For each subaccount listed, create an auditlog-management "
+                "service instance and a service key if one does not exist.\n"
+                "2. Retrieve records for each subaccount over a recent window "
+                "and save them as btp_audit_log_records.json — see "
+                "docs/EXPORT_GUIDE.md, 'Audit log records'.\n"
+                "3. Alternatively, add an explicit auditLogEnabled field to "
+                "your btp_subaccounts.json export if your own configuration "
+                "management already records it.\n"
+                "4. Re-run the scan; each subaccount will then appear as "
+                "evidenced or in BTP-GOV-001, and no longer here.\n"
+                "5. Treat any subaccount that stays here after a full export as "
+                "a genuinely unmonitored one and investigate it directly in the "
+                "cockpit."),
+            references=[
+                "SAP BTP — Audit Log Retrieval API",
+                "SAP BTP Security Recommendations — audit logging",
+            ],
+            affected_objects=unknown_objects,
+            details={"degrades_coverage": True,
+                     "subaccounts_total": len(records),
+                     "subaccounts_unassessed": len(unknown),
+                     "subaccounts_evidenced": evidenced,
+                     "retention_not_inferred": True},
+            # A summary of what was not assessed; settling one subaccount must
+            # shrink this finding rather than retire and re-raise it.
+            scope="aggregate",
+        )
 
     # ════════════════════════════════════════════════════════════════
     #  Utility Methods
