@@ -14,6 +14,11 @@ finding creation and severity utilities.
 from typing import Dict, List, Any, Optional
 import datetime
 
+# Safe to import at module level: owasp_mapping imports only `typing` at
+# import time and defers its `coverage`/`abap_sast` reads into functions,
+# so there is no cycle back through BaseAuditor.
+from modules.owasp_mapping import map_finding
+
 
 class BaseAuditor:
     """Base class for all SAP audit modules."""
@@ -498,6 +503,13 @@ class BaseAuditor:
             "details": details or {},
             "timestamp": datetime.datetime.now().isoformat(),
         }
+        # Standards mapping, attached HERE so it reaches every one of the 673
+        # checks from one place rather than being remembered per module. It
+        # always carries `basis` — "cwe", "family" or None — because a mapping
+        # whose provenance is not visible is indistinguishable from a guess, and
+        # an unmapped finding travels with the REASON it is unmapped rather than
+        # silently having no standards fields.
+        f["owasp"] = map_finding(check_id, (details or {}).get("cwe"))
         if affected_objects:
             f["affected_objects"] = affected_objects
         if subject:
