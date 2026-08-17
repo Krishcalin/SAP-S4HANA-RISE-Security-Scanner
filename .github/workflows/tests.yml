@@ -251,7 +251,7 @@ jobs:
         run: python -m tools.build_checks_reference --check
 
   sap-content:
-    name: SAP baseline catalogue is current
+    name: SAP baseline and notes catalogues are current
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -265,7 +265,7 @@ jobs:
           git clone --depth 1 --filter=blob:none --sparse \
             https://github.com/SAP-samples/frun-csa-policies-best-practices.git /tmp/sappol
           cd /tmp/sappol
-          git sparse-checkout set BaselinePolicies Schema
+          git sparse-checkout set BaselinePolicies NotesPolicies Schema
           echo "policy files: $(find . -name '*.xml' | wc -l)"
 
       - name: Re-derive the catalogue and compare
@@ -301,6 +301,14 @@ jobs:
               raise SystemExit(1)
           print(f"catalogue current: {fresh['_meta']['counts']}")
           PY
+
+      # The notes catalogue is derived from the OTHER half of the same upstream
+      # repository, by a different generator, for a different consumer. --strict
+      # fails on a header line that looks like a note and did not parse, so a new
+      # patch-day header format is a build failure here rather than a silent gap
+      # in the note list a customer is working from.
+      - name: Re-derive the notes catalogue and compare
+        run: python -m tools.build_sap_notes_catalogue --source /tmp/sappol --strict --check
 
   # ------------------------------------------------------------------ #
   #  Brand asset drift — the served PNGs must match the master         #

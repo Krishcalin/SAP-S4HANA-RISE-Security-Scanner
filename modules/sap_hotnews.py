@@ -367,6 +367,7 @@ class SapHotNewsAuditor(BaseAuditor):
 
         if not has_applied:
             self._report_no_data(catalog)
+            self._report_catalogue_disagreement(catalog)
             # NOT a return. The exposure checks below read the component export
             # and the CVSS vector, neither of which needs an SNOTE list — and a
             # system whose operator cannot produce one is exactly the system that
@@ -385,6 +386,12 @@ class SapHotNewsAuditor(BaseAuditor):
         # that stops in August 2025" and "you are patched" are different
         # statements, and only the first one is ours to make.
         self._report_catalogue_scope(catalog, assessable, out_of_scope)
+        # Before anything is said about the estate, say what is wrong with the
+        # catalogue. A curated entry that disagrees with SAP's own published
+        # record is a defect in THIS PRODUCT, and it has to be visible in the
+        # same report as the findings it would otherwise silently distort.
+        self._report_catalogue_disagreement(catalog)
+        self._report_sap_published_hotnews(catalog, present)
         # Only ABAP-assessable entries count as missing: the absence of an AS
         # Java note from this system's SNOTE export is not evidence about the
         # Java system, and alarming on it here was a false positive.
@@ -821,6 +828,252 @@ class SapHotNewsAuditor(BaseAuditor):
     #: Per-note exposure evidence, harvested once from the SAP CNA records in NVD
     #: and shipped. Loaded lazily so a missing or malformed file degrades the
     #: exposure checks rather than the whole module.
+    #: SAP's own published record, generated from
+    #: SAP-samples/frun-csa-policies-best-practices by
+    #: tools/build_sap_notes_catalogue.py. 1728 notes across 154 patch days,
+    #: none of them typed by hand.
+    SAP_CATALOGUE_PATH = (Path(__file__).resolve().parent.parent / "data"
+                          / "sap_notes_catalogue.json")
+
+    def _sap_catalogue(self) -> Dict[str, Any]:
+        """SAP's published note record, or {} if it could not be read.
+
+        An empty dict disables the two checks below and nothing else. That is
+        the right failure: the curated catalogue is self-contained and every
+        other check still runs, so a missing data file degrades breadth rather
+        than turning the module off.
+        """
+        cached = getattr(self, "_sap_catalogue_cache", None)
+        if cached is not None:
+            return cached
+        try:
+            payload = json.loads(
+                self.SAP_CATALOGUE_PATH.read_text(encoding="utf-8"))
+            data = payload.get("notes") or {}
+        except (OSError, ValueError):
+            data = {}
+        self._sap_catalogue_cache = data
+        return data
+
+    # ── HOTNEWS-011: this product's catalogue against SAP's own record ──────
+
+    def _report_catalogue_disagreement(self, catalog: List[Dict[str, Any]]):
+        """Curated entries whose facts SAP's published policies contradict.
+
+        THIS IS A CHECK ON THIS PRODUCT'S DATA, not on the customer's estate,
+        and it exists because of a risk the roadmap named outright: "a fabricated
+        SAP identifier ships". Forty-three notes were typed in by hand. SAP now
+        publishes the same facts as machine-readable policies under Apache-2.0,
+        so the two can be compared.
+
+        IT REPORTS THE DIFFERENCE AND NEVER ADJUDICATES, and the reason is worth
+        recording because the obvious instinct was wrong. The first version of
+        this check assumed SAP's policy was authoritative and that a curated
+        score which differed was a mistake to correct. Checking four of them
+        against NVD showed otherwise:
+
+          CVE-2021-38176   NVD 8.8 (S:U)  ·  SAP as CNA 9.9 (S:C)
+          CVE-2021-38178   NVD 8.8        ·  SAP policy 9.1
+          CVE-2022-41204   NVD 8.8, AND SAP'S OWN CNA RECORD 8.8  ·  SAP policy 9.6
+          CVE-2022-39802   NVD 7.5        ·  SAP policy 9.9
+
+        The curated scores are NVD's. SAP's policy headers carry SAP's own, the
+        two routinely differ on Scope, and for CVE-2022-41204 SAP's policy header
+        differs from SAP's own CNA record. There is no side to take here.
+        "Correcting" the catalogue to match the policy would have replaced one
+        sourced number with another and dropped the provenance that makes either
+        mean anything.
+
+        So a CVSS difference is reported as a PROVENANCE difference. A CVE-id
+        difference is reported more sharply, because two sources naming different
+        CVEs for one note is likelier to be an error on one side than a
+        difference of method — and at least one policy header carries a 2023 CVE
+        against a 2025 note.
+
+        The COMPONENT field is deliberately not compared. The curated catalogue
+        records a human-readable product name ("NETWEAVER AS ABAP (SAML
+        VERIFIER)") and SAP's policies record an application component key
+        ("BC-SEC-LGN-SML"). Those are two different fields, and comparing them
+        would report forty-three disagreements that are not disagreements.
+        """
+        published = self._sap_catalogue()
+        if not published:
+            return
+        items, checked = [], 0
+        for entry in catalog:
+            note = self._norm_note(entry.get("note"))
+            record = published.get(note)
+            if not record:
+                continue
+            checked += 1
+            ours_cve = str(entry.get("cve") or "").upper()
+            theirs_cve = record.get("cve") or []
+            # A curated entry may name several CVEs in one string; it disagrees
+            # only when NONE of the ones it names appears in SAP's list.
+            named = set(re.findall(r"CVE-\d{4}-\d{4,7}", ours_cve))
+            if named and theirs_cve and not (named & set(theirs_cve)):
+                items.append(
+                    "note %s — this catalogue says %s, SAP's policy for %s says %s"
+                    % (note, " / ".join(sorted(named)),
+                       ", ".join(record.get("patch_days") or []) or "?",
+                       ", ".join(theirs_cve)))
+            ours_cvss, theirs_cvss = entry.get("cvss"), record.get("cvss")
+            if ours_cvss and theirs_cvss and abs(float(ours_cvss) - float(theirs_cvss)) > 0.05:
+                items.append(
+                    "note %s — CVSS provenance differs: this catalogue records "
+                    "NVD's %s, SAP's policy records %s (the two commonly differ "
+                    "on Scope; neither is corrected here)"
+                    % (note, ours_cvss, theirs_cvss))
+        if not items:
+            return
+        self.finding(
+            check_id="HOTNEWS-011",
+            title="Note facts differ between this catalogue and SAP's published record",
+            severity=self.SEVERITY_LOW,
+            category=self.CATEGORY,
+            description=(
+                "%d fact(s) about SAP notes differ between this product's "
+                "curated catalogue and SAP's own published CSA policies, across "
+                "%d of the %d curated entries SAP's policies also cover. This "
+                "concerns the SCANNER'S DATA and not the scanned system, and it "
+                "is reported in the same document as the findings that rest on "
+                "it: a CVE id sends somebody to an advisory, and a base score "
+                "decides where a note lands in a queue.\n\n"
+                "MOST OF THESE ARE PROVENANCE, NOT ERROR. This catalogue records "
+                "NVD's base score; SAP's policies record SAP's own, and the two "
+                "routinely differ on Scope — for CVE-2021-38176 NVD publishes "
+                "8.8 with S:U while SAP as CNA publishes 9.9 with S:C. For "
+                "CVE-2022-41204 SAP's policy header says 9.6 while SAP's own CNA "
+                "record in NVD says 8.8. Neither number is corrected here, "
+                "because replacing one sourced figure with another would drop "
+                "the provenance that makes either mean anything.\n\n"
+                "A CVE-ID difference is the sharper one and worth opening the "
+                "note for: two sources naming different CVEs for one note is "
+                "likelier to be an error on one side than a difference of "
+                "method. The SAP ONE Support Launchpad settles it in a minute."
+                % (len(items), checked, len(catalog))),
+            affected_items=items,
+            remediation=(
+                "1. For a CVE-ID difference, open the note in the SAP ONE "
+                "Support Launchpad and read the CVE from the note itself. One "
+                "of the two sources is wrong and the note settles which.\n"
+                "2. Correct HOTNEWS_CATALOG in modules/sap_hotnews.py if this "
+                "product is the one that is wrong.\n"
+                "3. For a CVSS difference, no action is usually needed — the two "
+                "scores come from two publishers making different Scope "
+                "judgements. Decide which your risk process uses and apply it "
+                "consistently; do not average them.\n"
+                "4. Where both sources turn out to be as-published, leave it. "
+                "This finding is a standing note about provenance, not a defect "
+                "waiting to be cleared."),
+            references=[
+                "SAP-samples/frun-csa-policies-best-practices (Apache-2.0)",
+                "SAP ONE Support Launchpad — the note itself",
+            ],
+            details={"disagreements": len(items), "curated_entries": len(catalog),
+                     "compared": checked, "self_audit": True,
+                     "source": "SAP-samples/frun-csa-policies-best-practices"},
+            scope="aggregate",
+        )
+
+    # ── HOTNEWS-012: SAP's HotNews list, beyond the curated forty-three ────
+
+    def _report_sap_published_hotnews(self, catalog: List[Dict[str, Any]],
+                                      present: Set[str]):
+        """Priority-1 notes SAP publishes that this system's export does not list.
+
+        Scope is SAP's, not ours: priority 1 in SAP's own tiering, carrying a
+        CVE, and inside the set SAP's policies declare they can check on an
+        ABAP or HANA system. That is 43 notes — coincidentally the same size as
+        the hand-curated list, and chosen by SAP instead of by us.
+
+        WHAT THIS DOES NOT DETERMINE IS APPLICABILITY, and the finding says so
+        rather than implying otherwise. SAP's policies decide whether a note
+        applies by evaluating support-package levels in SQL against Focused
+        Run's configuration database; those predicates were deliberately not
+        imported, because running them is not possible here and copying them
+        would claim a parity that does not exist. So a note listed here is one
+        SAP published and this export does not mention — a worklist, not a
+        verdict. Several will not apply to the components installed.
+
+        Entries already in the curated catalogue are excluded: HOTNEWS-001/003
+        report those with the applicability and exploitation context they carry,
+        and reporting them twice would make the more precise finding look like
+        a duplicate of the vaguer one.
+        """
+        published = self._sap_catalogue()
+        if not published:
+            return
+        curated = {self._norm_note(e.get("note")) for e in catalog}
+        missing = []
+        for note, record in sorted(published.items(), key=lambda kv: kv[0]):
+            if note in curated or note in present:
+                continue
+            if record.get("priority") != 1 or not record.get("cve"):
+                continue
+            if not record.get("checked_by_sap_policy"):
+                continue
+            missing.append(record | {"note": note})
+        if not missing:
+            return
+        items = [
+            "%s — %s (CVSS %s, %s) %s"
+            % (m["note"], ", ".join(m["cve"]), m.get("cvss") or "?",
+               m.get("component") or "component not stated",
+               (m.get("title") or "")[:90])
+            for m in missing[:60]]
+        # Reuse the module's own emitter rather than a second one: it is the
+        # place that decides a note number is the only identifier these findings
+        # may carry, and having two would let the rules drift apart.
+        objects = self._note_objects(missing)
+        self.finding(
+            check_id="HOTNEWS-012",
+            title="SAP-published HotNews notes absent from the applied-notes export",
+            severity=self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=(
+                "%d note(s) that SAP publishes at priority 1 — its own HotNews "
+                "tier — carry a CVE, sit inside the set SAP's policies declare "
+                "checkable on an ABAP or HANA system, and do not appear in this "
+                "system's applied-notes export. They are beyond the %d entries "
+                "in this product's curated catalogue, which HOTNEWS-001 and -003 "
+                "cover separately with their exploitation context.\n\n"
+                "THIS IS A WORKLIST, NOT A VERDICT. Whether a note applies to "
+                "this system depends on which software components are installed "
+                "and at which support-package level, and SAP decides that by "
+                "evaluating SQL against Focused Run's configuration database. "
+                "Those predicates were deliberately not imported — this product "
+                "does not have that database and copying the expressions would "
+                "claim a parity it does not have. So some of the notes below "
+                "will not apply here. What is certain is that SAP published "
+                "them, that they are HotNews, and that nothing in the export "
+                "says they were implemented."
+                % (len(missing), len(catalog))),
+            affected_items=items,
+            affected_objects=objects,
+            remediation=(
+                "1. Work the list in SNOTE or the Launchpad: for each note, "
+                "check whether the affected component is installed at an "
+                "affected level.\n"
+                "2. Implement the ones that apply; record the ones that do not, "
+                "with the component and level that rules them out.\n"
+                "3. Supply system_component.csv if you have not — the component "
+                "export is what turns this worklist into an applicability "
+                "answer for the exposure checks that can make one.\n"
+                "4. Re-run the scan. Notes present in the export drop out "
+                "automatically."),
+            references=[
+                "SAP-samples/frun-csa-policies-best-practices (Apache-2.0) — "
+                "SAP's own patch-day policies",
+                "SAP ONE Support Launchpad — Security Notes",
+            ],
+            details={"count": len(missing), "listed": len(items),
+                     "scope": "sap_priority_1_with_cve_and_sap_checkable",
+                     "applicability_determined": False,
+                     "source": "SAP-samples/frun-csa-policies-best-practices"},
+            scope="aggregate",
+        )
+
     EXPOSURE_PATH = Path(__file__).resolve().parent.parent / "data" / "cve_exposure.json"
 
     def _exposure_data(self) -> Dict[str, Any]:
