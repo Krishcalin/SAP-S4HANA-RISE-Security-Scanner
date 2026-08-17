@@ -6,7 +6,7 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**407** check ids are written as literals in `modules/`, across **33** modules. A further **266** are built at runtime from shipped rule tables, giving **673** in total.
+**407** check ids are written as literals in `modules/`, across **33** modules. A further **267** are built at runtime from shipped rule tables, giving **674** in total.
 
 ## What this file does not claim
 
@@ -632,9 +632,9 @@ Examples: `abap/ext_debugging_possible`, `auth/check/calltransaction`, `auth/no_
 
 One id per judged profile parameter. `PARAM-000`, `PARAM-MISSING` and `PARAM-MISSING-OTHER` are fixed ids and appear in the literal table above.
 
-### `ABAP-<rule id>` — 135
+### `ABAP-<rule id>` — 136
 
-Source: `modules/abap_sast.py — ALL_ABAP_SAST_RULES (118) + ALL_JS_RULES (7) + ALL_BTP_CONFIG_RULES (8) + CROSS_ARTIFACT_RULES (2)`
+Source: `modules/abap_sast.py — ALL_ABAP_SAST_RULES (118) + ALL_JS_RULES (7) + ALL_BTP_CONFIG_RULES (8) + CROSS_ARTIFACT_RULES (3)`
 
 Examples: `ABAP-AMDP-001`, `ABAP-AMDP-002`, `ABAP-AMDP-003`, `ABAP-AMDP-004`, `ABAP-AMDP-005`, `ABAP-AUTH-001`
 

@@ -214,3 +214,58 @@ def test_these_findings_are_confirmed_not_pattern_only(tmp_path):
 def test_no_project_no_findings():
     """An index built from nothing asserts nothing."""
     assert cross_artifact_findings(CdsAuthorizationIndex()) == []
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  Global vs instance authorization (FR-05: "RAP global/instance authorization")
+# ═════════════════════════════════════════════════════════════════════════════
+
+GLOBAL_ONLY = ("define behavior for Z_Order alias O\n"
+               "authorization master ( global )\n{ create; update; delete; }\n")
+BOTH = ("define behavior for Z_Item alias I\n"
+        "authorization master ( global, instance )\n{ update; }\n")
+
+
+def test_a_behaviour_authorised_only_globally_is_reported(tmp_path):
+    """SAP: global authorization restricts operations for an entire RAP BO
+    "regardless of individual instances", while instance authorization "applies
+    checks based on the state of an entity instance". Global-only means a user
+    cleared to update any instance is cleared to update every instance."""
+    fired, _ = _scan(tmp_path, **{"b.asbdef": GLOBAL_ONLY,
+                                  "r.asdcls": ROLE_FOR_ORDERS})
+    assert "ABAP-RAP-006" in fired
+
+
+def test_a_behaviour_declaring_both_kinds_is_not_reported(tmp_path):
+    """`( global, instance )` is the complete form and must be silent, or the
+    check punishes the correct answer."""
+    fired, _ = _scan(tmp_path, **{"b.asbdef": BOTH, "r.asdcls": ROLE_FOR_ORDERS})
+    assert "ABAP-RAP-006" not in fired
+
+
+def test_instance_only_is_not_reported_as_global_only(tmp_path):
+    fired, _ = _scan(tmp_path, **{
+        "b.asbdef": "define behavior for Z_A alias A\nauthorization master ( instance )\n{ update; }\n",
+        "r.asdcls": ROLE_FOR_ORDERS})
+    assert "ABAP-RAP-006" not in fired
+
+
+def test_no_authorization_clause_is_rap_005_not_rap_006(tmp_path):
+    """The two findings must partition: an absent clause is a decision nobody
+    made, a global-only clause is a decision that may be the wrong one."""
+    fired, _ = _scan(tmp_path, **{
+        "b.asbdef": "define behavior for Z_L alias L\n{ create; }\n",
+        "r.asdcls": ROLE_FOR_ORDERS})
+    assert "ABAP-RAP-005" in fired and "ABAP-RAP-006" not in fired
+
+
+def test_three_behaviours_in_one_file_are_judged_separately(tmp_path):
+    fired, scanner = _scan(tmp_path, **{
+        "b.asbdef": GLOBAL_ONLY + "\n" + BOTH +
+                    "\ndefine behavior for Z_Loose alias L\n{ create; }\n",
+        "r.asdcls": ROLE_FOR_ORDERS})
+    assert {"ABAP-RAP-005", "ABAP-RAP-006"} <= fired
+    kinds = {e: i.get("auth_master") for e, i in scanner.cds_index.behaviors.items()}
+    assert kinds["Z_ORDER"] == {"global"}
+    assert kinds["Z_ITEM"] == {"global", "instance"}
+    assert kinds["Z_LOOSE"] is None

@@ -95,6 +95,13 @@ _BEHAVIOR_FOR = re.compile(r"\bdefine\s+behavior\s+for\s+([A-Za-z_]\w*)",
 _BEHAVIOR_AUTH = re.compile(
     r"\bauthorization\s+(?:master|dependent)\b|\bauthorization\s*:", re.IGNORECASE)
 
+#: `authorization master ( global )`, `( instance )` or `( global, instance )`.
+#: SAP's BDL syntax is `authorization master {( global ) |( instance ) |
+#: ( global, instance )}`, and the two are not interchangeable — see
+#: `global_only_behaviors` for what the difference costs.
+_AUTH_MASTER = re.compile(
+    r"\bauthorization\s+master\s*\(([^)]*)\)", re.IGNORECASE)
+
 #: Annotation values that make a role irrelevant, so a missing role is not the
 #: story. `#NOT_ALLOWED` and `#NOT_REQUIRED` are already ABAP-CDS-001's subject
 #: and must not be reported twice under a different id; `#MANDATORY` cannot
@@ -157,6 +164,7 @@ class CdsAuthorizationIndex(object):
                 "file": label,
                 "line": text.count("\n", 0, match.start()) + 1,
                 "has_auth": bool(_BEHAVIOR_AUTH.search(block)),
+                "auth_master": self._auth_master_kinds(block),
             }
 
     def _add_view(self, text: str, label: str) -> None:
@@ -181,6 +189,21 @@ class CdsAuthorizationIndex(object):
             }
             if _ODATA_PUBLISH.search(text, start, match.start()):
                 self.exposed.setdefault(name, "@OData.publish: true")
+
+    @staticmethod
+    def _auth_master_kinds(block):
+        """Which authorization kinds a behaviour block declares, or None.
+
+        None means the block declares no `authorization master ( ... )` at all,
+        which is ABAP-RAP-005's subject and not this one's. An empty set means it
+        declared one whose contents could not be read, and is treated the same
+        way — unreadable is not evidence.
+        """
+        match = _AUTH_MASTER.search(block)
+        if not match:
+            return None
+        kinds = {k.strip().lower() for k in match.group(1).split(",")}
+        return {k for k in kinds if k in ("global", "instance")}
 
     @staticmethod
     def _previous_end(text: str, position: int) -> int:
@@ -218,6 +241,25 @@ class CdsAuthorizationIndex(object):
                    and (view["annotation"] or "") not in _ANNOTATION_SETTLES_IT
                    and name not in self.exposed)
 
+    def global_only_behaviors(self) -> List[Dict[str, Any]]:
+        """Behaviours whose authorization is global and never per-instance.
+
+        SAP draws the distinction explicitly: global authorization "restricts
+        data access or the ability to perform certain operations for an ENTIRE
+        RAP BO, regardless of individual instances", while instance
+        authorization "applies checks based on the STATE of an entity instance",
+        and "both global and instance authorization checks can be implemented
+        simultaneously".
+
+        So a behaviour declaring only `( global )` answers one question — may
+        this user perform this operation at all — and never the second, may they
+        perform it on THIS record. Correct for an entity whose rules genuinely do
+        not depend on the record; the whole vulnerability for one whose rules do.
+        """
+        return [dict(info, entity=entity)
+                for entity, info in sorted(self.behaviors.items())
+                if info.get("auth_master") == {"global"}]
+
     def behaviors_without_authorization(self) -> List[Dict[str, Any]]:
         return [dict(info, entity=entity)
                 for entity, info in sorted(self.behaviors.items())
@@ -252,6 +294,13 @@ CROSS_ARTIFACT_RULES: List[Dict[str, Any]] = [
         "name": "Exposed CDS view has no access-control role",
         "severity": "HIGH",
         "cwe": "CWE-862",
+    },
+    {
+        "id": "ABAP-RAP-006",
+        "category": "Missing Authorization",
+        "name": "RAP behaviour authorises the operation but never the instance",
+        "severity": "MEDIUM",
+        "cwe": "CWE-863",
     },
     {
         "id": "ABAP-RAP-005",
@@ -350,6 +399,50 @@ def cross_artifact_findings(index: CdsAuthorizationIndex) -> List[Dict[str, Any]
              "view is not covered by the new role either.\n"
              "5. Re-run the scan to confirm the view resolves to a role."
              % view["name"]),
+        ))
+
+    for behavior in index.global_only_behaviors():
+        out.append(_finding(
+            check_id="ABAP-RAP-006",
+            name=_BY_ID["ABAP-RAP-006"]["name"],
+            severity=_BY_ID["ABAP-RAP-006"]["severity"],
+            category=_BY_ID["ABAP-RAP-006"]["category"],
+            file=behavior["file"], obj=behavior["entity"], line=behavior["line"],
+            statement="define behavior for %s — authorization master ( global )"
+                      % behavior["entity"],
+            description=(
+                "This behaviour declares `authorization master ( global )` and "
+                "nothing else, so its authorization handler is asked one question "
+                "- may this user perform this operation at all - and never the "
+                "second one, may they perform it on THIS record. SAP draws the "
+                "line explicitly: global authorization restricts operations for "
+                "an entire RAP business object 'regardless of individual "
+                "instances', while instance authorization 'applies checks based "
+                "on the state of an entity instance', and the two can be declared "
+                "together as ( global, instance ). Global-only is correct where "
+                "the rule genuinely does not depend on the record, and is the "
+                "entire vulnerability where it does: a user cleared to update any "
+                "instance is thereby cleared to update every instance - every "
+                "company code, every plant, every other department's documents. "
+                "Reported at MEDIUM rather than HIGH because only the data model "
+                "settles which case this is, and this check cannot read that."),
+            recommendation=(
+                "1. Decide whether access to this entity depends on the record: "
+                "if any user should be able to act on some instances and not "
+                "others, global-only authorization cannot express that.\n"
+                "2. Where it does, declare `authorization master ( global, "
+                "instance )` and implement GET_INSTANCE_AUTHORIZATIONS in the "
+                "behaviour pool alongside the global handler.\n"
+                "3. Base the instance check on the record's own fields - company "
+                "code, plant, owner - against the user's authorization object, "
+                "not on the operation alone.\n"
+                "4. Where global-only IS correct, record that in a comment beside "
+                "the declaration so the next reviewer need not re-derive it from "
+                "the data model.\n"
+                "5. Consider a RAP precheck as well, which rejects unwanted "
+                "incoming VALUES before they reach the transactional buffer - a "
+                "different question again from who may act and on what.\n"
+                "6. Re-run the scan."),
         ))
 
     for behavior in index.behaviors_without_authorization():
