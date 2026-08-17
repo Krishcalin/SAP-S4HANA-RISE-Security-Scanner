@@ -45,46 +45,47 @@ Business Client) is also excluded: it re-ships almost monthly at CVSS 10.0,
 patches a DESKTOP client by MSI rather than by SNOTE, and as a catalog entry
 it would be a permanent false "missing" on every scan.
 
-PROVENANCE, AND ONE CORRECTION THIS CATALOG HAS ALREADY NEEDED.
+PROVENANCE, AND THE CORRECTION THAT WAS ITSELF WRONG.
 
-The original entries were written against SAP Security Patch Day summaries and
-CISA KEV. An operator-supplied HotNews reference (2020 – Aug 2026) was then
-cross-checked against them, in both directions. It caught a real error here:
-this catalog paired note 3084487 with CVE-2021-38163, Visual Composer,
-exploited — but 3084487 is CVE-2021-38176, SQL injection in AS ABAP (SQLDBC),
-and the Visual Composer upload in CISA KEV is note 3097887, now its own entry.
-The exploited-in-the-wild flag had been sitting on the wrong note number. In
-the other direction, the reference's numbers for CVE-2023-25616 ("3302162,
-approx") and CVE-2023-23857 ("3299357") conflict with this catalog's 3245526 /
-3252433, which stand — the reference itself warns that its 2021–2023 numbers
-vary between sources.
+Every note-to-CVE binding in this catalogue is now read from the SAP CNA record
+in NVD. SAP is a CVE Numbering Authority, so its advisories reach NVD carrying
+`sourceIdentifier: cna@sap.com` and a reference to `me.sap.com/notes/<note>` —
+that reference is SAP itself binding the note number to the CVE, in public, with
+no S-user. Every `exploited` flag is read from the CISA KEV feed, and where the
+basis is a vendor report instead, `exploited_basis` says so.
 
-Reference entries NOT added, and why: note numbers that conflict between
-sources or could not be confirmed (CVE-2020-6364, CVE-2023-27500,
-CVE-2025-30018, the Build Apps SSRF); out-of-product entries (above); 3413475,
-whose CVE-2023-49583 is already represented by 3411067; and the Jan-2026 rows,
-which carry no note number at all and are therefore undetectable by note
-matching.
+That mattered, because this catalogue got the same pair wrong twice. It first
+paired note 3084487 with CVE-2021-38163 (Visual Composer, exploited). An
+operator-supplied reference said that was wrong, so it was "corrected": 3084487
+was rewritten as CVE-2021-38176 / SQLDBC and the Visual Composer entry moved to
+3097887. The SAP CNA records say the original was right about 3084487 and the
+correction introduced two new errors:
 
-Note 3747367 (CVE-2026-44747) WAS added, and correcting how is the point.
-It sat out of the catalogue on the grounds that it post-dated every source used,
-with a standing note to confirm it in the Launchpad — which needs an S-user and
-so parked the entry indefinitely behind somebody else's login. It did not need
-one. SAP is a CVE Numbering Authority, so its advisories reach NVD directly:
-CVE-2026-44747 carries `sourceIdentifier: cna@sap.com` and references
-`me.sap.com/notes/3747367`, which is SAP itself binding the note number to the
-CVE — the same binding this catalogue got wrong for 3084487. That is a stronger
-provenance than the operator reference the entry was originally sourced from,
-and it is public.
+    CVE-2021-38163 -> note 3084487   Visual Composer 7.0 RT, CISA KEV 2022-06-09
+    CVE-2021-38176 -> note 3089831   NZDT function modules (never 3084487)
+    CVE-2021-38178 -> note 3097887   AS ABAP software logistics, CVSS 8.8
 
-The operator reference also had it as **Feb 2026**. It is **July 2026** — SAP
-Security Patch Day of 14 July 2026, NVD published 2026-07-14. The wrong month
-was propagated into `docs/EXPORT_GUIDE.md` as well and is corrected there too.
+The cost was not cosmetic. Note 3097887 is an ABAP note; the correction tagged it
+`java`, which routes it to the adjacent-systems disclosure — so a HotNews-class
+ABAP note could never be reported as missing from an ABAP export, whatever the
+customer had or had not applied. A wrong `applies_to` does not produce a wrong
+finding; it produces no finding, which is worse.
 
-The general lesson, recorded because it will apply again: *"needs Launchpad
-confirmation"* is worth testing before it is accepted. For anything with a CVE,
-the SAP CNA record is public and authoritative, and only note text, affected
-support-package levels and correction instructions genuinely require an S-user.
+The general lesson, recorded because it has now applied twice: a secondary
+summary is not evidence about a note number, in either direction. Neither is this
+module's own history. The CNA record is, and it is free.
+
+Two earlier judgements are also revised by it. CVE-2023-27500 was recorded as
+"could not be confirmed" and left out; NVD binds it to note 3302162 and it is now
+in. Note 3747367 was left out as post-dating every source, with a standing
+instruction to confirm it in the Launchpad; it needed no such thing.
+
+Products that never sit inside an S/4HANA RISE system boundary are still excluded
+from the catalog entirely rather than tagged: Business One, Commerce Cloud SaaS,
+and apps built with SAP Build Apps. The recurring Google Chromium note (2622660,
+SAP Business Client) is also excluded: it re-ships almost monthly at CVSS 10.0,
+patches a DESKTOP client by MSI rather than by SNOTE, and as a catalog entry it
+would be a permanent false "missing" on every scan.
 
 Data sources:
   - applied_notes.csv        → SNOTE / System Recommendations implementation
@@ -129,16 +130,27 @@ class SapHotNewsAuditor(BaseAuditor):
     #: which carries version/released/obtained — it existed in the repository and
     #: was simply not applied here.
     CATALOG_META = {
-        "curated_through": "2025-08",
+        # Advanced from 2025-08 when the catalogue was swept against a
+        # 2020–Aug 2026 vulnerability-intelligence review, every entry of which
+        # was then verified against the SAP CNA record in NVD. The date is what
+        # the sweep covered; the SUBSET note below is what it selected within it,
+        # and the two are different claims that must both be stated.
+        "curated_through": "2026-08",
         "note": "A CURATED SUBSET of high-impact SAP HotNews and High notes, not "
-                "the full SAP Security Patch Day history. Absence of a finding "
-                "means none of the notes BELOW are missing — it is not a statement "
-                "that the estate is fully patched.",
+                "the full SAP Security Patch Day history. The date range is swept "
+                "to the month below; within it the selection is by impact — "
+                "HotNews, actively-exploited, and High notes that reach an "
+                "ECC/S4 landscape. Absence of a finding means none of the notes "
+                "BELOW is missing — it is not a statement that the estate is "
+                "fully patched.",
     }
 
     # Curated catalog of high-impact SAP HotNews / High Security Notes since 2020.
     # Fields: note, cve, cvss, priority ("HotNews"|"High"), component, released
-    # ("YYYY-MM"), exploited (known in-the-wild / CISA KEV), title,
+    # ("YYYY-MM"), exploited (known in-the-wild), exploited_basis (WHICH kind of
+    # evidence — "cisa-kev <date>" or "vendor-reported ..."; a KEV listing with a
+    # remediation due date and a vendor saying it has seen exploitation are not
+    # the same claim and the report should not present them as one), title,
     # applies_to ("abap" = assessable from this system's SNOTE export;
     # "java"|"bi"|"btp"|"solman" = adjacent landscape component → HOTNEWS-005),
     # component_prereq (optional ABAP add-on the note requires, checked against
@@ -148,101 +160,198 @@ class SapHotNewsAuditor(BaseAuditor):
     HOTNEWS_CATALOG: List[Dict[str, Any]] = [
         {"note": "2890213", "cve": "CVE-2020-6207", "cvss": 10.0, "priority": "HotNews",
          "component": "Solution Manager (EEM / diagnostics agent)", "released": "2020-03",
-         "exploited": True, "applies_to": "solman",
+         "exploited": True, "exploited_basis": "cisa-kev 2021-11-03", "applies_to": "solman",
          "title": "Missing authentication check in SAP Solution Manager"},
         {"note": "2934135", "cve": "CVE-2020-6287", "cvss": 10.0, "priority": "HotNews",
          "component": "NetWeaver AS Java (LM Configuration Wizard)", "released": "2020-07",
-         "exploited": True, "applies_to": "java",
+         "exploited": True, "exploited_basis": "cisa-kev 2021-11-03", "applies_to": "java",
          "title": "RECON — unauthenticated account takeover / full compromise"},
-        # 3084487 previously carried CVE-2021-38163 / Visual Composer / exploited.
-        # That pairing was wrong — see the docstring correction note.
-        {"note": "3084487", "cve": "CVE-2021-38176", "cvss": 9.9, "priority": "HotNews",
-         "component": "NetWeaver AS ABAP (SQLDBC library)", "released": "2021-08",
-         "exploited": False, "applies_to": "abap",
-         "title": "SQL injection in SAP NetWeaver AS ABAP (SQLDBC)"},
-        {"note": "3097887", "cve": "CVE-2021-38163", "cvss": 9.9, "priority": "HotNews",
-         "component": "NetWeaver AS Java (Visual Composer 7.0 RT)", "released": "2021-09",
-         "exploited": True, "applies_to": "java",
-         "title": "Unrestricted file upload in SAP NetWeaver (Visual Composer)"},
-        # ICMAD hit the ICM inside the ABAP kernel (and Web Dispatcher), so it IS
-        # assessable from this system; the AS Java companion 3123427 is not.
+        # ── The 2021 pair this catalogue had BACKWARDS ──────────────────────
+        # A previous correction moved the Visual Composer / KEV entry from note
+        # 3084487 to 3097887 and rewrote 3084487 as CVE-2021-38176 "SQLDBC".
+        # Every part of that is wrong, per the SAP CNA records in NVD:
+        #   CVE-2021-38163 -> note 3084487 (Visual Composer 7.0 RT, KEV)
+        #   CVE-2021-38176 -> note 3089831 (NZDT function modules)
+        #   CVE-2021-38178 -> note 3097887 (AS ABAP software logistics)
+        # The cost was not cosmetic. 3097887 is an ABAP note and was tagged
+        # `java`, so it routed to the adjacent-systems disclosure and could never
+        # be reported as missing from an ABAP export — a real HotNews-class note
+        # this scanner structurally could not raise.
+        {"note": "3084487", "cve": "CVE-2021-38163", "cvss": 9.9, "priority": "HotNews",
+         "component": "NetWeaver (Visual Composer 7.0 RT) 7.30–7.50", "released": "2021-09",
+         "exploited": True, "exploited_basis": "cisa-kev 2022-06-09", "applies_to": "java",
+         "title": "Unrestricted file upload in Visual Composer 7.0 RT — RCE by a non-admin user"},
+        {"note": "3089831", "cve": "CVE-2021-38176", "cvss": 8.8, "priority": "High",
+         "component": "NetWeaver AS ABAP (NZDT near-zero-downtime function modules)",
+         "released": "2021-09", "exploited": False, "applies_to": "abap",
+         "title": "SQL injection via remotely callable NZDT function modules"},
+        {"note": "3097887", "cve": "CVE-2021-38178", "cvss": 8.8, "priority": "High",
+         "component": "NetWeaver AS ABAP / ABAP Platform 700–756 (software logistics)",
+         "released": "2021-10", "exploited": False, "applies_to": "abap",
+         "title": "Malicious ABAP code transfer through the software logistics system"},
         {"note": "3123396", "cve": "CVE-2022-22536", "cvss": 10.0, "priority": "HotNews",
          "component": "NetWeaver ABAP/Java, Web Dispatcher, Content Server (ICM)", "released": "2022-02",
-         "exploited": True, "applies_to": "abap",
+         "exploited": True, "exploited_basis": "cisa-kev 2022-08-18", "applies_to": "abap",
          "title": "ICMAD — HTTP request smuggling in ICM / Web Dispatcher"},
         {"note": "3123427", "cve": "CVE-2022-22532 / CVE-2022-22533", "cvss": 8.1, "priority": "High",
          "component": "NetWeaver AS Java (Memory Pipe / MPI, ICMAD)", "released": "2022-02",
          "exploited": False, "applies_to": "java",
          "title": "ICMAD HTTP smuggling / MPI exhaustion in AS Java"},
+        {"note": "3239152", "cve": "CVE-2022-41204", "cvss": 8.8, "priority": "High",
+         "component": "SAP Commerce 1905–2205 (login page)", "released": "2022-10",
+         "exploited": False, "applies_to": "commerce",
+         "title": "URL manipulation on the Commerce login page — credential redirection"},
+        {"note": "3242933", "cve": "CVE-2022-39802", "cvss": 7.5, "priority": "High",
+         "component": "SAP Manufacturing Execution 15.1–15.3", "released": "2022-10",
+         "exploited": False, "applies_to": "me",
+         "title": "Path traversal through an unvalidated file-path request parameter"},
         {"note": "3245526", "cve": "CVE-2023-25616", "cvss": 9.9, "priority": "HotNews",
          "component": "BusinessObjects BI Platform (CMC)", "released": "2023-03",
          "exploited": False, "applies_to": "bi",
-         "title": "Code injection / improper access in BusinessObjects BI"},
+         "title": "Code injection in the BI Platform Central Management Console"},
         {"note": "3252433", "cve": "CVE-2023-23857", "cvss": 9.9, "priority": "HotNews",
-         "component": "NetWeaver AS Java (P4 / open naming & directory API)", "released": "2023-03",
+         "component": "NetWeaver AS Java (P4 / open naming & directory API)", "released": "2023-02",
          "exploited": False, "applies_to": "java",
-         "title": "Improper access control (missing authentication check)"},
+         "title": "Improper access control over the P4 protocol"},
+        {"note": "3283438", "cve": "CVE-2023-25617", "cvss": 9.0, "priority": "HotNews",
+         "component": "BusinessObjects (Adaptive Job Server) 420, 430", "released": "2023-03",
+         "exploited": False, "applies_to": "bi",
+         "title": "Remote OS command execution where program-object execution is enabled"},
         {"note": "3288480", "cve": "CVE-2023-27269", "cvss": 9.6, "priority": "HotNews",
          "component": "NetWeaver AS ABAP / ABAP Platform", "released": "2023-03",
          "exploited": False, "applies_to": "abap",
-         "title": "Directory traversal in SAP NetWeaver AS for ABAP"},
-        # Ships as a CommonCryptoLib / kernel patch, not an SNOTE correction
-        # instruction — one reason the export guide steers the applied-notes
-        # export toward System Recommendations, which tracks kernel-level notes.
+         "title": "Directory traversal allowing overwrite of system files"},
+        {"note": "3302162", "cve": "CVE-2023-27500", "cvss": 9.6, "priority": "HotNews",
+         "component": "NetWeaver AS ABAP / ABAP Platform (program SAPRSBRO)", "released": "2023-03",
+         "exploited": False, "applies_to": "abap",
+         "title": "Directory traversal in SAPRSBRO — overwrite system files from a non-admin user"},
+        {"note": "3320355", "cve": "CVE-2023-40622", "cvss": 9.9, "priority": "HotNews",
+         "component": "BusinessObjects BI Platform (Promotion Management)", "released": "2023-09",
+         "exploited": False, "applies_to": "bi",
+         "title": "Information disclosure in BI Promotion Management"},
+        # Ships as a CommonCryptoLib / kernel patch, not an SNOTE correction, so a
+        # pure SNOTE export may never show it. Kept assessable deliberately: the
+        # fail-safe direction is to push the operator toward System
+        # Recommendations, which tracks kernel-level notes.
         {"note": "3340576", "cve": "CVE-2023-40309", "cvss": 9.8, "priority": "HotNews",
          "component": "CommonCryptoLib (ABAP kernel, HANA, Web Dispatcher)", "released": "2023-09",
          "exploited": False, "applies_to": "abap",
          "title": "Missing authorization check in CommonCryptoLib"},
-        {"note": "3320355", "cve": "CVE-2023-40622", "cvss": 9.9, "priority": "HotNews",
-         "component": "BusinessObjects BI Platform (Promotion Management)", "released": "2023-09",
-         "exploited": False, "applies_to": "bi",
-         "title": "Information disclosure enabling full compromise in BI Promotion Management"},
         {"note": "3411067", "cve": "CVE-2023-49583", "cvss": 9.1, "priority": "HotNews",
-         "component": "BTP Security Services (@sap/xssec)", "released": "2024-01",
+         "component": "BTP Security Services (@sap/xssec)", "released": "2023-12",
          "exploited": False, "applies_to": "btp",
-         "title": "Privilege escalation via SAP BTP security-services library"},
+         "title": "Privilege escalation in the @sap/xssec security library"},
         {"note": "3420923", "cve": "CVE-2024-22131", "cvss": 9.1, "priority": "HotNews",
-         "component": "ABAP Platform (SAP ABA)", "released": "2024-02",
+         "component": "ABAP Platform (SAP ABA)", "released": "2024-01",
          "exploited": False, "applies_to": "abap",
-         "title": "Code injection in SAP Application Basis (ABA)"},
+         "title": "Code injection in the ABAP Platform administration layer"},
         {"note": "3448171", "cve": "CVE-2024-33006", "cvss": 9.6, "priority": "HotNews",
          "component": "NetWeaver AS ABAP (file upload)", "released": "2024-05",
          "exploited": False, "applies_to": "abap",
-         "title": "Unrestricted file upload in SAP NetWeaver ABAP"},
+         "title": "Unrestricted file upload in AS ABAP"},
+        {"note": "3469791", "cve": "CVE-2024-54198", "cvss": 8.5, "priority": "High",
+         "component": "NetWeaver AS ABAP (RFC to restricted destinations)", "released": "2024-12",
+         "exploited": False, "applies_to": "abap",
+         "title": "Credential exposure via RFC calls to restricted destinations"},
         {"note": "3479478", "cve": "CVE-2024-41730", "cvss": 9.8, "priority": "HotNews",
          "component": "BusinessObjects BI Platform (REST / SSO)", "released": "2024-08",
          "exploited": False, "applies_to": "bi",
-         "title": "Missing authentication check — SSO token theft via REST"},
+         "title": "Missing authentication — logon token obtainable through a REST endpoint"},
+        {"note": "3536965", "cve": "CVE-2024-47578", "cvss": 9.1, "priority": "HotNews",
+         "component": "NetWeaver AS Java (Adobe Document Services)", "released": "2024-12",
+         "exploited": False, "applies_to": "java",
+         "title": "SSRF in Adobe Document Services reaching systems behind the firewall"},
+        {"note": "3537476", "cve": "CVE-2025-0070", "cvss": 9.9, "priority": "HotNews",
+         "component": "NetWeaver AS ABAP / ABAP Platform", "released": "2025-01",
+         "exploited": False, "applies_to": "abap",
+         "title": "Improper authentication checks allowing privilege escalation"},
+        {"note": "3550708", "cve": "CVE-2025-0066", "cvss": 9.9, "priority": "HotNews",
+         "component": "NetWeaver AS ABAP (Internet Communication Framework)", "released": "2025-01",
+         "exploited": False, "applies_to": "abap",
+         "title": "Weak ICF access controls exposing restricted information"},
+        {"note": "3581961", "cve": "CVE-2025-27429", "cvss": 9.9, "priority": "HotNews",
+         "component": "S/4HANA Private Cloud / On-Premise (RFC function module)", "released": "2025-04",
+         "exploited": False, "applies_to": "abap",
+         "title": "ABAP code injection through an RFC-exposed function module"},
         {"note": "3594142", "cve": "CVE-2025-31324", "cvss": 10.0, "priority": "HotNews",
          "component": "NetWeaver Visual Composer (Metadata Uploader)", "released": "2025-04",
-         "exploited": True, "applies_to": "java",
-         "title": "Unrestricted file upload → RCE in Visual Composer"},
+         "exploited": True, "exploited_basis": "cisa-kev 2025-04-29", "applies_to": "java",
+         "title": "Unauthenticated file upload to the Visual Composer Metadata Uploader"},
         {"note": "3604119", "cve": "CVE-2025-42999", "cvss": 9.1, "priority": "HotNews",
          "component": "NetWeaver Visual Composer (Metadata Uploader)", "released": "2025-05",
-         "exploited": True, "applies_to": "java",
-         "title": "Insecure deserialization — root cause behind CVE-2025-31324"},
-        # The single most relevant entry for this product's audience: code
-        # injection in S/4HANA itself, exploited in the wild within weeks.
+         "exploited": True, "exploited_basis": "cisa-kev 2025-05-15", "applies_to": "java",
+         "title": "Insecure deserialization in Visual Composer"},
         {"note": "3627998", "cve": "CVE-2025-42957", "cvss": 9.9, "priority": "HotNews",
          "component": "S/4HANA (remote-enabled RFC function module)", "released": "2025-08",
-         "exploited": True, "applies_to": "abap",
+         "exploited": True, "exploited_basis": "vendor-reported (SecurityBridge, not in CISA KEV)",
+         "applies_to": "abap",
          "title": "ABAP code injection in S/4HANA via RFC — full compromise from a low-privileged user"},
         {"note": "3633838", "cve": "CVE-2025-42950", "cvss": 9.9, "priority": "HotNews",
          "component": "Landscape Transformation / SLT (DMIS add-on)", "released": "2025-08",
          "exploited": False, "applies_to": "abap", "component_prereq": "DMIS",
          "title": "ABAP code injection in SAP Landscape Transformation (companion to CVE-2025-42957)"},
+        {"note": "3634501", "cve": "CVE-2025-42944", "cvss": 10.0, "priority": "HotNews",
+         "component": "NetWeaver AS Java (RMI-P4)", "released": "2025-09",
+         "exploited": False, "applies_to": "java",
+         "title": "Unauthenticated deserialization on the RMI-P4 port"},
+        {"note": "3668705", "cve": "CVE-2025-42887", "cvss": 9.9, "priority": "HotNews",
+         "component": "SAP Solution Manager (remote-enabled function module)", "released": "2025-11",
+         "exploited": False, "applies_to": "solman",
+         "title": "Code injection in a Solution Manager RFC function module"},
+        {"note": "3685270", "cve": "CVE-2025-42880", "cvss": 9.9, "priority": "HotNews",
+         "component": "SAP Solution Manager (remote-enabled function module)", "released": "2025-12",
+         "exploited": False, "applies_to": "solman",
+         "title": "Code injection in a Solution Manager RFC function module"},
+        {"note": "3687749", "cve": "CVE-2026-0501", "cvss": 9.9, "priority": "HotNews",
+         "component": "S/4HANA Private Cloud / On-Premise (Financials General Ledger)",
+         "released": "2026-01", "exploited": False, "applies_to": "abap",
+         "title": "SQL injection in Financials General Ledger — read, modify and delete backend data"},
+        {"note": "3694242", "cve": "CVE-2026-0498", "cvss": 9.1, "priority": "HotNews",
+         "component": "S/4HANA Private Cloud / On-Premise (RFC function module)",
+         "released": "2026-01", "exploited": False, "applies_to": "abap",
+         "title": "ABAP code injection through an RFC function module (admin privileges)"},
+        {"note": "3674774", "cve": "CVE-2026-0509", "cvss": 9.6, "priority": "HotNews",
+         "component": "NetWeaver AS ABAP / ABAP Platform (background RFC)", "released": "2026-02",
+         "exploited": False, "applies_to": "abap",
+         "title": "Background RFC executable without the required S_RFC authorization"},
+        {"note": "3697099", "cve": "CVE-2026-0488", "cvss": 9.9, "priority": "HotNews",
+         "component": "SAP CRM and S/4HANA (Scripting Editor)", "released": "2026-02",
+         "exploited": False, "applies_to": "abap",
+         "title": "Generic function-module call executing unauthorized critical functionality"},
+        {"note": "3719353", "cve": "CVE-2026-27681", "cvss": 9.9, "priority": "HotNews",
+         "component": "Business Planning and Consolidation / Business Warehouse",
+         "released": "2026-04", "exploited": False, "applies_to": "abap",
+         "title": "SQL injection in BPC / BW — workaround is to revoke S_GUI activity 60"},
+        {"note": "3724838", "cve": "CVE-2026-34260", "cvss": 9.6, "priority": "HotNews",
+         "component": "S/4HANA (SAP Enterprise Search for ABAP)", "released": "2026-05",
+         "exploited": False, "applies_to": "abap",
+         "title": "SQL injection through user-controlled input in Enterprise Search"},
+        {"note": "3731908", "cve": "CVE-2026-34256", "cvss": 7.1, "priority": "High",
+         "component": "SAP ERP and S/4HANA (Private Cloud and On-Premise)", "released": "2026-04",
+         "exploited": False, "applies_to": "abap",
+         "title": "Missing authorization check — an ABAP report can overwrite existing objects"},
+        {"note": "3746332", "cve": "CVE-2026-44748", "cvss": 9.9, "priority": "HotNews",
+         "component": "NetWeaver AS ABAP / ABAP Platform (SAML verifier)", "released": "2026-06",
+         "exploited": False, "applies_to": "abap",
+         "title": "XML signature wrapping — modified signed documents accepted by the verifier"},
+        {"note": "3717897", "cve": "CVE-2026-27671", "cvss": 9.8, "priority": "HotNews",
+         "component": "SAP Kernel (AS ABAP RFC protocol validation)", "released": "2026-06",
+         "exploited": False, "applies_to": "abap",
+         "title": "Unauthenticated crafted RFC request exploiting improper protocol validation"},
+        {"note": "3714806", "cve": "CVE-2026-34265", "cvss": 9.8, "priority": "HotNews",
+         "component": "NetWeaver AS ABAP (DIAG protocol parsing)", "released": "2026-08",
+         "exploited": False, "applies_to": "abap",
+         "title": "Unauthenticated memory corruption through DIAG protocol parsing"},
         # ── Beyond the systematic curation cut-off ──────────────────────────
         # Added individually, from SAP's OWN CNA record rather than a summary.
         # NVD CVE-2026-44747 carries sourceIdentifier `cna@sap.com` and
         # references `me.sap.com/notes/3747367` directly, which is what binds the
-        # note number to the CVE — the binding this catalogue has been wrong about
-        # before (see the 3084487 correction in the docstring).
+        # note number to the CVE — the binding this catalogue has been wrong
+        # about before, twice, for the 2021 pair above.
         #
         # `exploited` is False because nothing establishes otherwise, NOT because
-        # exploitation has been ruled out. That is the safe direction here: the
-        # note still raises as a missing HotNews either way, whereas asserting
-        # in-the-wild exploitation without a source is the exact fabrication the
-        # 3084487 correction exists to record.
+        # exploitation has been ruled out; CISA KEV was checked (1665 entries, 14
+        # SAP) and it is not among them.
         {"note": "3747367", "cve": "CVE-2026-44747", "cvss": 9.9, "priority": "HotNews",
          "component": "NetWeaver AS ABAP (kernel — KRNL64NUC/UC 7.22 through 9.20)",
          "released": "2026-07", "exploited": False, "applies_to": "abap",

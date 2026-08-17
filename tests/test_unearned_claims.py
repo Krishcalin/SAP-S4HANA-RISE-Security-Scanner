@@ -308,10 +308,16 @@ def test_adjacent_system_notes_are_disclosed_not_alarmed():
 
 
 def test_high_priority_missing_still_fires_via_the_merge_path():
-    """After applies_to scoping, the only built-in High entry (3123427) is an
-    AS Java note, so an ABAP sample can no longer exercise HOTNEWS-002. The
-    merge path can: an operator-supplied ABAP High entry that is not
-    implemented must still raise it."""
+    """The merge path must raise HOTNEWS-002 for an operator-supplied ABAP High
+    entry that is not implemented.
+
+    This test was written when the ONLY built-in High entry was 3123427, an AS
+    Java note — so after applies_to scoping no ABAP sample could exercise
+    HOTNEWS-002 at all, and the merge path was the only way to reach it. That is
+    no longer true: the 2026 sweep added four ABAP High notes (3089831, 3097887,
+    3469791, 3731908) and the check now fires natively on sample_data. The test
+    is kept because the merge path is still a distinct route to the same check
+    and nothing else covers it."""
     data = {"applied_notes": [],
             "sap_security_notes": [{"note": "9990001", "priority": "High",
                                     "cvss": 8.0, "applies_to": "abap",
