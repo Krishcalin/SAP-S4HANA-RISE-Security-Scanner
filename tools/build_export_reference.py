@@ -8,12 +8,15 @@
 
 Run:  python -m tools.build_export_reference
 
-WHY THIS EXISTS. docs/EXPORT_GUIDE.md is hand-written and gives a step-by-step
-procedure for the sources a first scan needs. It names 36 of the 123 logical
-sources the loader accepts. The other 87 were mentioned nowhere at all — so a
-customer could not supply them, the coverage manifest reported them "not
-supplied" for ever, and the checks behind them could never fire. A gap nobody can
-see is worse than a gap on a list.
+WHY THIS EXISTS. docs/EXPORT_GUIDE.md is hand-written. When this generator was
+written it covered 36 of the 123 logical sources the loader accepted; the other 87
+were mentioned nowhere at all — so a customer could not supply them, the coverage
+manifest reported them "not supplied" for ever, and the checks behind them could
+never fire. A gap nobody can see is worse than a gap on a list.
+
+The guide has since been extended to cover every source, so this file's headline
+figure is now a regression detector rather than a to-do list: add a source to the
+loader and it appears here as undocumented until somebody writes the procedure.
 
 WHAT IT DELIBERATELY DOES NOT DO. It does not invent an export procedure. Writing
 "run transaction XY12 and save the result" for a source whose procedure has not
@@ -48,16 +51,24 @@ HEADER = """# Export source reference
 Every logical source the scanner can read, what it enables, and whether
 [`EXPORT_GUIDE.md`](EXPORT_GUIDE.md) tells you how to produce it.
 
-**{total} logical sources.** {documented} have a written procedure in the export
-guide; **{undocumented} do not yet** — those rows name the files the loader will
-accept, so a source you already have to hand can be supplied today, but the
-step-by-step extraction has not been verified and is deliberately not guessed.
+{status}
 
 Omitting a source is always safe. The checks behind it do not run, and the
 coverage manifest counts it as *not supplied* rather than passing it off as
 clean — see chapter 13 of the architecture guide.
 
 """
+
+#: Two headlines, because "0 do not yet" is a sentence nobody should have to read
+#: to learn that the catalogue is complete.
+STATUS_GAP = """**{total} logical sources.** {documented} have a written procedure in the export
+guide; **{undocumented} do not yet** — those rows name the files the loader will
+accept, so a source you already have to hand can be supplied today, but the
+step-by-step extraction has not been verified and is deliberately not guessed."""
+
+STATUS_COMPLETE = """**{total} logical sources, all of them with a written procedure** in the export
+guide. This table is the regression detector for that: add a source to the loader
+without writing its procedure and it appears here as *not yet written*."""
 
 
 def build() -> str:
@@ -82,8 +93,10 @@ def build() -> str:
         rise = "not obtainable" if src in RISE_UNREACHABLE_SOURCES else ""
         rows.append((src, names, sorted(consumers.get(src, [])), has_doc, rise))
 
-    out = [HEADER.format(total=len(sources), documented=documented,
-                         undocumented=len(sources) - documented)]
+    undocumented = len(sources) - documented
+    status = (STATUS_GAP if undocumented else STATUS_COMPLETE).format(
+        total=len(sources), documented=documented, undocumented=undocumented)
+    out = [HEADER.format(status=status)]
     out.append("| Source | Files the loader accepts | Feeds | Procedure |")
     out.append("|---|---|---|---|")
     for src, names, mods, has_doc, rise in rows:
@@ -96,14 +109,28 @@ def build() -> str:
                       ", ".join("`%s`" % m for m in mods) or "—",
                       note))
     out.append("")
-    out.append("## What “not yet written” means")
-    out.append("")
-    out.append("The scanner will read the file if you supply it under one of the "
-               "names above. What is missing is a verified procedure for "
-               "producing it — which transaction, which selection, which "
-               "columns. Those are not guessed here: a wrong transaction code in "
-               "an export guide costs a customer an afternoon and costs the "
-               "product its credibility.")
+    if undocumented:
+        out.append("## What “not yet written” means")
+        out.append("")
+        out.append("The scanner will read the file if you supply it under one of "
+                   "the names above. What is missing is a verified procedure for "
+                   "producing it — which transaction, which selection, which "
+                   "columns. Those are not guessed here: a wrong transaction code "
+                   "in an export guide costs a customer an afternoon and costs "
+                   "the product its credibility.")
+    else:
+        out.append("## What “documented” means, and what it does not")
+        out.append("")
+        out.append("That the export guide has a section for the source, naming "
+                   "the columns the checks read and where the data comes from. "
+                   "It does not mean every route has been verified against a "
+                   "primary SAP source — the ones that have not are marked *not "
+                   "verified for this guide* in the section itself, and are the "
+                   "route the consuming module was written against rather than a "
+                   "checked fact. That distinction is kept in the guide rather "
+                   "than flattened into this table, because a reader deciding "
+                   "whether to trust a transaction code needs it in front of the "
+                   "transaction code.")
     out.append("")
     return "\n".join(out)
 

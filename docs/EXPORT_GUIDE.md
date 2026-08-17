@@ -62,19 +62,21 @@ reason for each.
 
 ## Every source, including the ones this guide does not cover
 
-This guide gives a verified, step-by-step procedure for the sources a first scan
-needs. The scanner reads **123** logical sources in total, and the remaining ones
-have no written procedure yet.
+The scanner reads **128** logical sources. All of them now have a procedure: the
+sections up to *SAP Cloud ALM* cover what a first scan needs, and
+[*The remaining sources*](#the-remaining-sources) below covers the rest.
 
-[**`EXPORT_SOURCES.md`**](EXPORT_SOURCES.md) lists all 123 — the filenames the
-loader accepts, which checks each one feeds, and whether a procedure exists. It
-is generated from the code, so a source cannot be added to the scanner without
-appearing there.
+[**`EXPORT_SOURCES.md`**](EXPORT_SOURCES.md) lists all 128 — the filenames the
+loader accepts, which checks each one feeds, and whether a procedure exists. It is
+generated from the code, so a source cannot be added to the scanner without
+appearing there, and it will show up as undocumented until somebody writes the
+procedure.
 
-If you already hold one of those files, supply it: the scanner will read it under
-any of the listed names. What is missing is the extraction procedure, and those
-are not guessed — a wrong transaction code in an export guide costs you an
-afternoon.
+Not every procedure is equally attested, and the ones that are not say so. A route
+marked *not verified for this guide* is the one the scanner's own module was
+written against, recorded so you have somewhere to start rather than nowhere —
+check it before you build a job around it. Nothing is guessed: a wrong transaction
+code in an export guide costs you an afternoon.
 
 ## Core Data Exports
 
@@ -1441,6 +1443,1302 @@ One consequence worth knowing: three store names collide with our filenames
 (`STANDARD_USERS`, `GW_SECINFO`, `GW_REGINFO`). Case decides — `standard_users.csv`
 is the native export, `STANDARD_USERS.csv` is the CSA store — on Windows too, where
 the filesystem itself cannot tell them apart.
+
+---
+
+---
+
+# The remaining sources
+
+The sections above cover what a first scan needs. What follows covers the rest of
+the catalogue, so that every source the scanner reads has somewhere to send you.
+
+**Two things to know before you use them.**
+
+**Where the route came from.** Each procedure names the transaction, table or API
+the scanner's own module was written against — that mapping lives in the module
+header and is the reason the column names below are what they are. A route marked
+*"not verified for this guide — confirm before you build a job around it"* is one
+that has not been checked against a primary SAP source. It is written down rather
+than left out so you have somewhere to start, and marked so you do not mistake it
+for a checked fact. Nothing here is invented: where neither the module nor a
+primary source names a route, the entry says so plainly.
+
+**Some of these are not exports at all.** A dozen sources are *declarative*: there
+is no SAP transaction behind them because the thing being audited is a decision
+your organisation made, not a setting SAP stores. Whether personal data is masked
+in the QA system, which log types you retain and for how long, whether an incident
+runbook exists — SAP does not know any of that. Those files you write, once, and
+keep beside the export. Each one is marked **declarative** and gives the exact key
+names the check reads. Writing one is not busywork: it converts an assumption
+nobody has stated into a control somebody can review, and the scanner will tell
+you when it drifts.
+
+Omitting any of these is always safe. The checks behind them do not run, and the
+coverage manifest counts the source as *not supplied* rather than passing it off
+as clean.
+
+---
+
+## ABAP authorization detail (the `rolegov`, `iam` and `users` modules)
+
+### Authorization object values per user (`auth_objects.csv`)
+**Source:** `SUIM` → *User* → *Users by Complex Selection Criteria* → *By
+Authorization Values*, or the same data from your own role-explosion job. One row
+per user × authorization object × field × value. *The node path shifts slightly
+between releases; the report is the one that selects users by authorization
+object, field and value.*
+
+| Column (any of) | Meaning |
+|---|---|
+| `UNAME` · `BNAME` · `USERNAME` | User ID |
+| `OBJECT` · `AUTH_OBJECT` | Authorization object (`S_DEVELOP`, `S_TABU_DIS`, …) |
+| `FIELD` · `AUTH_FIELD` | Field within the object (`ACTVT`, `DEVCLASS`, …) |
+| `VALUE` · `AUTH_VALUE` | Value or range held |
+| `ACTIVITY` · `ACTVT` | Activity, where you export it as its own column |
+| `TCODE` · `TRANSACTION` | Transaction, where the row is transaction-scoped |
+
+This is the *effective* authorization — after role composition, not the role
+definition. `role_auth_values.csv` (AGR_1251) is the role side and answers a
+different question; supplying both lets the SoD analysis work at permission level.
+
+An export limited to a handful of objects is fine and common. It bounds what the
+checks can say, and the coverage manifest records the source as supplied, so state
+the filter in your own notes — the scanner cannot see that `S_TABU_DIS` was left
+out of the extract rather than held by nobody.
+
+### User groups (`user_groups.csv`)
+**Source:** `SU10` or `SUIM`, or a download of `USR02` — the group for the
+authorization check is `USR02-CLASS`.
+
+| Column (any of) | Meaning |
+|---|---|
+| `BNAME` · `UNAME` · `USERNAME` | User ID |
+| `CLASS` · `USGRP` · `USER_GROUP` | User group for authorization check |
+| `UFLAG` · `LOCK_STATUS` | Lock status, if you have it |
+
+Segmentation is the point: `S_USER_GRP` is what stops a user administrator in one
+group from resetting passwords in another. A system where every user sits in the
+same group — or in none — has a user-administration boundary that exists on the
+org chart and nowhere else.
+
+### Generated role profiles (`role_profiles.csv`, `agr_1016.csv`)
+**Source:** `SE16` on `AGR_1016`.
+
+Also accepted: `agr_1016.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `AGR_NAME` · `ROLE` · `ROLE_NAME` | Role |
+| `PROFILE` · `PROFILE_NAME` · `GENERATED_PROFILE` · `PROFN` | Generated authorization profile |
+| `GENERATED` · `STATUS` · `GEN_STATUS` | Generation status, if your extract carries it |
+
+**Export every role, including the ones with no profile.** A blank profile is the
+finding: the role was maintained in PFCG and never generated, so it grants nothing
+at runtime while continuing to appear in every access review as though it did. A
+row that is absent cannot be told apart from a role that was filtered out, so an
+extract of only the roles that *have* profiles reports nothing at all.
+
+### SU24 authorization proposals (`su24_proposals.csv`, `usobt_c.csv`)
+**Source:** `SU24`, or `SE16` on `USOBX_C` (check indicators) joined to `USOBT_C`
+(proposed values). The check indicator is `USOBX_C-OKFLAG`.
+
+Also accepted: `usobt_c.csv`, `su24.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `TCODE` · `TRANSACTION` · `TCD` · `NAME` | Transaction |
+| `CHECK_INDICATOR` · `CHECK_IND` · `OKFLAG` · `MODE` | Check indicator (`CM` / `C` / `N` / `U`) |
+| `PROPOSAL` · `MAINTAINED` | Whether a value proposal exists |
+
+`U` — *unmaintained* — is what this is for. PFCG builds a role from the proposals,
+so a transaction whose proposal was never maintained produces a role that either
+under-authorises (and gets fixed by someone adding a manual full authorization) or
+was never checked at all. After an upgrade, run `SU25` step 2 before you export,
+or the extract shows the pre-upgrade picture.
+
+---
+
+## Change control and custom code (the `codetrans` module)
+
+### System change option (`system_change.csv`, `se06.csv`)
+**Source:** `SE06` → *System Change Option* (also reachable from `SE03`). Export
+the global setting and the per-software-component and per-namespace rows.
+
+Also accepted: `se06.csv`, `system_change_option.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `SCOPE` · `OBJECT` · `NAMESPACE` · `COMPONENT` · `NAME` | What the row governs — global, a software component, or a namespace |
+| `SETTING` · `MODIFIABLE` · `VALUE` · `SETTING_VALUE` · `CHANGEABILITY` · `STATUS` · `EDTFLAG` | Modifiable / not modifiable |
+
+This is the second and **independent** lock beside the SCC4 client setting, which
+is why it is worth its own export: a client can be closed while the system is
+globally modifiable, and repository objects can then be changed in production
+regardless of what SCC4 says. *The underlying tables are not verified for this
+guide; export from the SE06 screen or from your Basis team's documented route.*
+
+### Open transport requests (`transports.csv`, `se09.csv`)
+**Source:** `SE09` / `SE10` — the Transport Organizer. Table route: `E070`
+(header) joined to `E07T` (description).
+
+| Column (any of) | Meaning |
+|---|---|
+| `TRKORR` · `TRANSPORT` · `REQUEST` | Request number |
+| `TRSTATUS` · `STATUS` | Release status, exported as-is |
+| `TRFUNCTION` · `TYPE` | Request type |
+| `AS4USER` · `OWNER` | Owner |
+| `AS4TEXT` · `DESCRIPTION` | Short text |
+
+Export `TRSTATUS` unchanged rather than translating it — the scanner reads SAP's
+own codes, and a translated column ("open", "done") loses the distinction between
+a request that is merely modifiable and one that is protected against release.
+
+Taken **in production**. An open request in a development system is a working
+day; an open request in production is a change that entered outside the transport
+path, and the whole point of the check is which system it was found in.
+
+### Transport routes (`transport_routes.csv`, `tms_routes.csv`)
+**Source:** `STMS` → *Overview* → *Transport Routes*.
+
+| Column (any of) | Meaning |
+|---|---|
+| `TYPE` · `ROUTE_TYPE` | Consolidation or delivery route |
+| `SOURCE` · `FROM_SYSTEM` · `SOURCE_SID` | Source system |
+| `TARGET` · `TO_SYSTEM` · `TARGET_SID` | Target system |
+
+Export the whole domain, not the routes touching one system. The finding is about
+the *shape* of the landscape — a delivery route that reaches production without
+passing through QA is only visible when both legs are in the same file.
+
+### Transport import history (`transport_history.csv`, `stms_log.csv`)
+**Source:** `STMS` → *Import Overview* → select the system → *Import History*.
+
+Also accepted: `stms_log.csv`, `import_history.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `TRKORR` · `TRANSPORT` · `REQUEST` | Request number |
+| `RELEASED_BY` · `RELEASER` · `AS4USER` | Who released it |
+| `IMPORTED_BY` · `IMPORTER` · `IMPORT_USER` | Who imported it |
+| `APPROVAL` · `APPROVED_BY` · `APPROVER` | Who approved it |
+| `IMPORT_DATE` · `IMPORT_TIME` · `TRDATE` | When it was imported |
+| `TARGET` · `TARGET_SYSTEM` | Where it went |
+| `SOURCE` · `SOURCE_SYSTEM` · `ORIGIN` | Where it came from |
+
+**The approval column will usually not be in the STMS export.** STMS records who
+released and who imported; approval lives in ChaRM, ServiceNow or whatever your
+change process runs on. Join it in if you can — a transport released and imported
+by the same person is the four-eyes finding, and without the approval column the
+check can only say that no third party appears, not that none existed.
+
+### SAP standard modifications (`sap_modifications.csv`, `se95.csv`)
+**Source:** `SE95` — the Modification Browser.
+
+Also accepted: `se95.csv`, `modifications.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `OBJECT` · `OBJECT_NAME` · `PROGRAM` | Modified SAP object |
+| `TYPE` · `MOD_TYPE` | Modification type |
+| `REGISTERED` · `SAP_NOTE` · `CORRECTION` | Registration key or the note it implements |
+| `MOD_DATE` · `DATE` · `CHANGED_ON` | When |
+| `MODIFIED_BY` · `CHANGED_BY` · `USER` | By whom |
+| `REASON` · `DESCRIPTION` | Why |
+
+A modification made under a note correction is routine. One with no note and no
+reason is both a security question and an upgrade liability, and the two are the
+same finding because the mechanism is the same: SAP ships a fix, the modification
+adjustment reverses it, and nobody notices until the next scan.
+
+### Development authorization in production (`dev_access_prod.csv`)
+**Source:** the same extract as `auth_objects.csv`, **taken in the production
+system**, filtered to the development authorizations — `S_DEVELOP`, and the users
+who can reach `SE38`, `SE80`, `SE37`, `SE24`.
+
+| Column (any of) | Meaning |
+|---|---|
+| `USERNAME` · `UNAME` · `BNAME` | User ID |
+| `TCODE` · `TRANSACTION` | Transaction |
+| `AUTH_OBJECT` · `OBJECT` | Authorization object |
+| `FIELD` · `AUTH_FIELD` | Field |
+| `VALUE` · `AUTH_VALUE` · `ACTIVITY` · `ACTVT` | Value held |
+
+Supplying `auth_objects.csv` from production alone is enough — this file exists so
+you can supply the narrower extract when a full authorization dump from production
+is not something your change process will allow.
+
+### ATC / Code Inspector results (`custom_code_scan.csv`, `atc_results.csv`)
+**Source:** `ATC` — run the security variant and export the result list. Code
+Inspector (`SCI`) output is accepted in the same shape.
+
+Also accepted: `atc_results.csv`, `code_inspector.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `OBJECT_NAME` · `OBJECT` · `PROGRAM` · `REPORT` · `INCLUDE` · `CLASS` | The object |
+| `OBJECT_TYPE` · `TYPE` · `OBJTYPE` | Object type |
+| `FINDING_TYPE` · `CHECK` · `CHECK_TITLE` · `CHECK_ID` · `MESSAGE_ID` · `MSG_ID` | Which check fired |
+| `DESCRIPTION` · `MESSAGE` · `MESSAGE_TEXT` · `TEXT` | The message |
+| `LINE` · `LINE_NUMBER` · `LINE_NO` · `ROW` | Line |
+| `SEVERITY` · `PRIORITY` | Priority as ATC reported it |
+| `STATUS` · `STATE` · `EXEMPTION` | Exemption / suppression state |
+
+**You may not need this file.** MonitorRisk carries its own ABAP scanner — point
+`--code-src` at a source export and it applies its own rules directly. This source
+is for importing an ATC run you already have, so that findings your team has
+already triaged appear beside the rest rather than being re-litigated.
+
+Export **exemptions along with findings**. An ATC run with every finding exempted
+and an ATC run with no findings look identical once the exemptions are dropped,
+and they are not the same system.
+
+---
+
+## Cryptography and transport security (the `crypto` module)
+
+### ICM TLS configuration (`tls_config.csv`, `icm_ssl.csv`)
+**Source:** `SMICM` → *Goto* → *Services*, which lists each active port with its
+protocol. Cipher configuration comes from the profile parameters (`RZ11`), which
+you may already be supplying as `security_params.csv`.
+
+| Column (any of) | Meaning |
+|---|---|
+| `PORT` · `SERVICE_PORT` | Port |
+| `NAME` · `SERVICE` · `LISTENER` | Service name |
+| `PROTOCOL` · `SSL_PROTOCOL` · `TLS_VERSION` | Protocol / version offered |
+| `CIPHERS` · `CIPHER_SUITE` · `SSL_CIPHERS` | Cipher suite string |
+| `HSTS` · `STRICT_TRANSPORT` | HSTS, where configured |
+
+Export the services as configured, including the ones you believe are internal.
+"Internal" is a statement about the network, and the check is about the endpoint;
+where both are true the finding costs you one line of justification, and where
+only one is true it is the finding.
+
+### Certificate inventory (`certificate_inventory.csv`, `strust_certs.csv`)
+**Source:** `STRUST` — every PSE's own certificate and its trust list. `SMICM`
+shows the ones the web dispatcher presents.
+
+| Column (any of) | Meaning |
+|---|---|
+| `CERT_NAME` · `ALIAS` · `SUBJECT` | Certificate subject or alias |
+| `VALID_TO` · `EXPIRY` · `NOT_AFTER` | Expiry date |
+| `KEY_SIZE` · `KEY_LENGTH` · `BITS` | Key length |
+| `ALGORITHM` · `SIGNATURE_ALG` | Signature algorithm |
+| `ISSUER` · `ISSUED_BY` | Issuer |
+| `PURPOSE` · `USAGE` · `PSE` | Which PSE / what it is for |
+
+Include expired certificates rather than filtering them out. An expired
+certificate still sitting in a trust list is a different finding from one that was
+removed, and only the export can tell the two apart.
+
+### PSE inventory (`pse_inventory.csv`, `strust_pse.csv`)
+**Source:** `STRUST` — the PSE list in the left-hand tree.
+
+| Column (any of) | Meaning |
+|---|---|
+| `PSE_NAME` · `NAME` · `PSE_FILE` | PSE (`SAPSSLS.pse`, `SAPSSLA.pse`, …) |
+| `TYPE` · `PSE_TYPE` | PSE type |
+| `STATUS` · `STATE` | Status as STRUST reports it |
+| `CERT_EXPIRY` · `VALID_TO` | Expiry of the PSE's own certificate |
+
+### CommonCryptoLib version (`crypto_library.csv`, `commoncryptolib.csv`)
+**Source:** the version your kernel reports. *The exact invocation differs by
+kernel release and is not verified for this guide — use the one your Basis team
+documents, and note which you used.*
+
+| Column (any of) | Meaning |
+|---|---|
+| `LIBRARY` · `NAME` · `COMPONENT` | Library name |
+| `VERSION` · `RELEASE` | Version |
+| `PATCH_LEVEL` · `PATCH` | Patch level |
+| `PATH` · `LOCATION` | Where it is loaded from |
+
+One row is enough. The path matters more than it looks: a system running a
+CommonCryptoLib from outside the kernel directory is patched on a schedule nobody
+is tracking.
+
+### SNC parameters (`snc_config.csv`)
+**Source:** `RZ11` — the `snc/*` profile parameters. If you are already supplying
+`security_params.csv` you can skip this file; the check falls back to it.
+
+| Column (any of) | Meaning |
+|---|---|
+| `PARAMETER` · `NAME` | Parameter name (`snc/enable`, `snc/data_protection/min`, …) |
+| `VALUE` · `PARAM_VALUE` | Current value |
+
+Export the **current** value, not the profile value. A parameter changed
+dynamically and never written back to the profile is correct today and wrong after
+the next restart, and that gap is worth seeing.
+
+---
+
+## System trust and routing (the `systrust` module)
+
+### Trusted-RFC inbound relationships (`rfc_trust.csv`, `rfcsysacl.csv`)
+**Source:** `SMT1` — *Trusted Systems*, or `SE16` on `RFCSYSACL`.
+
+Also accepted: `rfcsysacl.csv`, `trusted_systems.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `RFCTRUSTSY` · `RFCSYSID` · `TRUSTED_SID` · `TRUSTED_SYSTEM` · `RFC_TRUSTSY` · `SID` | The system that is trusted to log on here |
+
+Take it **in the system that is being trusted into** — the direction is the whole
+finding. A production system that trusts a development system means any dialog
+user in development can arrive in production as themselves; the reverse is
+ordinary. Set `local_system_sid` in the scan configuration so the system's own SID
+is not reported as trusting itself.
+
+### SAProuter route permission table (`saprouttab.csv`)
+**Source:** the `saprouttab` file on the SAProuter host. Supply it as-is — one
+route-permission line per row — or split it into columns if that is easier.
+
+Also accepted: `route_permission.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `LINE` · `RULE` · `ENTRY` | The whole route-permission line, unsplit |
+| `ACTION` · `TYPE` | `P` / `S` / `D` |
+| `SOURCE` · `SOURCE_HOST` · `SRC` · `FROM` | Source host |
+| `DEST` · `DEST_HOST` · `TARGET` · `TO` | Destination host |
+| `PORT` · `DEST_PORT` · `SERVICE` | Destination port |
+
+The unsplit form is preferred, because a wildcard is easier to see in the original
+line than in a column somebody has already interpreted. Include comment lines if
+your extract carries them; they are ignored, and leaving them in keeps the line
+numbers matching the file on the host.
+
+---
+
+## The ABAP integration surface (the `intglayer` module)
+
+### IDoc ports (`idoc_ports.csv`, `we21.csv`)
+**Source:** `WE21` — port definitions.
+
+| Column (any of) | Meaning |
+|---|---|
+| `PORT` · `PORT_NAME` · `PORTNAME` | Port name |
+| `PORT_TYPE` · `TYPE` · `PORTTYPE` | File, tRFC, XML, ABAP-PI, … |
+| `DIRECTION` · `DIR` | Inbound / outbound |
+| `HOST` · `RFCHOST` | Target host, for RFC ports |
+| `FILE_PATH` · `PATH` · `DIRECTORY` | Directory, for file ports |
+| `TLS` · `SSL` · `HTTPS` | Whether transport is encrypted |
+| `SNC` · `SNC_MODE` | SNC status |
+
+A file port writing to a directory the application server shares with anything
+else is an IDoc anyone on that host can read or forge; an RFC port without SNC is
+business documents on the wire. Both are only visible if the path and the SNC
+column survive the export, so keep them.
+
+### IDoc partner profiles (`idoc_partners.csv`, `we20.csv`)
+**Source:** `WE20` — partner profiles.
+
+| Column (any of) | Meaning |
+|---|---|
+| `PARTNER` · `PARTNER_NO` · `PARTNR` | Partner number |
+| `PARTNER_TYPE` · `PARTYP` · `TYPE` | Partner type (`LS`, `KU`, `LI`, …) |
+| `MESSAGE_TYPE` · `MESTYP` · `IDOC_TYPE` | Message type |
+| `DIRECTION` · `DIRECT` | Inbound / outbound |
+| `PORT` · `RCVPOR` | Port used |
+
+Export inbound and outbound together. The interesting case is an inbound profile
+for a message type that posts documents, bound to a partner nobody recognises —
+and you can only see that the partner is unrecognised when the whole list is in
+one place.
+
+### Web service endpoints (`ws_endpoints.csv`, `soamanager.csv`)
+**Source:** `SOAMANAGER` → *Web Service Configuration*. Export the service
+definitions with their bindings.
+
+| Column (any of) | Meaning |
+|---|---|
+| `SERVICE_NAME` · `NAME` · `ENDPOINT` | Service |
+| `BINDING` · `BINDING_NAME` | Binding |
+| `STATUS` · `ACTIVE` | Whether the binding is active |
+| `AUTHENTICATION` · `AUTH_TYPE` | Authentication method configured |
+| `TRANSPORT_BINDING` · `PROTOCOL` | Transport (HTTP / HTTPS) |
+
+The check is looking for two things that read very differently on screen and
+identically to an attacker: a binding that accepts basic authentication over
+plain HTTP, and an active binding in front of a service that wraps a BAPI or
+remote-enabled function module. Export inactive bindings too — an inactive
+binding is a control, and the scan should be able to see that you applied it.
+
+### SAP-delivered external OS commands (`ext_os_commands_sap.csv`, `sxpgcotabe.csv`)
+**Source:** the SAP-delivered external command set, the counterpart of the
+customer commands documented above under *External OS commands*. *The table is
+recorded in the scanner's module as `SXPGCOTABE`, and neither that nor the
+maintenance route is verified for this guide — export from your Basis team's own
+documented route and say which.*
+
+```
+Required: NAME (command name), OPSYSTEM, OPCOMMAND
+Optional: PARAMETERS, ADDITIONAL_PARAMETERS_ALLOWED
+```
+
+Optional in every sense: supply it only if you want the SAP-delivered commands
+audited alongside your own. The customer command list matters more, because that
+is where a command with `ADDITIONAL_PARAMETERS_ALLOWED` set turns `SM49` execution
+authorization into a shell.
+
+---
+
+## Fiori launchpad (the `fiori` module)
+
+### Catalogs (`fiori_catalogs.csv`, `flpd_catalogs.csv`)
+**Source:** `/UI2/FLPD_CUST` — the Launchpad Designer — or your launchpad content
+export. One row per catalog × role assignment.
+
+| Column (any of) | Meaning |
+|---|---|
+| `CATALOG_ID` · `CATALOG` · `ID` | Catalog |
+| `ROLE` · `AGR_NAME` · `ASSIGNED_ROLE` | Role the catalog is assigned to |
+| `SCOPE` · `ACCESS_TYPE` · `VISIBILITY` | Assignment scope, where you have it |
+
+### Tiles (`fiori_tiles.csv`, `flpd_tiles.csv`)
+**Source:** `/UI2/FLPD_CUST`, same export, tile level.
+
+| Column (any of) | Meaning |
+|---|---|
+| `TILE_ID` · `APP_ID` · `ID` | Tile / application |
+| `TITLE` · `APP_TITLE` · `DESCRIPTION` | Title |
+| `CATALOG_ID` · `CATALOG` | Catalog it belongs to |
+| `ROLE` · `AGR_NAME` | Role |
+| `SEMANTIC_OBJECT` | Semantic object |
+| `SERVICE_NAME` · `ODATA_SERVICE` · `SERVICE` · `TARGET_SERVICE` | OData service the tile calls |
+
+Supply `odata_auth.csv` as well if you can. On their own the tiles say what is on
+somebody's home page; joined to the OData authorizations they answer the question
+worth asking, which is whether the role that shows the tile also authorises the
+service behind it. A tile that launches and then fails is a nuisance. A service
+authorised for a role that shows no tile is the finding — the app is hidden, not
+protected, and any client that knows the URL reaches it.
+
+### Spaces and pages (`fiori_spaces.json`)
+**Source:** the launchpad *Manage Launchpad Spaces* and *Manage Launchpad Pages*
+apps. *The export route is not verified for this guide.*
+
+Also accepted: `spaces_pages.json`
+
+```json
+{"spaces": [
+  {"spaceId": "ZSPACE_FIN", "name": "Finance",
+   "roles": ["SAP_BR_AP_ACCOUNTANT"], "visibility": "role-based",
+   "pages": [{"id": "ZPAGE_AP", "name": "Payables"}]}
+]}
+```
+
+`roles` / `assignedRoles` is what the check reads. A space with an empty role list
+is visible to everyone the launchpad serves, which is the spaces-and-pages version
+of the catalog finding above.
+
+### App launch statistics (`fiori_app_usage.csv`)
+**Source:** your launchpad usage analytics. *No verified route is recorded for
+this one — the module was written against a launch-count extract, and where that
+comes from differs by release and by whether usage collection was ever switched
+on. Export from whatever your team already uses and note it.*
+
+| Column (any of) | Meaning |
+|---|---|
+| `APP_ID` · `TILE_ID` · `ID` | Application |
+| `TITLE` · `APP_TITLE` | Title |
+| `LAUNCH_COUNT` · `USAGE_COUNT` · `LAUNCHES` | Times launched in the window |
+| `LAST_LAUNCH` · `LAST_USED` | Last launch |
+| `CATALOG` · `CATALOG_ID` | Catalog |
+
+**Say what window it covers.** Zero launches over a quarter is an access grant
+nobody needs; zero launches over a fortnight is a holiday. The scanner cannot see
+the window, so record it beside the file — the finding it produces is only as good
+as that number.
+
+---
+
+## S/4HANA business authorization (the `s4authz` module)
+
+These five sources describe the S/4HANA authorization layer that sits above the
+classic authorization objects: business roles, the restrictions that scope them,
+the catalogs they carry, and the CDS views and OData services they ultimately
+expose. Where an entry says *not verified*, the shape is what the scanner reads —
+the route to produce it differs between the private and public cloud editions and
+is not recorded here as a checked fact.
+
+### Business role assignments (`business_roles.csv`)
+**Source:** `PFCG` in S/4HANA on-premise and RISE private edition, where business
+roles are PFCG roles; the *Maintain Business Roles* app in the public cloud
+edition. *Not verified for this guide.*
+
+Also accepted: `business_role_users.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `USER` · `USER_ID` · `BNAME` · `USERNAME` | User |
+| `BUSINESS_ROLE` · `ROLE` · `AGR_NAME` · `ROLE_ID` | Business role |
+
+One row per assignment. The check looks for the business-role equivalent of
+`SAP_ALL` — a single role that carries the whole application surface — and for how
+many people hold it, so an extract limited to a department answers a smaller
+question than it appears to.
+
+### Business role restrictions (`business_role_restrictions.csv`)
+**Source:** the restriction maintenance behind the business role — organisational
+and value restrictions per restriction type. *Not verified for this guide.*
+
+| Column (any of) | Meaning |
+|---|---|
+| `ROLE` · `BUSINESS_ROLE` · `ROLE_ID` | Business role |
+| `RESTRICTION_TYPE` · `TYPE` | Restriction type |
+| `FIELD` · `RESTRICTION` | Restricted field |
+| `VALUE` · `RESTRICTION_VALUE` · `ACCESS` · `SETTING` | Value, or the unrestricted marker |
+| `WRITE` · `WRITE_ACCESS` | Whether the restriction covers write as well as read |
+
+**Export the unrestricted rows.** A restriction set to *unrestricted* is the
+finding, and it is not the same as a restriction that is absent: the first is a
+decision somebody made in the maintenance screen, the second may just be a row
+your extract dropped. Keep whatever marker your export uses for it rather than
+converting it to a blank.
+
+### Business catalogs per role (`business_role_catalogs.csv`)
+**Source:** the catalog assignment of each business role. *Not verified for this
+guide.*
+
+| Column (any of) | Meaning |
+|---|---|
+| `ROLE` · `BUSINESS_ROLE` · `ROLE_ID` | Business role |
+
+Catalog sprawl is a count, not a judgement: a role carrying dozens of catalogs is
+not wrong, it is unreviewable, and the check reports the roles nobody could
+sensibly attest to in an access review.
+
+### CDS view exposure (`cds_views.csv`)
+**Source:** the `@AccessControl.authorizationCheck` annotation and the exposure
+state of each CDS view, from ADT or from your own report over the DDL sources.
+*Not verified for this guide.*
+
+Also accepted: `cds_access_control.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `VIEW` · `CDS_VIEW` · `DDLNAME` · `ENTITY` · `NAME` | View |
+| `EXPOSED` · `OData` · `SERVICE` | Whether it is exposed as a service |
+| `RELEASED` · `C1_CONTRACT` | Release contract, where you have it |
+| `AUTH_CHECK` · `AUTHORIZATION_CHECK` · `AUTHORIZATIONCHECK` · `ACCESSCONTROL` | The authorization-check annotation |
+
+**You may not need this file.** If you can supply the ABAP sources instead —
+`--code-src` pointed at a repository export — MonitorRisk reads the DDL and the
+DCL directly and cross-references them, which is a stronger answer than an
+annotation column: it can tell an exposed view with no access-control role at all
+from one whose role exists and grants everything.
+
+### OData V4 service groups (`odata_v4_services.csv`, `iwfnd_v4.csv`)
+**Source:** `/IWFND/V4_ADMIN` — the Gateway V4 service administration. The V2
+services belong in `odata_auth.csv` (`/IWFND/MAINT_SERVICE`) and are documented
+separately.
+
+| Column (any of) | Meaning |
+|---|---|
+| `SERVICE_GROUP` · `SERVICEGROUP` | Service group |
+| `SERVICE` · `NAME` | Service |
+| `PUBLISHED` · `STATUS` · `STATE` | Publication state |
+| `SYSTEM_ALIAS` · `ALIAS` | System alias |
+| `AUTH` · `AUTHORIZATION` · `S_SERVICE` · `PROTECTED` | Whether an `S_SERVICE` authorization guards it |
+
+A published V4 service group with no `S_SERVICE` check is reachable by any
+authenticated caller who can construct the URL, and unlike a Fiori tile there is
+nothing on a screen to suggest it exists.
+
+### Cloud Foundry org and space roles (`cf_roles.csv`)
+**Source:** the Cloud Foundry CLI.
+
+```bash
+cf curl /v3/roles?include=user,organization,space > cf_roles.json
+```
+
+Convert to CSV, or export from `cf org-users` / `cf space-users` per org and
+space. Also accepted: `cf_org_space_roles.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `USER` · `USERNAME` · `USER_ID` · `EMAIL` | User |
+| `ORG` · `ORGANIZATION` | Organization |
+| `SPACE` | Space |
+| `ROLE` · `ROLE_TYPE` · `CF_ROLE` | Role (`OrgManager`, `SpaceDeveloper`, …) |
+| `SCOPE` | Org-level or space-level |
+
+`SpaceDeveloper` in the production space is deploy authority over the running
+application, which is a larger grant than most of the business roles it sits
+beside — and it is administered in a different console by a different team, which
+is exactly why it is worth pulling into the same report.
+
+---
+
+## BTP platform surface (the `btpcloud` module)
+
+The five BTP files documented earlier — subaccounts, security settings, role
+collections, audit log records, Cloud Connector — are the ones with a verified
+`btp` CLI verb behind them. The six below are the rest of the subaccount's
+surface. Two have a documented API path; the others are cockpit exports, and they
+are marked so you know which is which.
+
+### Destinations (`btp_destinations.json`)
+**Source:** the Destination service's own API, path
+`/destination-configuration/v1/subaccountDestinations`, reached at the hostname
+inside a Destination service key. **MonitorRisk will fetch this for you:**
+
+```bash
+python -m collect btp --service-key ./destination-key.json --out ./extract
+python sap_scanner.py --data-dir ./extract
+```
+
+The service key is the file you download from the BTP cockpit when you create a
+service key for the Destination service instance; the client secret stays inside
+it and never reaches the command line. Or call the path yourself and save the
+response. Also accepted: `destinations.json`
+
+Either an array of destinations, or the service's own envelope:
+
+```json
+[{"Name": "S4_BACKEND", "URL": "https://s4.example.com",
+  "Authentication": "BasicAuthentication", "ProxyType": "OnPremise",
+  "TrustAll": "false", "User": "RFC_USER"}]
+```
+
+Keys read: `Name`, `URL`, `Authentication`, `ProxyType`, `TrustAll` (also
+`skipSSLValidation`), `User`, `lastModified`.
+
+`TrustAll: "true"` is the one to look for. It disables certificate validation on
+the connection between the platform and your backend, which turns a TLS link into
+an encrypted link to whoever is on the path — and it is set, routinely, to get a
+destination working against a self-signed certificate and then never unset.
+
+### Entitlements (`btp_entitlements.json`)
+**Source:** BTP cockpit → *Entitlements* → *Entity Assignments*, exported per
+subaccount. *A `btp` CLI verb for this is not verified for this guide.*
+
+Also accepted: `entitlements.json`
+
+```json
+{"entitlements": [
+  {"serviceName": "hana-cloud", "planName": "hana", "subaccount": "<guid>",
+   "quota": 2, "used": 0}
+]}
+```
+
+Keys read: `entitlements` / `services` / `quotaAssignments`, then `serviceName` /
+`service` / `name`, `planName` / `plan`, `quota` / `amount`, `used` / `usage` /
+`instances_created`, `subaccount` / `subaccountId`.
+
+Include the **used** figure, or the check has nothing to work with. An entitlement
+with quota and no instances is a service anybody with the right role can spin up
+in a subaccount nobody is watching — dormant attack surface that costs nothing and
+appears on no inventory. Without `used`, an unspent entitlement and a fully
+consumed one look the same.
+
+### Service instance bindings (`btp_service_bindings.json`)
+**Source:** BTP cockpit → *Instances and Subscriptions*, or the Cloud Foundry CLI
+where the instances live in a CF space:
+
+```bash
+cf curl /v3/service_credential_bindings > btp_service_bindings.json
+```
+
+*A `btp` CLI verb for this is not verified for this guide.* Also accepted:
+`service_bindings.json`
+
+Keys read: `bindings` / `serviceBindings` / `items`, then `name` / `bindingName`,
+`service` / `serviceName` / `service_instance`, `created` / `createdAt` /
+`creation_date`, `lastRotated` / `rotatedAt` / `last_rotation`, `scopes` /
+`authorities` / `scope`, `instanceStatus` / `instance_state`.
+
+`lastRotated` is the field that matters and the one most often missing. A binding
+carries a credential; a binding created three years ago and never rotated is a
+credential three years old, held by whatever application still has the environment
+variable. If your export cannot produce a rotation timestamp, say so rather than
+supplying the creation date in its place — the check reports "no rotation evidence"
+differently from "rotated three years ago", and the second is a claim.
+
+### Private Link and network isolation (`btp_network.json`)
+**Source:** BTP cockpit → the Private Link service instances and your connectivity
+configuration. *No verified export route is recorded for this one.*
+
+Also accepted: `private_link.json`
+
+```json
+{"endpoints": [
+  {"service": "hana-cloud", "endpointType": "public",
+   "privateLink": false, "url": "https://…"}
+]}
+```
+
+Keys read: `endpoints` / `privateLinks` / `configurations` / `connectivity`, then
+`service` / `serviceName`, `endpointType` / `type`, `privateLink` /
+`privateLinkEnabled` / `private_endpoint`, `url` / `endpoint`.
+
+### Identity Authentication configuration (`ias_config.json`)
+**Source:** the IAS Administration Console — *Applications & Resources* for the
+application list and their authentication policies, and the tenant's own password
+policy. *The IAS REST API is not named here because its path is not verified for
+this guide.*
+
+Also accepted: `ias_applications.json`
+
+```json
+{"applications": [
+  {"name": "S4 Fiori", "type": "SAP", "mfaEnabled": true,
+   "authenticationRules": [...], "ipRestrictions": ["10.0.0.0/8"],
+   "riskBasedAuth": true, "authenticationType": "saml2"}],
+ "passwordPolicy": {"minLength": 12, "maxFailedAttempts": 5,
+                    "requireComplexity": true, "passwordExpiryDays": 180},
+ "corporateIdP": {"enabled": true, "enforced": true,
+                  "localFallbackAllowed": false}}
+```
+
+Three blocks, three different checks, and they are worth supplying together:
+`applications` drives the MFA and conditional-authentication checks,
+`passwordPolicy` the local-user policy check, and `corporateIdP` the one that
+matters most — a corporate identity provider that is configured but not
+*enforced*, with local password logon still allowed, means every conditional
+access rule your IdP applies can be walked around by anyone who knows the local
+password. `enforced` and `localFallbackAllowed` are the two keys that settle it.
+
+`authenticationType` / `trustType` also feeds the XSUAA-trust check: applications
+still on the older trust chain are named so the migration has a list.
+
+### Cloud Integration artifacts (`cpi_artifacts.json`)
+**Source:** Cloud Integration → *Monitor* → *Manage Security Material* for the
+credential store, and *Manage Integration Content* for the deployed iFlows. *The
+OData API these screens sit on is not named here — the path is not verified for
+this guide.*
+
+Also accepted: `cpi_security.json`
+
+```json
+{"credentials": [
+  {"name": "S4_USER", "type": "User Credentials",
+   "deployedOn": "2023-02-11", "deployedBy": "P000123"}],
+ "iflows": [
+  {"name": "OrderReplication", "senderAuth": "None",
+   "endpoints": ["/http/orders"], "hardcodedCredentials": false}]}
+```
+
+Keys read: `credentials` / `securityMaterial` / `credentialStore` with `name` /
+`alias`, `type` / `kind`, `deployedOn` / `created` / `lastModified`, `deployedBy`
+/ `owner`; and `iflows` / `integrationFlows` / `artifacts` with `name` / `id`,
+`senderAuth` / `inboundAuth` / `senderAuthentication`, `endpoints` /
+`senderEndpoints`, `hardcodedCredentials` / `embeddedCredentials`.
+
+The credential store is the interesting half. Deployment metadata is what makes it
+auditable: a credential deployed by somebody who left, or deployed once and never
+touched, is a standing password nobody owns.
+
+### Event Mesh (`event_mesh.json`)
+**Source:** the Event Mesh queue and topic configuration for the subaccount. *No
+verified export route is recorded for this one.*
+
+Also accepted: `em_config.json`
+
+```json
+{"queues": [
+  {"name": "orders.inbound", "accessPolicy": "…",
+   "topics": ["ns/orders/*"], "subscriptions": [...]}]}
+```
+
+Keys read: `queues` with `name` / `queueName`, `topics` / `topicSubscriptions`,
+`accessPolicy` / `acl` / `permissions`, `namespace` / `messageNamespace`.
+
+---
+
+## The cloud integration surface (the `intglayer` module, cloud half)
+
+Four of these six are **declarative**: there is no single system that knows your
+integration topology or which webhooks you have registered across three vendors.
+That is the reason they are worth writing down.
+
+### API Management proxies and policies (`apim_policies.json`)
+**Source:** the API portal's proxy list with the policies applied to each. *The
+management API path is not verified for this guide; export from the API portal.*
+
+Also accepted: `api_proxies.json`
+
+```json
+{"proxies": [
+  {"name": "OrderAPI", "basePath": "/orders", "deployed": true,
+   "policies": ["VerifyAPIKey", "Quota"],
+   "tlsEnforced": true, "minTlsVersion": "TLSv1.2",
+   "target": "https://s4.example.com/sap/opu/odata/…"}]}
+```
+
+Keys read: `proxies` / `apiProxies` / `apis` with `name` / `proxyName` /
+`apiName`, `basePath` / `path`, `policies` / `appliedPolicies`, `active` /
+`deployed`, `target` / `targetUrl`, `tlsEnforced` / `httpsOnly` / `requireSSL`,
+`minTlsVersion` / `tlsVersion` / `sslProtocol`.
+
+A proxy with an empty policy list is a pass-through: API Management is in the path
+adding a hostname and nothing else, while the architecture diagram shows a
+gateway. Export proxies with no policies rather than filtering them out — they are
+the finding.
+
+### OAuth client registrations (`oauth_clients.json`)
+**Source:** the XSUAA service instances and their bindings, per subaccount.
+
+```bash
+cf curl /v3/service_instances?service_plans.names=application > instances.json
+```
+
+*The mapping from instance to client registration is not verified for this guide.*
+Also accepted: `xsuaa_clients.json`
+
+```json
+{"clients": [
+  {"clientId": "sb-orderapp!t1234", "scopes": ["uaa.resource"],
+   "grantTypes": ["client_credentials"],
+   "created": "2022-06-01", "lastUsed": "2026-07-30"}]}
+```
+
+Keys read: `clients` / `oauthClients` with `clientId` / `client_id` / `name`,
+`scopes` / `scope` / `authorities`, `grantTypes` / `grant_types` /
+`authorized_grant_types`, `created` / `createdAt`, `lastUsed` / `last_access` /
+`lastTokenIssued`.
+
+`lastUsed` is what turns this from an inventory into a control. A
+`client_credentials` client that has issued no token in a year is a live
+credential with no owner and no purpose, and it will not appear in any user access
+review because it is not a user.
+
+### CPI data stores and variables (`cpi_datastores.json`)
+**Source:** Cloud Integration → *Monitor* → *Manage Stores*. *The OData API path
+is not verified for this guide.*
+
+Also accepted: `cpi_variables.json`
+
+```json
+{"dataStores": [{"name": "OrderStage", "entryCount": 14200,
+                 "encrypted": false, "retentionDays": 0}],
+ "variables":  [{"name": "lastRunToken", "value": "…"}]}
+```
+
+Keys read: `dataStores` / `stores` with `name` / `storeName`, `entryCount` /
+`entries` / `size`, `encrypted` / `encryption`, `retentionDays` / `ttl` /
+`retention`; and `variables` / `globalVariables` with `name` / `variableName`,
+`value` / `content`.
+
+A data store is a queue that has stopped being a queue: unencrypted, no retention,
+and holding a year of business documents that were only ever meant to be in
+transit. The entry count and the retention setting together are the finding.
+
+### Registered webhooks (`webhooks.json`) — **declarative**
+**Source:** you. There is no one system that holds this; webhooks get registered
+in whichever application needed one, and the point of writing them down is that
+nobody currently can list them.
+
+Also accepted: `callbacks.json`
+
+```json
+{"webhooks": [
+  {"name": "order-created", "url": "https://hooks.example.com/…",
+   "event": "OrderCreated", "signatureVerification": true,
+   "active": true, "created": "2025-03-02", "lastTriggered": "2026-08-10"}]}
+```
+
+Keys read: `webhooks` / `callbacks` / `subscriptions` with `name` / `id`, `url` /
+`callbackUrl` / `endpoint`, `event`, `signatureVerification` / `hmac` /
+`secret_configured`, `status` / `active`, `created` / `registeredAt`,
+`lastTriggered` / `lastCall`.
+
+`signatureVerification` is the one that matters: a webhook receiver that does not
+verify a signature will act on anything that arrives at the URL, and the URL is in
+the configuration of every system that calls it.
+
+### Integration topology (`integration_topology.json`) — **declarative**
+**Source:** you, or your architecture repository if it is machine-readable.
+
+Also accepted: `system_map.json`
+
+```json
+{"connections": [
+  {"source": "S4P", "target": "CRM-SaaS", "protocol": "https",
+   "encrypted": true, "status": "active"}]}
+```
+
+Keys read: `connections` / `integrations` / `links` with `source` / `from` /
+`sender`, `target` / `to` / `receiver`, `protocol` / `type` / `transport`,
+`encrypted` / `tls` / `ssl`, `status` / `active`.
+
+Worth the hour it takes. Every other integration check in this product examines
+one endpoint at a time; this is the only source that says which systems are meant
+to be talking at all, so it is the only one that can show a connection nobody
+would defend if asked.
+
+### Integration alerting (`integration_alerts.json`) — **declarative**
+**Source:** you, describing how integration failures reach a human.
+
+Also accepted: `alert_config.json`
+
+```json
+{"rules": [{"name": "iflow-failure", "type": "error", "category": "runtime"}],
+ "siemIntegration": true, "emailNotification": true, "logForwarding": true}
+```
+
+Keys read: `rules` / `alertRules` / `conditions` with `name`, `type`, `category`;
+and the top-level `siemIntegration` / `siem`, `emailNotification` / `email`,
+`logForwarding`.
+
+An integration layer with no alerting is not a monitoring gap, it is a security
+gap: a failing iFlow that nobody is told about is a business process that has
+quietly stopped, and a *succeeding* iFlow doing the wrong thing is one nobody will
+notice for a quarter.
+
+---
+
+## Data protection and privacy (the `dataprot` module)
+
+Three of these come out of SAP. The rest are **declarative** — the classification
+of which fields hold personal data, which systems hold production copies, what
+legal basis each processing purpose runs on. SAP stores none of that, because none
+of it is a setting; it is the register your data-protection officer either has or
+does not. Writing it down here means the scanner can hold it against what the
+system is actually configured to do, which is the only way a paper register and a
+running system ever get compared.
+
+### Read Access Logging configuration (`ral_config.csv`, `sralmanager.csv`)
+**Source:** `SRALMANAGER` — Read Access Logging Manager. Export the configurations
+with their log purposes and channels.
+
+| Column (any of) | Meaning |
+|---|---|
+| `CONFIG_NAME` · `NAME` | RAL configuration |
+| `STATUS` · `ACTIVE` · `ENABLED` | Whether it is switched on |
+| `CHANNEL` · `LOG_CHANNEL` | Channel (Dynpro, Web Dynpro, RFC, Web Service, Gateway) |
+| `PURPOSE` · `LOG_PURPOSE` · `LOG_DOMAIN` | Log purpose |
+
+RAL is the only thing in an ABAP system that records who *read* personal data —
+the change documents cover writes and nothing else. Its coverage is per channel,
+so export every channel including the ones with no configuration: a RAL setup that
+covers the Dynpro screens and not the OData services logs the way people used to
+reach the data and not the way they reach it now.
+
+If you are already supplying `security_params.csv`, the check falls back to it for
+the master switch — but the channel detail only exists here.
+
+### RAL log channels (`ral_log_channels.csv`)
+**Source:** `SRALMANAGER` — the channel configuration, with storage and retention.
+
+| Column (any of) | Meaning |
+|---|---|
+| `CHANNEL_NAME` · `NAME` | Channel |
+| `RETENTION_DAYS` · `RETENTION` · `TTL` | Retention |
+| `ARCHIVING` · `ARCHIVE_ENABLED` | Whether records are archived |
+| `STORAGE_TYPE` · `STORAGE` | Where records are kept |
+
+A read-access log with a short retention is a control that satisfies an auditor on
+the day of the audit and answers no question afterwards. The retention needs to
+outlast the time it takes to discover a breach, which is the number the check
+compares it against.
+
+### ILM retention policies (`ilm_policies.json`)
+**Source:** `IRMPOL` — Information Lifecycle Management policy maintenance.
+
+Also accepted: `ilm_retention.json`
+
+```json
+{"policies": [
+  {"name": "FI_DOCS", "dataObject": "FI_ACCTIT", "retentionPeriod": 10,
+   "unit": "YEAR", "destructionMethod": "DELETE",
+   "endOfPurpose": true, "legalBasis": "HGB §257"}]}
+```
+
+Keys read: `policies` / `retentionRules` with `name` / `policyName`, `dataObject` /
+`object` / `table`, `retentionPeriod` / `retention` / `duration`, `unit` /
+`retentionUnit`, `destructionMethod` / `destruction` / `endAction`, `endOfPurpose`
+/ `purposeExpiry`, `legalBasis`.
+
+Export the policies for the personal-data objects even where retention is
+indefinite. "No policy" and "policy with no end" are different findings: the first
+is an oversight, the second is a decision somebody can be asked to justify.
+
+### Personal data field inventory (`personal_data_inventory.csv`) — **declarative**
+**Source:** your data-protection register. Where you already run RAL or the
+Information Retrieval Framework, seed it from those and correct by hand.
+
+Also accepted: `pdi.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `TABLE_NAME` · `TABLE` | Table |
+| `FIELD_NAME` · `FIELD` · `COLUMN` | Field |
+| `CLASSIFICATION` · `DATA_CLASS` · `SENSITIVITY` | Classification |
+| `RAL_ENABLED` · `RAL` · `ACCESS_LOGGING` | Whether read access is logged |
+| `MASKED_IN_NONPROD` · `MASKED` · `ANONYMIZED` | Whether it is masked in copies |
+
+The two right-hand columns are what makes this more than a spreadsheet. They are
+claims about the system, and the scanner holds them against `ral_config.csv` and
+`data_masking.json` — so a field marked *RAL enabled* in a system where RAL covers
+no channel becomes a finding rather than a reassurance.
+
+### Sensitive field classification (`sensitive_fields.csv`) — **declarative**
+**Source:** you. Same shape as the inventory above and read by the same check;
+supply whichever your organisation already maintains, or both.
+
+Also accepted: `pii_fields.csv`
+
+### Purpose of processing (`purpose_of_processing.csv`) — **declarative**
+**Source:** your Article 30 record of processing activities. Where purposes are
+already modelled in ILM, export from there and extend.
+
+Also accepted: `pop_config.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `PURPOSE` · `PURPOSE_ID` · `PURPOSE_NAME` | Purpose |
+| `LEGAL_BASIS` · `BASIS` · `GDPR_ARTICLE` | Legal basis |
+| `EXPIRY_DATE` · `VALID_TO` · `END_DATE` | When the purpose ends |
+| `DATA_CATEGORIES` · `CATEGORIES` · `FIELDS` | Categories covered |
+| `STATUS` · `ACTIVE` | Whether it is current |
+
+A purpose past its expiry date with data still live is the end-of-purpose finding,
+and it is the one nobody discovers on their own, because nothing in the system
+raises an event when a legal basis lapses.
+
+### Deletion and DSAR requests (`deletion_requests.csv`) — **declarative**
+**Source:** your data-subject request process — the ticket queue, not SAP.
+
+Also accepted: `dsar_requests.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `REQUEST_ID` · `ID` · `TICKET` | Request |
+| `DATA_SUBJECT` · `SUBJECT` · `PERSON` | Subject, however you reference them |
+| `REQUEST_TYPE` · `TYPE` · `ACTION` | Erasure, blocking, access |
+| `RECEIVED_DATE` · `CREATED` · `REQUEST_DATE` | Received |
+| `COMPLETED_DATE` · `CLOSED` · `COMPLETION_DATE` | Completed |
+| `STATUS` · `STATE` | Status |
+| `DOCUMENTATION` · `NOTES` · `JUSTIFICATION` | Evidence of what was done |
+
+**Reference data subjects rather than naming them.** A ticket number is enough for
+the check, which measures elapsed time against the statutory deadline; a name puts
+a data subject into a security report, which is the one place a privacy control
+should never create a new copy of them.
+
+### Non-production data masking (`data_masking.json`) — **declarative**
+**Source:** you, describing which non-production systems hold masked data.
+
+Also accepted: `masking_config.json`
+
+```json
+{"configurations": [
+  {"name": "S4Q", "systemType": "QA", "piiMasked": true,
+   "status": "active", "anonymized": true}]}
+```
+
+Keys read: `configurations` / `rules` with `name` / `system`, `systemType` /
+`type`, `piiMasked` / `maskingEnabled` / `anonymized`, `status` / `active`.
+
+Read together with `system_landscape.csv`: a system classified as a production
+copy with no masking configuration is the finding, and it is the most common one
+in this family, because a system refresh copies the data and nobody re-runs the
+masking job afterwards.
+
+### Data residency and cross-border transfer (`data_residency.json`) — **declarative**
+**Source:** you, describing where data sits and where it moves.
+
+Also accepted: `cross_border.json`
+
+```json
+{"primaryRegion": "eu10",
+ "transfers": [
+   {"name": "analytics-feed", "sourceRegion": "eu10", "destRegion": "us10",
+    "adequacyDecision": false, "safeguard": "SCC",
+    "dataTypes": ["customer"], "dpiaCompleted": true}]}
+```
+
+Keys read: `primaryRegion` / `homeRegion` / `dataCenter`, and `transfers` /
+`dataFlows` / `flow` with `name`, `sourceRegion` / `from`, `destRegion` / `to` /
+`destination`, `adequacyDecision` / `adequacy`, `safeguard` / `transferMechanism`
+/ `legal_mechanism`, `dataTypes` / `categories`, `dpiaCompleted` / `dpia`.
+
+The check is looking for a transfer with neither an adequacy decision nor a
+safeguard recorded — a data flow that exists in the architecture and not in the
+compliance file. Include the transfers you believe are fine; that is what makes
+the absence of the others meaningful.
+
+### DPP toolkit configuration (`dpp_config.json`) — **declarative**
+**Source:** you, recording which of SAP's data-protection capabilities are
+actually configured in this system.
+
+Also accepted: `dpp_toolkit.json`
+
+Six keys, all read at the top level, each either a truthy value or absent:
+
+```json
+{"informationReport": true, "deletionReport": true, "changeOfPurpose": true,
+ "dataBlocking": true, "consentManagement": false,
+ "dataBreachNotification": true}
+```
+
+| Key | What it stands for |
+|---|---|
+| `informationReport` | GDPR Art.15 — right of access / data subject report |
+| `deletionReport` | GDPR Art.17 — right to erasure |
+| `changeOfPurpose` | GDPR Art.6 — change of purpose management |
+| `dataBlocking` | End-of-purpose blocking |
+| `consentManagement` | GDPR Art.7 — consent recording and withdrawal |
+| `dataBreachNotification` | GDPR Art.33/34 — breach notification support |
+
+`false` and absent are treated the same, deliberately: this file is a set of
+claims, and a claim you did not make is not a claim the scanner will make for you.
+
+### System landscape classification (`system_landscape.csv`) — **declarative**
+**Source:** you, or your SLD / LMDB if it carries the classification.
+
+Also accepted: `landscape.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `SID` · `SYSTEM` · `SYSTEM_ID` | System |
+| `ENVIRONMENT` · `TYPE` · `SYSTEM_TYPE` | Production, QA, development, sandbox |
+| `DATA_CLASSIFICATION` · `CLASSIFICATION` · `DATA_CLASS` | Highest classification held |
+| `CONTAINS_PROD_DATA` · `HAS_PROD_DATA` · `IS_COPY` · `SOURCE_PROD` | Whether it holds a production copy |
+| `ACCESS_POLICY` · `ACCESS_CONTROL` | Access policy applied |
+
+`CONTAINS_PROD_DATA` is the column the rest of the family hangs on. A sandbox
+holding a production copy is a production system with development access and no
+change control, and nothing inside that sandbox knows it.
+
+---
+
+## Logging, SIEM and incident response (the `logmon` module)
+
+### SIEM connector configuration (`siem_config.json`) — **declarative**
+**Source:** you, describing how SAP logs reach your SIEM.
+
+```json
+{"enabled": true, "connector": "sapetd-splunk", "lastSync": "2026-08-14",
+ "logSources": ["security_audit_log", "system_log", "change_documents"]}
+```
+
+Keys read: `enabled` / `active`, `connector` / `type`, `lastSync` / `lastForward`,
+`logSources` / `sources`.
+
+`logSources` is the half that finds things. Almost every landscape forwards the
+security audit log; far fewer forward change documents or the table change log,
+and an attacker who knows which is which knows exactly which trail is watched.
+
+### Log retention policy (`log_retention.json`) — **declarative**
+**Source:** you, per log type.
+
+```json
+{"policies": [
+  {"logType": "security_audit_log", "retentionDays": 365, "archiving": true},
+  {"logType": "change_documents",   "retentionDays": 2555, "archiving": true}]}
+```
+
+Keys read: `policies` / `retentionRules` with `logType` / `name`, `retentionDays`
+/ `retention`, `archiving` / `archiveEnabled`.
+
+The `logreview` module holds this against the audit-log window you actually
+exported, so a policy promising a year against an export covering a fortnight
+becomes a discrepancy rather than a comfort.
+
+### Logon event counters (`logon_events.csv`)
+**Source:** aggregate per-user logon counts for the window — derived from your
+security audit log export, or from the workload statistics. *No single verified
+route is recorded; whichever you use, keep the window consistent with the audit
+log you supply.*
+
+Also accepted: `logon_stats.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `USERNAME` · `BNAME` · `USER` | User |
+| `COUNT` · `OCCURRENCES` | Number of events in the window |
+| `EVENT` · `TYPE` · `LOGON_TYPE` | Success or failure, and how they logged on |
+
+Aggregates only. This file is deliberately not the event stream — it feeds the
+failed-logon-count checks, and the run-of-failures-then-a-success analysis reads
+the audit log itself. Keep failures and successes as separate rows rather than
+netting them: a hundred failures and one success is the pattern, and a single row
+saying 101 hides it.
+
+### Incident response readiness (`incident_response.json`) — **declarative**
+**Source:** you. Six keys, each truthy or absent:
+
+```json
+{"runbook": "https://wiki/…/sap-ir", "contacts": "secops@example.com",
+ "escalation": true, "forensicAccess": true,
+ "backupVerification": "monthly", "drillSchedule": "2026-11"}
+```
+
+| Key | What it stands for |
+|---|---|
+| `runbook` | Incident response runbook or playbook exists |
+| `contacts` | Emergency security contact list is maintained |
+| `escalation` | Escalation matrix is defined |
+| `forensicAccess` | Forensic access procedure is documented |
+| `backupVerification` | Log backup verification is scheduled |
+| `drillSchedule` | Tabletop or drill schedule exists |
+
+The value can be a URL, a date, a team name — anything truthy. The check is
+control existence, not content: it cannot read your runbook and does not pretend
+to, and it says so in the finding.
+
+---
+
+## Vendor and payment master data (the `vendormaster` module)
+
+Two exports, and together they answer the ghost-vendor question: is there a bank
+account that several suppliers share, and is there a supplier whose payment
+details were created and last changed by the same person with nobody else
+involved.
+
+### Business partner / vendor master (`vendor_master.csv`)
+**Source:** `SE16` on `BUT000` (business partner) in S/4HANA, or `LFA1` (vendor
+master) in a classic or converted system. `KNA1` for customers, if you audit
+those too.
+
+Also accepted: `but000.csv`, `lfa1.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `PARTNER` · `LIFNR` · `KUNNR` · `PARTNER_ID` · `VENDOR` | Partner or vendor number |
+| `NAME1` · `NAME` · `PARTNER_NAME` · `MC_NAME1` | Name |
+| `XBLCK` · `SPERR` · `BLOCKED` | Posting block |
+| `LOEVM` · `XDELE` · `DELETED` · `DELETE_FLAG` | Deletion flag |
+| `NOT_RELEASED` · `UNRELEASED` | Not-released marker, where you have it |
+| `CRDAT` · `ERDAT` · `CREATED_ON` | Created on |
+| `CRUSR` · `ERNAM` · `CREATED_BY` | Created by |
+| `CHDAT` · `AEDAT` · `CHANGED_ON` | Last changed on |
+| `CHUSR` · `AENAM` · `CHANGED_BY` | Last changed by |
+
+The four audit columns are the ones people leave out and the ones the analysis
+runs on. Without created-by and changed-by there is no four-eyes question to ask,
+and the check will say so rather than reporting a clean result.
+
+### Bank details (`vendor_bank.csv`)
+**Source:** `SE16` on `BUT0BK` (business partner bank details) or `LFBK` (vendor
+bank details). `KNBK` for customers.
+
+Also accepted: `but0bk.csv`, `lfbk.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `PARTNER` · `LIFNR` · `KUNNR` · `PARTNER_ID` · `VENDOR` | Partner the account belongs to |
+| `BANKS` · `BANK_COUNTRY` · `COUNTRY` | Bank country key |
+| `BANKL` · `BANK_KEY` · `BANK_NUMBER` | Bank key |
+| `BANKN` · `ACCOUNT` · `ACCOUNT_NUMBER` | Account number |
+| `IBAN` | IBAN, where held |
+
+**Account numbers never leave this product in full.** They are masked to the last
+four characters everywhere they appear — findings, reports, exports, the console.
+They are needed unmasked *on the way in* because the whole analysis is a match
+between partners, and two accounts masked to `••••4321` are not evidence that they
+are the same account.
+
+If your change process will not release account numbers at all, supply the file
+without them. The scanner detects that specific case and reports it as an export
+quality gap — the analysis did not run — rather than as an absence of shared
+accounts. That distinction is the entire reason the check exists in that shape:
+a payment-fraud analysis that silently reports nothing is worse than one that says
+it could not run.
 
 ---
 

@@ -102,7 +102,7 @@
 |---|---|
 | [**`docs/ARCHITECTURE.md`**](docs/ARCHITECTURE.md) <br><sub>**Confidential** · not published. Renders here on GitHub; [`ARCHITECTURE.html`](docs/ARCHITECTURE.html) is the same document styled for print and offline reading, generated from the same source.</sub> | How the system is put together and why, explained from first principles for readers who are not software engineers. Seven parts and 35 chapters: the problem RISE creates, the trust boundary, the seven-stage pipeline, the thirty inspectors, what to fix first, risk in money terms, and a full chapter on what the product cannot do. Start here. |
 | [`docs/EXPORT_GUIDE.md`](docs/EXPORT_GUIDE.md) | How to produce the exports this tool reads |
-| [`docs/EXPORT_SOURCES.md`](docs/EXPORT_SOURCES.md) | Every one of the 128 logical sources, what it feeds, and whether a procedure is written yet |
+| [`docs/EXPORT_SOURCES.md`](docs/EXPORT_SOURCES.md) | Every one of the 128 logical sources, what it feeds, and which checks it unlocks — all 128 now have a written procedure in the export guide |
 | [`docs/CHECKS_REFERENCE.md`](docs/CHECKS_REFERENCE.md) | Per-check reference |
 | [`docs/RELEASE_GATE.md`](docs/RELEASE_GATE.md) | Using the scanner as a CI gate — adoption order and policy |
 | [`docs/RISE_SECURITY_MODEL.md`](docs/RISE_SECURITY_MODEL.md) | Who can actually fix what in RISE, and why it decides the finding text |

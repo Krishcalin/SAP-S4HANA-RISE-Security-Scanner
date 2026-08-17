@@ -84,13 +84,59 @@ def test_it_names_the_files_the_loader_will_actually_accept(reference):
 
 def test_the_undocumented_ones_are_marked_rather_than_quietly_listed(reference):
     """A row that looks like the others but has no procedure behind it would send
-    a reader to a guide that says nothing. It says so instead."""
+    a reader to a guide that says nothing. It says so instead.
+
+    This test used to assert that SOME row was marked undocumented, which was true
+    of the 87 that had no procedure. They now all do, so the assertion has been
+    turned round: what must hold is that the two states are distinguishable and
+    that every row carries one of them. A row with neither marker is the bug —
+    it reads as documented to a skimming reader without claiming to be.
+    """
     rows = re.findall(r"^\| `[^`]+` \|.*$", reference, re.M)
     assert len(rows) >= 100, "only %d rows — the table is not complete" % len(rows)
-    marked = [r for r in rows if "not yet written" in r]
-    assert marked, "nothing is marked as undocumented; the guide covers 36 of 123"
-    documented = [r for r in rows if "| documented |" in r]
-    assert documented, "nothing is marked as documented either — the check is broken"
+    unlabelled = [r for r in rows
+                  if "| documented" not in r and "not yet written" not in r]
+    assert not unlabelled, (
+        "%d rows state neither documented nor not-yet-written: %s"
+        % (len(unlabelled), unlabelled[:3]))
+
+
+def test_every_source_has_a_procedure_a_customer_can_follow(reference):
+    """The invariant this file was created to move towards, now that it holds.
+
+    A source with no procedure is a check that cannot fire for a reason the
+    customer cannot act on. Adding one to the loader without writing its
+    extraction must fail here rather than sit in a table nobody re-reads.
+
+    If you are adding a source and cannot verify its procedure, write the section
+    anyway and mark the route *not verified for this guide* — that is an honest
+    state the guide already carries for a dozen sources. What is not acceptable is
+    a source the reader never hears about.
+    """
+    from modules.coverage import all_logical_sources
+    from modules.data_loader import DataLoader
+
+    guide = GUIDE.read_text(encoding="utf-8")
+    missing = sorted(
+        src for src in all_logical_sources()
+        if src not in guide
+        and not any(name in guide for name in DataLoader.FILE_MAP.get(src, ())))
+    assert not missing, (
+        "%d source(s) the scanner reads have no section in docs/EXPORT_GUIDE.md: "
+        "%s" % (len(missing), missing[:12]))
+
+
+def test_an_unverified_route_says_so_where_the_reader_will_see_it(reference):
+    """Not every procedure could be checked against a primary SAP source, and the
+    ones that could not carry a marker. If that marker ever disappears wholesale,
+    either somebody verified two dozen routes in an afternoon or the caveats were
+    edited out — and the second is how a guide starts being trusted more than it
+    has earned."""
+    guide = GUIDE.read_text(encoding="utf-8")
+    assert guide.count("not verified for this guide") >= 8, (
+        "the unverified-route markers have thinned out to %d — confirm the routes "
+        "were actually verified rather than the caveats removed"
+        % guide.count("not verified for this guide"))
 
 
 def test_it_does_not_invent_sap_transaction_codes(reference):
@@ -107,6 +153,27 @@ def test_it_does_not_invent_sap_transaction_codes(reference):
         assert verb not in body.lower(), (
             "the generated reference is describing a procedure it cannot know: %r"
             % verb)
+
+
+def test_the_module_names_the_guide_quotes_are_ones_the_cli_accepts():
+    """Five were wrong when the remaining 62 procedures were written.
+
+    Each new section is headed "(the `xyz` module)" so a reader can run just that
+    part of the scan. Five of those names were the module's PYTHON name rather
+    than its `--modules` alias — `codetransport` for `codetrans`, `integration`
+    for `intglayer`, and so on. Every one would have produced an unknown-module
+    error at the exact moment a reader tried to act on the guide, which is the
+    cheapest possible bug to prevent and one of the more expensive to be on the
+    receiving end of.
+    """
+    from modules.coverage import CLI_MODULE_ALIASES
+
+    guide = GUIDE.read_text(encoding="utf-8")
+    valid = set(CLI_MODULE_ALIASES) | set(CLI_MODULE_ALIASES.values())
+    quoted = set(re.findall(r"`([a-z0-9_]+)`(?=[^\n]{0,40}\bmodule)", guide))
+    unknown = sorted(quoted - valid)
+    assert not unknown, (
+        "the guide names module(s) the CLI does not accept: %s" % unknown)
 
 
 def test_the_guide_points_at_the_full_catalogue():
