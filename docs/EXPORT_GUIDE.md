@@ -809,18 +809,32 @@ patch cycle understates the estate in the safe direction, but one taken from
 a System Recommendations run that has not been refreshed can overstate it.
 
 ### Security-notes catalogue extension (`sap_security_notes.json`, `hotnews_catalog.json`)
-**Not a system export.** The built-in catalogue is curated through 2025-08;
-this OPTIONAL file extends or corrects it. Source: SAP ONE Support Launchpad →
-My Security Notes (S-user required), filtered to HotNews / High. Notes newer
-than the built-in cut-off — for example the Feb-2026 HotNews the operator
-reference lists (note 3747367 / CVE-2026-44747), once confirmed in the
-Launchpad — belong here:
+**Not a system export.** The built-in catalogue is swept systematically through
+2025-08, with later notes added individually; this OPTIONAL file extends or
+corrects it. Source: SAP ONE Support Launchpad → My Security Notes (S-user
+required), filtered to HotNews / High. Any note newer than the sweep, or any
+correction to a built-in entry, belongs here:
 
 ```json
-[{"note": "3747367", "cve": "CVE-2026-44747", "priority": "HotNews",
-  "component": "NetWeaver AS ABAP", "released": "2026-02",
-  "applies_to": "abap"}]
+[{"note": "3812004", "cve": "CVE-2026-51230", "cvss": 9.8, "priority": "HotNews",
+  "component": "NetWeaver AS ABAP", "released": "2026-09",
+  "exploited": false, "applies_to": "abap",
+  "title": "…"}]
 ```
+
+> **You may not need an S-user for the identifying fields.** SAP is a CVE
+> Numbering Authority, so its advisories reach the NVD feed directly with
+> `sourceIdentifier: cna@sap.com` and a reference to `me.sap.com/notes/<note>` —
+> which is SAP itself binding the note number to the CVE, publicly. That covers
+> `note`, `cve`, `cvss`, `component`, `released` and `title`. The Launchpad is
+> genuinely required for the rest: note text, affected support-package levels and
+> correction instructions.
+>
+> Note **3747367 / CVE-2026-44747** (NetWeaver AS ABAP kernel, CVSS 9.9) is the
+> worked example and is now **built in** — added from the SAP CNA record, not
+> from the Launchpad. It also arrived here dated Feb 2026 in an operator
+> reference; SAP published it on **14 July 2026**. Prefer the CNA record over a
+> summary when the two disagree about a date.
 
 Merge semantics: entries override the built-in catalogue key-by-key and never
 blank a curated field by omission (an entry without `exploited` keeps the

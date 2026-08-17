@@ -62,11 +62,29 @@ vary between sources.
 Reference entries NOT added, and why: note numbers that conflict between
 sources or could not be confirmed (CVE-2020-6364, CVE-2023-27500,
 CVE-2025-30018, the Build Apps SSRF); out-of-product entries (above); 3413475,
-whose CVE-2023-49583 is already represented by 3411067; the Jan-2026 rows,
+whose CVE-2023-49583 is already represented by 3411067; and the Jan-2026 rows,
 which carry no note number at all and are therefore undetectable by note
-matching; and note 3747367 (CVE-2026-44747, Feb 2026), which post-dates every
-source this catalog was verified against — confirm it in the Launchpad and
-supply it via `sap_security_notes.json`.
+matching.
+
+Note 3747367 (CVE-2026-44747) WAS added, and correcting how is the point.
+It sat out of the catalogue on the grounds that it post-dated every source used,
+with a standing note to confirm it in the Launchpad — which needs an S-user and
+so parked the entry indefinitely behind somebody else's login. It did not need
+one. SAP is a CVE Numbering Authority, so its advisories reach NVD directly:
+CVE-2026-44747 carries `sourceIdentifier: cna@sap.com` and references
+`me.sap.com/notes/3747367`, which is SAP itself binding the note number to the
+CVE — the same binding this catalogue got wrong for 3084487. That is a stronger
+provenance than the operator reference the entry was originally sourced from,
+and it is public.
+
+The operator reference also had it as **Feb 2026**. It is **July 2026** — SAP
+Security Patch Day of 14 July 2026, NVD published 2026-07-14. The wrong month
+was propagated into `docs/EXPORT_GUIDE.md` as well and is corrected there too.
+
+The general lesson, recorded because it will apply again: *"needs Launchpad
+confirmation"* is worth testing before it is accepted. For anything with a CVE,
+the SAP CNA record is public and authoritative, and only note text, affected
+support-package levels and correction instructions genuinely require an S-user.
 
 Data sources:
   - applied_notes.csv        → SNOTE / System Recommendations implementation
@@ -213,6 +231,23 @@ class SapHotNewsAuditor(BaseAuditor):
          "component": "Landscape Transformation / SLT (DMIS add-on)", "released": "2025-08",
          "exploited": False, "applies_to": "abap", "component_prereq": "DMIS",
          "title": "ABAP code injection in SAP Landscape Transformation (companion to CVE-2025-42957)"},
+        # ── Beyond the systematic curation cut-off ──────────────────────────
+        # Added individually, from SAP's OWN CNA record rather than a summary.
+        # NVD CVE-2026-44747 carries sourceIdentifier `cna@sap.com` and
+        # references `me.sap.com/notes/3747367` directly, which is what binds the
+        # note number to the CVE — the binding this catalogue has been wrong about
+        # before (see the 3084487 correction in the docstring).
+        #
+        # `exploited` is False because nothing establishes otherwise, NOT because
+        # exploitation has been ruled out. That is the safe direction here: the
+        # note still raises as a missing HotNews either way, whereas asserting
+        # in-the-wild exploitation without a source is the exact fabrication the
+        # 3084487 correction exists to record.
+        {"note": "3747367", "cve": "CVE-2026-44747", "cvss": 9.9, "priority": "HotNews",
+         "component": "NetWeaver AS ABAP (kernel — KRNL64NUC/UC 7.22 through 9.20)",
+         "released": "2026-07", "exploited": False, "applies_to": "abap",
+         "title": "Memory corruption in SAP NetWeaver AS ABAP — authenticated attacker, "
+                  "out-of-bounds write"},
     ]
 
     def run_all_checks(self) -> List[Dict[str, Any]]:
@@ -422,6 +457,16 @@ class SapHotNewsAuditor(BaseAuditor):
         through = meta.get("curated_through", "unknown")
         hotnews = sum(1 for e in catalog if e.get("priority") == "HotNews")
         high = len(catalog) - hotnews
+        # Entries newer than the systematic sweep, added one at a time from a
+        # primary source. They must be counted SEPARATELY: a single 2026 note in
+        # the catalogue does not make the catalogue current to 2026, and saying
+        # "the newest released <date>" would imply a sweep that never happened.
+        beyond = sorted(e.get("released", "") for e in catalog
+                        if e.get("released", "") > through)
+        later = (" Beyond that sweep, %d note(s) have been added individually "
+                 "from primary sources (newest %s); they are exceptions, not "
+                 "coverage of their release months."
+                 % (len(beyond), beyond[-1])) if beyond else ""
         self.finding(
             check_id="HOTNEWS-COVERAGE",
             title="SAP note check ran against a curated subset, not the full patch history",
@@ -432,12 +477,16 @@ class SapHotNewsAuditor(BaseAuditor):
                 f"curated entries ({hotnews} HotNews, {high} High; "
                 f"{len(assessable)} assessable from this ABAP system's export, "
                 f"{len(out_of_scope)} for adjacent landscape components, disclosed "
-                f"separately), the newest released {through}. It is NOT the full "
-                f"SAP Security Patch Day history, and a clean result here means "
-                f"none of those {len(catalog)} is missing — not that the estate "
-                f"is fully patched. Notes released after {through}, and "
-                f"lower-priority notes at any date, were not assessed."),
-            affected_items=[f"catalogue of {len(catalog)} notes, curated through {through}"],
+                f"separately), swept systematically through {through}.{later} It is "
+                f"NOT the full SAP Security Patch Day history, and a clean result "
+                f"here means none of those {len(catalog)} is missing — not that the "
+                f"estate is fully patched. Notes released after {through}, other "
+                f"than the individually-added ones above, and lower-priority notes "
+                f"at any date, were not assessed."),
+            affected_items=[
+                "catalogue of %d notes, swept through %s%s"
+                % (len(catalog), through,
+                   ", plus %d added individually" % len(beyond) if beyond else "")],
             remediation=(
                 "Confirm patch status against SAP Support Portal / Maintenance "
                 "Planner for the periods this catalogue does not cover, and treat "
@@ -446,6 +495,7 @@ class SapHotNewsAuditor(BaseAuditor):
                         "SAP Note 2871952 - Security Patch Day process"],
             details={"catalogue_size": len(catalog),
                      "curated_through": through,
+                     "added_beyond_sweep": len(beyond),
                      "hotnews": hotnews, "high": high,
                      "assessable": len(assessable),
                      "adjacent_or_not_applicable": len(out_of_scope),

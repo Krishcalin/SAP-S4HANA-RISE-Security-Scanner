@@ -238,11 +238,57 @@ def test_the_catalogue_declares_its_own_cut_off():
     assert "CURATED SUBSET" in meta.get("note", "")
 
 
-def test_the_declared_cut_off_matches_the_newest_note():
-    """A hand-maintained date drifts the moment somebody adds a note and forgets.
-    This fails the moment they disagree."""
-    newest = max(e.get("released", "") for e in SapHotNewsAuditor.HOTNEWS_CATALOG)
-    assert SapHotNewsAuditor.CATALOG_META["curated_through"] == newest
+def test_a_note_beyond_the_cut_off_is_disclosed_rather_than_hidden():
+    """THIS TEST USED TO SAY `curated_through == newest note`.
+
+    That equality was the right guard while the catalogue only ever grew by
+    sweeping a new patch month, and it became wrong the moment a single later
+    note was added individually — 3747367 / CVE-2026-44747, from SAP's own CNA
+    record. One 2026 note does not make the catalogue current to 2026, so
+    advancing the date to satisfy the old assertion would have manufactured
+    exactly the overclaim the assertion existed to prevent.
+
+    The invariant that survives is the honest one: entries beyond the sweep are
+    allowed, and every one of them must be COUNTED IN THE DISCLOSURE. What must
+    never happen is the catalogue quietly containing notes the coverage finding
+    does not admit to.
+    """
+    through = SapHotNewsAuditor.CATALOG_META["curated_through"]
+    beyond = [e for e in SapHotNewsAuditor.HOTNEWS_CATALOG
+              if e.get("released", "") > through]
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        findings = SapHotNewsAuditor({"applied_notes": []}, {}).run_all_checks()
+    coverage = next(f for f in findings if f["check_id"] == "HOTNEWS-COVERAGE")
+
+    assert coverage["details"]["added_beyond_sweep"] == len(beyond), (
+        "%d note(s) sit beyond the declared sweep and the coverage finding "
+        "reports %d" % (len(beyond), coverage["details"]["added_beyond_sweep"]))
+    if beyond:
+        newest = max(e["released"] for e in beyond)
+        assert newest in coverage["description"], (
+            "the newest individually-added note (%s) is not named in the "
+            "disclosure" % newest)
+
+
+def test_a_whole_month_added_beyond_the_cut_off_must_move_the_cut_off():
+    """The escape hatch above has a limit, and this is it.
+
+    One later note is an exception. Several from the same month is a sweep
+    somebody performed and forgot to declare — and leaving `curated_through`
+    behind it would understate coverage while the disclosure told customers that
+    month was never assessed. Three from one month is the line.
+    """
+    through = SapHotNewsAuditor.CATALOG_META["curated_through"]
+    months = {}
+    for entry in SapHotNewsAuditor.HOTNEWS_CATALOG:
+        released = entry.get("released", "")
+        if released > through:
+            months.setdefault(released, []).append(entry["note"])
+    swept = {m: n for m, n in months.items() if len(n) >= 3}
+    assert not swept, (
+        "these months beyond the declared cut-off %s look swept, not "
+        "exceptional — advance curated_through instead: %s" % (through, swept))
 
 
 def test_adjacent_system_notes_are_disclosed_not_alarmed():
