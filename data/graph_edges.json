@@ -1,0 +1,51 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "description": "Rules for deriving graph edges from findings. Content, not code: adding an edge kind is a data change, exactly as adding an attack path is.",
+    "what_an_edge_claims": "That two objects named by ONE finding stand in the stated relationship, because the check that produced the finding is about that relationship. Nothing here is traversed, reached or validated: every edge is written with confidence 'derived_from_config' and the console repeats it.",
+    "what_an_edge_never_claims": "That the relationship was exercised. That is the 'used' provenance, which needs logon or gateway evidence and is not derivable from a configuration finding alone. Every edge below is written 'configured'.",
+    "the_pairing_rule": "A finding lists its objects FLAT. AUTH-002 names one role, one authorization object and two users, and which user holds which role is visible only in the display string. So an edge is emitted ONLY where the pairing is unambiguous — one side names exactly one object of its type — and where both sides are plural the finding is declined and counted. Reading the pairing out of affected_items would resurrect the 'display' basis this product retired.",
+    "why_not_the_transitive_edge": "AUTH-002 evidences user->role and role->auth_object. It does NOT evidence a user->auth_object edge: that is the transitive closure, and asserting it as an edge would state as observed what is only implied.",
+    "sources": [
+      "server/schema.sql — graph_edge, whose provenance/confidence/owner columns this fills",
+      "server/identity.py — extract_nodes, whose typed objects these edges join"
+    ]
+  },
+  "rules": [
+    {
+      "check_prefix": "AUTH-",
+      "from_type": "user",
+      "to_type": "role",
+      "edge_type": "holds_role",
+      "why": "The AUTH-* family reports role content and attributes it to the users who hold the role. The assignment is the relationship the check is about."
+    },
+    {
+      "check_prefix": "AUTH-",
+      "from_type": "role",
+      "to_type": "auth_object",
+      "edge_type": "grants_authorization",
+      "why": "The same findings name the authorization object whose values made the role risky. A role granting S_RFCACL is the edge that matters, not the user who happens to hold it."
+    },
+    {
+      "check_prefix": "AUTH-013",
+      "from_type": "role",
+      "to_type": "tcode",
+      "edge_type": "grants_transaction",
+      "why": "AUTH-013 is about transaction access carried by a role, so the role->tcode relationship is the finding's own subject."
+    },
+    {
+      "check_prefix": "IAM-EXP-",
+      "from_type": "user",
+      "to_type": "role",
+      "edge_type": "holds_role",
+      "why": "The privilege-escalation checks name the user and the role that grants the escalation. Same relationship as the AUTH- family, different evidence."
+    },
+    {
+      "check_prefix": "TRUST-004",
+      "from_type": "user",
+      "to_type": "destination",
+      "edge_type": "can_use_destination",
+      "why": "A trusted destination usable by a named user is the relationship the check exists to report — it is the hop a caller would take between systems."
+    }
+  ]
+}

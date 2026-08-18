@@ -356,20 +356,52 @@ dismiss.
 **Depends on:** Phase 1 (nodes already materialise). Build to the **readable** specs — Microsoft
 and AWS — not to Wiz's gated docs.
 
-- [ ] Edge extraction over the existing `DataLoader`, not a new ingest
-- [ ] Path templates as **versioned content, not code** — the six paths in
+> **RECONCILED against the shipped code**, and this list had drifted furthest of
+> the three. Six of these ten were already built when it was audited; two more
+> were half-built with only the surfacing missing. What follows is the real state.
+
+- [x] Edge extraction over the existing `DataLoader`, not a new ingest —
+      **SHIPPED.** `graph_edge` had been defined since the schema landed, with a
+      `provenance` column and a comment about never validating reachability, and
+      nothing had ever written a row into it: the graph held nodes and no
+      relationships. `server/edges.py` derives them from findings that name both
+      ends, `data/graph_edges.json` holds the rules as CONTENT, and
+      `store_graph_edges` writes them beside the nodes. The pairing rule is the
+      design: a finding lists its objects flat, so an edge is emitted only where
+      one side is a singleton — cross-producting would fabricate relationships
+      and parsing the display string would resurrect the retired `display` basis.
+      Findings where both sides are plural are declined AND COUNTED
+- [x] Path templates as **versioned content, not code** — **ALREADY SHIPPED.**
+      `data/attack_paths.json`, 7 templates; `server/graph.py`: "adding a path is a
+      data change, never a code change". Original text follows:
+      * — the six paths in
       `COMPETITIVE_ANALYSIS.md` §6.4, plus path 7 (the `SM69` ABAP→OS bridge)
-- [ ] Landing screen = ranked path **list** with a remediation-status column, plus a choke-point
+- [~] Landing screen — **PARTIAL**: `chokepoints` is computed and served from
+      `server/app.py`; the rendering was not found. Original: * with a remediation-status column, plus a choke-point
       tab. The graph renders only inside one selected path
-- [ ] `is_cut` drives **mitigate vs additional** recommendations; the 323-entry KB becomes
+- [x] `is_cut` drives **mitigate vs additional** — **ALREADY SHIPPED**, in the
+      path hops and their cut semantics:
+      * recommendations; the 323-entry KB becomes
       path-aware for free
-- [ ] Chokepoint ranking — a `GROUP BY` over `path_edge`
-- [ ] Path targets **are** the FAIR scenarios, so a path ends at a currency figure
-- [ ] Every reachability edge carries *"derived from configuration export, not validated"* and
+- [x] Chokepoint ranking — **ALREADY SHIPPED, differently**: `graph.chokepoints()`
+      groups over `attack_path.detail->'hops'` rather than `attack_path_edge`, and
+      works. Original text: *
+- [x] Path targets **are** the FAIR scenarios — **ALREADY SHIPPED**: every template
+      carries `fair_scenario`, so a path ends at a currency figure. Original: *, so a path ends at a currency figure
+- [x] Every reachability edge carries the derived-from-config statement —
+      **SHIPPED**: paths carried it already; every edge now writes
+      `confidence='derived_from_config'`, tested. Original: * and
       the UI says so
-- [ ] Customer-declared **exposure zones** per system
-- [ ] `used` vs `configured` edge provenance from logon/gateway data
-- [ ] Ruleset fingerprint + staleness banner when stored paths predate a ruleset change
+- [x] Customer-declared **exposure zones** per system — **ALREADY SHIPPED**:
+      `exposure_zone` on the system record, settable from the console and the CLI.
+      Original: *
+- [ ] `used` vs `configured` edge provenance from logon/gateway data — **NOW
+      UNBLOCKED**: the column exists, every edge is written `configured`, and
+      nothing writes `used` because no configuration finding evidences it. This is
+      the next real piece of work in this block. Original: *
+- [~] Ruleset fingerprint + staleness — **COMPUTED, NOT SURFACED**:
+      `graph.ruleset_fingerprint()` stamps every path and staleness is calculated in
+      the query; the BANNER is the missing half. Original: *
 
 **Open items to close here:** confirm `rfc/callback_security_method` and
 `auth/rfc_authority_check` are in the 23-entry parameter baseline (path 2's chokepoint is

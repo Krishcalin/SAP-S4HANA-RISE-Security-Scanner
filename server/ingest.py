@@ -31,6 +31,7 @@ manifest makes the incompleteness visible rather than silent.
 from __future__ import annotations
 
 import hashlib
+import json
 import importlib
 import logging
 import traceback
@@ -46,6 +47,7 @@ from server import db
 from server.coverage import build_manifest
 from modules.coverage import UNSUPPLIED, look_verdict
 from modules.coverage import modules_for_categories as coverage_modules_for
+from server.edges import extract_edges
 from server.identity import extract_nodes, fingerprint_finding
 
 log = logging.getLogger(__name__)
@@ -642,6 +644,57 @@ def store_graph_nodes(conn: psycopg.Connection, run_id: int, landscape_id: int,
     return len(nodes)
 
 
+def store_graph_edges(conn: psycopg.Connection, run_id: int, landscape_id: int,
+                     findings: List[Dict[str, Any]],
+                     default_sid: Optional[str] = None) -> Dict[str, int]:
+    """Materialise the relationships between this run's graph nodes.
+
+    `graph_edge` was defined when the schema landed and nothing had ever written
+    to it, so the graph held nodes and no relationships between them. The rules
+    live in `data/graph_edges.json` as content; `server/edges.py` explains the
+    pairing rule that decides when a finding evidences WHICH objects relate and
+    when it only evidences THAT they do.
+
+    Nodes are looked up rather than created here. An edge whose end is not
+    already a node would mean the two extractors disagree about keying, and
+    inserting it would paper over that; the edge is skipped and counted instead.
+    """
+    edges, stats = extract_edges(findings, default_system=default_sid)
+    stats["stored"] = 0
+    stats["missing_node"] = 0
+    if not edges:
+        return stats
+
+    keys = sorted({e["from_key"] for e in edges} | {e["to_key"] for e in edges})
+    rows = conn.execute(
+        "SELECT node_key, id FROM graph_node "
+        "WHERE landscape_id = %s AND node_key = ANY(%s)",
+        (landscape_id, keys)).fetchall()
+    node_id = {r[0] if not isinstance(r, dict) else r["node_key"]:
+               r[1] if not isinstance(r, dict) else r["id"] for r in rows}
+
+    for edge in edges:
+        source, target = node_id.get(edge["from_key"]), node_id.get(edge["to_key"])
+        if source is None or target is None:
+            stats["missing_node"] += 1
+            continue
+        conn.execute(
+            """
+            INSERT INTO graph_edge
+                (landscape_id, from_node, to_node, type, check_id, provenance,
+                 confidence, owner, attributes, first_seen_run, last_seen_run)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (landscape_id, from_node, to_node, type) DO UPDATE SET
+                last_seen_run = EXCLUDED.last_seen_run,
+                attributes = EXCLUDED.attributes
+            """,
+            (landscape_id, source, target, edge["type"], edge["check_id"],
+             edge["provenance"], edge["confidence"], edge["owner"],
+             json.dumps(edge["attributes"]), run_id, run_id))
+        stats["stored"] += 1
+    return stats
+
+
 def queue_notifications(conn: psycopg.Connection, run_id: int, landscape_id: int,
                         diff: RunDiff) -> int:
     """Queue alerts for the two things nobody should have to go looking for.
@@ -717,6 +770,10 @@ def scan_directory(data_dir: Path, landscape_id: int, system_id: Optional[int],
                              default_sid, default_client, enrichment,
                              coverage=manifest)
             node_count = store_graph_nodes(conn, run_id, landscape_id, system_id,
+                                           findings, default_sid)
+            # Edges after nodes, and only ever looking nodes up: see
+            # store_graph_edges for why an edge never creates one.
+            edge_stats = store_graph_edges(conn, run_id, landscape_id,
                                            findings, default_sid)
             queue_notifications(conn, run_id, landscape_id, diff)
 
