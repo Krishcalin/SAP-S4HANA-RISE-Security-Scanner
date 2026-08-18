@@ -1578,6 +1578,22 @@ class RiseTaintAnalyzer(TaintAnalyzer):
     # the released-classes listing to anchor on client identity, and anchoring on
     # a bare accessor name instead would taint every CATCH block in the estate,
     # because that accessor is overwhelmingly the exception message getter.
+    #
+    # U8 (the ABAP-Cloud HTTP handler interface) is DECLINED for the same reason,
+    # and the decision is settled even though the question is not. Seeding a
+    # handler's request parameter would be ordinary B2-shaped work and needs no
+    # new machinery — what it needs is the interface and method name, and neither
+    # appears in ANY SAP file this project can fetch: not in the released-classes
+    # listing (which contains no `IF_*HTTP*` interface at all), not in the
+    # ABAP-for-Cloud-Development cheat sheet, and the keyword documentation has
+    # no page under the names tried. Writing the identifier from memory is
+    # precisely the failure U10 exists to prevent, and remembering it correctly
+    # would not make it verified.
+    #
+    # What would settle it: the interface's own page on the SAP Business
+    # Accelerator Hub, or an SAP-published sample that implements a handler.
+    # Until then an inbound HTTP request reaches the analyzer only through the
+    # sources already listed.
     #: U10, settled. Each identifier here was grep-confirmed in a NAMED SAP file
     #: before it shipped, and the file is recorded beside it. That is the whole
     #: bar: not "this looks like a real class", but "here is where SAP writes it".
@@ -1646,6 +1662,20 @@ class RiseTaintAnalyzer(TaintAnalyzer):
     #: it back.
     _READ_LINE = re.compile(
         r"^\s*READ\s+(?:CURRENT\s+)?LINE\b.*?\bINTO\s+(?P<tgt>[\w/]+)", re.IGNORECASE)
+
+    #: U7, settled. SAP's syntax is
+    #: `READ DATASET dset INTO dobj [MAXIMUM LENGTH mlen] [[ACTUAL] LENGTH alen].`
+    #: and its effect is stated plainly: "This statement exports data from the
+    #: file specified in dset to the data object dobj."
+    #:
+    #: So it is B7's shape exactly — an INTO target filled from outside — and the
+    #: content is external by definition: a file on the application server was
+    #: written by an interface, an upload, another system, or an operator, and
+    #: never by the program reading it. `READ DATASET` is an ABAP KEYWORD, so it
+    #: needs no entry in `CONFIRMED_SOURCE_IDENTIFIERS`; that table exists for
+    #: library names, which are claims about SAP's shipped code.
+    _READ_DATASET = re.compile(
+        r"^\s*READ\s+DATASET\b.*?\bINTO\s+(?P<tgt>[\w/]+)", re.IGNORECASE)
 
     #: B5. Parsed XML. The trap is capturing the LEFT-hand root name instead of the
     #: ABAP variable it binds to, so the extraction is deliberately `= <name>`.
@@ -1769,6 +1799,9 @@ class RiseTaintAnalyzer(TaintAnalyzer):
                 t for t in self._IDENT_RE.findall(binds)
                 if t.lower() not in _ABAP_NOISE_WORDS]
         m = self._READ_LINE.match(code)
+        if m:
+            return [m.group("tgt")]
+        m = self._READ_DATASET.match(code)
         if m:
             return [m.group("tgt")]
         m = self._CALL_XSLT.search(code)

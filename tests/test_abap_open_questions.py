@@ -532,3 +532,114 @@ def test_the_reason_for_leaving_it_alone_is_recorded_beside_the_rule():
     source = (ROOT / "modules" / "abap_sast_extra.py").read_text(encoding="utf-8")
     assert "U2, settled" in source
     assert "NONE of them is" in source
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  U1 — the two grammar questions the lexer had been betting on
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_an_unclosed_literal_does_not_mask_the_following_statement():
+    """"Character literals that span multiple lines are not allowed." While the
+    mode stack carried `lit` across the newline, everything after a stray
+    apostrophe was masked as literal content and every rule went blind on real
+    code — bounded only by the fifty-line runaway guard."""
+    from modules.abap_sast import split_statements
+    stmts = split_statements(
+        "x = 'unclosed\nDELETE FROM zcust WHERE id = lv_id.\n")
+    assert any("DELETE FROM zcust" in s.text for s in stmts), [s.text for s in stmts]
+
+
+def test_an_unclosed_template_does_not_mask_the_following_statement():
+    """"A string template that starts with | must be closed with | within the
+    same line of source code.\""""
+    from modules.abap_sast import split_statements
+    stmts = split_statements(
+        "x = |unclosed\nDELETE FROM zcust WHERE id = lv_id.\n")
+    assert any("DELETE FROM zcust" in s.text for s in stmts), [s.text for s in stmts]
+
+
+def test_the_documented_exception_still_spans_lines():
+    """"The only exceptions to this rule are line breaks in embedded
+    expressions." Closing the template at the newline here would break the one
+    multi-line form ABAP actually allows."""
+    from modules.abap_sast import split_statements
+    stmts = split_statements("x = |a{ lv_b\n  + lv_c }d|. WRITE x.\n")
+    assert any("WRITE x" in s.text for s in stmts), [s.text for s in stmts]
+
+
+def test_a_forced_close_is_reported_as_degraded_rather_than_recovered_silently():
+    """A recovery nobody is told about is indistinguishable from a clean lex.
+    The following lines are now scanned — which is the fix — but the line that
+    was malformed still has to reach the coverage signal."""
+    from modules.abap_sast import AbapSourceScanner
+    scanner = AbapSourceScanner(data_flow=False)
+    scanner.scan_text("REPORT z.\nx = 'never closed\nWRITE lv_a.\n", Path("z.abap"))
+    assert scanner.lex_degraded >= 1
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  U7 — the application-server dataset
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_a_dataset_read_is_a_taint_source():
+    """SAP: "This statement exports data from the file specified in dset to the
+    data object dobj." A file on the application server was written by an
+    interface, an upload, another system or an operator — never by the program
+    reading it."""
+    src = ("FORM f.\n  READ DATASET lv_file INTO lv_line.\n"
+           "  SELECT * FROM (lv_line) INTO TABLE @DATA(t).\nENDFORM.\n")
+    scanner = AbapSourceScanner(data_flow=True)
+    assert any(f["confidence"] == "confirmed"
+               for f in scanner.scan_text(src, Path("z.abap"))
+               if f["rule_id"].startswith("ABAP-SQLI"))
+
+
+def test_the_length_additions_do_not_hide_the_target():
+    """`MAXIMUM LENGTH` and `[ACTUAL] LENGTH` are in SAP's syntax and sit after
+    the INTO target, so a pattern anchored too tightly would miss the common
+    form."""
+    src = ("FORM f.\n  READ DATASET lv_file INTO lv_line MAXIMUM LENGTH 200.\n"
+           "  SELECT * FROM (lv_line) INTO TABLE @DATA(t).\nENDFORM.\n")
+    scanner = AbapSourceScanner(data_flow=True)
+    assert any(f["confidence"] == "confirmed"
+               for f in scanner.scan_text(src, Path("z.abap"))
+               if f["rule_id"].startswith("ABAP-SQLI"))
+
+
+def test_it_taints_the_target_and_not_every_variable_in_scope():
+    """The control. A source that tainted the whole scope would confirm every
+    dynamic statement in the FORM and make the evidence class meaningless."""
+    src = ("FORM f.\n  READ DATASET lv_file INTO lv_line.\n"
+           "  SELECT * FROM (lv_other) INTO TABLE @DATA(t).\nENDFORM.\n")
+    scanner = AbapSourceScanner(data_flow=True)
+    assert all(f["confidence"] != "confirmed"
+               for f in scanner.scan_text(src, Path("z.abap"))
+               if f["rule_id"].startswith("ABAP-SQLI"))
+
+
+def test_a_keyword_source_needs_no_provenance_entry():
+    """`READ DATASET` is an ABAP keyword — a language construct anyone can
+    verify. `CONFIRMED_SOURCE_IDENTIFIERS` exists for library names, which are
+    claims about SAP's shipped code, and padding it with keywords would blur the
+    distinction it was created to keep."""
+    from modules.abap_sast import RiseTaintAnalyzer
+    assert not any("DATASET" in name.upper()
+                   for name in RiseTaintAnalyzer.CONFIRMED_SOURCE_IDENTIFIERS)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  U8 — declined, and the decision recorded
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_the_http_handler_seeding_is_declined_with_its_reason():
+    """U8 is the one question in section 7 that no fetchable SAP source answers.
+    Seeding a handler's request parameter is ordinary B2-shaped work needing no
+    new machinery — what it needs is the interface and method name, and neither
+    appears in the released-classes listing, the cloud cheat sheet, or the
+    keyword documentation pages tried. Writing it from memory is exactly the
+    failure U10 exists to prevent, and remembering it correctly would not make
+    it verified. The DECISION is settled even though the question is not, and it
+    has to be recorded or the next person re-opens it."""
+    source = (ROOT / "modules" / "abap_sast.py").read_text(encoding="utf-8")
+    assert "U8 (the ABAP-Cloud HTTP handler interface) is DECLINED" in source
+    assert "What would settle it" in source
