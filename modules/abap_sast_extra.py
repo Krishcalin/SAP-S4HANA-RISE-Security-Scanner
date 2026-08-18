@@ -706,11 +706,23 @@ EXTRA_ABAP_RULES: List[Dict[str, Any]] = (
 #: in every entry below.
 _ALLOWLIST = ("check_allowlist", "check_whitelist")
 
-#: `check_whitelist` is retained as an alias only. It is NOT confirmed to be a
-#: released method name — it survived in the vendored list by accident, via the
-#: blanket class prefix — and removing it outright would turn every estate still
-#: using it into a false positive. UNVERIFIED: see U3 in
-#: docs/CVA_ENGINE_IMPROVEMENT_PLAN.md.
+#: U3, as far as a published source can take it. SAP's released-classes listing
+#: shows `CL_ABAP_DYN_PRG` and, on it, `check_allowlist` and
+#: `check_table_name_tab`. `check_whitelist` appears nowhere in that file.
+#:
+#: So the RELEASED SPELLING IS CONFIRMED to be `check_allowlist`. What the source
+#: cannot settle is the original question — whether `check_whitelist` is a legacy
+#: alias or was never a method at all — because the listing gives worked examples,
+#: not class signatures, and absence from a set of examples is not absence from a
+#: class.
+#:
+#: The alias therefore stays, and the reasoning is asymmetric on purpose. Keeping
+#: a name that does not exist costs a false negative only if an estate has its own
+#: unrelated `check_whitelist` doing something other than validating input, which
+#: is far-fetched. Removing a name that DOES exist reports every estate still
+#: calling the old spelling as unsanitised — a false positive on correct code, in
+#: the family where this engine most needs to be believed.
+#: PARTIALLY SETTLED: see U3 in docs/CVA_ENGINE_IMPROVEMENT_PLAN.md.
 
 SINK_SANITIZERS: Dict[str, Tuple[str, ...]] = {
     # Dynamic table name

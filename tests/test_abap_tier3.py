@@ -330,13 +330,34 @@ def test_b9_was_declined_rather_than_anchored_on_a_guessed_identifier():
         "B9 was added or the decision not to add it stopped being recorded"
 
 
-def test_the_new_source_families_are_abap_keywords_not_library_names():
+def test_the_new_source_families_are_keywords_or_carry_their_provenance():
     """The discipline that keeps this tier honest: a keyword or system field is a
     language construct anyone can verify. A class or method name is a claim about
-    SAP's shipped code, and an unverified one is a fabricated identifier."""
+    SAP's shipped code, and an unverified one is a fabricated identifier.
+
+    This test used to refuse `=>` outright, which was correct while nothing had
+    been confirmed. U10 confirmed four identifiers against named SAP files, so
+    the assertion is now the stronger one it should always have been: an
+    identifier may appear IF AND ONLY IF it is listed with the file it was read
+    from. That still fails on a fabricated name, and additionally fails on a real
+    one somebody added without saying where they got it.
+    """
     added = RiseTaintAnalyzer._SOURCE_RE.pattern.replace(
         __import__("modules.abap_sast_rules", fromlist=["TaintAnalyzer"])
         .TaintAnalyzer._SOURCE_RE.pattern, "")
     for token in ("sy-lisel", "sy-ucomm", "sscrfields"):
         assert token in added
-    assert "=>" not in added, "a class-qualified identifier entered the source list"
+
+    confirmed = RiseTaintAnalyzer.CONFIRMED_SOURCE_IDENTIFIERS
+    # Checked alternative by alternative rather than by a regex over a regex:
+    # the pattern is escaped, so `=>` appears as `=\>` and a naive search for
+    # "=>" reports nothing while a naive one for "=" reports everything.
+    for alternative in added.split("|"):
+        plain = alternative.replace("\\", "").strip()
+        if "=>" not in plain:
+            continue
+        assert plain in confirmed, (
+            "%s entered the source list with no recorded provenance" % plain)
+    for name, source in confirmed.items():
+        assert source.startswith("SAP"), (name, source)
+        assert ".md" in source, "provenance must name the file, not just the repo"

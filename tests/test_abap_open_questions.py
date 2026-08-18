@@ -191,3 +191,126 @@ def test_zero_is_recorded_as_ambiguous_because_it_is():
     table has to say so where the next person will see it."""
     from modules.abap_sast import AUTHORITY_CHECK_SUBRC
     assert "no check was carried out" in AUTHORITY_CHECK_SUBRC[0]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  U3 — the released spelling, and what a set of examples cannot prove
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_the_released_allowlist_spelling_is_the_one_that_ships():
+    """SAP's released-classes listing shows `CL_ABAP_DYN_PRG` with
+    `check_allowlist` and `check_table_name_tab`."""
+    from modules.abap_sast_extra import _ALLOWLIST
+    assert "check_allowlist" in _ALLOWLIST
+
+
+def test_the_unconfirmed_alias_is_kept_and_the_reasoning_is_written_down():
+    """`check_whitelist` appears nowhere in that listing. That confirms the
+    released spelling and does NOT settle the original question — whether the old
+    name is a legacy alias — because the listing gives worked examples rather
+    than class signatures, and absence from examples is not absence from a class.
+
+    So it stays, and the asymmetry is the argument: keeping a name that does not
+    exist costs a false negative only in a contrived case, while removing one
+    that does exist reports correct code as unsanitised.
+    """
+    from modules.abap_sast_extra import _ALLOWLIST
+    source = (ROOT / "modules" / "abap_sast_extra.py").read_text(encoding="utf-8")
+    assert "check_whitelist" in _ALLOWLIST
+    assert "PARTIALLY SETTLED" in source
+    assert "absence from a set of examples" in source
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  U4 — a rule aimed at the wrong idea, not merely an imprecise one
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_the_http_utility_rule_stays_retired_with_the_reason_upgraded():
+    """SAP describes `CL_WEB_HTTP_UTILITY` as "Encoding strings/xstrings in
+    Base64 and decoding Base64-encoded strings/xstrings" and it exposes no
+    HTML-escaping method, so "used this class without escaping" says nothing
+    either way. The rule was aimed at the wrong idea, which no amount of
+    narrowing would have fixed."""
+    from modules.abap_sast import RETIRED_RULES
+    source = (ROOT / "modules" / "abap_sast.py").read_text(encoding="utf-8")
+    assert "ABAP-XSS-006" in RETIRED_RULES
+    assert "U4 IS NOW SETTLED" in source
+
+
+def test_the_limit_of_that_evidence_is_stated_too():
+    """The listing covers RELEASED ABAP Cloud APIs. `CL_HTTP_UTILITY`'s absence
+    from it proves the class is unreleased, NOT that the classic class lacks
+    `escape_html` — and anyone deciding whether to revive the rule needs that
+    distinction rather than an overstated conclusion."""
+    source = (ROOT / "modules" / "abap_sast.py").read_text(encoding="utf-8")
+    assert "NOT establish" in source and "unreleased" in source
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  U10 — identifiers may ship, but only with a citation
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_every_confirmed_identifier_names_the_file_it_was_read_from():
+    """The bar U10 set: not "this looks like a real class" but "here is where
+    SAP writes it"."""
+    from modules.abap_sast import RiseTaintAnalyzer
+    for name, source in RiseTaintAnalyzer.CONFIRMED_SOURCE_IDENTIFIERS.items():
+        assert "abap-cheat-sheets" in source, (name, source)
+        assert source.endswith(".md"), (name, source)
+
+
+def test_json_deserialisation_taints_what_it_produces():
+    src = ("FORM f.\n"
+           "  /ui2/cl_json=>deserialize( EXPORTING json = lv_body"
+           " CHANGING data = ls_out ).\n"
+           "  SELECT * FROM (ls_out-tab) INTO TABLE @DATA(t).\n"
+           "ENDFORM.\n")
+    scanner = AbapSourceScanner(data_flow=True)
+    hits = [f for f in scanner.scan_text(src, Path("z.abap"))
+            if f["rule_id"].startswith("ABAP-SQLI")]
+    assert hits, "the dynamic FROM was not reported at all"
+    assert any(h["confidence"] == "confirmed" for h in hits)
+
+
+def test_a_reader_built_over_input_carries_the_inputs_provenance():
+    """`cl_sxml_string_reader=>create( xml )` produces a reader over input, so
+    everything pulled through it is attacker-influenced."""
+    src = ("FORM f.\n"
+           "  DATA(reader) = cl_sxml_string_reader=>create( lv_xml ).\n"
+           "  SELECT * FROM (reader) INTO TABLE @DATA(t).\n"
+           "ENDFORM.\n")
+    scanner = AbapSourceScanner(data_flow=True)
+    assert any(f["confidence"] == "confirmed"
+               for f in scanner.scan_text(src, Path("z.abap"))
+               if f["rule_id"].startswith("ABAP-SQLI"))
+
+
+def test_screen_field_values_are_a_source():
+    """`DYNP_VALUES_READ` reads the user's own screen entries back into the
+    program. It reaches the finding through the output-parameter binding rather
+    than an assignment, so it lifts the evidence class without reaching
+    `confirmed` — which is the honest grade for it."""
+    src = ("FORM f.\n"
+           "  CALL FUNCTION 'DYNP_VALUES_READ' TABLES dynpfields = lt_f.\n"
+           "  SELECT * FROM (lt_f) INTO TABLE @DATA(t).\n"
+           "ENDFORM.\n")
+    scanner = AbapSourceScanner(data_flow=True)
+    hits = [f for f in scanner.scan_text(src, Path("z.abap"))
+            if f["rule_id"].startswith("ABAP-SQLI")]
+    assert hits
+    assert all(h["confidence"] != "pattern-only" for h in hits)
+
+
+def test_an_identifier_with_no_provenance_would_fail_the_guard():
+    """The guard's teeth, exercised rather than asserted. A name added to the
+    pattern without an entry in the table must break the tier-3 check — that is
+    what stops the next unverified identifier."""
+    from modules.abap_sast import RiseTaintAnalyzer
+    confirmed = dict(RiseTaintAnalyzer.CONFIRMED_SOURCE_IDENTIFIERS)
+    invented = "cl_made_up_class=>get_input"
+    assert invented not in confirmed
+    alternatives = [a.replace("\\", "").strip()
+                    for a in (RiseTaintAnalyzer._SOURCE_RE.pattern + "|"
+                              + invented).split("|")]
+    unrecorded = [a for a in alternatives if "=>" in a and a not in confirmed]
+    assert unrecorded == [invented]

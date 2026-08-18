@@ -258,11 +258,25 @@ SEVERITY_FIXES: Dict[str, str] = {
 
 #: Rules withdrawn rather than narrowed. F9: `cl_http_utility=>(?!escape_html)\w+`
 #: excludes exactly one method name, so every OTHER use of a general HTTP utility
-#: class is reported as missing HTML escaping. Narrowing it means naming the
-#: methods that class actually exposes, and nobody has read that listing —
-#: inventing them is precisely how fabricated identifiers enter this repository
-#: (U4 in docs/CVA_ENGINE_IMPROVEMENT_PLAN.md). ABAP-XSS-001/002/003/005 cover the
+#: class is reported as missing HTML escaping. ABAP-XSS-001/002/003/005 cover the
 #: real output sinks.
+#:
+#: U4 IS NOW SETTLED, AND THE RETIREMENT IS PERMANENT RATHER THAN PENDING.
+#: `CL_HTTP_UTILITY` does not appear in SAP's released-classes listing at all, so
+#: it is not a released API — and its ABAP Cloud counterpart `CL_WEB_HTTP_UTILITY`
+#: is described there as "Encoding strings/xstrings in Base64 and decoding
+#: Base64-encoded strings/xstrings", exposing `encode_base64`, `decode_base64`,
+#: `encode_x_base64` and `decode_x_base64`. It has no HTML-escaping method at all.
+#:
+#: That undermines the rule's premise rather than its precision. It assumed that
+#: using this class family without one particular method means HTML escaping was
+#: skipped; the successor class does not escape anything, so its use says nothing
+#: either way. Narrowing was never going to fix a rule aimed at the wrong idea.
+#:
+#: What the listing does NOT establish, and this matters: it covers released ABAP
+#: Cloud APIs, so `CL_HTTP_UTILITY`'s absence proves it is unreleased, NOT that
+#: the classic class lacks `escape_html`. Its method list is still unread, which
+#: is why nothing here narrows the rule instead of retiring it.
 RETIRED_RULES: Tuple[str, ...] = ("ABAP-XSS-006",)
 
 #: F4. Rules that fire on a dynamically-named token. SAP writes a LITERAL operand
@@ -1455,17 +1469,50 @@ class RiseTaintAnalyzer(TaintAnalyzer):
     # ------------------------------------------------------------------ #
     #  Group B — the source families the analyzer had no case for         #
     # ------------------------------------------------------------------ #
-    # Every addition below is an ABAP KEYWORD or a SYSTEM FIELD, both of which are
-    # language constructs. No library class or method name is introduced: those
-    # are the identifiers the repo's no-fabrication rule is about, and U10 in
-    # docs/CVA_ENGINE_IMPROVEMENT_PLAN.md records that the ones originally
-    # proposed for `_SOURCE_RE` were never grep-confirmed in a fetched SAP file.
-    # B9 (HTTP response bodies) is not here for exactly that reason — it needs the
-    # released-classes listing to anchor on client identity, and anchoring on a
-    # bare accessor name instead would taint every CATCH block in the estate.
+    # Additions here are ABAP KEYWORDS, SYSTEM FIELDS, or identifiers listed in
+    # `CONFIRMED_SOURCE_IDENTIFIERS` with the SAP file they were read from. The
+    # first two are language constructs anyone can verify; the third is a claim
+    # about SAP's shipped code, which is why it carries a citation rather than a
+    # judgement. U10 in docs/CVA_ENGINE_IMPROVEMENT_PLAN.md is the record of
+    # those four being confirmed.
+    #
+    # B9 (HTTP response bodies) is not here, for the reason it never was: it needs
+    # the released-classes listing to anchor on client identity, and anchoring on
+    # a bare accessor name instead would taint every CATCH block in the estate,
+    # because that accessor is overwhelmingly the exception message getter.
+    #: U10, settled. Each identifier here was grep-confirmed in a NAMED SAP file
+    #: before it shipped, and the file is recorded beside it. That is the whole
+    #: bar: not "this looks like a real class", but "here is where SAP writes it".
+    #:
+    #: The guard that used to enforce this refused any class-qualified name
+    #: outright, which was right while nothing was confirmed and wrong once
+    #: something was. It now requires provenance instead — strictly stronger,
+    #: because it catches an unverified identifier AND records where the verified
+    #: ones came from. B9 is still absent for the original reason: an HTTP
+    #: response accessor cannot be anchored without the released-classes listing,
+    #: and anchoring on the bare name taints every CATCH block in the estate.
+    CONFIRMED_SOURCE_IDENTIFIERS = {
+        # JSON text arriving from outside, deserialised into ABAP data.
+        "/ui2/cl_json=>deserialize":
+            "SAP-samples/abap-cheat-sheets 21_XML_JSON.md",
+        # A reader constructed OVER input: everything pulled through it carries
+        # the input's provenance, which is exactly what taint means.
+        "cl_sxml_string_reader=>create":
+            "SAP-samples/abap-cheat-sheets 21_XML_JSON.md",
+        # Screen field values, read back into the program. The values are the
+        # user's, which is the definition of a source.
+        "DYNP_VALUES_READ":
+            "SAP-samples/abap-cheat-sheets 18_Dynpro.md",
+        # The value the user picked from an F4 help.
+        "F4IF_INT_TABLE_VALUE_REQUEST":
+            "SAP-samples/abap-cheat-sheets 18_Dynpro.md",
+    }
+
     _SOURCE_RE = re.compile(
         TaintAnalyzer._SOURCE_RE.pattern
-        + r"|\bsy-lisel\b|\bsy-ucomm\b|\bsscrfields-\w+",
+        + r"|\bsy-lisel\b|\bsy-ucomm\b|\bsscrfields-\w+"
+        + "".join("|" + re.escape(name)
+                  for name in sorted(CONFIRMED_SOURCE_IDENTIFIERS)),
         re.IGNORECASE)
 
     #: B8. Dialog modules are blocks in `abap_sast.py`'s own model but were not
