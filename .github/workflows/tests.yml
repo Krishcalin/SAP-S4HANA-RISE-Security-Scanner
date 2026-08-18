@@ -250,6 +250,14 @@ jobs:
       - name: docs/CHECKS_REFERENCE.md matches the code
         run: python -m tools.build_checks_reference --check
 
+      # The release gate's coverage table drifted twice while it was maintained
+      # by hand, under a note claiming it was derived. It is derived now, and
+      # this is what keeps that true: a coverage check added without
+      # regenerating fails the build rather than going quietly missing from the
+      # document somebody reads before wiring the gate into CI.
+      - name: docs/RELEASE_GATE.md matches the modules
+        run: python -m tools.build_gate_reference --check
+
   sap-content:
     name: SAP baseline and notes catalogues are current
     runs-on: ubuntu-22.04

@@ -116,31 +116,41 @@ day somebody remembers to teach the gate its id.
 
 The findings that carry it today:
 
+<!-- BEGIN GENERATED: degraded-coverage findings -->
+
 | check | module | what could not be looked at |
 |---|---|---|
-| `ABAP-LEX-001` | `abap_sast` | the lexer lost its place in a source file |
 | `ABAP-COV-001` | `abap_sast` | `--abap-src` names a path that is not a directory — the scan never ran |
 | `ABAP-COV-002` | `abap_sast` | the source tree held no file the scanner recognises |
 | `ABAP-COV-003` | `abap_sast` | files that could not be read were skipped |
 | `ABAP-COV-004` | `abap_sast` | source files were present in a language this scanner has no rules for |
 | `ABAP-COV-005` | `abap_sast` | no CDS access-control artefact in the tree, so view protection was not assessed |
 | `ABAP-COV-006` | `abap_sast` | roleless views whose exposure could not be established |
+| `ABAP-LEX-001` | `abap_sast` | the lexer lost its place in a source file |
 | `BASELINE-000` | `baseline_params` | no profile parameter export, so eighteen parameters went unjudged |
-| `PARAM-MISSING-OTHER` | `security_params` | parameters absent from an export nobody declared complete |
 | `BTP-AUD-001` | `btp_cloud_surface` | subaccounts whose audit-log state no supplied export settles |
 | `CAPX-COV-001` | `cap_xsuaa` | `--cap-src` unreadable, or a descriptor or CDS construct that would not parse |
-| `VBM-DATA-001` | `vendor_master` | the vendor / bank master export carried no usable rows |
-| `HOTNEWS-COVERAGE` | `sap_hotnews` | the note catalogue is a curated subset, not the full patch history |
+| `MDC-PAY-002` | `master_data_changes` | bank changes were found and no payment-run export was supplied, so whether any were paid was never tested |
 | `HOTNEWS-010` | `sap_hotnews` | exposure could not be established against the installed releases |
+| `HOTNEWS-COVERAGE` | `sap_hotnews` | the note catalogue is a curated subset, not the full patch history |
+| `PARAM-MISSING-OTHER` | `security_params` | parameters absent from an export nobody declared complete |
+| `VBM-DATA-001` | `vendor_master` | the vendor / bank master export carried no usable rows |
 | `<CHECK>-COVERAGE` | any | a release-gated check could not determine whether it applied |
 
-> This table is derived by reading `details["degrades_coverage"]` out of the
-> modules, not maintained from memory — which is how `ABAP-COV-004` came to be
-> missing from it between shipping on 2026-08-16 and this revision. The gate
-> itself was never wrong: it reads the flag on the finding and does not know
-> these ids, which is exactly the property the paragraph above describes. Only the
-> documentation drifted, which is the failure mode a hand-maintained list of ids
-> has and the gate deliberately does not.
+> **This table is generated** by `python -m tools.build_gate_reference`,
+> which reads `details["degrades_coverage"]` out of the modules —
+> including the ids that reach it through a `_coverage` helper and never
+> appear beside the flag. It used to say it was derived while being
+> maintained by hand, which is how `ABAP-COV-004` and then `MDC-PAY-002`
+> came to be missing from it.
+>
+> The gate itself was never wrong either time: it reads the flag on the
+> finding and does not know these ids, which is exactly the property the
+> paragraph above describes. Only the documentation drifted — and this is
+> the document somebody reads before wiring the gate into CI, so a table
+> that silently omits a check is how a reader concludes their pipeline is
+> covered when it is not.
+<!-- END GENERATED: degraded-coverage findings -->
 
 An unreadable or misspelled policy is also `2`: a typo in a config file must not
 quietly disarm the gate. **A scan that read nothing at all is `2` as well** — zero
