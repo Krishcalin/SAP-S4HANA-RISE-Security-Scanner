@@ -6,7 +6,11 @@
 > outstanding. A great deal has shipped since they were written, and this document
 > has not been rewritten phase by phase:
 >
-> - **33 audit modules** (these documents say 23), 664 check ids, 128 logical sources.
+> - **34 audit modules** (these documents say 23), 685 check ids, 132 logical sources.
+>   The forward lists in Phases 5 and 6 have since been reconciled item by item
+>   against the shipped code — they had drifted in the direction that is easy to
+>   miss, understating the product, so a reader would have set out to rebuild
+>   things that already existed.
 > - **Connected mode exists** — `collect/` with four read-only collectors:
 >   `sapcontrol` (sapstartsrv SOAP), `icf` (HTTP service surface + OData
 >   catalogue), `rfc` (users, roles, authorisations) and `btp` (platform REST
@@ -440,17 +444,54 @@ for SAP's content would be exactly the fabrication this project forbids.
 
 **Depends on:** Phase 1. The structural fix for the invented-identifier failure mode.
 
-- [ ] Importer for `SAP-samples/frun-csa-policies-best-practices` (Apache-2.0, 260 XML policies)
-- [ ] Adopt SAP's config-store and field names as the **canonical import schema**
-- [ ] Map every check to its SAP Security Baseline requirement ID; publish coverage against the
-      **214 in-scope control points** — the yardstick the incumbent itself chose
-- [ ] CI job diffing the SAP repo and the Baseline ZIP each release (no login wall). The
-      `change_marker` PDFs give a precise inter-version diff
-- [ ] Rebuild the SAP Notes module on `NotesPolicies/ABAP` (133 policies by patch day), reframed
-      around **verifying the note took effect** — identification is already free from SAP
+> **RECONCILED against the shipped code.** This list had drifted, and in the
+> direction that is easy to miss: it UNDERSTATED the product. Somebody reading it
+> would have set out to build things that exist. Each item below now says what
+> shipped, where it lives, and what it deliberately did not do.
+
+- [x] Importer for `SAP-samples/frun-csa-policies-best-practices` (Apache-2.0, 261 XML
+      policies) — **SHIPPED, both halves.** `server/sapcontent.py` parses
+      `BaselinePolicies` into `data/sap_baseline_requirements.json` (38 requirements,
+      58 policies); `tools/build_sap_notes_catalogue.py` parses `NotesPolicies` into
+      `data/sap_notes_catalogue.json` (1,732 notes, 154 patch days from 2016-01).
+      Two generators because their consumers differ — the baseline feeds the server's
+      coverage page, the notes feed `modules/sap_hotnews.py`, and `modules/` may not
+      import from `server/`
+- [~] Adopt SAP's config-store and field names as the **canonical import schema** —
+      **PARTIAL, and probably as far as this should go.** `modules/cloudalm_import.py`
+      keys on SAP's store names; `CONFIGSTORE_SOURCES` in the notes generator maps every
+      store SAP's note policies read to the export that answers it; `system_change`
+      documents SAP's own `GLOBAL` / `NAME='GLOBAL_SETTING'` / `VALUE='NOT MODIFIABLE'`
+      vocabulary. What did NOT happen is renaming our logical sources to SAP's store
+      names, and that was right: a customer's file is named for what they exported, not
+      for what Focused Run calls it
+- [~] Map every check to its SAP Security Baseline requirement ID; ~~publish coverage
+      against the **214 in-scope control points**~~ — **PARTIAL, AND HALF OF IT
+      DECLINED.** `server/sapcontent.requirement_for()` maps 208 of 685 checks to a
+      Baseline requirement, covering 17 of the 38 SAP publishes. The remaining 477 are
+      mostly things the Baseline does not describe at all — financial controls, vendor
+      master integrity, resilience — so "map EVERY check" is not a target so much as a
+      category error. **The 214 figure is refused outright**: parsing SAP's published
+      v2.4 policies yields 351 check items across 38 families, a different unit that
+      does not reconcile with the widely-quoted 214 control points (69/92/53). Publishing
+      a percentage against it would be a fabricated denominator. See the warning in
+      `server/sapcontent.py`
+- [~] CI job diffing the SAP repo and the Baseline ZIP each release (no login wall) —
+      **PARTIAL.** The `sap-content` job clones SAP's policy repository on every run and
+      re-derives BOTH catalogues, failing on any drift, which is the half that needed no
+      login. The Baseline ZIP and its `change_marker` PDFs are still untouched
+- [x] Rebuild the SAP Notes module on `NotesPolicies/ABAP` (133 policies by patch day),
+      reframed around **verifying the note took effect** — **SHIPPED, and the reframing
+      is the part that matters.** `HOTNEWS-012` lists SAP-published HotNews notes absent
+      from the applied-notes export; `HOTNEWS-013` goes further and states a
+      DETERMINATION — the installed component, kernel or HANA revision is below the level
+      SAP publishes as carrying the fix, with the evidence in the finding. That is
+      "verifying the note took effect" as far as an offline export can reach it
 - [ ] SOX/ITGC framework mapping; "SAP ECS mandatory hardening" framework
 - [ ] Populate `owning_team` and `responsibility` across the catalogue
-- [ ] **Publish the check catalogue** — 323 auditable vs 550 asserted
+- [ ] **Publish the check catalogue** — 323 auditable vs 550 asserted. *(Partly overtaken:
+      `docs/CHECKS_REFERENCE.md` is generated and published, 685 checks. What is still
+      unpublished is the auditable/asserted SPLIT, which is the honest half)*
 
 ✅ **SATISFIED, 2026-08-07.** A customer supplied SAP Note 3250501 v46 (released
 2026-05-15) from their own S-user. It is recorded as facts in
@@ -548,18 +589,34 @@ the cut is genuinely evidenced.
 
 ## Phase 6 — original scope (for reference)
 
-- [ ] **SAP Cloud ALM CSA** ingestion — already switched on in most RISE tenants; no transport,
-      no RFC user, no agent. *Verify first:* whether its API returns raw store values or only
-      compliance verdicts. That determines whether it unlocks our 350 checks or only SAP's
+> **RECONCILED against the shipped code**, same as Phase 5 above.
+
+- [x] **SAP Cloud ALM CSA** ingestion — **SHIPPED, both paths, and the precondition was
+      answered by making it moot.** *Verify first* could NOT be satisfied: SAP's
+      `cloud-alm-setup-admin-guide` carries no CSA content, `SAP-samples/cloud-alm-api-examples`
+      publishes projects, tasks, process authoring, requirements, testing and analytics
+      and nothing for configuration and security analysis, and the Business Accelerator
+      Hub is a JavaScript application this product cannot read. Settling it needs a live
+      tenant. So both shapes are handled instead: `modules/cloudalm_import.py` translates
+      RAW STORE exports into the logical sources our own checks read, and
+      `modules/cloudalm_verdicts.py` reads a RESULTS export as SAP's verdicts — labelled
+      as SAP's throughout, severity taken from SAP's own Baseline tier, with "could not
+      evaluate" kept apart from "failed". Whichever the tenant can produce, one of the
+      two reads it
 - [x] **BTP collectors** — **SHIPPED** as `collect/btp.py`: destinations, subaccounts,
       `auditlog-management` (`/auditlog/v2/auditlogrecords`) and the Cloud Connector
       `/api/v1/configuration`, all read-only behind a path allowlist checked before a
       request is built. Out of process under `collect/`, per Decision D2 — the objection
       recorded below was to a network client inside the stdlib-only boundary, and that
       still stands in that form
-- [ ] **Retrospective threat review** over an exported Security Audit Log window. Prerequisite:
-      log-source health checks. Wording discipline: *"retrospective detection over the exported
-      window"*, **never** *"monitoring"*
+- [x] **Retrospective threat review** over an exported Security Audit Log window —
+      **SHIPPED** as `modules/log_review.py` (`--modules logreview`), 15 checks: a pattern
+      library (`LREV-PAT-001..007`), filter-coverage checks (`LREV-FLT-*`), window
+      checks (`LREV-WIN-*`) and the stated prerequisite, log-source health, as
+      `LREV-SRC-001..003`. The wording discipline is enforced in the module's own
+      docstring rather than left to whoever writes the next datasheet: it is a
+      retrospective review over an exported window, and no finding, title or description
+      derived from it may imply monitoring, detection, real-time or streaming
 - [ ] ITSM outbound webhook + stored ticket reference (not a ServiceNow app)
 - [ ] Read-only MCP surface over the query layer
 - [ ] PDF/PPTX export driven from SQL rather than an in-memory list
@@ -655,8 +712,13 @@ Re-verified end to end after conversion: scanning the same bundle twice still gi
    closing one overdue review shrinks the member list without retiring the finding and
    restarting the clock on the rest.
 
-3. Begin Phase 4 — the attack-path graph. The node substrate is in place: **626 typed nodes**
-   from real exports, with cloud and on-premise identities correctly separated.
+3. ~~Begin Phase 4 — the attack-path graph~~ ✅ **DONE.** The core shipped; the
+   heading above records it. The node substrate that made it possible was **626
+   typed nodes** from real exports, with cloud and on-premise identities correctly
+   separated. What remains is the DEPTH rather than the core — path templates as
+   versioned content, choke-point ranking, exposure zones, `used` vs `configured`
+   edge provenance — and that block, in the Phase 4 forward list, is now the
+   largest genuinely untouched work in this document.
 
 **Done:** README `PARAM-* (25+)` overstatement corrected to 23. CI now has six jobs including
 a stdlib-purity gate and a skip guard.
