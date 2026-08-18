@@ -136,14 +136,55 @@ _Q = r"['\"`]"
 #: separates a dynamic clause from ordinary logical grouping — `[^)]*` cannot.
 _DYN_NAME = r"(?:`[^`]*`|'[^']*'|[A-Za-z_]\w*(?:->\w+|-\w+)*)"
 
-#: Namespace authorities whose `http://` URIs are identifiers, not endpoints. The
-#: W3C and SAP entries are confirmed from SAP-authored material; the rest are OUR
-#: maintained allowlist and are labelled as such rather than claimed as SAP's.
-_NAMESPACE_HOSTS: Tuple[str, ...] = (
-    "www.w3.org", "w3.org",                     # verified
-    "www.sap.com", "sap.com", "xml.sap.com",    # verified
-    "schemas.xmlsoap.org", "schemas.microsoft.com",   # ours
-)
+#: Namespace authorities whose `http://` URIs are IDENTIFIERS, NOT ENDPOINTS.
+#: Every object that serialises XML or SOAP carries several, and reporting them
+#: as insecure protocol use (F5) flagged SAP's own asXML namespace.
+#:
+#: U12, settled — by relabelling rather than by research, because the question
+#: was never "is this list right" but "whose list is it". Checking that turned up
+#: a claim that was too strong: the previous comment said "the W3C and SAP
+#: entries are confirmed from SAP-authored material", and only ONE of them is.
+#: `http://www.sap.com/abapxml` appears in SAP's own XML cheat sheet; `w3.org`
+#: and `xml.sap.com` were carrying a "verified" marker they had not earned.
+#:
+#: Nothing was removed, because nothing is wrong. The W3C and SOAP hosts really
+#: are namespace authorities and dropping them would resurrect exactly the false
+#: positives F5 fixed. What changes is that the two classes are now DATA rather
+#: than a comment, so a host added later has to declare which it is — and an
+#: entry claiming SAP's authority has to name the file.
+_NAMESPACE_HOSTS_VERIFIED: Dict[str, str] = {
+    "www.sap.com":
+        "http://www.sap.com/abapxml, SAP's asXML namespace — "
+        "SAP-samples/abap-cheat-sheets 21_XML_JSON.md",
+}
+
+#: OURS. A maintained allowlist and not a claim about SAP: each entry is a
+#: judgement, and the reason is the judgement. If one of these turns out to be
+#: wrong, it is this project's error to correct and not SAP's to explain.
+_NAMESPACE_HOSTS_OURS: Dict[str, str] = {
+    "sap.com":
+        "the bare host, so SAP namespaces served from subdomains other than "
+        "www are covered without listing each one",
+    "xml.sap.com":
+        "an SAP host in namespace position; not found in any file fetched for "
+        "this project, so it is kept on judgement rather than evidence",
+    "www.w3.org":
+        "the XML Schema, XSL and XML Signature namespaces live here. Any object "
+        "doing schema-aware serialisation carries at least one",
+    "w3.org":
+        "the same authority written without the www prefix",
+    "schemas.xmlsoap.org":
+        "the SOAP 1.1 envelope and WSDL namespaces. Every classic SOAP consumer "
+        "or provider carries them",
+    "schemas.microsoft.com":
+        "carried by Office Open XML and by OData payloads that pass through "
+        "ABAP; an identifier in every case",
+}
+
+#: The order is verified-then-ours so a reader of the compiled pattern meets the
+#: attested entries first. Behaviour does not depend on it.
+_NAMESPACE_HOSTS: Tuple[str, ...] = (tuple(_NAMESPACE_HOSTS_VERIFIED)
+                                     + tuple(_NAMESPACE_HOSTS_OURS))
 
 #: U5, settled, and the rule was matching nothing.
 #:
@@ -214,7 +255,9 @@ PATTERN_FIXES: Dict[str, str] = {
 
     # F5. Every object that serialises XML or SOAP carries several `http://`
     # namespace URIs. They are identifiers, not endpoints — including SAP's own
-    # asXML namespace, which we were reporting as an insecure protocol.
+    # asXML namespace, which we were reporting as an insecure protocol. The hosts
+    # come from `_NAMESPACE_HOSTS_VERIFIED` and `_NAMESPACE_HOSTS_OURS`; see U12
+    # there for which is which and why the distinction is kept in data.
     "ABAP-CONF-002":
         _Q + r"http://(?!(?:" + "|".join(h.replace(".", r"\.")
                                          for h in _NAMESPACE_HOSTS) + r")\b)"

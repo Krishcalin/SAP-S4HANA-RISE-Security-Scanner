@@ -418,3 +418,63 @@ def test_the_reason_filter_was_excluded_is_recorded_not_just_the_exclusion():
     source = (ROOT / "modules" / "abap_sast_extra.py").read_text(encoding="utf-8")
     assert "FILTER DOES NOT" in source
     assert "Only table key columns" in source
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  U12 — whose list is it
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_every_allowlisted_host_declares_which_table_it_belongs_to():
+    """U12 was never "is this list right" but "whose list is it". A host in the
+    compiled tuple and in neither table is one nobody has taken responsibility
+    for, which is the state the question was raised about."""
+    from modules.abap_sast import (_NAMESPACE_HOSTS, _NAMESPACE_HOSTS_OURS,
+                                   _NAMESPACE_HOSTS_VERIFIED)
+    declared = set(_NAMESPACE_HOSTS_VERIFIED) | set(_NAMESPACE_HOSTS_OURS)
+    assert set(_NAMESPACE_HOSTS) == declared
+    assert not (set(_NAMESPACE_HOSTS_VERIFIED) & set(_NAMESPACE_HOSTS_OURS))
+
+
+def test_a_verified_host_names_the_file_it_was_read_from():
+    """The stronger claim carries the heavier burden. Checking this one turned up
+    that `w3.org` and `xml.sap.com` had been carrying a "verified" marker they
+    had not earned — only `http://www.sap.com/abapxml` appears in an SAP file."""
+    from modules.abap_sast import _NAMESPACE_HOSTS_VERIFIED
+    for host, evidence in _NAMESPACE_HOSTS_VERIFIED.items():
+        assert ".md" in evidence, (host, evidence)
+        assert "http://" in evidence, "cite the namespace URI, not just the file"
+
+
+def test_our_own_entries_give_a_reason_rather_than_an_assertion():
+    """These are judgements. A judgement with no reason cannot be reviewed, and
+    the next person either trusts it blindly or deletes it blindly."""
+    from modules.abap_sast import _NAMESPACE_HOSTS_OURS
+    for host, reason in _NAMESPACE_HOSTS_OURS.items():
+        assert len(reason) > 40, (host, reason)
+
+
+def test_the_list_is_not_presented_as_sap_s():
+    """The whole point of U12. If this file ever says the allowlist is SAP's,
+    the product is making a claim on SAP's behalf that SAP has not made."""
+    source = (ROOT / "modules" / "abap_sast.py").read_text(encoding="utf-8")
+    assert "not a claim about SAP" in source
+    assert "this project's error to correct" in source
+
+
+@pytest.mark.parametrize("uri", [
+    "http://www.sap.com/abapxml",              # SAP's asXML namespace
+    "http://www.w3.org/2001/XMLSchema",        # XML Schema
+    "http://schemas.xmlsoap.org/soap/envelope/",   # SOAP 1.1 envelope
+])
+def test_a_namespace_uri_is_not_reported_as_insecure_transport(uri):
+    """The false positives F5 removed. Relabelling must not change behaviour —
+    an honesty fix that quietly resurrects a page of findings is not one."""
+    src = "FORM f.\n  DATA(x) = '%s'.\nENDFORM.\n" % uri
+    assert "ABAP-CONF-002" not in _ids(src, "z.abap")
+
+
+def test_a_real_http_endpoint_is_still_reported():
+    """The control. An allowlist that swallowed everything would be a silent
+    retirement of the rule rather than a narrowing of it."""
+    src = "FORM f.\n  DATA(x) = 'http://evil.example.com/api'.\nENDFORM.\n"
+    assert "ABAP-CONF-002" in _ids(src, "z.abap")
