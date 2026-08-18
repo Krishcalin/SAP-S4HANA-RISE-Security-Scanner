@@ -632,8 +632,37 @@ INTERNAL_TABLE_RULES: List[Dict[str, Any]] = [
         # blind spot exactly where it suppresses ABAP-SQLI-001. The parenthesis
         # must stay bounded, or this flags the parenthesised logical expressions
         # SAP documents as correct in LOOP AT and READ TABLE.
+        #
+        # U11, settled, and it splits. SAP lists the internal-table
+        # constructs that take a WHERE — LOOP AT, READ TABLE, DELETE, the
+        # FILTER operator and FOR loops — then says which of them support
+        # the full option set: "LOOP AT, READ TABLE ..., DELETE, and FOR
+        # loops". That set includes "Dynamic WHERE conditions: any
+        # character-like data object ... within a pair of parentheses", so
+        # FOR joins the alternation.
+        #
+        # FILTER DOES NOT, from the same page: it gets its own bullet with
+        # restricted options — "Only table key columns can be compared with
+        # single values in the WHERE condition", = only for hash keys, AND
+        # only for combining. No dynamic form is documented, and adding one
+        # would be the guess this whole open-questions list exists to stop.
+        #
+        # THE TRAP THAT KEPT U11 OPEN, and why FOR is still safe to add: a
+        # FOR loop's STATIC condition is written in parentheses as ordinary
+        # syntax — SAP's own example is `FOR wa IN it WHERE ( comp2 = 1 )`.
+        # So `WHERE (` after a FOR is evidence of nothing. What
+        # discriminates is `_NAME`, already in the pattern: a lone
+        # identifier or string literal. `comp2 = 1` is not one, and a bare
+        # identifier is not a valid static logical expression in ABAP —
+        # there is no implicit boolean-from-field — so a single name inside
+        # those parentheses can only be a dynamic clause.
+        #
+        # Anchored as FOR <name> IN, never a bare FOR, so ABAP SQL's
+        # FOR ALL ENTRIES IN cannot match: that is two words between FOR
+        # and IN, and it belongs to ABAP-SQLI-001 in any case.
         "pattern":
-            r"\b(?:READ\s+TABLE|LOOP\s+AT|MODIFY|DELETE)\s+[\w<>/-]+[^.]*"
+            r"\b(?:READ\s+TABLE|LOOP\s+AT|MODIFY|DELETE"
+            r"|FOR\s+[\w<>/-]+\s+IN)\s+[\w<>/-]+[^.]*"
             r"\bWHERE\s*\(\s*" + _NAME + r"\s*\)",
         "cwe": "CWE-913",
         "description": (

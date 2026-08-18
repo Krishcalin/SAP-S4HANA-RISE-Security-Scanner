@@ -314,3 +314,107 @@ def test_an_identifier_with_no_provenance_would_fail_the_guard():
                               + invented).split("|")]
     unrecorded = [a for a in alternatives if "=>" in a and a not in confirmed]
     assert unrecorded == [invented]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  U9 — all six data-cluster media
+# ═════════════════════════════════════════════════════════════════════════════
+
+_IMPORT = ("FORM f.\n  IMPORT p = lv_v FROM %s.\n"
+           "  SELECT * FROM (lv_v) INTO TABLE @DATA(t).\nENDFORM.\n")
+
+
+@pytest.mark.parametrize("medium", [
+    "MEMORY ID lv_id",
+    "DATA BUFFER lv_x",
+    "INTERNAL TABLE lt_c",
+    "DATABASE indx(zz) ID lv_id",
+    "SHARED MEMORY indx(zz) ID lv_id",
+    "SHARED BUFFER indx(zz) ID lv_id",
+])
+def test_every_documented_cluster_medium_is_a_source(medium):
+    """SAP's IMPORT syntax gives exactly six media. Three were already covered;
+    the other three had been proposed on structural symmetry alone and were
+    correctly left out until a fetched file named them. It does."""
+    scanner = AbapSourceScanner(data_flow=True)
+    hits = [f for f in scanner.scan_text(_IMPORT % medium, Path("z.abap"))
+            if f["rule_id"].startswith("ABAP-SQLI")]
+    assert hits, medium
+    assert any(h["confidence"] == "confirmed" for h in hits), medium
+
+
+def test_the_cross_program_media_are_the_strongest_case_not_the_weakest():
+    """A cluster in ABAP Memory was at least written by the same session. SAP
+    calls SHARED MEMORY and SHARED BUFFER "a cross-program memory area" — data
+    some other program wrote, possibly on another day — so if any medium
+    belonged in the source list, these did."""
+    source = (ROOT / "modules" / "abap_sast.py").read_text(encoding="utf-8")
+    assert "cross-program memory area" in source
+
+
+def test_the_runtime_name_table_form_is_still_left_alone():
+    """`IMPORT (param_table) FROM ...` binds by a name table computed at
+    runtime. U9 widened the MEDIA, not the binding forms, and widening one is
+    not licence to widen the other."""
+    scanner = AbapSourceScanner(data_flow=True)
+    src = ("FORM f.\n  IMPORT (lt_names) FROM MEMORY ID lv_id.\n"
+           "  SELECT * FROM (lv_v) INTO TABLE @DATA(t).\nENDFORM.\n")
+    hits = [f for f in scanner.scan_text(src, Path("z.abap"))
+            if f["rule_id"].startswith("ABAP-SQLI")]
+    assert all(h["confidence"] != "confirmed" for h in hits)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  U11 — FOR is in, FILTER is out, and SAP said which
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_a_dynamic_where_on_a_for_loop_is_reported():
+    """SAP lists FOR loops among the constructs supporting "Dynamic WHERE
+    conditions: any character-like data object ... within a pair of
+    parentheses"."""
+    src = ("FORM f.\n  DATA(r) = VALUE ty( FOR wa IN it WHERE (lv_dyn) ( wa ) ).\n"
+           "ENDFORM.\n")
+    assert "ABAP-DYNT-001" in _ids(src, "z.abap")
+
+
+@pytest.mark.parametrize("condition", [
+    "( comp2 = 1 )",                      # SAP's own example, verbatim
+    "( table_line CA `ACXYGZD` )",        # SAP's second example
+])
+def test_a_static_for_condition_in_parentheses_is_not_reported(condition):
+    """THE TRAP THAT KEPT U11 OPEN. A FOR loop's static condition is written in
+    parentheses as ordinary syntax, so `WHERE (` after a FOR is evidence of
+    nothing. Both fixtures here are SAP's own example lines — if this check ever
+    fires on them it is reporting correct, idiomatic modern ABAP."""
+    src = ("FORM f.\n  DATA(r) = VALUE ty( FOR wa IN it WHERE %s ( wa ) ).\n"
+           "ENDFORM.\n" % condition)
+    assert "ABAP-DYNT-001" not in _ids(src, "z.abap")
+
+
+def test_filter_is_refused_because_no_dynamic_form_is_documented():
+    """FILTER was named alongside the covered constructs, which is why it was a
+    question. SAP gives it restricted options — "Only table key columns can be
+    compared with single values in the WHERE condition" — and documents no
+    dynamic form, so including it would be a guess."""
+    src = "FORM f.\n  DATA(r) = FILTER #( it WHERE key = lv_k ).\nENDFORM.\n"
+    assert "ABAP-DYNT-001" not in _ids(src, "z.abap")
+
+
+def test_for_all_entries_is_not_swept_up_by_the_new_alternation():
+    """`SELECT ... FOR ALL ENTRIES IN itab WHERE (dyn)` is ABAP SQL and belongs
+    to ABAP-SQLI-001. The anchor is `FOR <name> IN`, and "ALL ENTRIES" is two
+    words, so the internal-table rule cannot reach it — otherwise one statement
+    would carry both a CWE-89 and a CWE-913 finding."""
+    src = ("FORM f.\n  SELECT * FROM t FOR ALL ENTRIES IN it WHERE (lv_dyn)"
+           " INTO TABLE @DATA(x).\nENDFORM.\n")
+    found = _ids(src, "z.abap")
+    assert "ABAP-SQLI-001" in found
+    assert "ABAP-DYNT-001" not in found
+
+
+def test_the_reason_filter_was_excluded_is_recorded_not_just_the_exclusion():
+    """An absent construct with no note reads as an oversight, and the next
+    person re-opens the question. The refusal has to carry SAP's wording."""
+    source = (ROOT / "modules" / "abap_sast_extra.py").read_text(encoding="utf-8")
+    assert "FILTER DOES NOT" in source
+    assert "Only table key columns" in source

@@ -1525,11 +1525,24 @@ class RiseTaintAnalyzer(TaintAnalyzer):
     #: B6. A data cluster read back is external input: whoever wrote the cluster
     #: chose the values. The `IMPORT (param_table) FROM ...` form binds by a
     #: RUNTIME name table and is deliberately left alone rather than guessed at.
-    #: UNVERIFIED (U9): shared-memory and database media are not included, because
-    #: no fetched SAP file names them.
+    #:
+    #: U9, settled. SAP's syntax for the medium gives exactly six alternatives:
+    #: `DATA BUFFER xstr`, `INTERNAL TABLE itab`, `MEMORY ID id`,
+    #: `DATABASE dbtab(ar) [TO wa] [CLIENT cl] ID id`, `SHARED MEMORY ...` and
+    #: `SHARED BUFFER ...`. Three were covered; the other three were left out
+    #: because they had been proposed on structural symmetry alone and no fetched
+    #: file named them. They are named now, so they are in.
+    #:
+    #: The argument for including them is the same one that admitted the first
+    #: three, and it gets STRONGER the further the medium is from the program: a
+    #: cluster in ABAP Memory was at least written by the same session, while
+    #: `DATABASE` and the two cross-program `SHARED` areas hold data some other
+    #: program wrote, possibly on another day. SAP's own words for the last two
+    #: are "a cross-program memory area".
     _IMPORT_CLUSTER = re.compile(
         r"^\s*IMPORT\b(?P<binds>(?:(?!\().)*?)"
-        r"\bFROM\s+(?:MEMORY\s+ID|DATA\s+BUFFER|INTERNAL\s+TABLE)\b", re.IGNORECASE)
+        r"\bFROM\s+(?:MEMORY\s+ID|DATA\s+BUFFER|INTERNAL\s+TABLE"
+        r"|DATABASE|SHARED\s+MEMORY|SHARED\s+BUFFER)\b", re.IGNORECASE)
 
     #: B7. Classic list interaction — the user picks a line and the program reads
     #: it back.
