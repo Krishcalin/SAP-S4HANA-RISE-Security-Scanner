@@ -336,6 +336,16 @@ per-client scope declaration, and the report must distinguish "compliant in the 
 from "compliant."** Silently passing a cross-client check on partial data is a defect an auditor
 can catch, and it is the kind that ends an engagement.
 
+> **CLOSED** — `modules/client_scope.py` + `STDUSR-COV-001`. The scope is MEASURED rather than
+> declared wherever `client_settings` (T000) was supplied: T000 names the clients that exist, the
+> standard-user export names the clients we looked at, and the difference is the gap. A declared
+> scope (`--clients 000,100`) stands in only where T000 is absent, and with neither the well-known
+> clients 000/001/066 are the floor — every scope reports its `basis` so a measured one is
+> distinguishable from an assumed one. `STDUSR-002` and `STDUSR-003` now carry the clients they
+> were computed over, and `STDUSR-COV-001` arms the coverage gate when the scope is partial. On the
+> bundled sample this fires: the standard-user export covers 000/001/066 while T000 lists
+> 000/100/200/300, so the PRODUCTION client was the one nobody had looked at.
+
 ### 3.2 RFC destinations carry mixed ownership
 
 An `SM59` export in RISE contains SAP-managed monitoring destinations. Flagging one as a customer

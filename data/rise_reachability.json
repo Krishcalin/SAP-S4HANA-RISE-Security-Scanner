@@ -6,7 +6,7 @@
     "states": {
       "yes": "Customer self-serves. Absent means they did not send it.",
       "read_only": "Customer can export it but cannot remediate what it shows. Absent is still theirs to fix; the FINDING is not.",
-      "partial": "Obtainable but incomplete or mixed-ownership. What arrives will not be the whole picture, and a check reading it must say so.",
+      "partial": "Obtainable but incomplete or mixed-ownership. What arrives will not be the whole picture, and a check reading it must say so. Two do: system_trust states the clients its standard-user result covers (STDUSR-COV-001), and server/enrich.py classifies each RFC destination's operator. The coverage manifest also lists every supplied partial source, so one that no check qualifies is still visible as qualified.",
       "ticket": "Not self-servable. The customer must raise an SAP service request. Absent is NOT a customer failure.",
       "no": "Structurally unavailable. No amount of customer effort produces it."
     },
@@ -361,7 +361,7 @@
       "state": "partial",
       "how": "Report RSUSR003",
       "blocked_by": "Cross-client by nature; client 000 access is restricted and on-request, so a customer may only evidence productive clients.",
-      "note": "Section 3.1: a cross-client check must never silently pass on partial data. 'Compliant in the clients we saw' is not 'compliant'."
+      "note": "Section 3.1: a cross-client check must never silently pass on partial data. Enforced by modules/client_scope.py — STDUSR-002 and STDUSR-003 carry the clients they were computed over and STDUSR-COV-001 names the ones they did not reach."
     },
     "rfc_destinations": {
       "state": "partial",

@@ -35,6 +35,7 @@ Data sources:
 """
 
 from typing import Dict, List, Any, Optional
+from modules import client_scope
 from modules.base_auditor import BaseAuditor
 
 
@@ -44,7 +45,11 @@ class SystemTrustAuditor(BaseAuditor):
 
     STANDARD_USERS = {"SAP*", "DDIC", "SAPCPIC", "EARLYWATCH", "TMSADM", "SAP#*", "SAPSUPPORT"}
     # Clients that must never keep default-password standard users.
-    STANDARD_CLIENTS = {"000", "001", "066"}
+    #: SAP's standard clients. Defined in `modules/client_scope.py` and
+    #: imported rather than repeated: the scope checker and this auditor
+    #: asking "is this a standard client" from two copies is how they come
+    #: to disagree about which clients a cross-client check must cover.
+    STANDARD_CLIENTS = set(client_scope.WELL_KNOWN_CLIENTS)
     # SID first letters that conventionally indicate a non-production tier.
     NONPROD_PREFIXES = ("D", "Q", "S", "T")
 
@@ -54,6 +59,9 @@ class SystemTrustAuditor(BaseAuditor):
         self.check_sapstar_autologon()
         self.check_default_passwords()
         self.check_standard_users_unlocked()
+        # After the two it qualifies, so a reader meets the result and
+        # the bound on it in that order.
+        self.check_client_scope()
         # trust / connectivity
         self.check_inbound_trust_tier()
         self.check_self_trust()
@@ -138,6 +146,81 @@ class SystemTrustAuditor(BaseAuditor):
                             "SAP Help — login/no_automatic_user_sapstar"],
             )
 
+    def _client_scope(self):
+        """Which clients the standard-user export actually covered."""
+        return client_scope.scope_for(self.data, "standard_users")
+
+    def _scope_suffix(self) -> str:
+        """The client bound, appended to a cross-client finding's own claim.
+
+        A finding that lists offenders from one client while reading as a
+        statement about the system is the same defect as the silent pass, in the
+        other direction: it understates rather than overstates, and the reader
+        cannot tell which they are holding.
+        """
+        note = client_scope.caveat(self._client_scope())
+        return "\n\n" + note if note else ""
+
+    def check_client_scope(self):
+        """WHAT THE STANDARD-USER CHECKS DID NOT LOOK AT.
+
+        DEGRADES COVERAGE. STDUSR-002 and STDUSR-003 are cross-client by nature —
+        SAP*/DDIC default passwords in EVERY client, TMSADM only in 000, client
+        066 removal — and both returned in silence when they found no offenders.
+        An export covering only the productive client therefore produced no
+        finding at all, and the reader concluded that no standard user anywhere
+        has a default password, when the two clients most likely to carry one
+        (000 and 001) were never read.
+
+        Section 3.1 of the RISE model is blunt about what that costs: "Silently
+        passing a cross-client check on partial data is a defect an auditor can
+        catch, and it is the kind that ends an engagement."
+        """
+        if not self.data.get("standard_users"):
+            return                     # the no-data path belongs to the checks
+        scope = self._client_scope()
+        if scope["complete"]:
+            return
+        unexamined = scope["unexamined"]
+        why = [c + " - " + client_scope.WELL_KNOWN_CLIENTS[c]
+               for c in unexamined if c in client_scope.WELL_KNOWN_CLIENTS]
+        detail = ""
+        if why:
+            detail = "\n\nWhy the uncovered clients matter:\n- " + "\n- ".join(why)
+        self.finding(
+            check_id="STDUSR-COV-001",
+            title=("Standard-user checks covered %d client(s), not the whole system"
+                   % len(scope["examined"])),
+            severity=self.SEVERITY_INFO,
+            category=self.CATEGORY,
+            description=(
+                "The standard-user export evidences client(s) %s. Client(s) %s "
+                "were not covered, so nothing in this report speaks to SAP*, "
+                "DDIC, SAPCPIC, EARLYWATCH or TMSADM in them.\n\n"
+                "This matters more than an ordinary coverage gap because the "
+                "standard-user checks are cross-client by nature: a clean "
+                "STDUSR-002 means \"no default passwords in the clients we saw\", "
+                "never \"no default passwords\".\n\n"
+                "Scope established from: %s.%s"
+                % (", ".join(scope["examined"]), ", ".join(unexamined),
+                   scope["basis"], detail)
+            ),
+            affected_items=["client %s not covered" % c for c in unexamined],
+            remediation=(
+                "Run RSUSR003 in every client and supply the combined export. "
+                "Where client 000 is restricted and on request - the usual case "
+                "in RISE - ask SAP for its standard-user status rather than "
+                "leaving the clients most likely to carry delivered credentials "
+                "unassessed."
+            ),
+            references=["docs/RISE_SECURITY_MODEL.md section 3.1",
+                        "SAP Security Baseline policy 1ASTDUSR"],
+            details={"degrades_coverage": True,
+                     "clients_examined": scope["examined"],
+                     "clients_unexamined": unexamined,
+                     "scope_basis": scope["basis"]},
+        )
+
     def check_default_passwords(self):
         """RSUSR003: standard users with SAP default passwords still valid."""
         rows = self.data.get("standard_users")
@@ -174,6 +257,7 @@ class SystemTrustAuditor(BaseAuditor):
                     f"{len(offenders)} standard/technical user(s) (SAP*, DDIC, SAPCPIC, "
                     "EARLYWATCH, TMSADM) still have their well-known SAP default password. "
                     "These are the first credentials an attacker tries and grant broad access."
+                    + self._scope_suffix()
                 ),
                 affected_items=offenders,
                 affected_objects=objects,
@@ -225,6 +309,7 @@ class SystemTrustAuditor(BaseAuditor):
                     f"{len(offenders)} standard user(s) are not locked. SAP*/DDIC/SAPCPIC and "
                     "any standard user in clients 000/001/066 should be locked (and SAP*/DDIC "
                     "never usable as dialog users) unless a specific task needs them."
+                    + self._scope_suffix()
                 ),
                 affected_items=offenders,
                 affected_objects=objects,

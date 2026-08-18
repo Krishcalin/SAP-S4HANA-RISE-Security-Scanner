@@ -195,6 +195,13 @@ def main():
              "rfc/callback_security_method=1 are SAP's own mandate there and are not "
              "findings, and DDIC is not required to be locked. Defaults to on_prem, "
              "because guessing ECS would silently relax genuine on-premise findings.")
+    parser.add_argument(
+        "--clients", default=None, metavar="LIST",
+        help="Which clients this export set is meant to cover, e.g. 000,100,200. "
+             "Only needed when no client_settings (T000) export was supplied — with "
+             "one, the scope is MEASURED against it rather than declared. Used by "
+             "the cross-client checks so a clean standard-user result reads as "
+             "'in the clients we saw' rather than as a statement about the system.")
 
     gate = parser.add_argument_group(
         "release gate",
@@ -253,6 +260,11 @@ def main():
         getattr(args, action.dest, None) for action in parser._actions
         if action.metavar == "FILE"])
     data = loader.load_all()
+    # A DECLARED client scope, for the case where T000 could not be supplied.
+    # Underscore-prefixed like the other non-file inputs, so it never joins the
+    # logical-source denominator a customer is measured against.
+    if args.clients:
+        data["_client_scope"] = args.clients
     # Source is a DIRECTORY, not one of the tabular exports, so it is handed to the
     # auditor through the same dict rather than through DataLoader's FILE_MAP.
     if getattr(args, "abap_src", None):

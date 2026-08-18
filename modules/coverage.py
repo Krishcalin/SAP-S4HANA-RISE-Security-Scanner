@@ -1135,6 +1135,14 @@ def build_manifest(data: Dict[str, Any],
     # How much of the answer above is riding on the default rather than on a
     # recorded row. A table that silently defaults is a table nobody finishes.
     unclassified = reachability.unclassified(known) if rise else []
+    # SUPPLIED IS NOT THE SAME AS COMPLETE. `data/rise_reachability.json` calls a
+    # `partial` source one that is "obtainable but incomplete or mixed-ownership"
+    # and says a check reading it must say so. Where a check does — system_trust
+    # states the clients its standard-user result covers — this list is the
+    # manifest's own record that the source arrived qualified rather than whole.
+    partial_supplied = sorted(
+        s for s in supplied
+        if rise and reachability.state_of(s, deployment_mode) == "partial")
 
     supplied_set = set(supplied)
     # A non-file input counts as supplied when it is present in `data` at all —
@@ -1217,6 +1225,7 @@ def build_manifest(data: Dict[str, Any],
         "sources_unreachable_in_rise": len(unreachable),
         "sources_needing_sap_action": len(needs_sap),
         "sources_unclassified_for_rise": len(unclassified),
+        "sources_supplied_partial": len(partial_supplied),
         "modules_complete": sum(1 for m in mods.values() if m["status"] == "complete"),
         "modules_degraded": sum(1 for m in mods.values() if m["status"] == "degraded"),
         "modules_skipped": sum(1 for m in mods.values() if m["status"] == "skipped"),
@@ -1240,6 +1249,9 @@ def build_manifest(data: Dict[str, Any],
         "needs_sap_action": needs_sap,
         "needs_sap_action_detail": {k: reachability.detail(k) for k in needs_sap},
         "unclassified_for_rise": unclassified,
+        "supplied_partial": partial_supplied,
+        "supplied_partial_detail": {k: reachability.detail(k)
+                                    for k in partial_supplied},
         "modules": mods,
         "summary": summarize(counts, deployment_mode),
     }
@@ -1288,6 +1300,12 @@ def summarize(counts: Dict[str, int], deployment_mode: str = "on_prem") -> str:
     # SEPARATE SENTENCE, SEPARATE OWNER. Folding this into the line above would
     # tell a customer to stop asking for data they can get; folding it into
     # "missing" would blame them for SAP's queue.
+    if counts.get("sources_supplied_partial"):
+        parts.append(
+            f"{counts['sources_supplied_partial']} supplied source(s) are partial in "
+            "RISE — cross-client or mixed-ownership — so results reading them "
+            "describe what was covered rather than the whole system."
+        )
     if counts.get("sources_needing_sap_action"):
         parts.append(
             f"{counts['sources_needing_sap_action']} source(s) are SAP-operated under "

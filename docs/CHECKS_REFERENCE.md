@@ -6,11 +6,11 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**424** check ids are written as literals in `modules/`, across **36** modules. A further **281** are built at runtime from shipped rule tables, giving **705** in total.
+**425** check ids are written as literals in `modules/`, across **36** modules. A further **281** are built at runtime from shipped rule tables, giving **706** in total.
 
 ## What this file does not claim
 
-**45 of the 424 titles and 21 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**46 of the 425 titles and 21 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -594,13 +594,14 @@ Category: Security Parameters
 | `CRYPTO-SNCECS-005` | MEDIUM | SNC identity is not consistent with the ECS baseline |
 | `CRYPTO-SNCECS-006` | MEDIUM | SNC GSS-API library is not the one the ECS baseline mandates |
 
-### `system_trust` — 12 checks
+### `system_trust` — 13 checks
 
 | Check | Severity | Title |
 |---|---|---|
 | `STDUSR-001` | CRITICAL | SAP* kernel emergency-user auto-logon is enabled |
 | `STDUSR-002` | CRITICAL | Standard users still have SAP default passwords |
 | `STDUSR-003` | HIGH | Standard users not locked |
+| `STDUSR-COV-001` | INFO | *varies* |
 | `TRUST-001` | *varies* — HIGH or MEDIUM | Inbound trusted-RFC relationships (verify no trust from a lower tier) |
 | `TRUST-002` | HIGH | RFC self-trust enabled |
 | `TRUST-003` | HIGH | Trusted-RFC relationships not migrated to the current security method |
