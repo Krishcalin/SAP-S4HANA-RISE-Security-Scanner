@@ -6,11 +6,11 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**418** check ids are written as literals in `modules/`, across **34** modules. A further **267** are built at runtime from shipped rule tables, giving **685** in total.
+**423** check ids are written as literals in `modules/`, across **35** modules. A further **267** are built at runtime from shipped rule tables, giving **690** in total.
 
 ## What this file does not claim
 
-**42 of the 418 titles and 20 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**45 of the 423 titles and 21 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -610,6 +610,16 @@ Category: Security Parameters
 | `TRUST-007` | HIGH | UCON RFC allowlist is not active |
 | `TRUST-008` | MEDIUM | RFC Gateway proxy ACL (gw/prxy_info) not configured |
 | `TRUST-010` | HIGH | Message-server ACL permits any host to register (rogue app server) |
+
+### `ucon_exposure` — 5 checks
+
+| Check | Severity | Title |
+|---|---|---|
+| `UCON-001` | *varies* — HIGH or MEDIUM | *varies* — UCON RFC scenario is still recording for … function module(s) |
+| `UCON-002` | MEDIUM | *varies* — … externally callable function module(s) were never called |
+| `UCON-003` | HIGH | *varies* — … is callable from outside the system |
+| `UCON-004` | MEDIUM | The UCON HTTP allowlist was supplied and is empty |
+| `UCON-COV-001` | INFO | No UCON data was supplied, so remote-callable exposure was not assessed |
 
 ### `user_auth_audit` — 10 checks
 

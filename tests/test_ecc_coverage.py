@@ -80,7 +80,7 @@ def test_twentytwo_auditors_produce_something_on_ecc(measured):
     running, which the parity count alone hides."""
     ecc, _ = measured
     producing = [m for m, r in ecc.items() if r["findings"] > 0]
-    assert len(producing) == 22, \
+    assert len(producing) == 23, \
         f"moved to {len(producing)} of 32: {sorted(producing)}"
 
 
@@ -129,7 +129,7 @@ def test_every_auditor_is_visible_to_the_coverage_manifest():
     # beside the existing store importer. The number is asserted rather than
     # derived on purpose: a new auditor should be a deliberate act, and this is
     # the line that makes somebody say so.
-    assert len(auditors) == 34, f"auditor count moved to {len(auditors)}"
+    assert len(auditors) == 35, f"auditor count moved to {len(auditors)}"
 
 
 def test_a_required_source_is_always_one_the_loader_knows():
@@ -220,4 +220,4 @@ def test_the_published_document_states_the_number_it_measured():
     doc = (ROOT / "docs" / "ECC_COVERAGE.md").read_text(encoding="utf-8")
     assert "| **14** |" in doc, \
         "docs/ECC_COVERAGE.md no longer states 14; update it and the test together"
-    assert "**22**" in doc
+    assert "**23**" in doc

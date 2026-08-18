@@ -119,6 +119,7 @@ RISE_MODULE_SCOPE: Dict[str, str] = {
     # RISE — Cloud ALM is included with every subscription — but what it yields
     # is SAP's assessment rather than ours.
     "cloudalm_verdicts": "in_scope",
+    "ucon_exposure": "in_scope",
 }
 
 #: The CLI's `--modules` vocabulary, mapped to the module file names this file
@@ -173,6 +174,7 @@ CLI_MODULE_ALIASES: Dict[str, str] = {
     "vendormaster": "vendor_master",
     "capxsuaa": "cap_xsuaa",
     "csa": "cloudalm_verdicts",
+    "ucon": "ucon_exposure",
 }
 
 #: Logical sources a RISE customer cannot produce, because they are read from the

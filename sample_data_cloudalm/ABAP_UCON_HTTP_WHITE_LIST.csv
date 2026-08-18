@@ -1,0 +1,4 @@
+ENTRY_ID,CONTEXT,PATH,ACTIVE
+1,OUTGOING_HTTP,/sap/opu/odata/sap/API_BUSINESS_PARTNER,X
+2,OUTGOING_HTTP,/sap/bc/srt/rfc,X
+3,CLICKJACKING,https://portal.example.com,X

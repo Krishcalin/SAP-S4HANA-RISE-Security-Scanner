@@ -101,6 +101,7 @@ STORE_TARGETS = {
     "AUDIT_CONFIGURATION_SLOT": ["audit_config"],
     "CLIENTS":                 ["client_settings"],
     "MS_SECINFO":              ["ms_acl"],
+    "ABAP_UCON_HTTP_WHITE_LIST": ["ucon_http_allowlist"],
 }
 
 #: Stores named in SAP's baseline policies that we recognise and do NOT translate.
@@ -126,9 +127,6 @@ UNMAPPED_STORES = {
         "per-client security policies (SECPOL). Their attribute names differ from "
         "the instance profile parameters security_params holds; merging the two "
         "would score a policy attribute against a parameter threshold.",
-    "ABAP_UCON_HTTP_WHITE_LIST":
-        "UCON allowlists. We consume no UCON data source today — this is a known "
-        "ingest gap (RISE model §7.1), not a translation problem.",
     "COMP_LEVEL":
         "software component / support-package levels. No logical source yet; "
         "applied_notes is note status, which is not the same thing.",
@@ -630,6 +628,29 @@ def _t_ms_secinfo(rows: List[Dict[str, str]],
     return {"ms_acl": out}
 
 
+def _t_ucon_http_white_list(rows: List[Dict[str, str]],
+                            notes: Dict[str, Any]
+                            ) -> Dict[str, List[Dict[str, str]]]:
+    """ABAP_UCON_HTTP_WHITE_LIST -> ucon_http_allowlist.
+
+    SAP's own baseline policies name this store and nothing consumed it, so a
+    Cloud ALM customer had to hand-export the allowlist separately to get a check
+    that their CSA extract already carried. `modules/ucon_exposure.py` reads
+    whether the allowlist has entries at all, so the translation preserves the
+    rows rather than interpreting them — an empty store and an absent store mean
+    different things and only the loader can tell them apart.
+    """
+    out = []
+    for row in rows:
+        entry = {k: v for k, v in row.items() if v not in (None, "")}
+        if not entry:
+            _skip(notes)
+            continue
+        entry["SOURCE_STORE"] = "ABAP_UCON_HTTP_WHITE_LIST"
+        out.append(entry)
+    return {"ucon_http_allowlist": out}
+
+
 #: store -> translator. Keys must match STORE_TARGETS exactly; the test suite
 #: asserts it, because a store listed as translatable with no translator would
 #: report coverage we do not have.
@@ -643,6 +664,7 @@ TRANSLATORS = {
     "AUDIT_CONFIGURATION_SLOT": _t_audit_configuration_slot,
     "CLIENTS": _t_clients,
     "MS_SECINFO": _t_ms_secinfo,
+    "ABAP_UCON_HTTP_WHITE_LIST": _t_ucon_http_white_list,
 }  # type: Dict[str, Callable[[List[Dict[str, str]], Dict[str, Any]], Dict[str, List[Dict[str, str]]]]]
 
 

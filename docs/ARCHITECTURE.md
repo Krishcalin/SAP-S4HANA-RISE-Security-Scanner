@@ -316,7 +316,7 @@ Putting those together produces a fairly precise specification for something tha
 
 ### The idea in three sentences
 
-Somebody takes a set of photographs of how the SAP system is currently configured — lists of users, roles, settings, connections, and so on — and saves them as ordinary files. MonitorRisk reads those files on a computer that has no connection to SAP at all, and applies **685 checks** written by people who know SAP well. It produces a report that says what is wrong, how bad it is, what to do about it, who is able to do it, and what it is worth in money.
+Somebody takes a set of photographs of how the SAP system is currently configured — lists of users, roles, settings, connections, and so on — and saves them as ordinary files. MonitorRisk reads those files on a computer that has no connection to SAP at all, and applies **690 checks** written by people who know SAP well. It produces a report that says what is wrong, how bad it is, what to do about it, who is able to do it, and what it is worth in money.
 
 **FIG. 5.1 — The whole idea**
 
@@ -328,7 +328,7 @@ A useful way to understand any security product is to ask which questions it can
 
 |  | Question | How it is answered |
 |---|---|---|
-| 1 | **What is wrong?** | 685 checks across 34 subject areas produce a list of findings, each naming the specific accounts, roles, settings or connections involved. |
+| 1 | **What is wrong?** | 690 checks across 35 subject areas produce a list of findings, each naming the specific accounts, roles, settings or connections involved. |
 | 2 | **How bad is each one?** | A severity from Critical to Low, assigned by the check itself according to what an attacker could achieve. |
 | 3 | **What should we do first?** | A priority from P1 to P4 that combines severity with whether the flaw is known to be exploited, how exposed it is, and how much privilege it confers. |
 | 4 | **What exactly do we do?** | A numbered remediation procedure naming the specific SAP transaction, parameter or table to change, how to verify it worked, and what to be careful of. |
@@ -623,7 +623,7 @@ Three rows, and already several of the questions from chapter 3 can be asked. Is
 
 ### How many files, and does it matter if some are missing?
 
-The full catalogue runs to **132 logical sources** ([Appendix C](#contents) lists them). Almost nobody supplies all of them on a first run, and that is expected. Every file is optional: the system runs whatever checks it has the information for and records the rest as not assessed.
+The full catalogue runs to **134 logical sources** ([Appendix C](#contents) lists them). Almost nobody supplies all of them on a first run, and that is expected. Every file is optional: the system runs whatever checks it has the information for and records the rest as not assessed.
 
 What is *not* acceptable is for a partial export to produce a clean-looking report. That is the whole subject of chapter [13](#contents).
 
@@ -669,7 +669,7 @@ When the customer supplies one, a further module unpacks it and analyses the cod
 
 ### Why convergence matters more than it sounds
 
-Because all three routes produce the same shape of information, none of the 685 checks contains any logic about provenance. There is no “if this came from the collector, be more careful” branch anywhere. Adding Route B required no changes to the checking logic at all, and required no new tests of the checks, because the checks could not tell the difference.
+Because all three routes produce the same shape of information, none of the 690 checks contains any logic about provenance. There is no “if this came from the collector, be more careful” branch anywhere. Adding Route B required no changes to the checking logic at all, and required no new tests of the checks, because the checks could not tell the difference.
 
 This is a general principle worth naming, since it recurs later in the book: **push variation to the edges**. Let the outside of the system deal with the messy diversity of the real world, and let the middle see one clean, uniform thing.
 
@@ -695,7 +695,7 @@ The DataLoader holds a table matching each expected filename to a named slot. Wh
 
 In most software, asking for something that is not there is an error. Here it is not. If `ral_config.csv` was never supplied, the slot called `ral_config` exists and is empty, and every check that needs it quietly stands aside.
 
-This is the only sensible behaviour when nobody ever supplies all 132 sources — but it creates a serious danger, which the next chapter is entirely about. A system that skips silently produces a short, clean report and looks like good news.
+This is the only sensible behaviour when nobody ever supplies all 134 sources — but it creates a serious danger, which the next chapter is entirely about. A system that skips silently produces a short, clean report and looks like good news.
 
 > **The trap, stated once so you recognise it later**
 >
@@ -733,7 +733,7 @@ Nothing in that report is a lie. It is nonetheless the most dangerous document s
   - In truth 21 of 33 subject areas were never examined, because the files they need were not supplied. Every sentence is accurate. The document is still false.
 
 **With a coverage statement** — “12 findings. 2 critical.”
-  - “You supplied 41 of 132 sources.”
+  - “You supplied 41 of 134 sources.”
   - “21 areas were not assessed.”
   - “1 source cannot be obtained in RISE at all.”
   - The reader concludes: we have looked at a third of the building.
@@ -835,7 +835,7 @@ for account in self.data["users"]:      # every row of users.csv
 
 ### Why 685 of these are hard
 
-If one check is fifteen lines, 685 checks are not simply nine thousand lines of the same thing. The difficulty is elsewhere:
+If one check is fifteen lines, 690 checks are not simply nine thousand lines of the same thing. The difficulty is elsewhere:
 
 - **Knowing what to check.** Most of the value is the accumulated knowledge of which settings matter and why. A cryptic permission with a wildcard value can mean “may impersonate any user from a trusted system”. Knowing that is decades of SAP experience, not programming.
 - **Knowing when not to fire.** A check that reports something harmless trains the reader to ignore it. The single most common cause of a security tool being abandoned is false alarms.
@@ -982,7 +982,7 @@ So each finding is marked — **a finding must know who can fix it**. Where the 
 The long explanation of why something is dangerous, and the step-by-step instructions for fixing it, are not stored in the finding. They live in a separate knowledge base, looked up by check identifier when a report is written (chapter [20](#contents)). Two reasons:
 
 - The same finding may appear five hundred times in one scan — once per affected role. Storing a page of narrative five hundred times would be wasteful and would make the record awkward to move around.
-- Improving the guidance for 685 checks becomes an edit to a content file rather than a change to thirty programs, which means it can be done by the person who knows SAP best rather than the person who writes code best.
+- Improving the guidance for 690 checks becomes an edit to a content file rather than a change to thirty programs, which means it can be done by the person who knows SAP best rather than the person who writes code best.
 
 > **Take-away from this chapter**
 >
@@ -1099,7 +1099,7 @@ Each of these is invisible if you check settings one at a time, because each ind
 
 # Part five · Making sense of the results
 
-685 checks against a real estate can produce thousands of findings. An undifferentiated list of thousands of problems is not information; it is a way of guaranteeing that nothing gets fixed. This part is about turning the list into decisions.
+690 checks against a real estate can produce thousands of findings. An undifferentiated list of thousands of problems is not information; it is a way of guaranteeing that nothing gets fixed. This part is about turning the list into decisions.
 
 1. **19**[What to fix first](#contents)
 2. **20**[Telling people what to actually do](#contents)
@@ -1923,7 +1923,7 @@ The glossary is the most useful part of this book for a first-time reader; keep 
 
 > **One honest note about counting**
 >
->  The headline “685 checks” needs a footnote. **418** check identifiers are written out individually in the source. A further **267** come from **five families generated at run time** from shipped rule lists — one check per technical parameter (78), one per code rule (136), one per duty-separation risk (27), one per imported code family (10), one per conflicting-duty pair (7). Both numbers are true; stating both is more useful than picking whichever is larger.
+>  The headline “690 checks” needs a footnote. **423** check identifiers are written out individually in the source. A further **267** come from **five families generated at run time** from shipped rule lists — one check per technical parameter (78), one per code rule (136), one per duty-separation risk (27), one per imported code family (10), one per conflicting-duty pair (7). Both numbers are true; stating both is more useful than picking whichever is larger.
 >
 >  These figures are derived from the code rather than typed here, and the test suite fails if this page and the source ever disagree.
 
@@ -2075,7 +2075,7 @@ The analysis still runs, and still tells you which scenarios dominate. What it w
 
 **Provenance and caveat.** This book was written from the repository’s documentation and its top-level program, at [github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner](https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner). Module names, the command-line surface, the pipeline order, the corpus-split rule, the gate rules and the deployment-mode behaviour are taken from the source and documentation. Descriptions of the internal structure of individual inspectors, the exact shape of a finding record, and the illustrative code in Appendix E are reconstructions written to be faithful in substance rather than literal in syntax; verify against the source before quoting them. All diagrams are architectural rather than exhaustive.
 
-The counts this document states — 685 checks, 418 written as literals, 267 generated at run time from 5 rule families, 34 modules, 136 custom-code rules, 27 duty-separation risks, 78 profile parameters and 132 logical sources — are derived from the code by `tests/test_architecture_doc.py`, which fails the build if this page and the source disagree. Edition 1.1 corrected three figures that had drifted from the source.
+The counts this document states — 690 checks, 423 written as literals, 267 generated at run time from 5 rule families, 35 modules, 136 custom-code rules, 27 duty-separation risks, 78 profile parameters and 134 logical sources — are derived from the code by `tests/test_architecture_doc.py`, which fails the build if this page and the source disagree. Edition 1.1 corrected three figures that had drifted from the source.
 
 **Confidential.** This document is not for publication. It describes the internal design, the current limitations and the forward direction of a commercial product; treat it as you would any other confidential product document.
 

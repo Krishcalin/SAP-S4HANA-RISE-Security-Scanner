@@ -218,6 +218,17 @@ class DataLoader:
         "incident_response":       ["incident_response.json", "ir_config.json"],
         "table_logging":           ["table_logging.csv", "dd09l.csv"],
         "logon_events":            ["logon_events.csv", "logon_stats.csv"],
+        # UNIFIED CONNECTIVITY. The ABAP-layer view of remote-callable exposure,
+        # and in RISE the ONLY one: secinfo/reginfo are OS files the customer
+        # cannot reach. RISE_SECURITY_MODEL section 7.1 ranks this first among the
+        # checks to add, and section 3 has carried "Gap in our ingest" against it
+        # since it was written.
+        "ucon_rfc_state":          ["ucon_rfc_state.csv", "ucon_rfc.csv",
+                                    "uconcockpit.csv", "ucon_phase_tool.csv"],
+        # The HTTP half, whose config store ABAP_UCON_HTTP_WHITE_LIST comes from
+        # SAP's own Apache-2.0 policy XML and which no logical source consumed.
+        "ucon_http_allowlist":     ["ucon_http_allowlist.csv", "http_whitelist.csv",
+                                    "abap_ucon_http_white_list.csv"],
         # Fiori & UI Layer data sources
         "fiori_catalogs":          ["fiori_catalogs.csv", "flpd_catalogs.csv"],
         "fiori_tiles":             ["fiori_tiles.csv", "flpd_tiles.csv"],

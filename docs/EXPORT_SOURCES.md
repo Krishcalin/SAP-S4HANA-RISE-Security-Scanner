@@ -8,7 +8,7 @@
 Every logical source the scanner can read, what it enables, and whether
 [`EXPORT_GUIDE.md`](EXPORT_GUIDE.md) tells you how to produce it.
 
-**132 logical sources, all of them with a written procedure** in the export
+**134 logical sources, all of them with a written procedure** in the export
 guide. This table is the regression detector for that: add a source to the loader
 without writing its procedure and it appears here as *not yet written*.
 
@@ -80,8 +80,8 @@ clean — see chapter 13 of the architecture guide.
 | `grac_mitigating_controls` | `grac_mitigating_controls.csv`, `gracmitcnt.csv` | `grc_access_control` | documented |
 | `grac_sod_risks` | `grac_sod_risks.csv`, `gracsodrisk.csv` | `grc_access_control` | documented |
 | `grac_sod_violations` | `grac_sod_violations.csv`, `gracuserprmvl.csv` | `grc_access_control` | documented |
-| `gw_reginfo` | `gw_reginfo.csv`, `reginfo.csv` | `integration_layer` | documented · not obtainable in RISE |
-| `gw_secinfo` | `gw_secinfo.csv`, `secinfo.csv` | `integration_layer` | documented · not obtainable in RISE |
+| `gw_reginfo` | `gw_reginfo.csv`, `reginfo.csv` | `integration_layer`, `ucon_exposure` | documented · not obtainable in RISE |
+| `gw_secinfo` | `gw_secinfo.csv`, `secinfo.csv` | `integration_layer`, `ucon_exposure` | documented · not obtainable in RISE |
 | `hana_audit_policies` | `hana_audit_policies.csv`, `audit_policies.csv` | `hana_db_security` | documented |
 | `hana_db_users` | `hana_db_users.csv`, `sys_users.csv` | `hana_db_security` | documented |
 | `hana_encryption` | `hana_encryption.json` | `crypto_posture` | documented |
@@ -144,6 +144,8 @@ clean — see chapter 13 of the architecture guide.
 | `transport_history` | `transport_history.csv`, `stms_log.csv`, `import_history.csv` | `code_transport` | documented |
 | `transport_routes` | `transport_routes.csv`, `tms_routes.csv` | `code_transport` | documented |
 | `transports` | `transports.csv`, `se09.csv` | `network_services` | documented |
+| `ucon_http_allowlist` | `ucon_http_allowlist.csv`, `http_whitelist.csv`, `abap_ucon_http_white_list.csv` | `ucon_exposure` | documented |
+| `ucon_rfc_state` | `ucon_rfc_state.csv`, `ucon_rfc.csv`, `uconcockpit.csv`, `ucon_phase_tool.csv` | `ucon_exposure` | documented |
 | `user_groups` | `user_groups.csv` | `iam_advanced` | documented |
 | `user_roles` | `user_roles.csv`, `agr_users.csv` | `abap_authorizations`, `access_risk_analysis`, `iam_advanced`, `role_governance`, `user_auth_audit` | documented |
 | `users` | `users.csv` | `basis_job_command`, `iam_advanced`, `user_auth_audit` | documented |

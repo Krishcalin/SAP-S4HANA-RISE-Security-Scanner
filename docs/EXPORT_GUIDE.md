@@ -1383,7 +1383,7 @@ They are recognised, listed in the scan output with the reason, and skipped:
 | `HDB_*` | HANA. Technical HANA configuration is SAP-operated under RISE (§4). |
 | `AUTH_COMB_USER`, `AUTH_COMB_ROLE` | SAP's critical-authorisation *combination* content. Our checks read `AGR_1251` authorisation values, and we could not confirm whether these stores carry the rules or the matches. |
 | `AUTH_SECURITY_POLICY` | Per-client security policies. Their attribute names are not the instance profile parameters `security_params` holds; merging them would score a policy attribute against a parameter threshold. |
-| `GLOBAL`, `SAP_KERNEL`, `COMP_LEVEL`, `TRANSPORT_TOOL`, `TDDAT`, `ABAP_UCON_HTTP_WHITE_LIST`, `ABAP_SACF_INFO`, `USER_PASSWD_HASH_USAGE` | No logical source consumes them yet. UCON in particular is a known ingest gap (§7.1), not a translation problem. |
+| `GLOBAL`, `SAP_KERNEL`, `COMP_LEVEL`, `TRANSPORT_TOOL`, `TDDAT`, `ABAP_SACF_INFO`, `USER_PASSWD_HASH_USAGE` | No logical source consumes them yet. `ABAP_UCON_HTTP_WHITE_LIST` left this list when `ucon_http_allowlist` was added — it now translates. |
 
 ### Known limitations
 
@@ -1924,6 +1924,64 @@ wrong tenant sends somebody to patch a database that was already current.
 Export the **current** value, not the profile value. A parameter changed
 dynamically and never written back to the profile is correct today and wrong after
 the next restart, and that gap is worth seeing.
+
+---
+
+## Unified Connectivity (the `ucon` module)
+
+**Why this section matters more in RISE than anywhere else.** The gateway ACL files
+`secinfo` and `reginfo` are filesystem artifacts on the application server, and a
+RISE customer contractually never gets OS access — `RISE_SECURITY_MODEL.md` §3
+lists them as structurally unavailable. UCON is the ABAP-layer equivalent, the
+Roles & Responsibilities put business-client UCON configuration with the customer,
+and it is reached from a transaction they already have. Without it, a RISE scan can
+say nothing at all about which function modules are callable from outside.
+
+`TRUST-007` already tells you to start the UCON RFC scenario in the Logging phase.
+This is the export of what that recording produced.
+
+### UCON RFC scenario state (`ucon_rfc_state.csv`)
+**Source:** `UCONCOCKPIT` — UCON RFC scenario, function-module list. Export the list
+view.
+
+Also accepted: `ucon_rfc.csv`, `uconcockpit.csv`, `ucon_phase_tool.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `FUNCNAME` · `FUNCTION` · `FUNCTION_MODULE` · `RFM` · `FMODULE` | The remote-enabled function module |
+| `AREA` · `FUNCGROUP` · `FUNCTION_GROUP` · `GROUP` | Its function group |
+| `PHASE` · `UCON_PHASE` · `STATUS` | Logging / Evaluation / Final. Only *Final* enforces |
+| `CA` · `DEFAULT_CA` · `IN_DEFAULT_CA` · `ASSEMBLY` · `COMM_ASSEMBLY` | Whether it is in the default Communication Assembly, i.e. externally callable |
+| `CALLED` · `CALL_COUNT` · `COUNT` · `EXTERNAL_CALLS` · `CALLS` | External calls recorded during the logging window |
+| `LAST_CALL` · `LASTCALL` · `LAST_CALLED` · `LAST_CALL_DATE` | When it was last called from outside |
+
+**The call-count column is the valuable one.** With it, `UCON-002` reports the
+function modules that are externally callable and were never actually called —
+remote attack surface that costs nothing to remove. Without it the check stays
+silent rather than assuming zero, because an absent column is not evidence of
+silence.
+
+**Export a window long enough to be honest.** A function used only at period end
+looks unused in a two-week recording. The finding says so, but the fix is a longer
+window, not a shorter conclusion.
+
+⚠️ **Column names are the spellings we accept, not a claim about SAP's schema.**
+UCONCOCKPIT's list view varies by release and language, and no SAP-primary source
+consulted for this guide publishes a table name for the RFC scenario — so no table
+name is asserted here. Match your export's headers against the aliases above and
+rename if none fit.
+
+### UCON HTTP allowlist (`ucon_http_allowlist.csv`)
+**Source:** `UCONCOCKPIT` — HTTP allowlist. The underlying table is
+`HTTP_WHITELIST`, delivered with **SAP Note 2573569**.
+
+Also accepted: `http_whitelist.csv`, `abap_ucon_http_white_list.csv`
+
+Any column layout is accepted — the check reads whether the allowlist has entries
+at all, because an empty allowlist leaves every activated ICF service reachable by
+anything that can reach the HTTP port. This is the logical source for the
+`ABAP_UCON_HTTP_WHITE_LIST` configuration store that SAP's own baseline policies
+name and that nothing consumed until now.
 
 ---
 

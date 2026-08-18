@@ -301,7 +301,7 @@ request · **No** = structurally unavailable.
 | **RFC destinations** `rfc_destinations.csv` (`SM59`/`RFCDES`) | `SM59`; or `SE16` on `RFCDES` | **Yes, mixed ownership** | Export contains SAP-managed technical/monitoring destinations the customer must not touch. **See §3.2.** |
 | **RFC trust** `rfc_trust.csv` | `SE16`; trust-relationship display | **Yes** | Nothing |
 | **ICF services** `icf_services.csv` | `SICF` | **Yes (read) / Ticket (fix)** | Deactivating critical ICF services appears as an SAP Standard task — the finding is real, the fix is a ticket |
-| **UCON** — *no loader key today* | `UCONCOCKPIT` | **Yes** | Nothing. The R&R explicitly puts business-client UCON configuration with the customer. **Gap in our ingest.** |
+| **UCON** `ucon_rfc_state.csv`, `ucon_http_allowlist.csv` | `UCONCOCKPIT` — RFC scenario function-module list; HTTP allowlist | **Yes** | Nothing. The R&R explicitly puts business-client UCON configuration with the customer. **Ingested since `modules/ucon_exposure.py`** — the gap this row carried is closed. |
 | **Background jobs** `background_jobs.csv` / `_steps` (`TBTCO`/`TBTCP`) | `SM37`; `SE16` | **Yes** | Whether the customer's role includes job administration was not verified on a live tenant |
 | **External OS commands** `ext_os_commands.csv` (`SM69`) | `SM69`; `SE16` on the command tables | **Yes (read)** | Definitions are ABAP-visible even though execution is at OS level. High value — see §4. |
 | **Audit log configuration** `audit_config.csv` / `security_audit_log.csv` | **`RSAU_CONFIG`** (replaced `SM19` from SAP_BASIS 7.50 SP03); read via **`RSAU_READ_LOG`**; admin via **`RSAU_ADMIN`** | **Yes** | Nothing. **Disproportionately valuable in RISE** — see §4 and §6.1. |
@@ -637,7 +637,7 @@ Two hard consequences:
 
 | Priority | Check family | Why |
 |---|---|---|
-| **1** | **UCON state** (`UCONCOCKPIT`) — we consume no UCON data today | Explicitly customer-owned in business clients. The ABAP-layer equivalent of the gateway ACLs we *cannot* reach, so it is the actionable pivot for remote-callable function exposure. |
+| ~~1~~ **DONE** | **UCON state** (`UCONCOCKPIT`) — `modules/ucon_exposure.py`, four checks. `UCON-002` reports function modules in the default Communication Assembly with zero recorded external calls, which is the exposure-without-use finding this row was asking for; `UCON-COV-001` arms the coverage gate when no UCON export arrives, because with the gateway ACLs unreachable too the product would otherwise be silent on remote-callable exposure. |
 | **1** | **SAL recording target = database**, File System flagged as not permitted in RISE; filter-slot count; event-class coverage; retention; whether logs are exported anywhere | RISE-specific rule an on-prem checklist gets wrong. Cheap, fully offline, and it is what makes any retrospective-review story credible. |
 | **1** | **Log-source health** as a check class — is the audit log actually capturing what the customer believes | Pure configuration, high value, and the customer cannot get it from SAP. |
 | **2** | **Support-package age against the 24-month window** — SAP delivers fixes for high / very-high notes only for support packages shipped in the last 24 months | Computable from exported component levels alone. A compounding, unpatchable exposure and an excellent FAIR input. **[SAP-primary]** |

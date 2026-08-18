@@ -689,7 +689,7 @@ pre .kw{color:#8FB8F0}
 <p class="lede">If you read nothing else, read this. Everything after it is elaboration.</p>
 
 <h4>The idea in three sentences</h4>
-<p>Somebody takes a set of photographs of how the SAP system is currently configured — lists of users, roles, settings, connections, and so on — and saves them as ordinary files. MonitorRisk reads those files on a computer that has no connection to SAP at all, and applies <strong>685 checks</strong> written by people who know SAP well. It produces a report that says what is wrong, how bad it is, what to do about it, who is able to do it, and what it is worth in money.</p>
+<p>Somebody takes a set of photographs of how the SAP system is currently configured — lists of users, roles, settings, connections, and so on — and saves them as ordinary files. MonitorRisk reads those files on a computer that has no connection to SAP at all, and applies <strong>690 checks</strong> written by people who know SAP well. It produces a report that says what is wrong, how bad it is, what to do about it, who is able to do it, and what it is worth in money.</p>
 
 <figure>
   <div class="cap"><span class="fid">FIG. 5.1</span><span class="ftx">The whole idea</span></div>
@@ -711,8 +711,8 @@ pre .kw{color:#8FB8F0}
 
   <rect class="box" x="664" y="34" width="250" height="118" rx="4"/>
   <text class="sv-h" x="686" y="74">MonitorRisk</text>
-  <text class="sv-ms" x="686" y="104">685 checks</text>
-  <text class="sv-ms" x="686" y="128">34 modules</text>
+  <text class="sv-ms" x="686" y="104">690 checks</text>
+  <text class="sv-ms" x="686" y="128">35 modules</text>
 
   <path class="ln" d="M914 93 H 984" marker-end="url(#ar)"/>
 
@@ -729,7 +729,7 @@ pre .kw{color:#8FB8F0}
 
 <div class="tw"><table>
   <tr><th class="k" style="width:4%"></th><th style="width:26%">Question</th><th>How it is answered</th></tr>
-  <tr><td class="k">1</td><td><strong>What is wrong?</strong></td><td>685 checks across 34 subject areas produce a list of findings, each naming the specific accounts, roles, settings or connections involved.</td></tr>
+  <tr><td class="k">1</td><td><strong>What is wrong?</strong></td><td>690 checks across 35 subject areas produce a list of findings, each naming the specific accounts, roles, settings or connections involved.</td></tr>
   <tr><td class="k">2</td><td><strong>How bad is each one?</strong></td><td>A severity from Critical to Low, assigned by the check itself according to what an attacker could achieve.</td></tr>
   <tr><td class="k">3</td><td><strong>What should we do first?</strong></td><td>A priority from P1 to P4 that combines severity with whether the flaw is known to be exploited, how exposed it is, and how much privilege it confers.</td></tr>
   <tr><td class="k">4</td><td><strong>What exactly do we do?</strong></td><td>A numbered remediation procedure naming the specific SAP transaction, parameter or table to change, how to verify it worked, and what to be careful of.</td></tr>
@@ -1106,7 +1106,7 @@ J_PATEL,A,64,20240119,,SALES
 <p>Three rows, and already several of the questions from chapter 3 can be asked. Is <code>J_PATEL</code> locked but still holding roles? <code>TRDAT</code> says the account has not logged in since January 2024 — is it dormant? <code>BATCH_MM</code> is a background account: does it hold permissions no automated job should have?</p>
 
 <h4>How many files, and does it matter if some are missing?</h4>
-<p>The full catalogue runs to <strong>132 logical sources</strong> (<a href="#appC">Appendix C</a> lists them). Almost nobody supplies all of them on a first run, and that is expected. Every file is optional: the system runs whatever checks it has the information for and records the rest as not assessed.</p>
+<p>The full catalogue runs to <strong>134 logical sources</strong> (<a href="#appC">Appendix C</a> lists them). Almost nobody supplies all of them on a first run, and that is expected. Every file is optional: the system runs whatever checks it has the information for and records the rest as not assessed.</p>
 <p>What is <em>not</em> acceptable is for a partial export to produce a clean-looking report. That is the whole subject of chapter <a href="#ch13">13</a>.</p>
 
 <h4>How the export is produced</h4>
@@ -1175,7 +1175,7 @@ J_PATEL,A,64,20240119,,SALES
 <p>When the customer supplies one, a further module unpacks it and analyses the code itself, applying <strong>136 rules</strong> for the classic weaknesses described in chapter 3, family 6.</p>
 
 <h4>Why convergence matters more than it sounds</h4>
-<p>Because all three routes produce the same shape of information, none of the 685 checks contains any logic about provenance. There is no “if this came from the collector, be more careful” branch anywhere. Adding Route B required no changes to the checking logic at all, and required no new tests of the checks, because the checks could not tell the difference.</p>
+<p>Because all three routes produce the same shape of information, none of the 690 checks contains any logic about provenance. There is no “if this came from the collector, be more careful” branch anywhere. Adding Route B required no changes to the checking logic at all, and required no new tests of the checks, because the checks could not tell the difference.</p>
 <p>This is a general principle worth naming, since it recurs later in the book: <strong>push variation to the edges</strong>. Let the outside of the system deal with the messy diversity of the real world, and let the middle see one clean, uniform thing.</p>
 
 <div class="call takeaway">
@@ -1230,7 +1230,7 @@ J_PATEL,A,64,20240119,,SALES
 
 <h4>The unusual decision: absence is normal</h4>
 <p>In most software, asking for something that is not there is an error. Here it is not. If <code>ral_config.csv</code> was never supplied, the slot called <code>ral_config</code> exists and is empty, and every check that needs it quietly stands aside.</p>
-<p>This is the only sensible behaviour when nobody ever supplies all 132 sources — but it creates a serious danger, which the next chapter is entirely about. A system that skips silently produces a short, clean report and looks like good news.</p>
+<p>This is the only sensible behaviour when nobody ever supplies all 134 sources — but it creates a serious danger, which the next chapter is entirely about. A system that skips silently produces a short, clean report and looks like good news.</p>
 
 <div class="call crim">
   <span class="k">The trap, stated once so you recognise it later</span>
@@ -1273,7 +1273,7 @@ J_PATEL,A,64,20240119,,SALES
         <span class="plbl">With a coverage statement</span>
         <span class="ph">“12 findings. 2 critical.”</span>
         <ul>
-          <li>“You supplied 41 of 132 sources.”</li>
+          <li>“You supplied 41 of 134 sources.”</li>
           <li>“21 areas were not assessed.”</li>
           <li>“1 source cannot be obtained in RISE at all.”</li>
         </ul>
@@ -1374,7 +1374,7 @@ DORMANT_DAYS = 90                       <span class="c"># the threshold, overrid
 </table></div>
 
 <h4>Why 685 of these are hard</h4>
-<p>If one check is fifteen lines, 685 checks are not simply nine thousand lines of the same thing. The difficulty is elsewhere:</p>
+<p>If one check is fifteen lines, 690 checks are not simply nine thousand lines of the same thing. The difficulty is elsewhere:</p>
 <ul>
   <li><strong>Knowing what to check.</strong> Most of the value is the accumulated knowledge of which settings matter and why. A cryptic permission with a wildcard value can mean “may impersonate any user from a trusted system”. Knowing that is decades of SAP experience, not programming.</li>
   <li><strong>Knowing when not to fire.</strong> A check that reports something harmless trains the reader to ignore it. The single most common cause of a security tool being abandoned is false alarms.</li>
@@ -1490,7 +1490,7 @@ DORMANT_DAYS = 90                       <span class="c"># the threshold, overrid
 <p>The long explanation of why something is dangerous, and the step-by-step instructions for fixing it, are not stored in the finding. They live in a separate knowledge base, looked up by check identifier when a report is written (chapter <a href="#ch20">20</a>). Two reasons:</p>
 <ul>
   <li>The same finding may appear five hundred times in one scan — once per affected role. Storing a page of narrative five hundred times would be wasteful and would make the record awkward to move around.</li>
-  <li>Improving the guidance for 685 checks becomes an edit to a content file rather than a change to thirty programs, which means it can be done by the person who knows SAP best rather than the person who writes code best.</li>
+  <li>Improving the guidance for 690 checks becomes an edit to a content file rather than a change to thirty programs, which means it can be done by the person who knows SAP best rather than the person who writes code best.</li>
 </ul>
 
 <div class="call takeaway">
@@ -1620,7 +1620,7 @@ DORMANT_DAYS = 90                       <span class="c"># the threshold, overrid
 <section class="part" id="part5">
   <div class="pnum">Part five</div>
   <h2 class="parth">Making sense of the results</h2>
-  <p class="pintro">685 checks against a real estate can produce thousands of findings. An undifferentiated list of thousands of problems is not information; it is a way of guaranteeing that nothing gets fixed. This part is about turning the list into decisions.</p>
+  <p class="pintro">690 checks against a real estate can produce thousands of findings. An undifferentiated list of thousands of problems is not information; it is a way of guaranteeing that nothing gets fixed. This part is about turning the list into decisions.</p>
   <ol class="plist">
     <li><b>19</b><a href="#ch19">What to fix first</a></li>
     <li><b>20</b><a href="#ch20">Telling people what to actually do</a></li>
@@ -2583,7 +2583,7 @@ python sap_scanner.py --data-dir ./exports --gate --gate-baseline baseline.json<
 
 <div class="call amber">
   <span class="k">One honest note about counting</span>
-  <p>The headline “685 checks” needs a footnote. <strong>418</strong> check identifiers are written out individually in the source. A further <strong>267</strong> come from <strong>five families generated at run time</strong> from shipped rule lists — one check per technical parameter (78), one per code rule (136), one per duty-separation risk (27), one per imported code family (10), one per conflicting-duty pair (7). Both numbers are true; stating both is more useful than picking whichever is larger.</p>
+  <p>The headline “690 checks” needs a footnote. <strong>423</strong> check identifiers are written out individually in the source. A further <strong>267</strong> come from <strong>five families generated at run time</strong> from shipped rule lists — one check per technical parameter (78), one per code rule (136), one per duty-separation risk (27), one per imported code family (10), one per conflicting-duty pair (7). Both numbers are true; stating both is more useful than picking whichever is larger.</p>
   <p>These figures are derived from the code rather than typed here, and the test suite fails if this page and the source ever disagree.</p>
 </div>
 
@@ -2714,7 +2714,7 @@ fair_findings = list(all_findings)
 
 <p style="font-size:15px;color:var(--ink2);max-width:80ch"><strong>Provenance and caveat.</strong> This book was written from the repository’s documentation and its top-level program, at <a href="https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner">github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner</a>. Module names, the command-line surface, the pipeline order, the corpus-split rule, the gate rules and the deployment-mode behaviour are taken from the source and documentation. Descriptions of the internal structure of individual inspectors, the exact shape of a finding record, and the illustrative code in Appendix E are reconstructions written to be faithful in substance rather than literal in syntax; verify against the source before quoting them. All diagrams are architectural rather than exhaustive.</p>
 
-<p style="font-size:15px;color:var(--ink2);max-width:80ch">The counts this document states — 685 checks, 418 written as literals, 267 generated at run time from 5 rule families, 34 modules, 136 custom-code rules, 27 duty-separation risks, 78 profile parameters and 132 logical sources — are derived from the code by <code>tests/test_architecture_doc.py</code>, which fails the build if this page and the source disagree. Edition 1.1 corrected three figures that had drifted from the source.</p>
+<p style="font-size:15px;color:var(--ink2);max-width:80ch">The counts this document states — 690 checks, 423 written as literals, 267 generated at run time from 5 rule families, 35 modules, 136 custom-code rules, 27 duty-separation risks, 78 profile parameters and 134 logical sources — are derived from the code by <code>tests/test_architecture_doc.py</code>, which fails the build if this page and the source disagree. Edition 1.1 corrected three figures that had drifted from the source.</p>
 
 <p style="font-size:15px;color:var(--ink2)"><strong>Confidential.</strong> This document is not for publication. It describes the internal design, the current limitations and the forward direction of a commercial product; treat it as you would any other confidential product document.</p>
 

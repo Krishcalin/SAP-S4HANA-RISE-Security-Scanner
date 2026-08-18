@@ -32,6 +32,13 @@ adding modules an ECC customer can never use makes this figure look worse withou
 making their scan worse.
 
 A fourth change moved it the other way, and downward was the improvement.
+`ucon_exposure` is NOT in the identical set, and the reason is the fixture rather than
+the product: `sample_data_ecc` carries no UCON export, so the module returns its
+coverage finding there and its full check set on the S/4 sample. Adding UCON files to the
+ECC fixture would assert that ECC estates generally have UCON configured, which was
+not verified against SAP-primary material — so the number stays at 14 and this
+paragraph records why rather than the fixture implying an answer.
+
 `sap_hotnews` left the identical set when its exposure checks began comparing the
 installed component release against the affected-version lists SAP publishes with
 each CVE. The ECC fixture is SAP_BASIS 750 with no S4CORE; the full sample is 755
@@ -52,7 +59,7 @@ The estimate was conservative, not mistaken.
 | no file inputs (`abap_sast` reads `--abap-src`) | 1 |
 | silent even with full data | 2 |
 
-The number is not the whole story, so two more are published beside it. **22 of
+The number is not the whole story, so two more are published beside it. **23** of
 33** produce something useful — the seven "partial" modules are degraded and
 still worth running. Which number is right depends on what "runs" is taken to
 mean, and this table exists so that nobody has to guess. The per-module table

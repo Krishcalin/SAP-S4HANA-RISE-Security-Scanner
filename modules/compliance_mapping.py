@@ -108,6 +108,11 @@ class ComplianceMapper:
         # results, and it does not re-theme them either.
         "SAP Cloud ALM CSA Results": ["secure-config", "access-control",
                                       "logging-monitoring", "change-management"],
+        # UCON governs which function modules a remote caller may invoke, so it
+        # is network-security and access-control at once: the same control both
+        # narrows the reachable surface and decides who reaches it.
+        "Unified Connectivity (UCON)": ["network-security", "access-control",
+                                        "secure-config"],
         "Network & Integration Layer": ["network-security", "app-runtime", "access-control"],
         "Code & Transport Security": ["secure-development", "change-management", "secure-config"],
         "Data Protection & Privacy": ["data-protection", "logging-monitoring"],
