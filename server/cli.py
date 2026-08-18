@@ -334,6 +334,41 @@ def cmd_scan(args: argparse.Namespace) -> int:
     diff = result.get("diff", {})
     print(f"\nrun #{result['run_id']}: {result['findings']} findings, "
           f"{result['nodes']} graph nodes")
+    edges = result.get("edges") or {}
+    if edges.get("stored"):
+        print(f"  graph: {edges['stored']} edge(s) — {edges.get('used', 0)} used, "
+              f"{edges.get('configured', 0)} configured")
+        # WHICH OF THE THREE CAUSES OF A LOW `used` COUNT THIS ONE IS. No export
+        # at all; an export that covers nobody holding an edge here; or an export
+        # that covers them and finds them quiet. Only the third says anything
+        # about the landscape, and a bare "0 used" would be read as the third
+        # every time — the strongest available claim from the weakest available
+        # evidence.
+        if not edges.get("provenance_evidence"):
+            print("         no logon export supplied: activity was not assessed, "
+                  "so every edge is configured by default rather than by finding.")
+        elif edges.get("users_in_logon_export") == 0 and edges.get("users_on_edges"):
+            # THE CASE THE SAMPLE CORPUS ACTUALLY HITS. Both exports were present
+            # and read, and they describe different populations — so `0 used` is a
+            # verdict on the evidence, not on the landscape. Printing the count
+            # without this line would report a fully dormant estate.
+            print(f"         the logon export names none of the "
+                  f"{edges['users_on_edges']} user(s) holding edges here, so "
+                  f"activity could not be settled for any of them.")
+        else:
+            print("         used = the holding account logged on in the exported "
+                  "window; it does not mean this role or destination was invoked.")
+            if edges.get("users_absent_from_logon_export"):
+                print(f"         {edges['users_absent_from_logon_export']} of "
+                      f"{edges['users_on_edges']} user(s) on edges are absent from "
+                      f"the logon export: unassessed, not quiet.")
+    if edges.get("declined_ambiguous"):
+        print(f"  {edges['declined_ambiguous']} relationship(s) left out of the "
+              f"graph: the finding named several objects on both sides and does "
+              f"not say which relate.")
+    if edges.get("missing_node"):
+        print(f"  {edges['missing_node']} edge(s) skipped: an endpoint was not a "
+              f"known node.")
     print(f"  new {diff.get('new',0)} · persisting {diff.get('persisting',0)} · "
           f"resolved {diff.get('resolved',0)} · regressed {diff.get('regressed',0)}")
     # WHAT THIS RUN DECLINED TO SAY, on the same line of sight as what it said.

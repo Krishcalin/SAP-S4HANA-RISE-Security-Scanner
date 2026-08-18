@@ -365,6 +365,15 @@ CREATE TABLE IF NOT EXISTS graph_edge (
     -- used       = it was actually exercised (a destination in a gateway log, a
     --              role whose holders logged on recently). Derivable offline and
     --              a genuine differentiator.
+    -- WHAT ACTUALLY WRITES `used` TODAY, because the definition above is wider
+    -- than the evidence available. server/edges.py:_provenance marks an edge FROM
+    -- a user `used` when the logon export shows that user logging on successfully
+    -- in the window. That evidences the ACCOUNT is live — NOT that it invoked
+    -- this role or destination, which no configuration export can show. Read a
+    -- `used` row as "this relationship belongs to an account in use". The gateway
+    -- log half of the definition is unimplemented: no gateway log is a documented
+    -- source yet. Rows written by a run with no logon export are `configured`
+    -- because activity was not assessed, never because it was assessed as absent.
     provenance   text   NOT NULL DEFAULT 'configured'
                  CHECK (provenance IN ('configured', 'used')),
     -- We can never validate reachability without a connection, so every edge

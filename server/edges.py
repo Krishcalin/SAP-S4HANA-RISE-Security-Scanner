@@ -25,11 +25,25 @@ here was traversed, reached or validated. The schema says so, the console repeat
 it, and a buyer who has seen a dynamic scanner will ask — the answer has to be
 prepared rather than improvised.
 
-Provenance is `configured` on every edge this module writes. `used` means the
-relationship was actually exercised — a destination appearing in a gateway log, a
-role whose holders logged on recently — and no configuration finding evidences
-that. The column exists and stays honest by being left alone until something that
-observes use fills it.
+PROVENANCE, AND THE NARROW THING `used` MEANS
+--------------------------------------------
+A configuration finding alone evidences only `configured`: the export says the
+relationship exists. `used` needs evidence that something was exercised, and the
+one such source this product can read offline is the logon export — so an edge
+FROM a user becomes `used` when that user has a successful logon in the exported
+window, and `active_users` explains how the two shapes of that export are read.
+
+The claim is deliberately weaker than it looks. A logon proves the ACCOUNT is
+live, never that the user invoked this particular role or destination; nothing in
+a configuration export could prove that. `used` therefore reads "this relationship
+belongs to an account that is actually in use". That is worth having — a dormant
+account holding SAP_ALL and a live one holding it are different risks — and it is
+worth not overstating, because the moment it reads as "this role was exercised" a
+reviewer will act on a traversal that was never observed.
+
+Where no logon export was supplied, every edge stays `configured` and
+`stats["provenance_evidence"]` is None. That is not a finding that nothing is
+used; it is the record that nobody looked.
 
 THE PAIRING RULE, WHICH IS THE WHOLE DESIGN
 -------------------------------------------
@@ -62,7 +76,7 @@ from __future__ import annotations
 import json
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from server.identity import AffectedObject, IdentityError, _CLOUD_SCOPED_TYPES
 
@@ -114,19 +128,184 @@ def _objects_by_type(finding: Dict[str, Any],
     return out
 
 
+#: Column names for the three things a logon export has to yield, taken from
+#: `modules/log_monitoring.py:check_logon_anomalies`, which has been reading this
+#: same file since long before edges existed. Mirrored rather than reinvented: two
+#: readers of one export disagreeing about which column holds the user name is a
+#: bug that only shows up on a customer's data, where neither author can see it.
+_LOGON_USER_KEYS = ("USERNAME", "BNAME", "USER")
+_LOGON_EVENT_KEYS = ("EVENT", "TYPE", "LOGON_TYPE")
+_LOGON_COUNT_KEYS = ("COUNT", "OCCURRENCES")
+
+
+def _is_success(event: str) -> bool:
+    """Success exactly as `log_monitoring` judges it, and nothing wider."""
+    return "SUCCESS" in event or event in ("S", "1")
+
+
+def active_users(data: Optional[Dict[str, Any]]) -> Optional[Set[str]]:
+    """Users with a successful logon in the exported window, or None.
+
+    NONE AND EMPTY ARE DIFFERENT, AND THE DIFFERENCE IS THE POINT. None means no
+    logon export was supplied, so nothing is known about activity and no edge may
+    be marked either way. An empty set means the export was supplied and named
+    nobody active, which is a real, if unusual, answer. Collapsing the two would
+    turn "we could not look" into "we looked and found nobody" — the failure this
+    codebase spends most of its comments avoiding.
+
+    TWO EXPORT SHAPES, AND WHY BOTH ARE HANDLED. `logon_events.csv` is usually
+    AGGREGATED — `USERNAME,EVENT,COUNT`, one row per user per outcome — and the
+    sample corpus contains `UNKNOWN_USER1,SUCCESS,0`, a success row meaning zero
+    successful logons. Reading that row as activity would mark the one account in
+    the file that never got in as the active one, so a count of zero is not
+    evidence. The other shape is one row per logon with no outcome column at all;
+    there, a row IS a logon, so every named user counts. The shape is decided from
+    the columns present across the export rather than per row, because a single
+    row missing its outcome in an otherwise-typed export is a hole, not a shape.
+
+    A failed logon is evidence of an ATTEMPT and never of use. Counting it would
+    mark an account active on the strength of somebody failing to get in.
+    """
+    if not data or data.get("logon_events") is None:
+        return None
+    rows = [r for r in (data.get("logon_events") or []) if isinstance(r, dict)]
+    upper_rows = [{str(k).strip().upper(): v for k, v in r.items()} for r in rows]
+    # Shape decided across the export, not per row — see the docstring.
+    typed = any(any(str(r.get(k, "")).strip() for k in _LOGON_EVENT_KEYS)
+                for r in upper_rows)
+
+    out: Set[str] = set()
+    for row in upper_rows:
+        name = ""
+        for key in _LOGON_USER_KEYS:
+            if str(row.get(key, "") or "").strip():
+                name = str(row[key]).strip().upper()
+                break
+        if not name:
+            continue
+        if typed:
+            event = ""
+            for key in _LOGON_EVENT_KEYS:
+                if str(row.get(key, "") or "").strip():
+                    event = str(row[key]).strip().upper()
+                    break
+            if not _is_success(event):
+                continue
+        count = "1"
+        for key in _LOGON_COUNT_KEYS:
+            if row.get(key) is not None and str(row[key]).strip():
+                count = str(row[key]).strip()
+                break
+        try:
+            if int(float(count)) <= 0:
+                continue       # a success row counting zero successes
+        except ValueError:
+            pass               # unparseable count, same as log_monitoring: one
+        out.add(name)
+    return out
+
+
+def observed_users(data: Optional[Dict[str, Any]]) -> Optional[Set[str]]:
+    """Every user the logon export names, whatever the outcome, or None.
+
+    THE COMPANION `active_users` NEEDS TO STAY HONEST. A user missing from the
+    logon export is not an inactive user — the export may cover a different
+    window, a different client, or a population that simply does not overlap the
+    one holding roles. The sample corpus is exactly that case: its logon export
+    and its role assignments name disjoint sets of users, so nothing can be
+    settled either way and `used` comes out zero for a reason that has nothing to
+    do with activity.
+
+    Set difference against this tells a caller which users were ASSESSED and
+    found quiet, and which were never in scope of the evidence at all. Reporting
+    only the first as "configured" would present the second as a finding.
+    """
+    if not data or data.get("logon_events") is None:
+        return None
+    out: Set[str] = set()
+    for raw in (data.get("logon_events") or []):
+        if not isinstance(raw, dict):
+            continue
+        row = {str(k).strip().upper(): v for k, v in raw.items()}
+        for key in _LOGON_USER_KEYS:
+            if str(row.get(key, "") or "").strip():
+                out.add(str(row[key]).strip().upper())
+                break
+    return out
+
+
+def _user_name(node_key: str) -> str:
+    """`user:ADMIN1@PRD` -> `ADMIN1`. Keying is `type:name@system#qualifier`."""
+    if ":" not in node_key:
+        return ""
+    name = node_key.split(":", 1)[1]
+    for sep in ("@", "#"):
+        name = name.split(sep, 1)[0]
+    return name.strip().upper()
+
+
+def _provenance(rule: Dict[str, Any], from_key: str,
+                active: Optional[Set[str]]) -> str:
+    """`used` where the relationship's holder was demonstrably active.
+
+    WHAT THIS CLAIMS, EXACTLY. The schema defines `used` as "it was actually
+    exercised... a role whose holders logged on recently", and that is the reading
+    implemented here: an edge FROM a user becomes `used` when that user has a
+    successful logon in the exported window.
+
+    WHAT IT DOES NOT CLAIM, and the distinction is easy to lose in a UI. A logon
+    proves the ACCOUNT is live. It does not prove the user invoked this particular
+    role or destination — nothing in a configuration export could prove that. So
+    the honest reading of a `used` edge is "this relationship belongs to an account
+    that is actually in use", not "this relationship was exercised". A dormant
+    account's dangerous role and a live account's are different risks, and that
+    difference is the entire value of the column; claiming the stronger thing
+    would spend it for nothing.
+
+    Only edges whose SOURCE is a user can be settled, because only a user carries
+    logon evidence. A role-to-authorization edge has no holder of its own and
+    stays `configured` whatever the logon export says.
+    """
+    if active is None:
+        return "configured"
+    if rule.get("from_type") != "user":
+        return "configured"
+    name = _user_name(from_key)
+    return "used" if name and name in active else "configured"
+
+
 def extract_edges(findings: Iterable[Dict[str, Any]],
                   default_system: Optional[str] = None,
-                  rules: Optional[List[Dict[str, Any]]] = None
+                  rules: Optional[List[Dict[str, Any]]] = None,
+                  active: Optional[Set[str]] = None,
+                  observed: Optional[Set[str]] = None
                   ) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
     """`(edges, stats)` for a set of findings.
 
     `stats` carries `declined_ambiguous` — findings where a rule matched, both
     sides were present, and both were plural. A caller that reports the edges
     without that number is reporting a graph as complete when it is not.
+
+    `active` is the set of users with a successful logon in the exported window,
+    from `active_users()`. Where it is None no logon export was supplied and every
+    edge stays `configured` — which is not a claim that nothing is used, only the
+    base fact that the export says the relationship exists.
+    `stats["provenance_evidence"]` names which of those two situations produced
+    the result, so a reader can tell a landscape with no dormant accounts from a
+    landscape nobody checked.
+
+    `observed` is every user the logon export NAMES, from `observed_users()`, and
+    it exists so that a third situation is distinguishable from the first two: the
+    export was supplied, was read, and covers none of the users holding edges. The
+    counts it produces — `users_on_edges`, `users_in_logon_export`,
+    `users_absent_from_logon_export` — are what stop a `used` of zero from being
+    read as a verdict on the landscape when it is a verdict on the export.
     """
     rules = load_rules() if rules is None else rules
     edges: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
-    stats = {"declined_ambiguous": 0, "rules_applied": 0, "findings_seen": 0}
+    stats = {"declined_ambiguous": 0, "rules_applied": 0, "findings_seen": 0,
+             "used": 0, "configured": 0,
+             "provenance_evidence": "logon_events" if active is not None else None}
 
     for finding in findings:
         check_id = str(finding.get("check_id") or "")
@@ -158,8 +337,7 @@ def extract_edges(findings: Iterable[Dict[str, Any]],
                             "to_key": target,
                             "type": rule["edge_type"],
                             "check_id": check_id,
-                            # Never anything else from a configuration finding.
-                            "provenance": "configured",
+                            "provenance": _provenance(rule, source, active),
                             "confidence": "derived_from_config",
                             "owner": "unknown",
                             "check_ids": [],
@@ -169,9 +347,26 @@ def extract_edges(findings: Iterable[Dict[str, Any]],
                         edge["check_ids"].append(check_id)
 
     out = []
+    edge_users: Set[str] = set()
     for edge in edges.values():
+        stats["used" if edge["provenance"] == "used" else "configured"] += 1
+        if edge["from_key"].startswith("user:"):
+            name = _user_name(edge["from_key"])
+            if name:
+                edge_users.add(name)
         edge["check_ids"].sort()
         edge["attributes"] = {"check_ids": edge.pop("check_ids")}
         out.append(edge)
     out.sort(key=lambda e: (e["from_key"], e["to_key"], e["type"]))
+
+    # DID THE EVIDENCE EVEN COVER THESE USERS. None where the caller supplied no
+    # population to compare against — an unanswered question rather than a zero.
+    stats["users_on_edges"] = len(edge_users)
+    if observed is None:
+        stats["users_in_logon_export"] = None
+        stats["users_absent_from_logon_export"] = None
+    else:
+        covered = {u for u in edge_users if u in observed}
+        stats["users_in_logon_export"] = len(covered)
+        stats["users_absent_from_logon_export"] = len(edge_users) - len(covered)
     return out, stats

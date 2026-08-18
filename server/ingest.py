@@ -47,7 +47,7 @@ from server import db
 from server.coverage import build_manifest
 from modules.coverage import UNSUPPLIED, look_verdict
 from modules.coverage import modules_for_categories as coverage_modules_for
-from server.edges import extract_edges
+from server.edges import active_users, extract_edges, observed_users
 from server.identity import extract_nodes, fingerprint_finding
 
 log = logging.getLogger(__name__)
@@ -646,7 +646,8 @@ def store_graph_nodes(conn: psycopg.Connection, run_id: int, landscape_id: int,
 
 def store_graph_edges(conn: psycopg.Connection, run_id: int, landscape_id: int,
                      findings: List[Dict[str, Any]],
-                     default_sid: Optional[str] = None) -> Dict[str, int]:
+                     default_sid: Optional[str] = None,
+                     data: Optional[Dict[str, Any]] = None) -> Dict[str, int]:
     """Materialise the relationships between this run's graph nodes.
 
     `graph_edge` was defined when the schema landed and nothing had ever written
@@ -658,8 +659,15 @@ def store_graph_edges(conn: psycopg.Connection, run_id: int, landscape_id: int,
     Nodes are looked up rather than created here. An edge whose end is not
     already a node would mean the two extractors disagree about keying, and
     inserting it would paper over that; the edge is skipped and counted instead.
+
+    `data` is the loaded export, present on the scan path and absent on the upload
+    path — an uploaded report carries findings, not sources. Without it every edge
+    stays `configured`, which records that nobody looked at activity rather than
+    that nothing is active.
     """
-    edges, stats = extract_edges(findings, default_system=default_sid)
+    edges, stats = extract_edges(findings, default_system=default_sid,
+                                 active=active_users(data),
+                                 observed=observed_users(data))
     stats["stored"] = 0
     stats["missing_node"] = 0
     if not edges:
@@ -673,20 +681,32 @@ def store_graph_edges(conn: psycopg.Connection, run_id: int, landscape_id: int,
     node_id = {r[0] if not isinstance(r, dict) else r["node_key"]:
                r[1] if not isinstance(r, dict) else r["id"] for r in rows}
 
+    # PROVENANCE ON AN EDGE THAT ALREADY EXISTS. A run that carried no logon
+    # export knows nothing about activity, so it must not overwrite a `used`
+    # settled by a run that did: absence of the export is not absence of use, and
+    # letting it downgrade would make provenance a function of which files the
+    # last operator happened to attach. A run that DID carry one is current
+    # evidence and its answer replaces the old one in both directions — including
+    # `used` back to `configured`, which is a real finding: the account went
+    # quiet. The two cases are distinguishable only here, so the SET clause is
+    # chosen here rather than pushed into the statement.
+    keep = ("EXCLUDED.provenance" if stats.get("provenance_evidence")
+            else "graph_edge.provenance")
     for edge in edges:
         source, target = node_id.get(edge["from_key"]), node_id.get(edge["to_key"])
         if source is None or target is None:
             stats["missing_node"] += 1
             continue
         conn.execute(
-            """
+            f"""
             INSERT INTO graph_edge
                 (landscape_id, from_node, to_node, type, check_id, provenance,
                  confidence, owner, attributes, first_seen_run, last_seen_run)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (landscape_id, from_node, to_node, type) DO UPDATE SET
                 last_seen_run = EXCLUDED.last_seen_run,
-                attributes = EXCLUDED.attributes
+                attributes = EXCLUDED.attributes,
+                provenance = {keep}
             """,
             (landscape_id, source, target, edge["type"], edge["check_id"],
              edge["provenance"], edge["confidence"], edge["owner"],
@@ -774,7 +794,7 @@ def scan_directory(data_dir: Path, landscape_id: int, system_id: Optional[int],
             # Edges after nodes, and only ever looking nodes up: see
             # store_graph_edges for why an edge never creates one.
             edge_stats = store_graph_edges(conn, run_id, landscape_id,
-                                           findings, default_sid)
+                                           findings, default_sid, data)
             queue_notifications(conn, run_id, landscape_id, diff)
 
             # CRQ runs on the COMPLETE finding set — the same list the auditors
@@ -800,7 +820,14 @@ def scan_directory(data_dir: Path, landscape_id: int, system_id: Optional[int],
 
             return {"run_id": run_id, "findings": len(findings), "nodes": node_count,
                     "diff": diff.as_counts(), "coverage": manifest,
-                    "module_status": module_status, "crq": crq, "paths": paths}
+                    "module_status": module_status, "crq": crq, "paths": paths,
+                    # Edge counts travel with the run because two of them are
+                    # refusals: `declined_ambiguous` is the relationships this
+                    # run could not pair, and a `configured` total with no
+                    # provenance evidence is activity nobody assessed. Computing
+                    # them and dropping them here would leave the caller
+                    # reporting a graph as complete when it is not.
+                    "edges": edge_stats}
 
         except ScanCancelled as exc:
             conn.rollback()

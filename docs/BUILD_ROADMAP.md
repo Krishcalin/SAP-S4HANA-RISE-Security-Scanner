@@ -395,10 +395,29 @@ and AWS — not to Wiz's gated docs.
 - [x] Customer-declared **exposure zones** per system — **ALREADY SHIPPED**:
       `exposure_zone` on the system record, settable from the console and the CLI.
       Original: *
-- [ ] `used` vs `configured` edge provenance from logon/gateway data — **NOW
-      UNBLOCKED**: the column exists, every edge is written `configured`, and
-      nothing writes `used` because no configuration finding evidences it. This is
-      the next real piece of work in this block. Original: *
+- [x] `used` vs `configured` edge provenance from logon/gateway data —
+      **SHIPPED, and narrower than the heading suggests.** An edge FROM a user is
+      written `used` when the logon export shows that user logging on
+      successfully in the window; everything else stays `configured`. The claim is
+      deliberately weak: a logon proves the ACCOUNT is live, not that it invoked
+      this role or destination, and no configuration export could show the latter.
+      Worth having anyway — a dormant account holding SAP_ALL and a live one
+      holding it are different risks. Only the SCAN path can settle it, because it
+      holds the sources; an uploaded report carries findings alone, so its edges
+      stay `configured` and `provenance_evidence` is None to record that nobody
+      looked rather than that nothing is used. Gateway data is NOT used: no
+      gateway log is a documented source today. Chokepoint ranking does not prefer
+      `used` edges either — `graph.chokepoints()` ranks findings by cut hops in
+      `attack_path` and never reads `graph_edge`.
+      **The catch worth carrying forward**: a low `used` count has three causes —
+      no logon export, an export covering none of the users holding edges, and an
+      export covering them and finding them quiet — and only the third says
+      anything about the landscape. The sample corpus is the SECOND case (its
+      logon export and its role assignments name disjoint users), so the counts
+      `users_on_edges` / `users_in_logon_export` /
+      `users_absent_from_logon_export` are reported alongside, and the CLI names
+      which case it hit. Without them the product would have reported a fully
+      dormant estate off two exports that never overlapped. Original: *
 - [~] Ruleset fingerprint + staleness — **COMPUTED, NOT SURFACED**:
       `graph.ruleset_fingerprint()` stamps every path and staleness is calculated in
       the query; the BANNER is the missing half. Original: *
@@ -749,8 +768,9 @@ Re-verified end to end after conversion: scanning the same bundle twice still gi
    typed nodes** from real exports, with cloud and on-premise identities correctly
    separated. What remains is the DEPTH rather than the core — path templates as
    versioned content, choke-point ranking, exposure zones, `used` vs `configured`
-   edge provenance — and that block, in the Phase 4 forward list, is now the
-   largest genuinely untouched work in this document.
+   edge provenance — and every item in that list has since shipped. The Phase 4
+   forward list above is the current record; this paragraph is kept for the
+   history and should not be read as an open worklist.
 
 **Done:** README `PARAM-* (25+)` overstatement corrected to 23. CI now has six jobs including
 a stdlib-purity gate and a skip guard.
