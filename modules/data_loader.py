@@ -185,6 +185,12 @@ class DataLoader:
         "client_settings":         ["client_settings.csv", "scc4.csv"],
         "change_documents":        ["change_documents.csv", "cdhdr.csv"],
         "change_document_items":   ["change_document_items.csv", "cdpos.csv"],
+        # SAP Cloud ALM CSA RESULTS — the verdict half of the Cloud ALM path.
+        # Store exports go through cloudalm_import.py and feed our own checks;
+        # a results export carries SAP's compliance verdicts instead and is read
+        # by cloudalm_verdicts.py as SAP's findings, not ours.
+        "csa_findings":            ["csa_findings.csv", "csa_verdicts.csv",
+                                    "csa_compliance.csv"],
         # HANA revision. The counterpart of sap_kernel for the database half:
         # SAP's note policies read HDB_VERSION in 30 check items, and without it
         # 18 notes cannot be answered from any other export.

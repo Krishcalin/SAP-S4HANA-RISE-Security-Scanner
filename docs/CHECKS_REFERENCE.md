@@ -6,11 +6,11 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**414** check ids are written as literals in `modules/`, across **33** modules. A further **267** are built at runtime from shipped rule tables, giving **681** in total.
+**418** check ids are written as literals in `modules/`, across **34** modules. A further **267** are built at runtime from shipped rule tables, giving **685** in total.
 
 ## What this file does not claim
 
-**42 of the 414 titles and 19 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**42 of the 418 titles and 20 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -172,6 +172,15 @@ Category: BTP Cloud Attack Surface
 | `CAPX-TEN-001` | MEDIUM | Application uses the shared tenant mode (one client secret everywhere) |
 | `CAPX-TOK-001` | HIGH | Application overrides the subaccount token policy |
 | `CAPX-URI-001` | HIGH | OAuth redirect URI is broader than a specific host |
+
+### `cloudalm_verdicts` — 4 checks
+
+| Check | Severity | Title |
+|---|---|---|
+| `CSA-COV-001` | INFO | A CSA export was supplied but no result could be read from it |
+| `CSA-SAP-001` | *varies* | SAP Cloud ALM CSA reports these policies as not compliant |
+| `CSA-SAP-002` | INFO | SAP Cloud ALM CSA could not evaluate these policies |
+| `CSA-SAP-003` | LOW | CSA results name policies the vendored baseline catalogue does not know |
 
 ### `code_inventory_report` — 5 checks
 

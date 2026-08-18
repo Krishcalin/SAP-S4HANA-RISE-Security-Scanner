@@ -56,6 +56,7 @@ from modules.financial_controls import FinancialControlsAuditor
 from modules.master_data_changes import MasterDataChangeAuditor
 from modules.vendor_master import VendorMasterAuditor
 from modules.cap_xsuaa import CapXsuaaAuditor
+from modules.cloudalm_verdicts import CloudAlmVerdictAuditor
 from modules.baseline_params import BaselineParamAuditor
 from modules.s4_business_authz import S4BusinessAuthzAuditor
 from modules.access_risk_analysis import AccessRiskAnalysisAuditor
@@ -568,6 +569,14 @@ def main():
     if "capxsuaa" in run_modules:
         print("[*] Running CAP & XSUAA Application Security Checks (scope -> role -> collection -> user)...")
         auditor = CapXsuaaAuditor(data, baseline_overrides, run_ctx)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- SAP Cloud ALM CSA results (SAP's verdicts, reported as SAP's) ---
+    if "csa" in run_modules:
+        print("[*] Reading SAP Cloud ALM CSA results (SAP's verdicts, not ours)...")
+        auditor = CloudAlmVerdictAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")

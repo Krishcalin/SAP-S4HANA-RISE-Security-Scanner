@@ -1405,6 +1405,48 @@ They are recognised, listed in the scan output with the reason, and skipped:
   activation token is reported rather than assumed to mean "inactive" — assuming
   would clear an exposed service with nothing anywhere saying so.
 
+### CSA compliance results (`csa_findings.csv`) — the other kind of CSA export
+
+Everything above concerns a **configuration-store** export: rows that are the
+settings themselves, which the store importer turns into inputs this product's own
+checks read. Some tenants can only produce the **results** instead — one row per
+policy per system, saying whether SAP's own check passed.
+
+Supply those as `csa_findings.csv`. Also accepted: `csa_verdicts.csv`,
+`csa_compliance.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `POLICY` · `POLICY_ID` · `CHECK_ID` · `RULE_ID` | SAP's policy identifier, e.g. `2AAUDIT` |
+| `SYSTEM` · `SID` · `TARGET_SYSTEM` · `MANAGED_OBJECT` | the system assessed |
+| `STATUS` · `RESULT` · `COMPLIANCE` · `RATING` | the verdict |
+| `CHECK_ITEM` · `DESCRIPTION` · `TITLE` | the item, where the export names one |
+| `DATE` · `COLLECTED_ON` · `LAST_RUN` | when it was collected |
+
+```
+POLICY,SYSTEM,STATUS
+2AAUDIT,PRD,NON-COMPLIANT
+1ACHANGE,PRD,NOT ASSESSED
+```
+
+> **These become SAP's findings, not this product's.** They were produced by SAP's
+> rules against SAP's own collection, and a verdict carries no parameter value,
+> user or table row — so there is nothing here to re-check and nothing is claimed
+> to have been. `CSA-SAP-001` reports them, labelled throughout, at **SAP's own
+> priority tier** rather than a severity this product invented. Policy identifiers
+> resolve against the SAP Security Baseline catalogue vendored from SAP's published
+> policies, so each line carries SAP's requirement and tier.
+
+**`NOT ASSESSED` is not a pass.** Statuses meaning the policy could not be
+evaluated are reported separately by `CSA-SAP-002` and mark coverage as degraded:
+a system compliant on everything CSA *could* evaluate is not a system compliant.
+Export those rows rather than filtering to failures.
+
+**Supply the store export as well if your tenant produces one.** The two are
+complementary, not alternatives: the store export yields the value, this yields
+the verdict. Where both are present you will see two views of one problem rather
+than two problems.
+
 ### Telling the scanner an export is complete (`export_completeness.json`)
 
 **Optional, and it changes what a missing row means.**

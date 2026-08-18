@@ -114,6 +114,10 @@ RISE_MODULE_SCOPE: Dict[str, str] = {
     "s4_business_authz": "in_scope",
     "access_risk_analysis": "in_scope",
     "basis_job_command": "in_scope",
+    # SAP's own verdicts. In scope in the sense that the data is obtainable in
+    # RISE — Cloud ALM is included with every subscription — but what it yields
+    # is SAP's assessment rather than ours.
+    "cloudalm_verdicts": "in_scope",
 }
 
 #: The CLI's `--modules` vocabulary, mapped to the module file names this file
@@ -167,6 +171,7 @@ CLI_MODULE_ALIASES: Dict[str, str] = {
     "mdchange": "master_data_changes",
     "vendormaster": "vendor_master",
     "capxsuaa": "cap_xsuaa",
+    "csa": "cloudalm_verdicts",
 }
 
 #: Logical sources a RISE customer cannot produce, because they are read from the

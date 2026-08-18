@@ -8,7 +8,7 @@
 Every logical source the scanner can read, what it enables, and whether
 [`EXPORT_GUIDE.md`](EXPORT_GUIDE.md) tells you how to produce it.
 
-**131 logical sources, all of them with a written procedure** in the export
+**132 logical sources, all of them with a written procedure** in the export
 guide. This table is the regression detector for that: add a source to the loader
 without writing its procedure and it appears here as *not yet written*.
 
@@ -54,6 +54,7 @@ clean — see chapter 13 of the architecture guide.
 | `cpi_artifacts` | `cpi_artifacts.json`, `cpi_security.json` | `btp_cloud_surface` | documented |
 | `cpi_datastores` | `cpi_datastores.json`, `cpi_variables.json` | `integration_layer` | documented |
 | `crypto_library` | `crypto_library.csv`, `commoncryptolib.csv` | `crypto_posture` | documented |
+| `csa_findings` | `csa_findings.csv`, `csa_verdicts.csv`, `csa_compliance.csv` | `cloudalm_verdicts` | documented |
 | `custom_code_scan` | `custom_code_scan.csv`, `atc_results.csv`, `code_inspector.csv` | `atc_import`, `code_transport` | documented |
 | `data_masking` | `data_masking.json`, `masking_config.json` | `data_protection` | documented |
 | `data_residency` | `data_residency.json`, `cross_border.json` | `data_protection` | documented |

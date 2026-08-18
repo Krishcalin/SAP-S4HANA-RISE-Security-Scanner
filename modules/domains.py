@@ -246,6 +246,14 @@ DOMAINS: List[Dict[str, Any]] = [
 #: findings this product produces, and a taxonomy that silently dropped them
 #: would understate the product while claiming to summarise it.
 UNPLACED_CATEGORIES: Dict[str, str] = {
+    "SAP Cloud ALM CSA Results":
+        "Somebody else's assessment. These are SAP's own compliance verdicts, "
+        "imported and reported as SAP's, and every one of the twelve domains "
+        "describes something THIS PRODUCT measured. Filing a verdict under a "
+        "domain would put SAP's conclusion into a count of ours — and because a "
+        "verdict carries no parameter value or user, there is nothing behind it "
+        "for a domain summary to be a summary OF. They belong beside the "
+        "domains, not inside them.",
     "CAP & XSUAA Application Security":
         "Design-time application security: what a CAP project's own source and "
         "security descriptor declare, before any of it is deployed. It is not a "

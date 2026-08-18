@@ -130,6 +130,8 @@ The findings that carry it today:
 | `BASELINE-000` | `baseline_params` | no profile parameter export, so eighteen parameters went unjudged |
 | `BTP-AUD-001` | `btp_cloud_surface` | subaccounts whose audit-log state no supplied export settles |
 | `CAPX-COV-001` | `cap_xsuaa` | `--cap-src` unreadable, or a descriptor or CDS construct that would not parse |
+| `CSA-COV-001` | `cloudalm_verdicts` | a CSA results export was supplied and no row in it named a policy |
+| `CSA-SAP-002` | `cloudalm_verdicts` | SAP Cloud ALM could not evaluate some policies, so its silence on them is not a pass |
 | `MDC-PAY-002` | `master_data_changes` | bank changes were found and no payment-run export was supplied, so whether any were paid was never tested |
 | `HOTNEWS-010` | `sap_hotnews` | exposure could not be established against the installed releases |
 | `HOTNEWS-COVERAGE` | `sap_hotnews` | the note catalogue is a curated subset, not the full patch history |

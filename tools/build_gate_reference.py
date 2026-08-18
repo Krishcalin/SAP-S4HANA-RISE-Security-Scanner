@@ -80,6 +80,9 @@ DESCRIPTIONS = {
                    "whether any were paid was never tested",
     "HOTNEWS-COVERAGE": "the note catalogue is a curated subset, not the full patch history",
     "HOTNEWS-010": "exposure could not be established against the installed releases",
+    "CSA-SAP-002": "SAP Cloud ALM could not evaluate some policies, so its silence "
+                   "on them is not a pass",
+    "CSA-COV-001": "a CSA results export was supplied and no row in it named a policy",
 }
 
 #: Computed per caller, so it cannot be enumerated. Kept as a row because a

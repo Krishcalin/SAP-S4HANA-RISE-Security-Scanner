@@ -103,6 +103,11 @@ class ComplianceMapper:
         "CAP & XSUAA Application Security": ["access-control", "authentication",
                                             "secure-development", "secure-config",
                                             "sod"],
+        # SAP's own CSA verdicts. The themes are those of the SAP Security
+        # Baseline the policies implement — this product does not re-judge the
+        # results, and it does not re-theme them either.
+        "SAP Cloud ALM CSA Results": ["secure-config", "access-control",
+                                      "logging-monitoring", "change-management"],
         "Network & Integration Layer": ["network-security", "app-runtime", "access-control"],
         "Code & Transport Security": ["secure-development", "change-management", "secure-config"],
         "Data Protection & Privacy": ["data-protection", "logging-monitoring"],

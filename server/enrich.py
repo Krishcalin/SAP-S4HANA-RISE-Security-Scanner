@@ -66,6 +66,7 @@ TEAM_BY_PREFIX: List[Tuple[str, str]] = [
     ("BTP-", "integration"),
     ("RISE-", "integration"),
     ("CAPX-", "development"),
+    ("CSA-", "configuration"),
     ("CODE-", "development"),
     ("FIORI-", "development"),
     ("DPP-", "data_protection"),
