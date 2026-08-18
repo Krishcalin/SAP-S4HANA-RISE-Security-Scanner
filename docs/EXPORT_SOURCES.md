@@ -8,7 +8,7 @@
 Every logical source the scanner can read, what it enables, and whether
 [`EXPORT_GUIDE.md`](EXPORT_GUIDE.md) tells you how to produce it.
 
-**134 logical sources, all of them with a written procedure** in the export
+**135 logical sources, all of them with a written procedure** in the export
 guide. This table is the regression detector for that: add a source to the loader
 without writing its procedure and it appears here as *not yet written*.
 
@@ -151,6 +151,7 @@ clean — see chapter 13 of the architecture guide.
 | `users` | `users.csv` | `basis_job_command`, `iam_advanced`, `user_auth_audit` | documented |
 | `vendor_bank` | `vendor_bank.csv`, `but0bk.csv`, `lfbk.csv` | `vendor_master` | documented |
 | `vendor_master` | `vendor_master.csv`, `but000.csv`, `lfa1.csv` | `vendor_master` | documented |
+| `webdisp_params` | `webdisp_params.csv`, `webdisp_profile.csv`, `web_dispatcher_params.csv`, `sapwebdisp_pfl.csv` | `webdisp_security` | documented |
 | `webhooks` | `webhooks.json`, `callbacks.json` | `integration_layer` | documented |
 | `ws_endpoints` | `ws_endpoints.csv`, `soamanager.csv` | `integration_layer` | documented |
 

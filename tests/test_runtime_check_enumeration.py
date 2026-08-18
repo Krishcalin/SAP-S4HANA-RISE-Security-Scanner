@@ -126,10 +126,10 @@ def test_runtime_families_carry_the_prefix_the_auditor_emits():
     by_module = {f["module"]: f for f in runtime_check_families()}
     assert set(by_module) == {"security_params", "abap_sast",
                               "access_risk_analysis", "atc_import",
-                              "iam_advanced"}
+                              "iam_advanced", "webdisp_security"}
     for module, prefix in [("access_risk_analysis", "ARA-"), ("atc_import", "ATC-"),
                            ("iam_advanced", "IAM-"), ("security_params", "PARAM-"),
-                           ("abap_sast", "ABAP-")]:
+                           ("abap_sast", "ABAP-"), ("webdisp_security", "WDISP-")]:
         ids = by_module[module]["ids"]
         assert ids, module
         assert all(cid.startswith(prefix) for cid in ids), (

@@ -58,6 +58,7 @@ from modules.vendor_master import VendorMasterAuditor
 from modules.cap_xsuaa import CapXsuaaAuditor
 from modules.cloudalm_verdicts import CloudAlmVerdictAuditor
 from modules.ucon_exposure import UconExposureAuditor
+from modules.webdisp_security import WebDispatcherAuditor
 from modules.baseline_params import BaselineParamAuditor
 from modules.s4_business_authz import S4BusinessAuthzAuditor
 from modules.access_risk_analysis import AccessRiskAnalysisAuditor
@@ -591,6 +592,14 @@ def main():
     if "ucon" in run_modules:
         print("[*] Reading UCON RFC scenario state (remote-callable exposure)...")
         auditor = UconExposureAuditor(data, baseline_overrides, run_ctx)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- Web Dispatcher: SAP's own WEBDISP_ALL baseline ---
+    if "webdisp" in run_modules:
+        print("[*] Auditing Web Dispatcher profile (SAP WEBDISP_ALL baseline)...")
+        auditor = WebDispatcherAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")

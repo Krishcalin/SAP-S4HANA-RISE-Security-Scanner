@@ -59,7 +59,7 @@ The estimate was conservative, not mistaken.
 | no file inputs (`abap_sast` reads `--abap-src`) | 1 |
 | silent even with full data | 2 |
 
-The number is not the whole story, so two more are published beside it. **23** of
+The number is not the whole story, so two more are published beside it. **24** of
 33** produce something useful — the seven "partial" modules are degraded and
 still worth running. Which number is right depends on what "runs" is taken to
 mean, and this table exists so that nobody has to guess. The per-module table

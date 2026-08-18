@@ -468,6 +468,13 @@
     "ucon_http_allowlist": {
       "state": "yes",
       "how": "UCONCOCKPIT — HTTP allowlist (table HTTP_WHITELIST, SAP Note 2573569)"
+    },
+    "webdisp_params": {
+      "state": "ticket",
+      "how": "The Web Dispatcher instance profile, as a NAME,VALUE list",
+      "blocked_by": "SAP operates the Web Dispatcher in a RISE tenant, so the profile is theirs to export and theirs to change",
+      "note": "MIXED BY TOPOLOGY, and `ticket` is the safer half. A customer running their OWN dispatcher in front of the tenant can export it freely and these findings are directly actionable for them; where SAP operates it, absence is a service request rather than a forgotten export. Classified `ticket` because that never blames the customer for SAP's component, and a customer who does own theirs simply supplies it.",
+      "verified": false
     }
   }
 }

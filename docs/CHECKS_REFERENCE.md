@@ -6,11 +6,11 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**423** check ids are written as literals in `modules/`, across **35** modules. A further **267** are built at runtime from shipped rule tables, giving **690** in total.
+**424** check ids are written as literals in `modules/`, across **36** modules. A further **281** are built at runtime from shipped rule tables, giving **705** in total.
 
 ## What this file does not claim
 
-**45 of the 423 titles and 21 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**45 of the 424 titles and 21 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -646,17 +646,31 @@ Category: User & Authorization
 | `VBM-DATA-001` | LOW | Bank export contains no account numbers, so no account can be compared |
 | `VBM-SOLE-001` | MEDIUM | Payment-relevant partners created and last changed by the same person |
 
+### `webdisp_security` — 1 check
+
+| Check | Severity | Title |
+|---|---|---|
+| `WDISP-COV-001` | INFO | No Web Dispatcher profile was supplied, so the internet-facing instance was not assessed |
+
 ## Runtime check families
 
 These ids are constructed per entry in a shipped table, so the catalogue grows with the table and not with the code.
+
+### `WDISP-<nnn>` — 14
+
+Source: `data/webdisp_baseline.json — rules`
+
+Examples: `WDISP-001`, `WDISP-002`, `WDISP-003`, `WDISP-004`, `WDISP-005`, `WDISP-006`
+
+Transcribed from SAP's WEBDISP_ALL baseline policies (2ODISCL, 2ONETENC). `WDISP-COV-001` is a fixed id and appears in the literal table.
 
 ### `PARAM-<parameter name>` — 78
 
 Source: `modules/security_params.py — BASELINE + ECS_RULES`
 
-Examples: `abap/ext_debugging_possible`, `auth/check/calltransaction`, `auth/no_check_in_some_cases`, `auth/object_disabling_active`, `auth/rfc_authority_check`, `dbs/dba/ccms_maintenance`
+Examples: `PARAM-abap/ext_debugging_possible`, `PARAM-auth/check/calltransaction`, `PARAM-auth/no_check_in_some_cases`, `PARAM-auth/object_disabling_active`, `PARAM-auth/rfc_authority_check`, `PARAM-dbs/dba/ccms_maintenance`
 
-One id per judged profile parameter. `PARAM-000`, `PARAM-MISSING` and `PARAM-MISSING-OTHER` are fixed ids and appear in the literal table above.
+One id per judged profile parameter. `PARAM-000`, `PARAM-MISSING` and `PARAM-MISSING-OTHER` are fixed ids and appear in the literal table.
 
 ### `ABAP-<rule id>` — 136
 
@@ -664,13 +678,13 @@ Source: `modules/abap_sast.py — ALL_ABAP_SAST_RULES (118) + ALL_JS_RULES (7) +
 
 Examples: `ABAP-AMDP-001`, `ABAP-AMDP-002`, `ABAP-AMDP-003`, `ABAP-AMDP-004`, `ABAP-AMDP-005`, `ABAP-AUTH-001`
 
-Custom-code scan rules. All four tables emit into the same `ABAP-` namespace: ABAP/UI5, JavaScript, BTP descriptors, and the cross-artefact checks — which carry no pattern, because what they find is an artefact that does not exist.
+Custom-code scan rules. All four tables emit into the same `ABAP-` namespace: ABAP/UI5, JavaScript, BTP descriptors, and the cross-artefact checks, which carry no pattern because the finding is the ABSENCE of an artefact.
 
 ### `ARA-<risk id>` — 36
 
 Source: `modules/access_risk_analysis.py — RULESET`
 
-Examples: `{'risk_id': 'BASIS-01', 'name': 'User Administration vs Authorization/Profile Administration', 'process': 'BASIS-SEC', 'risk_type': 'SOD', 'severity': 'CRITICAL', 'rationale': 'A single user who administers user master records (create users, reset passwords, assign roles/profiles) AND defines what roles/profiles grant (build authorizations) can grant themselves unlimited access with no four-eyes control. Foundational Basis privilege-escalation SoD.', 'functions': [{'name': 'User Administration (create/change users, assign roles & profiles)', 'actions': ['SU01', 'SU10', 'SU12'], 'permissions': [{'object': 'S_USER_GRP', 'field': 'ACTVT', 'values': ['01', '02']}, {'object': 'S_USER_AGR', 'field': 'ACTVT', 'values': ['22']}, {'object': 'S_USER_PRO', 'field': 'ACTVT', 'values': ['22']}]}, {'name': 'Authorization & Profile Administration (define role/profile content)', 'actions': ['PFCG', 'SU02', 'SU03', 'SU24'], 'permissions': [{'object': 'S_USER_AGR', 'field': 'ACTVT', 'values': ['01', '02']}, {'object': 'S_USER_AUT', 'field': 'ACTVT', 'values': ['01', '02']}, {'object': 'S_USER_PRO', 'field': 'ACTVT', 'values': ['01', '02']}]}], 'references': ['SAP Help S_USER_GRP (CLASS/ACTVT)', 'SAP KBA 2658656', 'SAP Help S_USER_AGR (ACTVT 01/02/22)', 'authorizationexperts.com s_user_agr']}`, `{'risk_id': 'BASIS-02', 'name': 'Maintain Role vs Assign Role to User', 'process': 'BASIS-SEC', 'risk_type': 'SOD', 'severity': 'HIGH', 'rationale': 'The person who BUILDS a role (its transactions and authorization values) must not be the person who ASSIGNS it to users. Combined, a user could insert powerful access into a role and assign it to their own account, bypassing role-owner approval. Build-vs-assign split at role granularity.', 'functions': [{'name': 'Maintain Role Content (build role menu & authorizations)', 'actions': ['PFCG'], 'permissions': [{'object': 'S_USER_AGR', 'field': 'ACTVT', 'values': ['01', '02']}, {'object': 'S_USER_TCD', 'field': 'TCD', 'values': ['*']}]}, {'name': 'Assign Role to User', 'actions': ['SU01', 'SU10', 'PFCG', 'PFUD'], 'permissions': [{'object': 'S_USER_AGR', 'field': 'ACTVT', 'values': ['22']}, {'object': 'S_USER_GRP', 'field': 'ACTVT', 'values': ['22']}]}], 'references': ['SAP Help / authorizationexperts.com S_USER_AGR (01/02 vs 22)', 'SAP Help S_USER_TCD (TCD)', 'SAP Help S_USER_SAS']}`, `{'risk_id': 'BASIS-03', 'name': 'ABAP Development vs Transport Release/Import to Production', 'process': 'BASIS-SEC', 'risk_type': 'SOD', 'severity': 'HIGH', 'rationale': 'A developer who writes/changes ABAP AND releases their own transports and imports them into production defeats change-management four-eyes control, moving untested or malicious code (backdoors) into PRD unreviewed.', 'functions': [{'name': 'Develop / Maintain ABAP Repository Objects', 'actions': ['SE38', 'SE80', 'SE24', 'SE37', 'SE11'], 'permissions': [{'object': 'S_DEVELOP', 'field': 'ACTVT', 'values': ['01', '02']}]}, {'name': 'Release & Import Transport Requests to Production', 'actions': ['SE09', 'SE10', 'SE01', 'STMS'], 'permissions': [{'object': 'S_TRANSPRT', 'field': 'ACTVT', 'values': ['43']}, {'object': 'S_CTS_ADMI', 'field': 'CTS_ADMFCT', 'values': ['IMPA', 'IMPS']}]}], 'references': ['SAP Help S_DEVELOP; SAP Note 65968', 'authorizationexperts.com s_transprt (ACTVT 43)', 'SAP Help S_CTS_ADMI (IMPA/IMPS)']}`, `{'risk_id': 'BASIS-04', 'name': 'Maintain Table Data vs Administer Security Audit Log', 'process': 'BASIS-SEC', 'risk_type': 'SOD', 'severity': 'HIGH', 'rationale': 'A user who directly changes sensitive table contents AND configures/deactivates the logging that records those changes (Security Audit Log via SM19/RSAU_CONFIG) can make and then conceal fraudulent changes. Separating data maintenance from audit administration preserves an untampered trail.', 'functions': [{'name': 'Maintain Table Contents Directly', 'actions': ['SM30', 'SM31', 'SM34', 'SE16N'], 'permissions': [{'object': 'S_TABU_DIS', 'field': 'ACTVT', 'values': ['02']}, {'object': 'S_TABU_NAM', 'field': 'ACTVT', 'values': ['02']}]}, {'name': 'Administer Security Audit Log / Change Logging', 'actions': ['SM19', 'RSAU_CONFIG'], 'permissions': [{'object': 'S_ADMI_FCD', 'field': 'S_ADMI_FCD', 'values': ['AUDA']}]}], 'references': ['SAP Help S_TABU_DIS / S_TABU_NAM', 'SAP Help Configuring the Security Audit Log (SM19/RSAU_CONFIG)', 'SAP community S_ADMI_FCD AUDA/AUDD']}`, `{'risk_id': 'CA-04', 'name': 'Change Payroll Status / Delete Payroll Results', 'process': 'H2R', 'risk_type': 'CRITICAL_ACTION', 'severity': 'HIGH', 'rationale': 'PU03 edits the Payroll Status infotype (IT0003) — unlock a personnel number, reset accounted-to/earliest-retro date and correction flags — while PU01 deletes the current payroll result. Together they re-open a closed/locked period, wipe a result and recalculate, defeating payroll locking and enabling undetected manipulation.', 'functions': [{'name': 'Manipulate Payroll Status / Results', 'actions': ['PU03', 'PU01'], 'permissions': [{'object': 'P_ORGIN', 'field': 'INFTY', 'values': ['0003']}, {'object': 'P_PCLX', 'field': 'AUTHC', 'values': ['U']}]}], 'references': ['SAP community IT0003 payroll status (PU03)', 'dan852 PU01 delete current result', 'authorizationexperts.com p_pclx (RELID/AUTHC=U)']}`, `{'risk_id': 'CP-05', 'name': 'Maintain Own HR Master Data (P_PERNR PSIGN=I)', 'process': 'H2R', 'risk_type': 'CRITICAL_PERMISSION', 'severity': 'HIGH', 'rationale': "P_PERNR (Personnel Number Check) with PSIGN='I' (own personnel number) at write level lets a user maintain their OWN pay-relevant infotypes (Basic Pay 0008, Bank Details 0009) — self-service pay manipulation. When the PERNR main switch is active (OOAC, AUTSW/PERNR), P_PERNR overrides P_ORGIN; PSIGN='I' with write AUTHC is the exact self-maintenance grant. Best practice PSIGN='E' (exclude own record) for pay-relevant infotypes.", 'functions': [{'name': 'Maintain Own Personnel Master Data', 'actions': ['PA30', 'PA40'], 'permissions': [{'object': 'P_PERNR', 'field': 'PSIGN', 'values': ['I']}, {'object': 'P_PERNR', 'field': 'AUTHC', 'values': ['W', 'E', 'S', '*']}]}], 'references': ['SAP Help P_PERNR', 'SAP Help P_PERNR PSIGN I/E, main switch OOAC (AUTSW/PERNR)']}`
+Examples: `ARA-BASIS-01`, `ARA-BASIS-02`, `ARA-BASIS-03`, `ARA-BASIS-04`, `ARA-CA-04`, `ARA-CP-05`
 
 Segregation-of-duties and critical-access risks, extendable by a customer's own `ara_ruleset.json`.
 
@@ -678,7 +692,7 @@ Segregation-of-duties and critical-access risks, extendable by a customer's own 
 
 Source: `modules/atc_import.py — FAMILIES`
 
-Examples: `SQLI`, `CINJ`, `CMDI`, `AUTHCHK`, `PATH`, `XSS`
+Examples: `ATC-AUTHCHK`, `ATC-CINJ`, `ATC-CMDI`, `ATC-CRED`, `ATC-CRYP`, `ATC-INFO`
 
 ABAP Test Cockpit finding families, imported from an ATC export.
 
@@ -686,7 +700,7 @@ ABAP Test Cockpit finding families, imported from an ATC export.
 
 Source: `modules/iam_advanced.py — DEFAULT_SOD_RULES`
 
-Examples: `{'rule_id': 'SOD-BASIS-001', 'name': 'Transport Management ↔ Development', 'severity': 'HIGH', 'side_a': {'description': 'Release/Import Transports', 'tcodes': ['STMS', 'SE09', 'SE10'], 'auth_objects': ['S_CTS_ADMI']}, 'side_b': {'description': 'ABAP Development', 'tcodes': ['SE38', 'SE80', 'SE24', 'SE37'], 'auth_objects': ['S_DEVELOP']}}`, `{'rule_id': 'SOD-FIN-001', 'name': 'Vendor Master ↔ Payment Processing', 'severity': 'CRITICAL', 'side_a': {'description': 'Create/Modify Vendor Master', 'tcodes': ['FK01', 'FK02', 'XK01', 'XK02', 'BP'], 'auth_objects': ['F_LFA1_BUK']}, 'side_b': {'description': 'Process Vendor Payments', 'tcodes': ['F110', 'F-53', 'F-58', 'FBZP'], 'auth_objects': ['F_BKPF_BUP']}}`, `{'rule_id': 'SOD-FIN-002', 'name': 'Purchase Order ↔ Goods Receipt', 'severity': 'HIGH', 'side_a': {'description': 'Create/Release Purchase Orders', 'tcodes': ['ME21N', 'ME22N', 'ME28', 'ME29N'], 'auth_objects': ['M_BEST_BSA']}, 'side_b': {'description': 'Post Goods Receipt', 'tcodes': ['MIGO', 'MB01', 'MB0A'], 'auth_objects': ['M_MSEG_BWA']}}`, `{'rule_id': 'SOD-FIN-003', 'name': 'Journal Entry ↔ GL Account Master', 'severity': 'HIGH', 'side_a': {'description': 'Post Journal Entries', 'tcodes': ['FB01', 'FB50', 'F-02', 'BAPI_ACC_DOCUMENT_POST'], 'auth_objects': ['F_BKPF_BUK']}, 'side_b': {'description': 'Maintain GL Account Master', 'tcodes': ['FS00', 'FSP0', 'FSS0', 'OB_GLACC01'], 'auth_objects': ['F_SKA1_BUK']}}`, `{'rule_id': 'SOD-FIN-004', 'name': 'Customer Master ↔ Sales Order / Billing', 'severity': 'HIGH', 'side_a': {'description': 'Create/Modify Customer Master', 'tcodes': ['FD01', 'FD02', 'XD01', 'XD02', 'BP'], 'auth_objects': ['F_KNA1_BUK']}, 'side_b': {'description': 'Create Sales Orders / Billing', 'tcodes': ['VA01', 'VA02', 'VF01', 'VF02'], 'auth_objects': ['V_VBAK_AAT']}}`, `{'rule_id': 'SOD-HR-001', 'name': 'HR Master Data ↔ Payroll Execution', 'severity': 'CRITICAL', 'side_a': {'description': 'Maintain HR Master Data', 'tcodes': ['PA20', 'PA30', 'PA40'], 'auth_objects': ['P_ORGIN']}, 'side_b': {'description': 'Execute Payroll', 'tcodes': ['PC00_M99_RUN', 'PC00_M10_CALC', 'PU03'], 'auth_objects': ['P_PYEVRUN']}}`
+Examples: `IAM-SOD-BASIS-001`, `IAM-SOD-FIN-001`, `IAM-SOD-FIN-002`, `IAM-SOD-FIN-003`, `IAM-SOD-FIN-004`, `IAM-SOD-HR-001`
 
 Conflicting-duty pairs.
 

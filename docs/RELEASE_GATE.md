@@ -138,6 +138,7 @@ The findings that carry it today:
 | `PARAM-MISSING-OTHER` | `security_params` | parameters absent from an export nobody declared complete |
 | `UCON-COV-001` | `ucon_exposure` | **undescribed** — add it to DESCRIPTIONS in tools/build_gate_reference.py |
 | `VBM-DATA-001` | `vendor_master` | the vendor / bank master export carried no usable rows |
+| `WDISP-COV-001` | `webdisp_security` | **undescribed** — add it to DESCRIPTIONS in tools/build_gate_reference.py |
 | `<CHECK>-COVERAGE` | any | a release-gated check could not determine whether it applied |
 
 > **This table is generated** by `python -m tools.build_gate_reference`,

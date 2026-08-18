@@ -165,7 +165,8 @@ DOMAINS: List[Dict[str, Any]] = [
         "blurb": "The interface surface, and what an attacker could reach through it.",
         "categories": ["Network & Integration Layer", "Network & Service Exposure",
                        "Gateway Security", "RFC Security",
-                       "Unified Connectivity (UCON)"],
+                       "Unified Connectivity (UCON)",
+                       "Web Dispatcher Security"],
         "prefixes": {"System Trust & Standard Users": ["TRUST", "PARAM-MS/",
                                               "PARAM-ms/"]},
         # A trust or message-server check that matches no prefix is still

@@ -223,6 +223,13 @@ class DataLoader:
         # cannot reach. RISE_SECURITY_MODEL section 7.1 ranks this first among the
         # checks to add, and section 3 has carried "Gap in our ingest" against it
         # since it was written.
+        # THE INTERNET-FACING INSTANCE'S OWN PROFILE. Separate from
+        # security_params because a Web Dispatcher is a separate instance;
+        # SAP splits them the same way (2ADISCL reads ABAP_INSTANCE_PAHI,
+        # 2ODISCL reads Parameters) and merging them would give one finding
+        # for two components with no way to tell which was exposed.
+        "webdisp_params":          ["webdisp_params.csv", "webdisp_profile.csv",
+                                    "web_dispatcher_params.csv", "sapwebdisp_pfl.csv"],
         "ucon_rfc_state":          ["ucon_rfc_state.csv", "ucon_rfc.csv",
                                     "uconcockpit.csv", "ucon_phase_tool.csv"],
         # The HTTP half, whose config store ABAP_UCON_HTTP_WHITE_LIST comes from

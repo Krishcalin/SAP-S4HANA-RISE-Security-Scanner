@@ -120,6 +120,7 @@ RISE_MODULE_SCOPE: Dict[str, str] = {
     # is SAP's assessment rather than ours.
     "cloudalm_verdicts": "in_scope",
     "ucon_exposure": "in_scope",
+    "webdisp_security": "in_scope",
 }
 
 #: The CLI's `--modules` vocabulary, mapped to the module file names this file
@@ -175,6 +176,7 @@ CLI_MODULE_ALIASES: Dict[str, str] = {
     "capxsuaa": "cap_xsuaa",
     "csa": "cloudalm_verdicts",
     "ucon": "ucon_exposure",
+    "webdisp": "webdisp_security",
 }
 
 #: Logical sources a RISE customer cannot produce, because they are read from the
@@ -726,6 +728,7 @@ def runtime_check_families() -> List[Dict[str, Any]]:
     from modules.atc_import import AtcImportAuditor
     from modules.iam_advanced import AdvancedIamAuditor
     from modules.security_params import SecurityParamAuditor
+    from modules.webdisp_security import load as _webdisp_rules
 
     def _ids(table: Any, key: str, prefix: str = "") -> List[str]:
         """The ids as the AUDITOR EMITS THEM, prefix and all.
@@ -748,6 +751,18 @@ def runtime_check_families() -> List[Dict[str, Any]]:
 
     params = SecurityParamAuditor({}, {}).effective_rules()
     families: List[Dict[str, Any]] = [
+        {
+            # The ids ARE literals — in data/webdisp_baseline.json rather than in
+            # the source, so the AST reader cannot see them and the denominator
+            # would grow only when a dispatcher check failed.
+            "module": "webdisp_security",
+            "pattern": "WDISP-<nnn>",
+            "ids": sorted(r["check_id"] for r in (_webdisp_rules().get("rules") or ())),
+            "source": "data/webdisp_baseline.json — rules",
+            "note": "Transcribed from SAP's WEBDISP_ALL baseline policies "
+                    "(2ODISCL, 2ONETENC). `WDISP-COV-001` is a fixed id and "
+                    "appears in the literal table.",
+        },
         {
             "module": "security_params",
             "pattern": "PARAM-<parameter name>",

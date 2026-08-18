@@ -1,0 +1,13 @@
+NAME,VALUE
+icm/server_port_0,"PROT=HTTP,PORT=8000,TIMEOUT=60"
+icm/server_port_1,"PROT=HTTP,PORT=8080,TIMEOUT=60"
+icm/HTTP/admin_0,"PREFIX=/sap/admin,DOCROOT=/usr/sap/WD1/admin"
+is/HTTP/show_server_header,TRUE
+is/HTTP/show_detailed_errors,TRUE
+login/show_detailed_errors,1
+rdisp/TRACE_HIDE_SEC_DATA,off
+icm/accept_forwarded_cert_via_http,TRUE
+icm/trusted_reverse_proxy_0,"SUBJECT=""*"", ISSUER=""*"""
+service/protectedwebmethods,NONE
+wdisp/system_0,"SID=PRD, MSHOST=prd-ms.example.com, MSPORT=8101"
+icm/max_conn,500

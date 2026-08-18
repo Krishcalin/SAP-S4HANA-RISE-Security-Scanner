@@ -90,6 +90,7 @@ TEAM_BY_PREFIX: List[Tuple[str, str]] = [
     #     so everything under LOG- was priced as a DETECTION gap. A missing backup
     #     is not a detection gap, and the module's docstring claimed the prefix
     #     made it under-price when in fact it mis-priced.
+    ("WDISP-", "basis"),   # instance profile maintenance
     ("UCON-", "integration"),   # remote-callable exposure is interface work
     ("RES-", "basis"),
 ]

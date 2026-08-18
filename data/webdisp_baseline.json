@@ -1,0 +1,226 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "description": "SAP Web Dispatcher profile checks, transcribed from SAP's own baseline policies for the WEBDISP_ALL stack.",
+    "why_the_web_dispatcher_needed_its_own_source": "Three modules already check is/HTTP/show_server_header and is/HTTP/show_detailed_errors — against `security_params`, which is the ABAP INSTANCE profile. A Web Dispatcher is a separate instance with its own profile, and it is the internet-facing one. So the component most exposed to the outside was the only one never read, while the same parameter names on the ABAP stack behind it were checked. SAP draws the same line: 2ADISCL reads the ABAP_INSTANCE_PAHI store, 2ODISCL reads the Parameters store.",
+    "source": {
+      "repository": "SAP-samples/frun-csa-policies-best-practices",
+      "licence": "Apache-2.0",
+      "path": "BaselinePolicies/SOS/v2.4/WEBDISP_ALL/",
+      "files": ["2ODISCL.xml", "2ONETENC.xml", "1OSECUPD.xml"],
+      "policy_version": "001, dated 2023-04-28, referencing SAP Security Baseline Template v2.4 (2022/12)",
+      "fetched": "2026-08-18 via api.github.com contents API with Accept: application/vnd.github.raw"
+    },
+    "provenance_rule": "Every rule carries `sap_check_id`, `policy` and the VERBATIM `sap_predicate` it was transcribed from, so a reader can check the transcription against SAP's file rather than trust it. No parameter name, value or check id here is ours. Where SAP's predicate could not be expressed in the small operator vocabulary below, the rule is listed under `_not_implemented` with the reason rather than approximated — an approximated predicate that disagrees with SAP's own tooling is worse than an absent one.",
+    "operators": {
+      "value_in": "VALUE must be one of `values` (case-sensitive, as SAP lists them).",
+      "value_not_equal": "VALUE must differ from `value`.",
+      "value_contains": "VALUE must contain `value` as a substring.",
+      "value_not_blank": "VALUE must be more than whitespace.",
+      "value_matches": "VALUE must match the `pattern` regex.",
+      "any_name_prefix_value_contains": "At least ONE parameter whose name starts with `name_prefix` must contain `value`. Absence of the whole family is non-compliant."
+    },
+    "scope_rule": "A rule with `name` applies to that one parameter. A rule with `name_prefix` applies to EVERY parameter in that family, and each offender is reported separately — icm/HTTP/admin_0 and icm/HTTP/admin_1 are two listeners and two findings' worth of exposure.",
+    "absent_parameter_rule": "A parameter that is not in the export is NOT reported as non-compliant unless `report_when_absent` is true. A Web Dispatcher profile lists what was set; an unset parameter takes SAP's default, which this product cannot read from the export. SAP encodes the same idea as `not_found=\"positive\"` — the semantic section 3.3 of the RISE model warns naive scanners get wrong.",
+    "_not_implemented": [
+      {
+        "sap_check_id": "DISCL-O_a.2",
+        "policy": "2ODISCL",
+        "parameter": "icm/HTTP/error_templ_path",
+        "reason": "SAP's predicate is two platform-specific filesystem-path regexes (/usr/sap/<SID>/<INST>/data/icmandir/error_templ and its Windows form). Transcribing them risks a path-shape claim that differs from SAP's tooling on a layout we have not seen, and the finding would be a path mismatch rather than a security fact. Left to SAP's own tooling."
+      },
+      {
+        "sap_check_id": "1OSECUPD",
+        "policy": "1OSECUPD",
+        "parameter": null,
+        "reason": "Reads the COMP_LEVEL store, not the profile: component='WEBDISP' with CD_HIST_DATE inside 365 days. It needs a component-level export this product does not collect for the Web Dispatcher, and its check item carries the POLICY id rather than a requirement id — which is why data/sap_baseline_requirements.json derives no SECUPD-O requirement. That is SAP's file, not a gap in our builder."
+      }
+    ]
+  },
+
+  "rules": [
+    {
+      "check_id": "WDISP-001",
+      "sap_check_id": "DISCL-O_a.1",
+      "policy": "2ODISCL",
+      "name": "is/HTTP/show_server_header",
+      "operator": "value_in",
+      "values": ["FALSE", "false", "0"],
+      "severity": "MEDIUM",
+      "title": "Web Dispatcher returns its server header",
+      "risk": "The HTTP server header names the product and often its version to every client, including unauthenticated ones. It costs an attacker nothing to read and tells them which exploits are worth trying against the component in front of the whole landscape.",
+      "fix": "Set is/HTTP/show_server_header = FALSE in the Web Dispatcher profile and restart the instance.",
+      "sap_predicate": "NAME = 'is/HTTP/show_server_header' and VALUE in ( 'FALSE', 'false', '0' )"
+    },
+    {
+      "check_id": "WDISP-002",
+      "sap_check_id": "DISCL-O_a.2",
+      "policy": "2ODISCL",
+      "name": "is/HTTP/show_detailed_errors",
+      "operator": "value_in",
+      "values": ["FALSE", "false", "0"],
+      "severity": "MEDIUM",
+      "title": "Web Dispatcher returns detailed error pages",
+      "risk": "Detailed HTTP errors disclose internal host names, paths and component versions to whoever triggered them. On the internet-facing component this is reconnaissance handed out on request.",
+      "fix": "Set is/HTTP/show_detailed_errors = FALSE in the Web Dispatcher profile.",
+      "sap_predicate": "NAME = 'is/HTTP/show_detailed_errors' and VALUE in ( 'FALSE', 'false', '0' )"
+    },
+    {
+      "check_id": "WDISP-003",
+      "sap_check_id": "DISCL-O_a.3",
+      "policy": "2ODISCL",
+      "name": "icm/SMTP/show_server_header",
+      "operator": "value_in",
+      "values": ["FALSE", "false", "0"],
+      "severity": "LOW",
+      "title": "SMTP server header is disclosed",
+      "risk": "Same disclosure as the HTTP header, on the SMTP listener. Only relevant where SMTP is configured, which is why this is LOW rather than MEDIUM.",
+      "fix": "Set icm/SMTP/show_server_header = FALSE.",
+      "sap_predicate": "NAME = 'icm/SMTP/show_server_header' and VALUE in ( 'FALSE', 'false', '0' )"
+    },
+    {
+      "check_id": "WDISP-004",
+      "sap_check_id": "DISCL-O_a.1",
+      "policy": "2ODISCL",
+      "name": "login/show_detailed_errors",
+      "operator": "value_in",
+      "values": ["0"],
+      "severity": "MEDIUM",
+      "title": "Detailed logon errors are returned",
+      "risk": "Distinguishing 'no such user' from 'wrong password' turns a password guess into two separate answers, and lets an attacker enumerate valid accounts before trying a single credential.",
+      "fix": "Set login/show_detailed_errors = 0.",
+      "sap_predicate": "NAME = 'login/show_detailed_errors' and VALUE ='0'"
+    },
+    {
+      "check_id": "WDISP-005",
+      "sap_check_id": "DISCL-O_a.4",
+      "policy": "2ODISCL",
+      "name": "rdisp/TRACE_HIDE_SEC_DATA",
+      "operator": "value_in",
+      "values": ["on", "ON"],
+      "severity": "HIGH",
+      "title": "Security data is not hidden from traces",
+      "risk": "With tracing enabled and this off, credentials and session tokens passing through the dispatcher are written to trace files. Anyone who can read a trace — including support staff and anyone who receives one attached to a ticket — reads live secrets.",
+      "fix": "Set rdisp/TRACE_HIDE_SEC_DATA = on.",
+      "sap_predicate": "NAME = 'rdisp/TRACE_HIDE_SEC_DATA' and VALUE in ( 'on', 'ON' )"
+    },
+    {
+      "check_id": "WDISP-006",
+      "sap_check_id": "DISCL-O_d",
+      "policy": "2ODISCL",
+      "name": "icm/trace_secured_data",
+      "operator": "value_in",
+      "values": ["FALSE", "false", "0"],
+      "severity": "HIGH",
+      "title": "ICM traces secured data",
+      "risk": "The ICM counterpart of the trace setting above: enabling it writes data the component itself classifies as secured into the trace.",
+      "fix": "Set icm/trace_secured_data = FALSE.",
+      "sap_predicate": "NAME = 'icm/trace_secured_data' and VALUE in ( 'FALSE', 'false', '0' )"
+    },
+    {
+      "check_id": "WDISP-007",
+      "sap_check_id": "DISCL-O_e",
+      "policy": "2ODISCL",
+      "name": "icm/accept_forwarded_cert_via_http",
+      "operator": "value_in",
+      "values": ["FALSE", "false", "0"],
+      "severity": "HIGH",
+      "title": "Forwarded client certificates are accepted over plain HTTP",
+      "risk": "The component trusts a client certificate presented in an HTTP header rather than one established by the TLS handshake. Anyone able to reach the port can assert any identity by setting a header, which turns certificate authentication into a claim rather than a proof.",
+      "fix": "Set icm/accept_forwarded_cert_via_http = FALSE. Where a trusted reverse proxy genuinely forwards certificates, restrict it with icm/trusted_reverse_proxy_<n> instead.",
+      "sap_predicate": "NAME = 'icm/accept_forwarded_cert_via_http' and VALUE in ( 'FALSE', 'false', '0' )"
+    },
+    {
+      "check_id": "WDISP-008",
+      "sap_check_id": "DISCL-O_c",
+      "policy": "2ODISCL",
+      "name": "service/protectedwebmethods",
+      "operator": "value_matches",
+      "pattern": "^(SDEFAULT|ALL)",
+      "severity": "HIGH",
+      "title": "Administrative web methods are not protected",
+      "risk": "service/protectedwebmethods decides which sapstartsrv web methods require authentication. Without SDEFAULT or ALL, administrative methods on the instance's management interface are reachable unauthenticated.",
+      "fix": "Set service/protectedwebmethods = SDEFAULT (or ALL with an explicit exception list).",
+      "sap_predicate": "NAME = 'service/protectedwebmethods' and VALUE like_regexpr '(SDEFAULT.*|ALL.*)'"
+    },
+    {
+      "check_id": "WDISP-009",
+      "sap_check_id": "DISCL-O_b.2",
+      "policy": "2ODISCL",
+      "name": "wdisp/permission_table",
+      "operator": "value_not_blank",
+      "severity": "HIGH",
+      "title": "No Web Dispatcher permission table is configured",
+      "risk": "The permission table is the Web Dispatcher's own allow/deny list for incoming URLs. Without one, every URL the back end exposes is reachable through the dispatcher, and the component whose job is to filter internet traffic filters nothing.",
+      "fix": "Configure wdisp/permission_table pointing at a permission file, and deny by default.",
+      "sap_predicate": "NAME = 'wdisp/permission_table' and VALUE not like_regexpr '^\\s*$'"
+    },
+    {
+      "check_id": "WDISP-010",
+      "sap_check_id": "DISCL-O_b.1",
+      "policy": "2ODISCL",
+      "name_prefix": "icm/HTTP/auth_",
+      "operator": "value_not_equal",
+      "value": "PREFIX=/,FILTER=SAP",
+      "severity": "MEDIUM",
+      "title": "ICM authentication handler applies SAP's filter to the whole URL space",
+      "risk": "PREFIX=/,FILTER=SAP applies one blanket handler from the root down. SAP's baseline treats it as non-compliant because it removes the per-path distinction the handler exists to make.",
+      "fix": "Replace the root-level handler with specific PREFIX entries for the paths that need it.",
+      "sap_predicate": "NAME like 'icm/HTTP/auth_%' and VALUE != 'PREFIX=/,FILTER=SAP'"
+    },
+    {
+      "check_id": "WDISP-011",
+      "sap_check_id": "DISCL-O_c",
+      "policy": "2ODISCL",
+      "name_prefix": "icm/HTTP/admin_",
+      "operator": "value_contains",
+      "value": "CLIENTHOST=",
+      "severity": "HIGH",
+      "title": "ICM administration handler is not restricted by client host",
+      "risk": "The ICM admin handler exposes the component's management interface. Without CLIENTHOST= it is reachable from anywhere that can reach the port, which on an internet-facing dispatcher means the internet.",
+      "fix": "Add CLIENTHOST= to every icm/HTTP/admin_<n> entry, naming the administration hosts.",
+      "sap_predicate": "NAME like 'icm/HTTP/admin_%' and VALUE like_regexpr '.*CLIENTHOST=.*'"
+    },
+    {
+      "check_id": "WDISP-012",
+      "sap_check_id": "NETENC-O.a2",
+      "policy": "2ONETENC",
+      "name_prefix": "icm/HTTP/admin_",
+      "operator": "value_contains",
+      "value": "PORT=",
+      "severity": "MEDIUM",
+      "title": "ICM administration handler names no port",
+      "risk": "Without PORT= the administration handler is not pinned to a specific listener, so it answers on any of them — including the public one.",
+      "fix": "Add PORT= to every icm/HTTP/admin_<n> entry, naming the administration port.",
+      "sap_predicate": "( ( NAME like 'icm/HTTP/admin_%' and VALUE like '%PORT=%' ) )"
+    },
+    {
+      "check_id": "WDISP-013",
+      "sap_check_id": "DISCL-O_f.1",
+      "policy": "2ODISCL",
+      "name_prefix": "icm/trusted_reverse_proxy_",
+      "operator": "value_not_contains_any",
+      "values": ["SUBJECT=\"*\"", "ISSUER=\"*\""],
+      "severity": "HIGH",
+      "title": "Trusted reverse proxy accepts any certificate",
+      "risk": "SUBJECT=\"*\" or ISSUER=\"*\" trusts every certificate rather than a named proxy, so anything that can present a certificate is treated as the trusted front end and may forward an asserted identity.",
+      "fix": "Name the proxy's actual certificate subject and issuer in icm/trusted_reverse_proxy_<n>.",
+      "sap_predicate": "NAME like 'icm/trusted_reverse_proxy_%' and ( VALUE not like '%SUBJECT=\"*\"%' and VALUE not like '%ISSUER=\"*\"%' )",
+      "sap_not_found": "positive"
+    },
+    {
+      "check_id": "WDISP-014",
+      "sap_check_id": "NETENC-O.a1",
+      "policy": "2ONETENC",
+      "name_prefix": "icm/server_port_",
+      "operator": "any_name_prefix_value_contains",
+      "value": "PROT=HTTPS",
+      "report_when_absent": true,
+      "severity": "HIGH",
+      "title": "No HTTPS listener is configured",
+      "risk": "SAP's baseline requires at least one icm/server_port_<n> serving PROT=HTTPS. Without one, everything reaching the dispatcher — including credentials and session cookies — crosses the network in clear text on the component that faces the least trusted part of it.",
+      "fix": "Configure at least one icm/server_port_<n> with PROT=HTTPS, and redirect or close the plain HTTP listeners.",
+      "sap_predicate": "( ( NAME like 'icm/server_port_0' and VALUE like '%PROT=HTTPS%' ) or ... or ( NAME like 'icm/server_port_9' and VALUE like '%PROT=HTTPS%' ) ) — SAP enumerates ports 0 through 9 explicitly; the prefix form here is equivalent for those and also covers a tenth listener SAP's enumeration would miss."
+    }
+  ]
+}

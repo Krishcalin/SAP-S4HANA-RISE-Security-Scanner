@@ -1927,6 +1927,63 @@ the next restart, and that gap is worth seeing.
 
 ---
 
+## Web Dispatcher (the `webdisp` module)
+
+**Why this is a separate file from `security_params.csv`.** The Web Dispatcher is a
+separate instance with its own profile, and it is the internet-facing one. SAP draws
+the same line: policy `2ADISCL` reads the ABAP instance's `ABAP_INSTANCE_PAHI` store
+while `2ODISCL` reads the dispatcher's `Parameters` store, because they describe two
+components. Merging them here would produce one finding for two instances with no way
+to tell which was exposed.
+
+### Web Dispatcher profile (`webdisp_params.csv`)
+**Source:** the Web Dispatcher instance profile — the `sapwebdisp.pfl` file, or
+`Profile Parameters` in the dispatcher's own admin UI. Export as a two-column
+`NAME,VALUE` list.
+
+Also accepted: `webdisp_profile.csv`, `web_dispatcher_params.csv`, `sapwebdisp_pfl.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `NAME` · `PARAMETER` · `PARAMETER_NAME` · `PARAM` · `PNAME` | The profile parameter |
+| `VALUE` · `PARAMETER_VALUE` · `PVALUE` · `CURRENT_VALUE` | Its value, whole |
+
+⚠️ **Quote any value containing a comma.** Web Dispatcher values routinely do —
+`PROT=HTTP,PORT=8000,TIMEOUT=60` is ONE value, not three. An unquoted line produces
+more fields than headers, and a naive reader keeps only the part before the first
+comma. That is not a cosmetic problem: `icm/HTTP/admin_0,PREFIX=/x,CLIENTHOST=10.0.0.1`
+would lose the `CLIENTHOST` restriction and the scan would report a correctly
+restricted admin handler as exposed. This scanner rejoins the overflow so the
+unquoted form still produces the right verdict, but quoting it is what makes the file
+correct CSV for everything else that reads it:
+
+```csv
+NAME,VALUE
+icm/server_port_0,"PROT=HTTPS,PORT=8443,TIMEOUT=60"
+icm/HTTP/admin_0,"PREFIX=/sap/admin,CLIENTHOST=10.0.0.1,PORT=8443"
+is/HTTP/show_server_header,FALSE
+```
+
+**What is checked, and by whose rules.** Fourteen checks transcribed from SAP's own
+Apache-2.0 baseline policies for the `WEBDISP_ALL` stack — `2ODISCL` (information
+disclosure) and `2ONETENC` (network encryption), v2.4. Every finding carries the SAP
+check id and the verbatim predicate it came from, so a disagreement is with SAP's
+rule rather than ours. Two of SAP's check items are deliberately not implemented and
+`data/webdisp_baseline.json` records why.
+
+**An unset parameter is not a finding.** A profile lists what was SET; an unset one
+takes SAP's default, which no export reveals. The single exception is the HTTPS
+listener check, because "no `icm/server_port_*` serves HTTPS anywhere in this profile"
+is a statement the profile does make.
+
+**Under RISE, this is usually SAP's to supply.** SAP operates the Web Dispatcher in a
+RISE tenant, so the profile comes through a service request rather than an export you
+can run — the coverage manifest classifies the source `ticket` for that reason. A
+customer running their own dispatcher in front of the tenant owns it outright, and
+for them every finding here is directly actionable.
+
+---
+
 ## Unified Connectivity (the `ucon` module)
 
 **Why this section matters more in RISE than anywhere else.** The gateway ACL files

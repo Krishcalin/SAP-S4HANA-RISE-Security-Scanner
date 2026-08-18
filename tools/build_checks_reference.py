@@ -57,7 +57,7 @@ TARGET = ROOT / "docs" / "CHECKS_REFERENCE.md"
 # denominator was blind to every positionally-passed check id. Imported rather
 # than duplicated so the document and the score cannot disagree about what a
 # check is.
-from modules.coverage import EMITTERS, wrapper_signatures        # noqa: E402,F401
+from modules.coverage import runtime_check_families, EMITTERS, wrapper_signatures        # noqa: E402,F401
 
 #: BaseAuditor's severity constants, resolved so `self.SEVERITY_HIGH` reads as
 #: HIGH rather than as an unresolvable attribute.
@@ -183,78 +183,29 @@ def collect_literal_checks() -> List[Check]:
 def collect_dynamic_families() -> List[Dict[str, Any]]:
     """Id families built at runtime from a shipped table.
 
-    Resolved by IMPORTING the tables rather than by parsing them, because the
-    tables are the authority and a second reading of them could disagree.
+    DERIVED FROM `modules.coverage.runtime_check_families()` RATHER THAN
+    RE-LISTED HERE. This function used to keep its own copy of the family list,
+    which is precisely the duplication that function's own docstring warns
+    against — "the table is the authority, and a second reading of it could
+    disagree with the first". The two did disagree the moment a sixth family was
+    added: coverage resolved six families and 281 ids while this file, still
+    holding five imports of its own, printed 267 from 5 and shipped a reference
+    missing a whole module's checks.
+
+    The coverage function already raises rather than degrades when a family
+    resolves to nothing, for the reason recorded below, which this build inherits
+    by calling it.
     """
-    families: List[Dict[str, Any]] = []
-
-    from modules.security_params import SecurityParamAuditor
-    rules = SecurityParamAuditor({}, {}).effective_rules()
-    families.append({
-        "pattern": "PARAM-<parameter name>",
-        "count": len(rules),
-        "source": "modules/security_params.py — BASELINE + ECS_RULES",
-        "examples": sorted(rules)[:6],
-        "note": "One id per judged profile parameter. `PARAM-000`, `PARAM-MISSING` "
-                "and `PARAM-MISSING-OTHER` are fixed ids and appear in the literal "
-                "table above.",
-    })
-
-    # THREE TABLES, NOT ONE. ALL_ABAP_SAST_RULES is the ABAP/UI5 set; the
-    # JavaScript and BTP-descriptor rules live in their own tables and emit ids in
-    # the SAME `ABAP-` namespace (ABAP-JS-001, ABAP-BTP-001). Reading only the
-    # first table undercounted the catalogue by 15 and the shortfall was invisible,
-    # because 118 is a plausible-looking number.
-    from modules.abap_sast import (ALL_ABAP_SAST_RULES, ALL_BTP_CONFIG_RULES,
-                                   ALL_JS_RULES, CROSS_ARTIFACT_RULES)
-
-    def _rule_ids(table: Any) -> List[str]:
-        return [str(r.get("id")) if isinstance(r, dict) else str(r) for r in table]
-
-    abap_ids = (_rule_ids(ALL_ABAP_SAST_RULES) + _rule_ids(ALL_JS_RULES)
-                + _rule_ids(ALL_BTP_CONFIG_RULES) + _rule_ids(CROSS_ARTIFACT_RULES))
-    families.append({
-        "pattern": "ABAP-<rule id>",
-        "count": len(abap_ids),
-        "source": ("modules/abap_sast.py — ALL_ABAP_SAST_RULES "
-                   f"({len(ALL_ABAP_SAST_RULES)}) + ALL_JS_RULES "
-                   f"({len(ALL_JS_RULES)}) + ALL_BTP_CONFIG_RULES "
-                   f"({len(ALL_BTP_CONFIG_RULES)}) + CROSS_ARTIFACT_RULES "
-                   f"({len(CROSS_ARTIFACT_RULES)})"),
-        "examples": sorted(abap_ids)[:6],
-        "note": "Custom-code scan rules. All four tables emit into the same "
-                "`ABAP-` namespace: ABAP/UI5, JavaScript, BTP descriptors, and the "
-                "cross-artefact checks — which carry no pattern, because what they "
-                "find is an artefact that does not exist.",
-    })
-
-    from modules.access_risk_analysis import AccessRiskAnalysisAuditor
-    families.append({
-        "pattern": "ARA-<risk id>",
-        "count": len(AccessRiskAnalysisAuditor.RULESET),
-        "source": "modules/access_risk_analysis.py — RULESET",
-        "examples": sorted(map(str, AccessRiskAnalysisAuditor.RULESET))[:6],
-        "note": "Segregation-of-duties and critical-access risks, extendable by a "
-                "customer's own `ara_ruleset.json`.",
-    })
-
-    from modules.atc_import import AtcImportAuditor
-    families.append({
-        "pattern": "ATC-<family>",
-        "count": len(AtcImportAuditor.FAMILIES),
-        "source": "modules/atc_import.py — FAMILIES",
-        "examples": [str(f.get("family")) for f in AtcImportAuditor.FAMILIES][:6],
-        "note": "ABAP Test Cockpit finding families, imported from an ATC export.",
-    })
-
-    from modules.iam_advanced import AdvancedIamAuditor
-    families.append({
-        "pattern": "IAM-<sod rule>",
-        "count": len(AdvancedIamAuditor.DEFAULT_SOD_RULES),
-        "source": "modules/iam_advanced.py — DEFAULT_SOD_RULES",
-        "examples": sorted(map(str, AdvancedIamAuditor.DEFAULT_SOD_RULES))[:6],
-        "note": "Conflicting-duty pairs.",
-    })
+    families = [
+        {
+            "pattern": family["pattern"],
+            "count": len(family["ids"]),
+            "source": family["source"],
+            "examples": family["ids"][:6],
+            "note": family.get("note", ""),
+        }
+        for family in runtime_check_families()
+    ]
 
     # NO try/except HERE, DELIBERATELY, AND THIS IS THE SECOND TIME TODAY.
     #

@@ -113,6 +113,11 @@ class ComplianceMapper:
         # narrows the reachable surface and decides who reaches it.
         "Unified Connectivity (UCON)": ["network-security", "access-control",
                                         "secure-config"],
+        # The dispatcher terminates external connections and decides which
+        # reach the back end, so its profile is network security and
+        # transport encryption before it is anything else.
+        "Web Dispatcher Security": ["network-security", "cryptography",
+                                    "secure-config"],
         "Network & Integration Layer": ["network-security", "app-runtime", "access-control"],
         "Code & Transport Security": ["secure-development", "change-management", "secure-config"],
         "Data Protection & Privacy": ["data-protection", "logging-monitoring"],
