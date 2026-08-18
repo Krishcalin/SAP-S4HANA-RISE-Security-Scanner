@@ -140,7 +140,21 @@ def test_every_source_has_a_procedure_a_customer_can_follow(reference):
 #:        `IntegrationRuntimeArtifacts` and `DataStores` resources
 #:        (SAP-docs/btp-integration-suite). Three sections lost the marker
 #:        outright; `cpi_artifacts` keeps one for the credential-store half only.
-UNVERIFIED_SECTION_FLOOR = 12
+#:        `sap_kernel` was added with a marker at the same time, so 12 held.
+#:   10 → after closing three more: `system_change` (SAP's own Focused Run
+#:        config store `GLOBAL` / `NAME='GLOBAL_SETTING'` /
+#:        `VALUE='NOT MODIFIABLE'`, which makes the ABAP table irrelevant),
+#:        `oauth_clients` (`btp list security/api-credential`, SAP-docs/
+#:        btp-cloud-platform) and `apim_policies` (the `apiportal-apiaccess`
+#:        service plan, SAP-docs/btp-integration-suite).
+#:
+#: The ten that remain are not remaining for want of trying. Six are S/4HANA and
+#: Fiori application-layer routes, and SAP publishes no machine-readable
+#: documentation repository for that layer the way it does for BTP and the
+#: Integration Suite — confirming them needs a system or an S-user, not another
+#: afternoon of searching. Their COLUMN NAMES are exact regardless, because those
+#: come from the code.
+UNVERIFIED_SECTION_FLOOR = 10
 
 
 def test_an_unverified_route_says_so_where_the_reader_will_see_it(reference):

@@ -1603,6 +1603,14 @@ or the extract shows the pre-upgrade picture.
 **Source:** `SE06` → *System Change Option* (also reachable from `SE03`). Export
 the global setting and the per-software-component and per-namespace rows.
 
+**SAP's own vocabulary for this, and the values to expect.** The Focused Run
+baseline policy reads it from a configuration store named `GLOBAL`, as
+`NAME = 'GLOBAL_SETTING'` with `VALUE = 'NOT MODIFIABLE'` for a system that is
+locked. Those are the names and the literal value SAP uses, so an export written
+as `NAME,VALUE` rows in that shape needs no translation — the loader accepts
+`NAME` and `VALUE` directly. Anything else your extract can produce is accepted
+under the aliases below.
+
 Also accepted: `se06.csv`, `system_change_option.csv`
 
 | Column (any of) | Meaning |
@@ -1613,8 +1621,9 @@ Also accepted: `se06.csv`, `system_change_option.csv`
 This is the second and **independent** lock beside the SCC4 client setting, which
 is why it is worth its own export: a client can be closed while the system is
 globally modifiable, and repository objects can then be changed in production
-regardless of what SCC4 says. *The underlying tables are not verified for this
-guide; export from the SE06 screen or from your Basis team's documented route.*
+regardless of what SCC4 says. The underlying ABAP table is not named here and
+does not need to be: the export comes from the SE06 screen, and the field
+vocabulary above is SAP's own.
 
 ### Open transport requests (`transports.csv`, `se09.csv`)
 **Source:** `SE09` / `SE10` — the Transport Organizer. Table route: `E070`
@@ -1986,7 +1995,14 @@ protected, and any client that knows the URL reaches it.
 
 ### Spaces and pages (`fiori_spaces.json`)
 **Source:** the launchpad *Manage Launchpad Spaces* and *Manage Launchpad Pages*
-apps. *The export route is not verified for this guide.*
+apps. *The export route is not verified for this guide* — SAP publishes no
+machine-readable documentation repository for the ABAP front-end server's
+launchpad, and the Work Zone documentation that does exist describes a different
+product with a different content model.
+
+If spaces and pages are not in use — many landscapes still run the classic
+catalog-and-group model — omit this file. `fiori_catalogs.csv` and
+`fiori_tiles.csv` answer the same access question for that model.
 
 Also accepted: `spaces_pages.json`
 
@@ -2004,9 +2020,19 @@ of the catalog finding above.
 
 ### App launch statistics (`fiori_app_usage.csv`)
 **Source:** your launchpad usage analytics. *No verified route is recorded for
-this one — the module was written against a launch-count extract, and where that
-comes from differs by release and by whether usage collection was ever switched
-on. Export from whatever your team already uses and note it.*
+this one, and it is the weakest entry in this guide.* The module was written
+against a launch-count extract; where that comes from differs by release, by
+whether the launchpad runs on the ABAP front-end server or on Work Zone, and by
+whether usage collection was ever switched on at all — which in most landscapes
+it was not.
+
+**Skip it unless you already have the data.** Every other Fiori source answers a
+question about configuration, which is always available; this one answers a
+question about behaviour, which is only available if somebody turned on
+collection months ago. If your team has a usage report, export it in the shape
+below and note where it came from. If not, the check simply does not run, and
+that costs you one finding about unused app assignments rather than anything
+about the security of what IS used.
 
 | Column (any of) | Meaning |
 |---|---|
@@ -2028,14 +2054,30 @@ as that number.
 These five sources describe the S/4HANA authorization layer that sits above the
 classic authorization objects: business roles, the restrictions that scope them,
 the catalogs they carry, and the CDS views and OData services they ultimately
-expose. Where an entry says *not verified*, the shape is what the scanner reads —
-the route to produce it differs between the private and public cloud editions and
-is not recorded here as a checked fact.
+expose.
+
+> **You may already have most of this, under other names.** In S/4HANA
+> on-premise and RISE private edition the business role IS a PFCG role, so the
+> assignment data is the same `AGR_USERS` extract this guide already documents as
+> [`user_roles.csv`](#user-roles-user_rolescsv) — supply that and the assignment
+> question is answered without producing anything new. What the files below add
+> is the layer PFCG does not model as a role: the restriction fields, the catalog
+> assignments, and the CDS and OData surface they reach. In the public cloud
+> edition there is no PFCG and the *Maintain Business Roles* app is the source
+> for all of them.
+>
+> Every route in this section is marked *not verified for this guide* for the
+> same reason: SAP publishes no machine-readable documentation repository for the
+> S/4HANA application layer the way it does for BTP and the Integration Suite, so
+> these were written from the consuming module rather than checked against a
+> primary source. The COLUMN NAMES are exact — they are extracted from the code —
+> and it is only the extraction route that is unconfirmed.
 
 ### Business role assignments (`business_roles.csv`)
 **Source:** `PFCG` in S/4HANA on-premise and RISE private edition, where business
-roles are PFCG roles; the *Maintain Business Roles* app in the public cloud
-edition. *Not verified for this guide.*
+roles are PFCG roles and the assignment is `AGR_USERS`; the *Maintain Business
+Roles* app in the public cloud edition. *Not verified for this guide — and if you
+are on-premise or private cloud, `user_roles.csv` already carries this.*
 
 Also accepted: `business_role_users.csv`
 
@@ -2082,7 +2124,16 @@ sensibly attest to in an access review.
 ### CDS view exposure (`cds_views.csv`)
 **Source:** the `@AccessControl.authorizationCheck` annotation and the exposure
 state of each CDS view, from ADT or from your own report over the DDL sources.
-*Not verified for this guide.*
+*Not verified for this guide* — SAP documents what the annotation MEANS, but not
+a supported way to export its value across a repository.
+
+**Prefer `--code-src` if you can.** Given the ABAP sources, MonitorRisk reads the
+DDL and the DCL directly and cross-references them, which answers a strictly
+stronger question than this column can: it distinguishes an exposed view with no
+access-control role at all from one whose role exists and grants everything, and
+it finds the RAP behaviour definitions that authorise an operation but never an
+instance. This file exists for landscapes where a source export is not available
+and somebody can run a report over the annotations instead.
 
 Also accepted: `cds_access_control.csv`
 
@@ -2381,8 +2432,19 @@ integration topology or which webhooks you have registered across three vendors.
 That is the reason they are worth writing down.
 
 ### API Management proxies and policies (`apim_policies.json`)
-**Source:** the API portal's proxy list with the policies applied to each. *The
-management API path is not verified for this guide; export from the API portal.*
+**Source:** API Management's own public APIs, reached through the
+**`apiportal-apiaccess`** service plan. Create a service instance on that plan and
+generate a service key; SAP's own description is that the plan "offers external
+applications the ability to access the public APIs of the SAP Integration Suite
+API Management capability… to perform CRUD operations on API Management features
+like API proxies or products", and that it is "especially useful when integrating
+API Management with a CI/CD process". The service key carries the application
+`url`, `clientId`, `clientSecret` and `tokenUrl`; exchange those for a bearer
+token and call the proxy and policy endpoints, which are documented on the SAP
+Business Accelerator Hub.
+
+Exporting by hand from the API portal produces the same rows if you would rather
+not create an instance.
 
 Also accepted: `api_proxies.json`
 
@@ -2405,13 +2467,23 @@ gateway. Export proxies with no policies rather than filtering them out — they
 the finding.
 
 ### OAuth client registrations (`oauth_clients.json`)
-**Source:** the XSUAA service instances and their bindings, per subaccount.
+**Source:** two `btp` CLI lists, because "OAuth client" covers two different
+things in a BTP subaccount and both are worth having:
 
 ```bash
-cf curl /v3/service_instances?service_plans.names=application > instances.json
+btp target --subaccount <subaccount-id>
+# 1. the application clients — one XSUAA service instance per application
+btp --format json list services/instance > instances.json
+btp --format json list services/binding  > bindings.json
+# 2. the API credentials that call the Authorization and Trust Management APIs
+btp --format json list security/api-credential > api_credentials.json
 ```
 
-*The mapping from instance to client registration is not verified for this guide.*
+SAP documents the second as managing "API credentials, which enable you to access
+the REST APIs of the SAP Authorization and Trust Management service" — a separate
+population from the application clients, administered separately, and the one
+nobody reviews. Merge whichever you have into the shape below.
+
 Also accepted: `xsuaa_clients.json`
 
 ```json
