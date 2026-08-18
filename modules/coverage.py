@@ -37,6 +37,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set
+from modules import rise_reachability as reachability
 from modules.deployment_modes import is_rise
 
 MODULES_DIR = Path(__file__).resolve().parents[1] / "modules"
@@ -178,6 +179,13 @@ CLI_MODULE_ALIASES: Dict[str, str] = {
 #: operating system and RISE customers contractually never get OS access. Listing
 #: them as "missing" would be dishonest — the customer did not forget them, they
 #: are structurally out of reach.
+#:
+#: THIS IS NOW THE FALLBACK, NOT THE AUTHORITY. `data/rise_reachability.json`
+#: classifies the whole upload surface in the five states
+#: `docs/RISE_SECURITY_MODEL.md` section 3 uses, and these five are its `no` rows.
+#: The literal survives so that an unreadable content file degrades to the
+#: behaviour that was here before rather than to "nothing is unreachable", which
+#: would be strictly worse than both.
 RISE_UNREACHABLE_SOURCES: Set[str] = {
     "ms_acl", "saprouttab", "gw_secinfo", "gw_reginfo", "ext_os_commands_sap",
 }
@@ -1077,9 +1085,39 @@ def build_manifest(data: Dict[str, Any],
     empty = sorted(k for k in known if data.get(k) is not None and not data.get(k))
     absent = sorted(k for k in known if data.get(k) is None)
 
+    # ABSENCE HAS THREE CAUSES IN RISE AND THEY BELONG TO DIFFERENT PEOPLE.
+    # `missing` is the customer's — they can export it and did not. `unreachable`
+    # is nobody's — no amount of effort produces an OS file in RISE.
+    # `needs_sap_action` is SAP's queue, and it did not exist here before: with
+    # two buckets it had to be filed as one of the other two, and both readings
+    # cost something real. Filed as missing it blames the customer for SAP's
+    # queue; filed as unreachable it tells them to stop asking for data they
+    # could actually get by raising a ticket.
+    #
+    # Eleven sources this product's own RISE research calls SAP-operated — the
+    # HANA configuration views, the ICM/SNC parameters, the crypto library — were
+    # landing in the customer's column until this table was consulted.
     rise = is_rise(deployment_mode)
-    unreachable = sorted(RISE_UNREACHABLE_SOURCES & set(absent)) if rise else []
-    missing = [k for k in absent if k not in set(unreachable)]
+    buckets: Dict[str, List[str]] = {"missing": [], "needs_sap_action": [],
+                                     "unreachable": []}
+    if rise and reachability.load():
+        for key in absent:
+            buckets[reachability.bucket_of(key, deployment_mode)].append(key)
+    elif rise:
+        # Content file unreadable. Degrade to the literal above rather than to
+        # "nothing is unreachable", which would be worse than the old behaviour.
+        for key in absent:
+            target = ("unreachable" if key in RISE_UNREACHABLE_SOURCES
+                      else "missing")
+            buckets[target].append(key)
+    else:
+        buckets["missing"] = list(absent)
+    missing = buckets["missing"]
+    needs_sap = sorted(buckets["needs_sap_action"])
+    unreachable = sorted(buckets["unreachable"])
+    # How much of the answer above is riding on the default rather than on a
+    # recorded row. A table that silently defaults is a table nobody finishes.
+    unclassified = reachability.unclassified(known) if rise else []
 
     supplied_set = set(supplied)
     # A non-file input counts as supplied when it is present in `data` at all —
@@ -1160,6 +1198,8 @@ def build_manifest(data: Dict[str, Any],
         "sources_empty": len(empty),
         "sources_missing": len(missing),
         "sources_unreachable_in_rise": len(unreachable),
+        "sources_needing_sap_action": len(needs_sap),
+        "sources_unclassified_for_rise": len(unclassified),
         "modules_complete": sum(1 for m in mods.values() if m["status"] == "complete"),
         "modules_degraded": sum(1 for m in mods.values() if m["status"] == "degraded"),
         "modules_skipped": sum(1 for m in mods.values() if m["status"] == "skipped"),
@@ -1177,6 +1217,12 @@ def build_manifest(data: Dict[str, Any],
         "empty": empty,
         "missing": missing,
         "unreachable_in_rise": unreachable,
+        # Absent, and the customer cannot self-serve it — SAP must be asked. Each
+        # entry carries the procedure and what blocks it, so the report can tell
+        # them what to raise rather than only that something is absent.
+        "needs_sap_action": needs_sap,
+        "needs_sap_action_detail": {k: reachability.detail(k) for k in needs_sap},
+        "unclassified_for_rise": unclassified,
         "modules": mods,
         "summary": summarize(counts, deployment_mode),
     }
@@ -1221,6 +1267,15 @@ def summarize(counts: Dict[str, int], deployment_mode: str = "on_prem") -> str:
             f"{counts['sources_unreachable_in_rise']} source(s) are not obtainable in "
             "RISE at all (they require OS access) and are excluded rather than counted "
             "as missing."
+        )
+    # SEPARATE SENTENCE, SEPARATE OWNER. Folding this into the line above would
+    # tell a customer to stop asking for data they can get; folding it into
+    # "missing" would blame them for SAP's queue.
+    if counts.get("sources_needing_sap_action"):
+        parts.append(
+            f"{counts['sources_needing_sap_action']} source(s) are SAP-operated under "
+            "RISE: obtainable only by raising a service request, so they are not "
+            "counted against the upload."
         )
     # GATED ON THE MODULES TOO, not on the sources alone. Every source can be
     # present while half the modules were never asked to look at them, and
