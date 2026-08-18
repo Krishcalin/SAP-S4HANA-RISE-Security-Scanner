@@ -1006,6 +1006,66 @@ class SapHotNewsAuditor(BaseAuditor):
             out.setdefault(name, set()).add((release, int(digits)))
         return out
 
+    def _installed_hana(self) -> Optional[str]:
+        """The installed HANA revision, or None.
+
+        Accepts the `NAME`/`VALUE` shape SAP's own config store uses — the store
+        is read as `NAME = 'VERSION'` — and a bare `VERSION` column, which is what
+        `M_DATABASE` gives when queried directly. A row that names neither is
+        skipped rather than guessed at.
+        """
+        for row in (self.data.get("hana_version") or []):
+            if not isinstance(row, dict):
+                continue
+            keys = {str(k).strip().upper(): v for k, v in row.items()}
+            name = str(keys.get("NAME", keys.get("PARAMETER", ""))).strip().upper()
+            value = str(keys.get("VALUE", keys.get("VERSION", ""))).strip()
+            if value and (not name or name in ("VERSION", "HDB_VERSION")):
+                return value
+        return None
+
+    @staticmethod
+    def _revision_tuple(value: str) -> Tuple[int, ...]:
+        """`2.00.073.00.1745` -> (2, 0, 73, 0, 1745).
+
+        Compared numerically, NOT as strings. SAP's own predicate compares a
+        truncated version string, which works only because HANA zero-pads its
+        segments; borrowing that would make the comparison depend on padding this
+        product does not control. A non-numeric segment stops the parse rather
+        than being coerced — a revision this cannot read must not be silently
+        ordered against one it can.
+        """
+        out = []
+        for part in str(value or "").split("."):
+            digits = "".join(c for c in part if c.isdigit())
+            if not digits:
+                break
+            out.append(int(digits))
+        return tuple(out)
+
+    def _hana_verdict(self, record: Dict[str, Any], installed: str):
+        """Is the installed HANA revision below this note's fix? With evidence."""
+        levels = record.get("hana_fix") or []
+        if not levels or not installed:
+            return None, []
+        current = self._revision_tuple(installed)
+        if not current:
+            return None, []
+        for row in levels:
+            branch, minimum = row["branch"], row["min_revision"]
+            if not installed.startswith(branch):
+                continue
+            needed = self._revision_tuple(minimum)
+            # Compare only as far as SAP states the fix. A note fixed in
+            # `2.00.001.0` says nothing about the segments below that.
+            width = min(len(current), len(needed))
+            if current[:width] < needed[:width]:
+                return "below", ["HANA is at revision %s; the fix is in %s"
+                                 % (installed, minimum)]
+            return "fixed", ["HANA is at revision %s" % installed]
+        # The installed branch is not one SAP's list mentions. Unknown, not safe.
+        return None, []
+
     def _verdict(self, record: Dict[str, Any],
                  installed: Dict[str, Set[Tuple[str, int]]]):
         """Is this note's fix missing from an installed component? With evidence.
@@ -1019,6 +1079,14 @@ class SapHotNewsAuditor(BaseAuditor):
         which this product does not interpret). Neither is evidence that the
         system is safe, and both are reported as coverage rather than silence.
         """
+        # The database half. A HANA note carries no component fix levels, so
+        # without this it could only ever be "unknown" — which is why HDB_VERSION
+        # was the largest unmapped store once the kernel one was built.
+        hana_state, hana_evidence = self._hana_verdict(
+            record, self._installed_hana())
+        if hana_state:
+            return hana_state, hana_evidence
+
         levels = record.get("fix_levels") or []
         if not levels:
             return "unknown", []
@@ -1054,7 +1122,7 @@ class SapHotNewsAuditor(BaseAuditor):
             return cached
         installed = self._installed_levels()
         settled = {}
-        if installed:
+        if installed or self._installed_hana():
             for note, record in self._sap_catalogue().items():
                 if note in present:
                     continue

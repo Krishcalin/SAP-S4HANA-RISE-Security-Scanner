@@ -155,6 +155,16 @@ _SP_THRESHOLD = re.compile(r"(?:&lt;|<)\s*'?(\d{1,5})'?")
 #: An affected RANGE. Not interpreted — see the docstring.
 _BETWEEN = re.compile(r"\bbetween\b", re.IGNORECASE)
 
+#: `substring(VALUE,0,7) = '2.00.00' AND substring(VALUE,0,14) >= '2.00.001.0'`
+#: — the HANA branch prefix and the first revision carrying the fix. SAP compares
+#: a truncated version string; what is taken here is the PAIR, and the comparison
+#: against an installed revision is this product's own, done on integer segments
+#: rather than by string ordering.
+_HANA_FIX = re.compile(
+    r"substring\s*\(\s*VALUE\s*,\s*\d+\s*,\s*\d+\s*\)\s*=\s*'([^']+)'"
+    r"\s*AND\s*substring\s*\(\s*VALUE\s*,\s*\d+\s*,\s*\d+\s*\)"
+    r"\s*(?:&gt;=|>=)\s*'([^']+)'", re.IGNORECASE)
+
 #: `NAME = 'KERN_PATCHLEVEL' and lpad(VALUE,4,'0') >= '1518'`
 _KERN_PATCH = re.compile(
     r"NAME\s*=\s*'KERN_PATCHLEVEL'\s*and\s*lpad\s*\(\s*VALUE\s*,\s*\d+\s*,"
@@ -200,12 +210,12 @@ CONFIGSTORE_SOURCES = {
     "GW_REGINFO": "gw_reginfo",
     "GW_SECINFO": "gw_secinfo",
     "SAP_KERNEL": "sap_kernel",
+    "HDB_VERSION": "hana_version",
 }
 #: Config stores with no export behind them yet, and what each would need. Kept
 #: explicit so the catalogue can count what a missing export costs rather than
 #: leaving the note looking unanswerable.
 CONFIGSTORE_UNMAPPED = {
-    "HDB_VERSION": "HANA revision",
     "SAPUI5_VERSION": "SAPUI5 version",
     "BOBJ_VERSION": "BusinessObjects version",
     "ABAP_UR_VERSION": "Unified Rendering version",
@@ -300,6 +310,10 @@ def parse_policy(path: Path, strict_errors: list) -> dict:
                 for triple in _component_levels(blob):
                     levels.setdefault(note, {}).setdefault(
                         "components", set()).add(triple)
+            elif store_name == "HDB_VERSION":
+                for branch, minimum in _HANA_FIX.findall(blob):
+                    levels.setdefault(note, {}).setdefault(
+                        "hana", set()).add((branch, minimum))
             elif store_name == "SAP_KERNEL":
                 patch = _KERN_PATCH.search(blob)
                 if patch:
@@ -347,6 +361,7 @@ def build(source: Path, strict: bool = False) -> str:
     notes: dict = {}
     patchdays = set()
     range_items = 0
+    unattributable = 0
     for path in files:
         policy = parse_policy(path, strict_errors)
         patchdays.add(policy["patchday"])
@@ -356,7 +371,7 @@ def build(source: Path, strict: bool = False) -> str:
                 "cve": [], "component": None, "cvss": None, "priority": None,
                 "title": None, "patch_days": [], "stacks": [],
                 "checked_by_sap_policy": False, "config_stores": [],
-                "fix_levels": [], "kernel_fix": [],
+                "fix_levels": [], "kernel_fix": [], "hana_fix": [],
             })
             if entry.get("cve") and entry["cve"] not in rec["cve"]:
                 rec["cve"].append(entry["cve"])
@@ -371,6 +386,14 @@ def build(source: Path, strict: bool = False) -> str:
         for note, found in policy["levels"].items():
             rec = notes.get(note)
             if rec is None:
+                # SAP's own files carry at least one malformed check-item id —
+                # `id="00022704878"`, which is note 2704878 with a stray zero —
+                # and it names no note any header declared. Attaching it by
+                # guessing which note was meant is exactly the kind of inference
+                # this catalogue exists to avoid, so it is counted and dropped
+                # rather than repaired. One note loses its fix levels and the
+                # number is visible, which is the honest trade.
+                unattributable += 1
                 continue
             for component, release, sp in sorted(found.get("components", ())):
                 row = {"component": component, "release": release, "min_sp": sp}
@@ -380,6 +403,10 @@ def build(source: Path, strict: bool = False) -> str:
                 row = {"release": release, "min_patch": patch}
                 if row not in rec["kernel_fix"]:
                     rec["kernel_fix"].append(row)
+            for branch, minimum in sorted(found.get("hana", ())):
+                row = {"branch": branch, "min_revision": minimum}
+                if row not in rec["hana_fix"]:
+                    rec["hana_fix"].append(row)
         for note, stores in policy["stores"].items():
             rec = notes.get(note)
             if rec is None:
@@ -391,6 +418,7 @@ def build(source: Path, strict: bool = False) -> str:
     for rec in notes.values():
         rec["fix_levels"].sort(key=lambda r: (r["component"], r["release"]))
         rec["kernel_fix"].sort(key=lambda r: r["release"])
+        rec["hana_fix"].sort(key=lambda r: r["branch"])
         rec["cve"].sort()
         rec["patch_days"].sort()
         rec["stacks"].sort()
@@ -451,6 +479,9 @@ def build(source: Path, strict: bool = False) -> str:
                 len(r["fix_levels"]) for r in notes.values()),
             "with_kernel_fix_levels": sum(
                 1 for r in notes.values() if r["kernel_fix"]),
+            "with_hana_fix_levels": sum(
+                1 for r in notes.values() if r["hana_fix"]),
+            "check_items_with_an_unattributable_id": unattributable,
             "check_items_using_an_uninterpreted_range": range_items,
         },
         "fix_levels": (

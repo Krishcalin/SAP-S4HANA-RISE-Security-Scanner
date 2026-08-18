@@ -138,13 +138,21 @@ def test_the_config_store_mapping_points_at_sources_the_loader_accepts(catalogue
 def test_an_unmapped_store_is_recorded_rather_than_dropped(catalogue):
     """A store with no export behind it must still be named, or a note blocked
     only by it looks unanswerable in principle rather than for a reason somebody
-    could fix. SAP_KERNEL used to be the largest of these and now has an export;
-    HDB_VERSION and the UI5/BusinessObjects stores remain."""
+    could fix.
+
+    Two have graduated out of this table since it was written — SAP_KERNEL, then
+    HDB_VERSION, each the largest remaining at the time — which is what the table
+    is for: it names the next one worth building rather than leaving the gap
+    implicit. The UI5, BusinessObjects, Unified Rendering and IGS stores remain,
+    and each is worth a handful of notes rather than dozens.
+    """
     meta = catalogue["_meta"]
     assert meta["config_store_unmapped"], "nothing is declared unmapped"
-    assert "HDB_VERSION" in meta["config_store_unmapped"]
+    assert "SAPUI5_VERSION" in meta["config_store_unmapped"]
     assert meta["counts"]["blocked_only_by_an_unmapped_store"] > 0
-    assert "SAP_KERNEL" in meta["config_store_sources"]
+    for graduated in ("SAP_KERNEL", "HDB_VERSION"):
+        assert graduated in meta["config_store_sources"]
+        assert graduated not in meta["config_store_unmapped"]
 
 
 def test_the_kernel_export_is_worth_far_more_than_the_old_measurement(catalogue):
@@ -363,3 +371,103 @@ def test_uninterpreted_ranges_are_counted_rather_than_silently_skipped(catalogue
     were skipped is not."""
     assert catalogue["_meta"]["counts"][
         "check_items_using_an_uninterpreted_range"] > 0
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  HDB_VERSION — the database half of the applicability engine
+# ═════════════════════════════════════════════════════════════════════════════
+
+#: Note 2424173 is fixed in HANA 1.00.122.07 and 2.00.001.0, per SAP's own policy.
+_HANA_NOTE = "2424173"
+
+
+def _hana(revision, applied="1"):
+    data = {"applied_notes": [{"NOTE": applied, "STATUS": "Completely implemented"}]}
+    if revision is not None:
+        data["hana_version"] = [{"NAME": "VERSION", "VALUE": revision}]
+    return _run(data)
+
+
+def test_a_revision_below_the_fix_is_a_determination():
+    """The point of mapping HDB_VERSION. A HANA note carries no component fix
+    levels, so before this it could only ever be reported as unassessed."""
+    fired = _hana("1.00.122.00")
+    listed = {i.split(" ", 1)[0] for i in fired["HOTNEWS-013"]["affected_items"]}
+    assert _HANA_NOTE in listed
+
+
+def test_the_evidence_names_the_installed_revision_and_the_required_one():
+    hit = [i for i in _hana("1.00.122.00")["HOTNEWS-013"]["affected_items"]
+           if i.startswith(_HANA_NOTE)]
+    assert hit
+    assert "HANA is at revision 1.00.122.00" in hit[0]
+    assert "the fix is in 1.00.122.07" in hit[0]
+
+
+def test_a_revision_above_the_fix_is_not_reported():
+    listed = {i.split(" ", 1)[0] for i in
+              _hana("1.00.122.30").get("HOTNEWS-013", {}).get("affected_items", [])}
+    assert _HANA_NOTE not in listed
+
+
+def test_the_comparison_is_numeric_not_lexicographic():
+    """SAP's predicate compares a truncated version STRING, which works only
+    because HANA zero-pads its segments. Borrowing that would make the answer
+    depend on padding this product does not control: as strings, "1.00.122.9" is
+    greater than "1.00.122.07" and also greater than "1.00.122.30"."""
+    from modules.sap_hotnews import SapHotNewsAuditor as H
+    assert H._revision_tuple("1.00.122.9") == (1, 0, 122, 9)
+    assert H._revision_tuple("1.00.122.30") > H._revision_tuple("1.00.122.9")
+    assert H._revision_tuple("2.00.073.00.1745") > H._revision_tuple("2.00.001.0")
+
+
+def test_a_branch_sap_does_not_mention_is_unknown_not_safe():
+    """SAP lists the branches it knows. An installed branch outside that list is
+    undetermined, and undetermined belongs in HOTNEWS-012, never in silence."""
+    listed = {i.split(" ", 1)[0] for i in
+              _hana("9.99.999.00").get("HOTNEWS-013", {}).get("affected_items", [])}
+    assert _HANA_NOTE not in listed
+
+
+def test_an_unreadable_revision_is_dropped_rather_than_ordered():
+    """A revision this cannot parse must not be silently ordered against one it
+    can — that is how an unreadable cell becomes a critical finding."""
+    fired = _run({"applied_notes": [{"NOTE": "1", "STATUS": "Completely implemented"}],
+                  "hana_version": [{"NAME": "VERSION", "VALUE": "unknown"}]})
+    listed = {i.split(" ", 1)[0] for i in
+              fired.get("HOTNEWS-013", {}).get("affected_items", [])}
+    assert _HANA_NOTE not in listed
+
+
+def test_a_note_already_implemented_is_not_reported_however_old_the_revision():
+    listed = {i.split(" ", 1)[0] for i in
+              _hana("1.00.122.00", applied=_HANA_NOTE)
+              .get("HOTNEWS-013", {}).get("affected_items", [])}
+    assert _HANA_NOTE not in listed
+
+
+def test_the_bare_version_column_is_accepted_too():
+    """`SELECT VERSION FROM M_DATABASE` gives a single column; SAP's own config
+    store gives NAME/VALUE. Both are real exports and both must load."""
+    fired = _run({"applied_notes": [{"NOTE": "1", "STATUS": "Completely implemented"}],
+                  "hana_version": [{"VERSION": "1.00.122.00"}]})
+    listed = {i.split(" ", 1)[0] for i in fired["HOTNEWS-013"]["affected_items"]}
+    assert _HANA_NOTE in listed
+
+
+def test_the_store_is_mapped_and_the_source_exists(catalogue):
+    from modules.data_loader import DataLoader
+    assert "hana_version" in DataLoader.FILE_MAP
+    assert catalogue["_meta"]["config_store_sources"]["HDB_VERSION"] == "hana_version"
+    assert "HDB_VERSION" not in catalogue["_meta"]["config_store_unmapped"]
+    assert catalogue["_meta"]["counts"]["with_hana_fix_levels"] > 20
+
+
+def test_a_malformed_check_item_id_is_counted_rather_than_repaired(catalogue):
+    """SAP's own files carry `id="00022704878"` — note 2704878 with a stray zero
+    — which names no note any header declared. Guessing which note was meant is
+    the inference this catalogue exists to avoid, so it is counted and dropped:
+    one note loses its fix levels and the number is visible."""
+    assert catalogue["_meta"]["counts"]["check_items_with_an_unattributable_id"] > 0
+    assert "22704878" not in catalogue["notes"]
+    assert "2704878" in catalogue["notes"]

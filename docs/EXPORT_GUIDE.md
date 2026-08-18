@@ -1836,6 +1836,40 @@ running several application servers can carry different kernel patch levels on
 each, and a finding attributed to the wrong host sends somebody to patch a
 machine that was already current.
 
+### HANA revision (`hana_version.csv`)
+**Source:** the database's own version, from `M_DATABASE`:
+
+```sql
+SELECT VERSION FROM M_DATABASE;
+```
+
+Also accepted: `hdb_version.csv`, `m_database.csv`
+
+| Column (any of) | Meaning |
+|---|---|
+| `VERSION` | the full revision string, e.g. `2.00.073.00.1745...` |
+| `NAME` + `VALUE` | the SAP config-store shape: `NAME` is `VERSION` |
+
+```
+NAME,VALUE
+VERSION,2.00.073.00.1745910275
+```
+
+**Export the WHOLE string, not the SPS.** SAP publishes note fixes at revision
+granularity — note 2424173 is fixed in `1.00.122.07`, not "SPS12" — so a value
+truncated to `2.00.073` cannot be compared against a fix at `2.00.073.00.17`, and
+the check reports the note as undetermined rather than guessing.
+
+**The counterpart of `sap_kernel.csv`, for the database half.** SAP's own note
+policies read the HANA revision in 30 check items, and 18 notes could be answered
+from no other export. Supplying it lets `HOTNEWS-013` state a determination — *"HANA
+is at revision 1.00.122.00; the fix is in 1.00.122.07"* — instead of listing the
+note as unassessed.
+
+Take it from the **same database** the rest of the export describes. A scale-out
+or MDC landscape has one revision per system, and a finding attributed to the
+wrong tenant sends somebody to patch a database that was already current.
+
 ### SNC parameters (`snc_config.csv`)
 **Source:** `RZ11` — the `snc/*` profile parameters. If you are already supplying
 `security_params.csv` you can skip this file; the check falls back to it.

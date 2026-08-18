@@ -1106,7 +1106,7 @@ J_PATEL,A,64,20240119,,SALES
 <p>Three rows, and already several of the questions from chapter 3 can be asked. Is <code>J_PATEL</code> locked but still holding roles? <code>TRDAT</code> says the account has not logged in since January 2024 — is it dormant? <code>BATCH_MM</code> is a background account: does it hold permissions no automated job should have?</p>
 
 <h4>How many files, and does it matter if some are missing?</h4>
-<p>The full catalogue runs to <strong>130 logical sources</strong> (<a href="#appC">Appendix C</a> lists them). Almost nobody supplies all of them on a first run, and that is expected. Every file is optional: the system runs whatever checks it has the information for and records the rest as not assessed.</p>
+<p>The full catalogue runs to <strong>131 logical sources</strong> (<a href="#appC">Appendix C</a> lists them). Almost nobody supplies all of them on a first run, and that is expected. Every file is optional: the system runs whatever checks it has the information for and records the rest as not assessed.</p>
 <p>What is <em>not</em> acceptable is for a partial export to produce a clean-looking report. That is the whole subject of chapter <a href="#ch13">13</a>.</p>
 
 <h4>How the export is produced</h4>
@@ -1201,7 +1201,7 @@ J_PATEL,A,64,20240119,,SALES
   <text class="sv-m" x="46" y="154">security_params.csv</text>
   <text class="sv-m" x="46" y="184">rfc_destinations.csv</text>
   <text class="sv-m" x="46" y="214">btp_destinations.json</text>
-  <text class="sv-ms" x="46" y="248">…and up to 130 others,</text>
+  <text class="sv-ms" x="46" y="248">…and up to 131 others,</text>
   <text class="sv-ms" x="46" y="272">any of which may be absent</text>
 
   <path class="ln" d="M324 162 H 404" marker-end="url(#ar)"/>
@@ -1230,7 +1230,7 @@ J_PATEL,A,64,20240119,,SALES
 
 <h4>The unusual decision: absence is normal</h4>
 <p>In most software, asking for something that is not there is an error. Here it is not. If <code>ral_config.csv</code> was never supplied, the slot called <code>ral_config</code> exists and is empty, and every check that needs it quietly stands aside.</p>
-<p>This is the only sensible behaviour when nobody ever supplies all 130 sources — but it creates a serious danger, which the next chapter is entirely about. A system that skips silently produces a short, clean report and looks like good news.</p>
+<p>This is the only sensible behaviour when nobody ever supplies all 131 sources — but it creates a serious danger, which the next chapter is entirely about. A system that skips silently produces a short, clean report and looks like good news.</p>
 
 <div class="call crim">
   <span class="k">The trap, stated once so you recognise it later</span>
@@ -1273,7 +1273,7 @@ J_PATEL,A,64,20240119,,SALES
         <span class="plbl">With a coverage statement</span>
         <span class="ph">“12 findings. 2 critical.”</span>
         <ul>
-          <li>“You supplied 41 of 130 sources.”</li>
+          <li>“You supplied 41 of 131 sources.”</li>
           <li>“21 areas were not assessed.”</li>
           <li>“1 source cannot be obtained in RISE at all.”</li>
         </ul>
@@ -2714,7 +2714,7 @@ fair_findings = list(all_findings)
 
 <p style="font-size:15px;color:var(--ink2);max-width:80ch"><strong>Provenance and caveat.</strong> This book was written from the repository’s documentation and its top-level program, at <a href="https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner">github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner</a>. Module names, the command-line surface, the pipeline order, the corpus-split rule, the gate rules and the deployment-mode behaviour are taken from the source and documentation. Descriptions of the internal structure of individual inspectors, the exact shape of a finding record, and the illustrative code in Appendix E are reconstructions written to be faithful in substance rather than literal in syntax; verify against the source before quoting them. All diagrams are architectural rather than exhaustive.</p>
 
-<p style="font-size:15px;color:var(--ink2);max-width:80ch">The counts this document states — 681 checks, 414 written as literals, 267 generated at run time from 5 rule families, 33 modules, 136 custom-code rules, 27 duty-separation risks, 78 profile parameters and 130 logical sources — are derived from the code by <code>tests/test_architecture_doc.py</code>, which fails the build if this page and the source disagree. Edition 1.1 corrected three figures that had drifted from the source.</p>
+<p style="font-size:15px;color:var(--ink2);max-width:80ch">The counts this document states — 681 checks, 414 written as literals, 267 generated at run time from 5 rule families, 33 modules, 136 custom-code rules, 27 duty-separation risks, 78 profile parameters and 131 logical sources — are derived from the code by <code>tests/test_architecture_doc.py</code>, which fails the build if this page and the source disagree. Edition 1.1 corrected three figures that had drifted from the source.</p>
 
 <p style="font-size:15px;color:var(--ink2)"><strong>Confidential.</strong> This document is not for publication. It describes the internal design, the current limitations and the forward direction of a commercial product; treat it as you would any other confidential product document.</p>
 

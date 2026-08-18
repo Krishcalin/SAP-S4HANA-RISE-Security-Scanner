@@ -8,7 +8,7 @@
 Every logical source the scanner can read, what it enables, and whether
 [`EXPORT_GUIDE.md`](EXPORT_GUIDE.md) tells you how to produce it.
 
-**130 logical sources, all of them with a written procedure** in the export
+**131 logical sources, all of them with a written procedure** in the export
 guide. This table is the regression detector for that: add a source to the loader
 without writing its procedure and it appears here as *not yet written*.
 
@@ -87,6 +87,7 @@ clean — see chapter 13 of the architecture guide.
 | `hana_granted_privileges` | `hana_granted_privileges.csv`, `granted_privileges.csv` | `hana_db_security` | documented |
 | `hana_granted_roles` | `hana_granted_roles.csv`, `granted_roles.csv` | `hana_db_security` | documented |
 | `hana_parameters` | `hana_parameters.csv`, `m_inifile_contents.csv`, `hana_ini.csv` | `crypto_posture`, `hana_db_security`, `resilience_posture` | documented |
+| `hana_version` | `hana_version.csv`, `hdb_version.csv`, `m_database.csv` | `sap_hotnews` | documented |
 | `ias_config` | `ias_config.json`, `ias_applications.json` | `btp_cloud_surface`, `iam_advanced` | documented |
 | `icf_services` | `icf_services.csv`, `sicf.csv`, `icf_nodes.csv` | `network_services` | documented |
 | `idoc_partners` | `idoc_partners.csv`, `we20.csv` | `integration_layer` | documented |

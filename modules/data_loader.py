@@ -185,6 +185,11 @@ class DataLoader:
         "client_settings":         ["client_settings.csv", "scc4.csv"],
         "change_documents":        ["change_documents.csv", "cdhdr.csv"],
         "change_document_items":   ["change_document_items.csv", "cdpos.csv"],
+        # HANA revision. The counterpart of sap_kernel for the database half:
+        # SAP's note policies read HDB_VERSION in 30 check items, and without it
+        # 18 notes cannot be answered from any other export.
+        "hana_version":            ["hana_version.csv", "hdb_version.csv",
+                                    "m_database.csv"],
         # Kernel release and patch level. Small file, large consequence: SAP's
         # own note policies use SAP_KERNEL in 602 check items, and without it 62
         # notes cannot be answered at all.
