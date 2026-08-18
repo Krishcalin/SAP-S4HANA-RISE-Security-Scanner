@@ -140,14 +140,67 @@ def test_the_original_five_are_still_unreachable():
     assert reach.sources_in_state("no") == RISE_UNREACHABLE_SOURCES
 
 
-def test_the_count_riding_on_the_default_is_reported():
-    """41 of 132 sources have no row and take `DEFAULT_STATE`. That is a fine
-    default and a bad secret — a table that silently defaults is a table nobody
-    finishes."""
-    unclassified = reach.unclassified(all_logical_sources())
-    assert unclassified, "if this is empty the table is complete; update this test"
+def test_the_table_is_complete():
+    """It was not: 41 of 132 sources rode `DEFAULT_STATE`, which is a fine default
+    and a bad secret. Every logical source the loader knows now carries a row.
+
+    The default and its count both stay — the next source added will ride it until
+    somebody writes its row, and the count is what makes that visible rather than
+    silent. That is what the test below proves still works."""
+    assert reach.unclassified(all_logical_sources()) == []
+
+
+def test_the_count_riding_on_the_default_is_still_reported():
+    """The mechanism outlives the completeness. A source the loader knows and the
+    table does not must still surface, or finishing the table today quietly
+    removes the guard that keeps it finished tomorrow."""
+    known = list(all_logical_sources()) + ["a_source_nobody_classified_yet"]
+    assert reach.unclassified(known) == ["a_source_nobody_classified_yet"]
     m = build_manifest({}, modules_run=[], deployment_mode=RISE)
-    assert m["counts"]["sources_unclassified_for_rise"] == len(unclassified)
+    assert m["counts"]["sources_unclassified_for_rise"] == 0
+
+
+def test_every_row_says_where_its_classification_came_from():
+    """Transcribed from section 3, or inferred from the R&R principle, are
+    different strengths of claim. 94 rows are transcription; the rest are
+    inference and the table says which."""
+    import json
+    payload = json.loads(
+        (ROOT / "data" / "rise_reachability.json").read_text(encoding="utf-8"))
+    vocabulary = set(payload["_meta"]["basis"]) | {"section_3"}
+    for key, row in reach.load().items():
+        assert row.get("basis") in vocabulary, key
+
+
+def test_a_governance_record_is_not_presented_as_an_sap_export():
+    """Fourteen sources are records the customer maintains rather than anything
+    RISE does or does not permit. Absent means the record does not exist, which
+    is a different finding from a missing export, and the row says so."""
+    gov = [k for k, v in reach.load().items()
+           if v.get("basis") == "governance_artefact"]
+    assert len(gov) > 10
+    for key in gov:
+        assert "NOT AN SAP EXPORT" in reach.detail(key)["note"], key
+
+
+def test_every_unverified_row_names_what_would_settle_it():
+    """`verified: false` on its own is a shrug. What makes it actionable is the
+    question and where the answer comes from — four of these need a design-partner
+    tenant, one needs a customer who runs their own Web Dispatcher, and knowing
+    which is the difference between a blocked item and a forgotten one."""
+    unverified = reach.unverified()
+    assert unverified, "if nothing is unverified, delete this test rather than it passing vacuously"
+    for key in unverified:
+        question = reach.detail(key).get("open_question", "")
+        assert len(question) > 60, key
+
+
+def test_an_inferred_infrastructure_row_admits_it_is_inferred():
+    """The rows classified from the principle rather than from a transcribed row
+    are the ones most likely to be wrong, so they carry the open question."""
+    for key, row in reach.load().items():
+        if row.get("basis") == "infrastructure" and row["state"] == "ticket":
+            assert row.get("verified") is False, key
 
 
 def test_unverified_rows_are_named_rather_than_presented_as_settled():
