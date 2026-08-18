@@ -376,8 +376,14 @@ and AWS — not to Wiz's gated docs.
       data change, never a code change". Original text follows:
       * — the six paths in
       `COMPETITIVE_ANALYSIS.md` §6.4, plus path 7 (the `SM69` ABAP→OS bridge)
-- [~] Landing screen — **PARTIAL**: `chokepoints` is computed and served from
-      `server/app.py`; the rendering was not found. Original: * with a remediation-status column, plus a choke-point
+- [x] Landing screen — **SHIPPED; this entry was wrong.** `frontend/src/routes/Paths.tsx`
+      renders the ranked path list, the four summary cards and the full choke-point
+      table — severs count coloured by CONSEQUENCE rather than by the finding's own
+      tier, linked check id, FAIR scenarios, ownership badge, state pill and an
+      explained empty state. Routed at `App.tsx` `/paths`. What was actually missing
+      was any TEST, which is how this entry came to disagree with the code:
+      nothing failed when the claim went stale and nothing would have failed if the
+      rendering went away. `Paths.test.tsx` now guards it. Original: * with a remediation-status column, plus a choke-point
       tab. The graph renders only inside one selected path
 - [x] `is_cut` drives **mitigate vs additional** — **ALREADY SHIPPED**, in the
       path hops and their cut semantics:
@@ -418,9 +424,13 @@ and AWS — not to Wiz's gated docs.
       `users_absent_from_logon_export` are reported alongside, and the CLI names
       which case it hit. Without them the product would have reported a fully
       dormant estate off two exports that never overlapped. Original: *
-- [~] Ruleset fingerprint + staleness — **COMPUTED, NOT SURFACED**:
-      `graph.ruleset_fingerprint()` stamps every path and staleness is calculated in
-      the query; the BANNER is the missing half. Original: *
+- [x] Ruleset fingerprint + staleness — **SHIPPED; this entry was wrong too.**
+      `graph.ruleset_fingerprint()` stamps every path, `path_summary` counts the ones
+      whose fingerprint differs from the current ruleset, and `Paths.tsx` renders the
+      banner — with the remedy, because a warning with no remedy is one the reader
+      learns to skip, and NOT on the healthy case, because a banner that always shows
+      is how the real one gets ignored. Guarded three ways in `Paths.test.tsx`
+      including the absence case. Original: *
 
 **Open items to close here:** confirm `rfc/callback_security_method` and
 `auth/rfc_authority_check` are in the 23-entry parameter baseline (path 2's chokepoint is
