@@ -99,11 +99,44 @@ def test_embedded_expressions_lex_as_code_not_as_template_text(label, source, ex
         [s.text for s in split_statements(source)]
 
 
-def test_a_column_one_star_inside_an_open_template_is_text_not_a_comment():
-    """`*` comments a line only in column 1 of CODE. Inside a template left open at
-    a line end it is content, and treating it as a comment dropped the line."""
-    stmts = split_statements("x = |first\n* still template|. WRITE x.\n")
+def test_a_star_inside_template_text_is_content_not_a_comment():
+    """`*` comments a line only in column 1 of CODE. Inside template text it is
+    content, and treating it as a comment dropped the line.
+
+    THIS TEST WAS RE-FIXTURED WHEN U1 WAS SETTLED. It used to open a template on
+    one line and continue it on the next — `x = |first\n* still template|.` —
+    which SAP's documentation says is not ABAP: "A string template that starts
+    with | must be closed with | within the same line of source code. The only
+    exceptions to this rule are line breaks in embedded expressions." So the old
+    fixture asserted correct handling of an input the language does not permit,
+    and the behaviour it pinned — carrying template mode across a newline — is
+    the defect U1 removed. The intent survives; the fixture is now a template
+    that closes where SAP says it must.
+    """
+    stmts = split_statements("x = |first * still template|. WRITE x.\n")
     assert len(stmts) == 2, [s.text for s in stmts]
+    assert "*" not in stmts[0].text_masked.split("|")[1], \
+        "the star was treated as a comment marker inside template text"
+
+
+def test_an_unclosed_template_does_not_swallow_the_next_line():
+    """U1's other half, and the reason it mattered. A template that reaches the
+    end of a line without closing cannot continue — so the following lines are
+    real code. While the lexer carried the mode across, every one of them was
+    masked as literal content and every rule went blind on them, bounded only by
+    the fifty-line runaway guard."""
+    stmts = split_statements(
+        "x = |unclosed\nDELETE FROM zcust WHERE id = lv_id.\n")
+    assert any("DELETE FROM zcust" in s.text for s in stmts), \
+        [s.text for s in stmts]
+
+
+def test_a_line_break_inside_an_embedded_expression_does_continue():
+    """The documented exception, which must keep working: "The only exceptions
+    to this rule are line breaks in embedded expressions." Closing the template
+    here instead would break the one multi-line form ABAP does allow."""
+    stmts = split_statements("x = |a{ lv_b\n  + lv_c }d|. WRITE x.\n")
+    assert any("WRITE x" in s.text for s in stmts), [s.text for s in stmts]
 
 
 # --------------------------------------------------------------------------- #

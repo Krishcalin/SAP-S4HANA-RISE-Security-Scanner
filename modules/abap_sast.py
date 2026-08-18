@@ -515,11 +515,21 @@ def split_statements(source: str) -> List[Statement]:
     pending_nosec: List[str] = []
     have_nosec = False
     stack: List[Tuple[str, str]] = []
+    pending_degraded = False
 
     def emit(text: str, masked: str, degraded: bool = False) -> None:
-        nonlocal block
+        nonlocal block, pending_degraded
         if not text:
             return
+        # U1. SAP forbids a literal or a template from crossing a line
+        # break, so `_scan_line` closes one that reaches the end of a line.
+        # That RECOVERS the following lines — they are real code and were
+        # previously masked away as literal content — but the line itself
+        # was malformed, and a recovery nobody is told about is
+        # indistinguishable from a file that lexed cleanly. Before this,
+        # only the fifty-line runaway guard ever noticed.
+        degraded = degraded or pending_degraded
+        pending_degraded = False
         if _BLOCK_OPEN.match(text):
             block += 1
         statements.append(Statement(
@@ -545,6 +555,8 @@ def split_statements(source: str) -> List[Statement]:
                 stack.pop()
 
         code, mask, term, stack = _scan_line(line, stack)
+        if _scan_line.unterminated_at_eol:
+            pending_degraded = True
         raw.append(line)
 
         if not code.strip():
@@ -1040,7 +1052,50 @@ def _scan_line(line: str, stack: List[Tuple[str, str]]
         put(ch)
         i += 1
 
-    return "".join(code), "".join(mask), "".join(term), stack
+    closed = _close_at_end_of_line(stack)
+    #: Set on the function so the splitter can mark the statement without
+    #: changing a return signature four call sites depend on.
+    _scan_line.unterminated_at_eol = len(closed) != len(stack)
+    return "".join(code), "".join(mask), "".join(term), closed
+
+
+def _close_at_end_of_line(stack: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+    """Drop the modes ABAP does not allow to cross a line break.
+
+    U1, settled, and the two halves have different answers — which is why
+    threading one and resetting the other looked like an unexplained bet.
+
+      * Character literals: "Character literals that span multiple lines are not
+        allowed." So `'...'` and `` `...` `` never continue.
+      * String templates: "A string template that starts with | must be closed
+        with | within the same line of source code. THE ONLY EXCEPTIONS TO THIS
+        RULE ARE LINE BREAKS IN EMBEDDED EXPRESSIONS." So `|...|` continues only
+        while a `{ ... }` is open inside it.
+
+    The mode stack introduced in T1.1 carried both across every line, which is
+    the WRONG DIRECTION TO BE WRONG IN. An unterminated delimiter is a syntax
+    error in real ABAP, but it arrives constantly in truncated exports, in files
+    with encoding damage, and behind any lexer slip; and while the mode is held,
+    every following line is masked as literal content, so every rule goes blind
+    on real code. `_RUNAWAY_LINES` bounded that at fifty lines. SAP's rule bounds
+    it at one.
+
+    An `_M_EMB` anywhere above an `_M_TPL` keeps that template open, because the
+    embedded expression is the documented exception and may legitimately span
+    lines. Nothing else survives the newline.
+    """
+    if not stack:
+        return stack
+    for depth in range(len(stack) - 1, -1, -1):
+        mode, _ = stack[depth]
+        if mode == _M_EMB:
+            # Inside an embedded expression: the documented exception. Keep this
+            # frame and everything under it, including the template it belongs to.
+            return stack[:depth + 1]
+        if mode in (_M_LIT, _M_TPL):
+            continue
+        return stack[:depth + 1]
+    return []
 
 
 def _trim3(c: str, m: str, t: str) -> Tuple[str, str, str]:
