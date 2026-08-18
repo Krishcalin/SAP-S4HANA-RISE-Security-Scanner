@@ -90,8 +90,28 @@ def test_a_cds_view_without_access_control_is_detected():
 
 
 def test_a_dcl_role_that_grants_unconditionally_is_detected():
-    """Worse than no role at all: a review sees that access control is defined."""
+    """Worse than no role at all: a review sees that access control is defined.
+
+    The fixture behind this test used to be written in a syntax DCL does not
+    have — `grant select on X where true` — matching a rule pattern written from
+    the same wrong assumption. The two agreed with each other and the test
+    passed for as long as both stayed wrong. SAP's keyword documentation settled
+    it (see U5): the full access rule is `GRANT SELECT ON cds_entity
+    [ REDEFINITION ] ;` with no WHERE at all.
+    """
     assert "ABAP-CDS-002" in ids("dcl_vulnerable.asdcls")
+
+
+def test_a_conditional_dcl_rule_in_the_same_file_is_not_reported():
+    """The negative half, which the old fixture could not express: a role that
+    restricts by `aspect pfcg_auth` is authorization working, and a check that
+    reported it alongside the full grant would be matching any grant at all."""
+    from modules.abap_sast import AbapSourceScanner
+    source = (FIXTURES / "dcl_vulnerable.asdcls").read_text(encoding="utf-8")
+    hits = [f for f in AbapSourceScanner(data_flow=True).scan_text(
+        source, FIXTURES / "dcl_vulnerable.asdcls")
+        if f["rule_id"] == "ABAP-CDS-002"]
+    assert len(hits) == 1, [h["line"] for h in hits]
 
 
 def test_xxe_ssrf_and_test_seam_are_detected():

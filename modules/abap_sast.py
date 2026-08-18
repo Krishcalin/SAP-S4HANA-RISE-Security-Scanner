@@ -145,7 +145,32 @@ _NAMESPACE_HOSTS: Tuple[str, ...] = (
     "schemas.xmlsoap.org", "schemas.microsoft.com",   # ours
 )
 
+#: U5, settled, and the rule was matching nothing.
+#:
+#: `ABAP-CDS-002` shipped as `GRANT SELECT ON \w+ WHERE TRUE`. SAP's keyword
+#: documentation gives the full-access rule as `GRANT SELECT ON cds_entity
+#: [ REDEFINITION ] ;` and says it in words: "A full access rule GRANT SELECT ON
+#: WITHOUT THE ADDITION WHERE provides access to a CDS entity cds_entity without
+#: conditions." DCL has no `WHERE TRUE`. The rule could never fire, and a
+#: HIGH/CWE-863 rule that cannot fire is worse than an absent one — it makes a
+#: clean result look like evidence.
+#:
+#: The real construct is the ABSENCE of the WHERE, so the pattern matches a
+#: grant that ends at its terminator. `REDEFINITION` is allowed between, because
+#: SAP's syntax permits it and it does not add a condition. This also matters
+#: more than it looks: SAP notes that it "does not as a rule supply any CDS roles
+#: with full access rules. Partners and customers can use full access rules to
+#: override roles supplied by SAP" — so a full-access rule in customer DCL is
+#: frequently an override of an SAP-delivered restriction.
+#: Anchored at the END OF THE STATEMENT, not on a `;`. The CDS/DCL splitter
+#: divides on the terminator and discards it, so by the time a rule sees the
+#: text there is no `;` left to match — and "the statement ends after the
+#: entity" is exactly what "without the addition WHERE" means once the source
+#: has been split into statements.
+_DCL_FULL_ACCESS = r"\bGRANT\s+SELECT\s+ON\s+[\w./]+\s*(?:REDEFINITION\s*)?$"
+
 PATTERN_FIXES: Dict[str, str] = {
+    "ABAP-CDS-002": _DCL_FULL_ACCESS,
     # `(?:DES|3DES|TRIPLE.?DES)\b` has no LEADING boundary, so the `des` in
     # `lv_modes` and `lt_codes` matched and reported HIGH "DES encryption".
     "ABAP-CRYP-003": r"\b(?:3DES|TRIPLE.?DES|DES)\b",
@@ -206,6 +231,15 @@ PATTERN_FIXES: Dict[str, str] = {
 #: `PATTERN_FIXES` cannot reach a rule's customer-facing text, and one rule's text
 #: asserts something the source contradicts.
 DESCRIPTION_FIXES: Dict[str, str] = {
+    "ABAP-CDS-002":
+        "A DCL access rule grants unrestricted access to a CDS entity. SAP's "
+        "full access rule is `GRANT SELECT ON <entity>;` with no WHERE "
+        "addition, and it has the same effect as having no role at all: "
+        "authorization control for that entity is switched off. SAP states it "
+        "does not as a rule supply CDS roles with full access rules, so one in "
+        "customer DCL is often an override of an SAP-delivered restriction "
+        "rather than a gap — confirm it was intended, and that the entity it "
+        "opens is not one carrying personal or financial data.",
     "ABAP-AUTH-002": (
         "This AUTHORITY-CHECK specifies DUMMY for every field, so no field value "
         "is actually compared and the statement checks only that the authorization "
@@ -297,6 +331,40 @@ LITERAL_BLIND: frozenset = frozenset({
 #: is the documented spelling.
 _AUTHORITY_CHECK_STMT = re.compile(
     r"^AUTHORITY-CHECK\s+OBJECT\b(?=.*\bFIELD\b)", re.IGNORECASE)
+
+#: U6, settled. SAP's syntax is
+#: `AUTHORITY-CHECK OBJECT auth_obj [FOR USER user] ID id1 {FIELD val1}|DUMMY`,
+#: and of the addition SAP says: "If the addition FOR USER is specified, the
+#: authorization of the user is checked whose user name is specified in user."
+#:
+#: That is a different question from the one every AUTHORITY_GUARDED rule asks.
+#: Those rules report an operation performed WITHOUT checking whether THIS user
+#: may perform it; a check aimed at somebody else answers nothing about the
+#: caller, and crediting it silenced the finding. It is the shape a user-admin
+#: or workflow-substitution report legitimately uses — so the construct is not
+#: wrong, it is simply not a guard for the current user, and this is a
+#: false-negative fix rather than a new finding.
+_AUTHORITY_FOR_OTHER_USER = re.compile(
+    r"^AUTHORITY-CHECK\s+OBJECT\b[^.]*?\bFOR\s+USER\b", re.IGNORECASE)
+
+#: U6's second half: every `sy-subrc` AUTHORITY-CHECK sets, from SAP's keyword
+#: documentation. The plan recorded only 0, 4 and 12 as documented.
+#:
+#: 40 arises ONLY with the FOR USER addition, which is why the two halves of U6
+#: were always one question. And 0 is the value worth reading twice — it means
+#: success OR THAT NO CHECK WAS CARRIED OUT, so `sy-subrc = 0` after an
+#: AUTHORITY-CHECK is not by itself proof that an authorization was tested.
+#: `_subrc_evaluated` therefore asks only whether the result is READ, and
+#: deliberately does not try to infer which branch means authorised.
+AUTHORITY_CHECK_SUBRC: Dict[int, str] = {
+    0: "authorization successful, or no check was carried out",
+    4: "authorization check not successful — authorizations exist for the "
+       "object but not for the values specified",
+    12: "no authorization was found for the object in the user master record",
+    40: "an invalid user ID was specified in user (FOR USER only)",
+}
+#: Documented as no longer set. Kept so nobody re-derives it from an old system.
+AUTHORITY_CHECK_SUBRC_OBSOLETE: Tuple[int, ...] = (24,)
 
 #: An AUTHORITY-CHECK whose result is never read is a no-op that the old guard
 #: credited in full.
@@ -1286,9 +1354,15 @@ def _guarded_blocks(statements: List[Statement]) -> set:
     inside a string literal (`WRITE 'TODO: add AUTHORITY-CHECK here'`), a check
     with no FIELD pair at all, a check whose result is discarded, and the
     undocumented spellings `AUTHORITY CHECK` / `AUTHORITYCHECK`.
+
+    A fifth was added once SAP's keyword documentation settled U6: a check
+    carrying the `FOR USER` addition asks about a DIFFERENT user, and answers
+    nothing about whether the caller may perform the operation. See
+    `_AUTHORITY_FOR_OTHER_USER`.
     """
     return {st.block for i, st in enumerate(statements)
             if _AUTHORITY_CHECK_STMT.match(st.text_masked)
+            and not _AUTHORITY_FOR_OTHER_USER.match(st.text_masked)
             and _subrc_evaluated(statements, i)}
 
 

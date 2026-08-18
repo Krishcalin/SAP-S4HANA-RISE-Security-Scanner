@@ -1,4 +1,15 @@
 @EndUserText.label: 'Vendor access'
 define role ZI_Vendor_Open {
-  grant select on ZI_Vendor where true;
+
+  // The full access rule, in SAP's actual syntax: GRANT SELECT ON with no
+  // WHERE addition. This fixture used to say `where true`, which is not DCL —
+  // it was written from the same wrong assumption as the rule it tested, so the
+  // two agreed with each other and neither was ever checked against SAP.
+  grant select on ZI_Vendor;
+
+  // A conditional rule, which must NOT be reported. Without it the fixture
+  // could not tell a rule that finds full access from one that matches any
+  // grant at all.
+  grant select on ZI_VendorRestricted
+    where (CompanyCode) = aspect pfcg_auth(F_LFA1_BUK, BUKRS, ACTVT = '03');
 }

@@ -491,14 +491,29 @@ Ranked by how often the safe form appears in real ABAP. All are `PATTERN_FIXES` 
 
 # 7. STILL UNVERIFIED — AND WHAT WOULD SETTLE IT
 
+> **Two closed.** U5 and U6 are settled against SAP's ABAP keyword documentation
+> and struck through below; both turned out to be defects rather than research
+> questions, which is the argument for working this list rather than leaving it.
+> Regression fixtures live in `tests/test_abap_open_questions.py`.
+>
+> The route that worked, for whoever takes the next one: the keyword
+> documentation is fetchable as static HTML at
+> `help.sap.com/doc/abapdocu_<nnn>_index_htm/<n.nn>/en-US/<page>.htm` — the
+> content page directly, NOT the `index.htm?file=` frameset, which returns only
+> the frame shell. `SAP-samples/abap-cheat-sheets` is fetchable through the
+> GitHub contents API and is a good way to find the page name, but it is a
+> teaching resource and stops short of full syntax: for U6 it says only that "an
+> addition is available with which you can specify other users" without naming
+> it. The keyword documentation named it.
+
 | # | Open question | Why it matters | Settles it |
 |---|---|---|---|
 | U1 | **May a text literal or string template span a line break? May a template nest inside `{ }`?** | The current lexer threads `in_template` across lines but resets `quote`/`escaped` — an unexplained bet on the answer, in two directions. The T1.1 mode stack is correct either way, which is precisely why it is the right shape; T1.2's flush is the safety net. | The ABAP keyword documentation's literals / string-templates pages. `16_Data_Types_and_Objects.md` is the closest machine-readable source and is silent. |
 | U2 | **`SELECT ... FIELDS ( ... )`** — does the field-list addition accept a parenthesised dynamic list? | Would extend A1. Grepping two files for it returned zero hits. | `03_ABAP_SQL.md` field-list section. |
 | U3 | **Is `check_whitelist` a legacy alias, or simply wrong?** | Determines whether it stays as an alias or is deleted in T1.7. | SAP's released-API listing for the dynamic-programming utility class — **not** the cheat sheets. |
 | U4 | **Which methods the HTTP utility class actually exposes** | Gates any narrowing of `ABAP-XSS-006`; until then, retire (F9). | `22_Released_ABAP_Classes.md`. |
-| U5 | **The DCL unconditional-grant syntax `ABAP-CDS-002` claims to match** | No such form was found in the authorization chapter. The rule may match a construct that does not exist. | `36_RAP_Behavior_Definition_Language.md` or a DCL-specific SAP page. |
-| U6 | **`AUTHORITY-CHECK`'s "for another user" addition, and the full `sy-subrc` code list** | A check aimed at a different user would still earn guard credit today. Only codes 0, 4 and 12 are documented in what we read. I will **not** name the addition — it appears in no fetched file. | The keyword-documentation page for `AUTHORITY-CHECK OBJECT`, linked from `25_Authorization_Checks.md`. |
+| ~~U5~~ | **SETTLED — and the rule was matching nothing.** SAP's keyword documentation gives the full access rule as `GRANT SELECT ON cds_entity [ REDEFINITION ] ;` and states it outright: "A full access rule GRANT SELECT ON **without the addition WHERE** provides access to a CDS entity `cds_entity` without conditions." There is no `WHERE TRUE` in DCL, so the shipped pattern could never fire — a HIGH/CWE-863 rule whose silence read as evidence. `PATTERN_FIXES` now matches the real construct (a grant that ends at its terminator, `REDEFINITION` permitted) and `DESCRIPTION_FIXES` carries SAP's own framing: it "does not as a rule supply any CDS roles with full access rules", so one in customer DCL is often an override of an SAP-delivered restriction. | `abencds_dcl_role_grant_rule.htm`, AS ABAP 7.55 | ✅ |
+| ~~U6~~ | **SETTLED — the guard was fail-open.** The addition is `FOR USER`: "If the addition FOR USER is specified, the authorization of the user is checked whose user name is specified in `user`." A check aimed at somebody else answers nothing about the caller, and `_guarded_blocks` was crediting it — a false negative in the most security-critical rule family here. `_AUTHORITY_FOR_OTHER_USER` now excludes it. The full `sy-subrc` list is 0, 4, 12 and **40** (invalid user id, which arises only WITH `FOR USER` — so both halves of this question were one question); 24 is documented as no longer set. Recorded in `AUTHORITY_CHECK_SUBRC`, including that **0 means success OR that no check was carried out**, so `sy-subrc = 0` is not proof a check happened. | `abapauthority-check.htm`, AS ABAP 7.50 | ✅ |
 | U7 | **Application-server dataset reads as a taint source** | Fits B7's existing `INTO`-target shape as a one-line addition if real. | `SAP/styleguides`, or a WebSearch restricted to SAP-published material. |
 | U8 | **The ABAP-Cloud HTTP handler interface** | Would be a B2-shaped procedure-parameter seeding, no new machinery. Covered by no file in the cheat-sheet repo. | `SAP/styleguides` or SAP-published documentation other than the help portal SPA. |
 | U9 | **Data-cluster media beyond memory / data buffer / internal table** (B6's shared-memory and database alternatives) | Included on structural symmetry only. Mark those alternatives UNVERIFIED in the code comment. | The keyword documentation's `IMPORT` page. |
