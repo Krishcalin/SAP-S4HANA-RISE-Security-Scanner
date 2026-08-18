@@ -67,6 +67,7 @@ from modules.pptx_report import PPTXReportGenerator
 from modules.finding_kb import FindingKB
 from modules.risk_prioritizer import RiskPrioritizer
 from modules import fair_adapter
+from modules import rise_ownership
 from modules.coverage import build_manifest
 from modules.data_loader import DataLoader
 from modules.deployment_modes import DEPLOYMENT_MODES, DEFAULT_DEPLOYMENT_MODE
@@ -591,6 +592,28 @@ def main():
     # domain roll-ups make exactly the same kind of claim, and on --severity HIGH
     # a Category with real MEDIUM findings rendered the green "no findings" chip.
     # The money was protected and the frameworks were not.
+    # WHO OWNS EACH FINDING, before anything downstream reads them.
+    #
+    # This ran only in the client-server product until now, so the offline report
+    # — the one a customer runs before they have bought anything — carried no
+    # "yours under RISE / SAP's under RISE" tag at all. docs/RISE_SECURITY_MODEL.md
+    # section 7.4 calls that tag the argument that justifies buying anything in a
+    # RISE tenant, and it was absent from the artefact that has to make it.
+    #
+    # Stamped onto the finding dicts in place so the report, the release gate and
+    # the JSON export all see the same verdict. On premise every finding comes
+    # back customer_fixable, which is the truth there rather than a default.
+    dest_hosts = rise_ownership.destination_hosts(data)
+    supplied_sources = {k for k, v in (data or {}).items() if v}
+    for f in all_findings:
+        owner, note = rise_ownership.owner_for_finding(
+            f, args.deployment_mode, dest_hosts, supplied_sources)
+        f["remediation_owner"] = owner
+        f.setdefault("owning_team", rise_ownership.team_for(
+            str(f.get("check_id") or "")))
+        if note:
+            f["ownership_note"] = note
+
     fair_findings = list(all_findings)
 
     # Filter by severity (affects the displayed findings / tiers only)

@@ -78,6 +78,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
+from modules.rise_ownership import classify_destination_owner
 from server.identity import AffectedObject, IdentityError, _CLOUD_SCOPED_TYPES
 
 RULES_PATH = Path(__file__).resolve().parents[1] / "data" / "graph_edges.json"
@@ -274,11 +275,38 @@ def _provenance(rule: Dict[str, Any], from_key: str,
     return "used" if name and name in active else "configured"
 
 
+def _edge_owner(rule: Dict[str, Any], to_key: str, deployment_mode: str,
+                dest_hosts: Optional[Dict[str, str]]) -> str:
+    """Who operates the thing at the far end of this edge.
+
+    `graph_edge.owner` has held `customer|sap|unknown` since the schema landed and
+    every edge was written `unknown`, while `rise_ownership.classify_destination_owner`
+    answered exactly this question for findings a few files away. An RFC
+    destination SAP operates in a RISE tenant is a real trust relationship and
+    belongs in the graph — it is simply not the customer's to sever, and a
+    chokepoint that recommends closing it is recommending a ticket they cannot
+    raise against a connection they do not control.
+
+    Only destination edges can be settled. A role or an authorization object has
+    no operator distinct from the system it lives in, so those stay `unknown`
+    rather than borrowing the destination heuristic.
+    """
+    if rule.get("to_type") != "destination" or dest_hosts is None:
+        return "unknown"
+    name = to_key.split(":", 1)[1].split("@", 1)[0].split("#", 1)[0] if ":" in to_key else ""
+    if not name:
+        return "unknown"
+    return classify_destination_owner(
+        name, dest_hosts.get(name.upper(), ""), deployment_mode)
+
+
 def extract_edges(findings: Iterable[Dict[str, Any]],
                   default_system: Optional[str] = None,
                   rules: Optional[List[Dict[str, Any]]] = None,
                   active: Optional[Set[str]] = None,
-                  observed: Optional[Set[str]] = None
+                  observed: Optional[Set[str]] = None,
+                  deployment_mode: str = "on_prem",
+                  dest_hosts: Optional[Dict[str, str]] = None
                   ) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
     """`(edges, stats)` for a set of findings.
 
@@ -304,7 +332,7 @@ def extract_edges(findings: Iterable[Dict[str, Any]],
     rules = load_rules() if rules is None else rules
     edges: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
     stats = {"declined_ambiguous": 0, "rules_applied": 0, "findings_seen": 0,
-             "used": 0, "configured": 0,
+             "used": 0, "configured": 0, "owner_sap": 0, "owner_customer": 0,
              "provenance_evidence": "logon_events" if active is not None else None}
 
     for finding in findings:
@@ -339,7 +367,8 @@ def extract_edges(findings: Iterable[Dict[str, Any]],
                             "check_id": check_id,
                             "provenance": _provenance(rule, source, active),
                             "confidence": "derived_from_config",
-                            "owner": "unknown",
+                            "owner": _edge_owner(rule, target,
+                                                 deployment_mode, dest_hosts),
                             "check_ids": [],
                         }
                         edges[key] = edge
@@ -350,6 +379,8 @@ def extract_edges(findings: Iterable[Dict[str, Any]],
     edge_users: Set[str] = set()
     for edge in edges.values():
         stats["used" if edge["provenance"] == "used" else "configured"] += 1
+        if edge["owner"] in ("sap", "customer"):
+            stats["owner_" + edge["owner"]] += 1
         if edge["from_key"].startswith("user:"):
             name = _user_name(edge["from_key"])
             if name:
