@@ -436,3 +436,34 @@ complete.
 - **The RFC-only surface list.** D3 requires it to be written down. It is not
   written down yet, and until it is, connected mode is not documentable as
   complete.
+- **Concur and Fieldglass.** Both are in the platform vocabulary, assessed by
+  nothing, and named in no decision document. `modules/platforms.py` records
+  them as `undecided` rather than quietly declining them — see D9.
+
+## D9 — Ariba: in the vocabulary, in no decision
+
+**Decided: declined, and the platform value stays.** Ariba reached
+`modules/platforms.PLATFORMS` — so a tenant can be registered against it —
+without ever appearing in a decision or scope document. That is the actual
+defect this settles: not that Ariba was unsupported, but that nothing said so
+while the product accepted a tenant of it.
+
+It is declined as a separate SaaS product rather than S/4HANA RISE, on the
+charter this product is built on. The prompt to settle it was a competitor
+assessment listing Ariba as covered — whose own evidence rating for that claim
+was *"internal email only; I found no public product page confirming
+Ariba-specific telemetry mechanics"*. Declining on thin third-party evidence is
+the right way round.
+
+**The value stays in `PLATFORMS`** for two reasons: an existing tenant row must
+not become invalid, and the refusal has to be visible at the moment somebody
+registers one. `add-tenant` now prints the recorded position for any platform
+that is not assessed.
+
+> If a real Ariba export shows a security surface worth checking, revisit this
+> rather than quietly carrying it. The same sentence D1 attaches to
+> SuccessFactors, for the same reason.
+
+**Not touched by this decision:** SuccessFactors, which D1 moved *into* scope
+and which remains there — `in_scope_unbuilt`, not declined. Recording it as an
+exclusion would have reversed D1 without saying so.

@@ -34,7 +34,7 @@ from typing import Optional
 
 from server import auth, db, ingest, totp
 from modules.deployment_modes import DEPLOYMENT_MODES, DEFAULT_DEPLOYMENT_MODE
-from modules.platforms import PLATFORMS, TENANT_PLATFORMS
+from modules.platforms import PLATFORMS, TENANT_PLATFORMS, status_note
 
 
 def cmd_init_db(args: argparse.Namespace) -> int:
@@ -262,6 +262,17 @@ def cmd_add_tenant(args: argparse.Namespace) -> int:
     if land is None:
         print(f"no such landscape: {args.landscape}", file=sys.stderr)
         return 1
+    # WHAT THIS PLATFORM WILL ACTUALLY GET, said before the row exists.
+    #
+    # `PLATFORMS` says which platforms a row may DECLARE; it never said whether
+    # any check would look at one. So `add-tenant ... ariba acme-prod` created a
+    # system that no module can produce a finding for, silently — and a registered
+    # tenant that can never be assessed reads as coverage. Printed rather than
+    # refused: the row is legitimate, it is the expectation that needed correcting.
+    note = status_note(args.platform)
+    if note:
+        print("note: " + note)
+
     if not args.external_key.strip():
         # The schema refuses this too (sap_system_shape_check demands
         # external_key <> ''), but a constraint violation is a poor way to learn
