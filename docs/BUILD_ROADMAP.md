@@ -539,7 +539,20 @@ for SAP's content would be exactly the fabrication this project forbids.
       SAP publishes as carrying the fix, with the evidence in the finding. That is
       "verifying the note took effect" as far as an offline export can reach it
 - [ ] SOX/ITGC framework mapping; "SAP ECS mandatory hardening" framework
-- [ ] Populate `owning_team` and `responsibility` across the catalogue
+- [x] Populate `owning_team` and `responsibility` across the catalogue — **SHIPPED,
+      with one half narrower than the heading.** `owning_team` is derived for every
+      check from `rise_ownership.TEAM_BY_PREFIX` and stored on `check_definition`.
+      Responsibility is `remediation_owner` — customer_fixable / ticket_to_sap /
+      provider_owned / not_assessable — derived per finding from SAP's published
+      Roles & Responsibilities, and it now reaches BOTH products: it moved out of
+      `server/enrich.py` into `modules/rise_ownership.py` so the offline scanner
+      stamps it too, and `modules/report_generator.py` renders a badge on every
+      finding plus a "who fixes what" split above them. Rendered in RISE only —
+      on premise every finding is the customer's and a badge on all of them
+      trains the reader to ignore badges. What is NOT done is curation: the
+      values are derived from check-ID prefixes and a destination-naming
+      heuristic, not reviewed check by check, and the heuristic half says so in
+      the report footer.
 - [ ] **Publish the check catalogue** — 323 auditable vs 550 asserted. *(Partly overtaken:
       `docs/CHECKS_REFERENCE.md` is generated and published, 685 checks. What is still
       unpublished is the auditable/asserted SPLIT, which is the honest half)*

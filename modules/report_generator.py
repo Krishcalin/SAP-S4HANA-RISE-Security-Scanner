@@ -29,6 +29,29 @@ _RISK_COLOUR = {"Critical": "#dc2626", "High": "#ea580c",
                 "Medium": "#d97706", "Low": "#16a34a"}
 
 
+#: remediation_owner -> (label, css class, what it means to the reader).
+#:
+#: WHY THE LABELS ARE NOT THE ENUM NAMES. `ticket_to_sap` is an internal state;
+#: "SAP service request" is what the reader has to go and do. docs/RISE_SECURITY_MODEL.md
+#: section 7.4 asks for a "yours under RISE / SAP's under RISE" tag on every
+#: finding and calls it the argument that justifies buying anything in a RISE
+#: tenant — an argument nobody makes in enum case.
+OWNER_LABELS = {
+    "customer_fixable": ("Yours", "own-yours",
+                         "You can change this yourself in your own tenant."),
+    "ticket_to_sap": ("SAP service request", "own-sap",
+                      "SAP operates this layer under RISE. Raise a service "
+                      "request; you cannot apply the change yourself."),
+    "provider_owned": ("SAP-operated", "own-sap",
+                       "Every object named in this finding is one SAP operates "
+                       "in a RISE tenant. Confirm the classification once for "
+                       "your landscape."),
+    "not_assessable": ("Not assessable", "own-unknown",
+                       "The evidence for this check is an OS-level artifact a "
+                       "RISE customer cannot reach. This is not a pass."),
+}
+
+
 class ReportGenerator:
 
     def __init__(self, findings: List[Dict[str, Any]], meta: Dict[str, Any],
@@ -240,6 +263,7 @@ class ReportGenerator:
         findings_html = self._render_findings()
         filter_html = self._render_filter_notice()
         coverage_html = self._render_coverage()
+        ownership_html = self._render_ownership_split()
         compliance_html = self._render_compliance()
         fair_html = self._render_fair()
         csf_html = self._render_csf()
@@ -821,6 +845,22 @@ class ReportGenerator:
   .p-badge.P2 {{ background: var(--high-bg); color: var(--high); border: 1px solid rgba(249,115,22,0.3); }}
   .p-badge.P3 {{ background: var(--medium-bg); color: var(--medium); border: 1px solid rgba(234,179,8,0.3); }}
   .p-badge.P4 {{ background: var(--low-bg); color: var(--low); border: 1px solid rgba(34,197,94,0.3); }}
+  .own-badge {{ font-size: 0.66rem; font-weight: 700; padding: 0.22rem 0.5rem; border-radius: 4px; flex-shrink: 0; letter-spacing: 0.02em; text-transform: uppercase; }}
+  .own-badge.own-yours {{ background: rgba(34,197,94,0.12); color: var(--low); border: 1px solid rgba(34,197,94,0.3); }}
+  .own-badge.own-sap {{ background: rgba(79,70,229,0.12); color: #4f46e5; border: 1px solid rgba(79,70,229,0.3); }}
+  .own-badge.own-unknown {{ background: rgba(148,163,184,0.14); color: var(--text-muted); border: 1px solid rgba(148,163,184,0.3); }}
+  .own-split {{ background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 1.2rem 1.4rem; margin: 1.5rem 0; }}
+  .own-split h2 {{ font-size: 1rem; margin: 0 0 0.5rem; color: var(--text-primary); }}
+  .own-lead {{ font-size: 0.9rem; color: var(--text-primary); margin: 0 0 1rem; }}
+  .own-grid {{ display: flex; gap: 0.8rem; flex-wrap: wrap; }}
+  .own-cell {{ flex: 1 1 8rem; border-radius: 8px; padding: 0.7rem 0.9rem; border: 1px solid var(--border); }}
+  .own-cell.own-yours {{ background: rgba(34,197,94,0.08); }}
+  .own-cell.own-sap {{ background: rgba(79,70,229,0.08); }}
+  .own-cell.own-unknown {{ background: rgba(148,163,184,0.08); }}
+  .own-n {{ font-family: var(--font-mono); font-size: 1.5rem; font-weight: 700; color: var(--text-primary); line-height: 1.1; }}
+  .own-l {{ font-size: 0.74rem; color: var(--text-primary); font-weight: 600; margin-top: 0.15rem; }}
+  .own-p {{ font-size: 0.68rem; color: var(--text-muted); font-family: var(--font-mono); }}
+  .own-foot {{ font-size: 0.72rem; color: var(--text-muted); margin: 0.9rem 0 0; line-height: 1.5; }}
   .p-tags {{ display: inline-flex; gap: 0.3rem; flex-wrap: wrap; }}
   .p-tag {{ font-family: var(--font-mono); font-size: 0.6rem; font-weight: 700; text-transform: uppercase; padding: 0.12rem 0.35rem; border-radius: 3px; letter-spacing: 0.03em; }}
   .p-tag.exploited {{ background: rgba(239,68,68,0.18); color: var(--critical); }}
@@ -1159,6 +1199,8 @@ class ReportGenerator:
     <button class="filter-btn" onclick="filterFindings('LOW')">Low ({low})</button>
   </div>
 
+  {ownership_html}
+
   <!-- Findings -->
   <div class="findings-section">
     <h2>Detailed Findings ({total})</h2>
@@ -1272,6 +1314,89 @@ window.addEventListener('beforeprint', () => {{
                 f'<div class="prio-sub">{sub}</div>'
                 f'<div class="prio-grid">{"".join(cards)}</div>{top_html}</div>')
 
+    def _is_rise(self) -> bool:
+        """Whether the ownership split is worth rendering at all.
+
+        Outside RISE the customer owns every layer, so every finding comes back
+        `customer_fixable` and a badge on all of them says nothing while teaching
+        the reader to skip badges.
+        """
+        from modules.deployment_modes import is_rise
+        return is_rise(str(self.meta.get("deployment_mode") or ""))
+
+    def _owner_badge(self, f: Dict[str, Any]) -> str:
+        """The tag section 7.4 asks for, on every finding, in RISE only."""
+        if not self._is_rise():
+            return ""
+        owner = f.get("remediation_owner")
+        entry = OWNER_LABELS.get(owner)
+        if entry is None:
+            return ""
+        label, css, tip = entry
+        note = f.get("ownership_note") or tip
+        return (f'<span class="own-badge {css}" title="{html.escape(str(note))}">'
+                f'{html.escape(label)}</span>')
+
+    def _render_ownership_split(self) -> str:
+        """How much of this report is the reader's to act on.
+
+        READS `full_findings`, NOT `findings`. This is a claim ABOUT THE ESTATE,
+        and `--severity HIGH` is a display option — counting the filtered set
+        would report "12 of 14 are yours" over a scan that found 75. The class
+        docstring makes that rule explicit and this is exactly the kind of
+        roll-up it was written for.
+
+        Renders nothing outside RISE, and nothing when no finding carries an
+        owner: an empty split is not a finding that everything is the customer's.
+        """
+        if not self._is_rise():
+            return ""
+        corpus = self.full_findings or self.findings
+        counts: Dict[str, int] = {}
+        for f in corpus:
+            owner = f.get("remediation_owner")
+            if owner in OWNER_LABELS:
+                counts[owner] = counts.get(owner, 0) + 1
+        total = sum(counts.values())
+        if not total:
+            return ""
+
+        yours = counts.get("customer_fixable", 0)
+        cells = []
+        for owner, (label, css, tip) in OWNER_LABELS.items():
+            n = counts.get(owner, 0)
+            if not n:
+                continue
+            pct = (n * 100.0) / total
+            cells.append(
+                f'<div class="own-cell {css}" title="{html.escape(tip)}">'
+                f'<div class="own-n">{n}</div>'
+                f'<div class="own-l">{html.escape(label)}</div>'
+                f'<div class="own-p">{pct:.0f}%</div></div>')
+
+        not_yours = total - yours
+        lead = (f"<strong>{not_yours} of {total}</strong> findings are not yours to "
+                f"fix in this RISE tenant." if not_yours else
+                f"All {total} findings are yours to fix.")
+        filtered = ""
+        if len(corpus) != len(self.findings):
+            filtered = (" Counted over the whole scan, not the "
+                        f"{len(self.findings)} shown below after the severity "
+                        "filter.")
+        return f"""
+  <div class="own-split">
+    <h2>Who fixes what, under RISE</h2>
+    <p class="own-lead">{lead}{filtered}</p>
+    <div class="own-grid">{''.join(cells)}</div>
+    <p class="own-foot">SAP operates the infrastructure, operating system,
+      database and profile-parameter layer in a RISE tenant, so findings there
+      are raised as service requests rather than applied directly. The split
+      follows SAP's published Roles &amp; Responsibilities; where a finding names
+      only RFC destinations SAP operates, the classification is a naming
+      heuristic to confirm once for your landscape.</p>
+  </div>
+"""
+
     def _render_findings(self) -> str:
         """Render all findings as HTML cards, in fix-first (P1->P4) order."""
         order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
@@ -1326,10 +1451,10 @@ window.addEventListener('beforeprint', () => {{
                 data_tier = f' data-tier="{html.escape(pr.tier)}"'
 
             parts.append(f"""
-    <div class="finding-card" data-severity="{html.escape(f['severity'])}" data-category="{html.escape(f['category'])}"{data_tier}>
+    <div class="finding-card" data-severity="{html.escape(f['severity'])}" data-category="{html.escape(f['category'])}"{data_tier} data-owner="{html.escape(str(f.get('remediation_owner') or ''))}">
       <div class="finding-header">
         <span class="sev-badge {html.escape(f['severity'])}">{html.escape(f['severity'])}</span>
-        {p_badge}
+        {p_badge}{self._owner_badge(f)}
         <span class="finding-title">{html.escape(f['title'])}</span>
         <span class="finding-id">{html.escape(f['check_id'])}</span>
         <span class="finding-chevron">&#9654;</span>

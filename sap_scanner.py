@@ -295,6 +295,10 @@ def main():
         "data_directory": str(data_dir),
         "modules_run": run_modules,
         "severity_filter": args.severity,
+        # The report renders the RISE ownership split only where the split is
+        # real. On premise every finding is the customer's, and a badge saying so
+        # on all of them is noise that trains the reader to ignore the badge.
+        "deployment_mode": args.deployment_mode,
         # Audit-replay anchor: which bytes produced this report. Rendered as
         # the evidence-manifest section; hashed here, in the run that read them.
         "evidence_manifest": loader.evidence_manifest(),
