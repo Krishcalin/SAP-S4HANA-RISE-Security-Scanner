@@ -478,3 +478,57 @@ def test_a_real_http_endpoint_is_still_reported():
     retirement of the rule rather than a narrowing of it."""
     src = "FORM f.\n  DATA(x) = 'http://evil.example.com/api'.\nENDFORM.\n"
     assert "ABAP-CONF-002" in _ids(src, "z.abap")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  U2 — the FIELDS clause, and a question whose answer is "no change"
+# ═════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.parametrize("statement", [
+    # SAP's own dynamic-SELECT-list example, verbatim in shape.
+    "SELECT (select_list) FROM zdemo_abap_fli"
+    " INTO CORRESPONDING FIELDS OF TABLE @fli_tab.",
+    # SAP's second spelling, with the list as a string literal.
+    "SELECT (`CARRID, CONNID, FLDATE`) FROM zdemo_abap_fli INTO TABLE @lt.",
+])
+def test_the_documented_dynamic_column_list_is_matched(statement):
+    """U2 asked whether A1 needed extending. It did not, and this is why: SAP
+    documents the dynamic column list exactly once, as a parenthesis directly
+    after SELECT, and both of its spellings already match. Pinned so the answer
+    stays true rather than being re-derived."""
+    assert "ABAP-SQLI-013" in _ids("FORM f.\n  %s\nENDFORM.\n" % statement,
+                                   "z.abap")
+
+
+@pytest.mark.parametrize("statement", [
+    "SELECT carrid, connid FROM zdemo_abap_fli INTO TABLE @lt.",
+    "SELECT FROM zdemo_abap_fli FIELDS carrid, connid INTO TABLE @lt.",
+    "SELECT FROM zdemo_abap_fli FIELDS zdemo_abap_fli~* INTO TABLE @lt.",
+    "SELECT FROM zdemo_abap_fli FIELDS carrid AS al1 INTO TABLE @lt.",
+])
+def test_the_static_field_list_forms_stay_silent(statement):
+    """The four `FIELDS` variants SAP tabulates are static column lists. A rule
+    firing on them would report a CRITICAL CWE-89 on the modern arrangement of
+    ordinary SQL."""
+    assert "ABAP-SQLI-013" not in _ids("FORM f.\n  %s\nENDFORM.\n" % statement,
+                                       "z.abap")
+
+
+def test_the_undocumented_parenthesised_fields_form_is_not_matched():
+    """The decision U2 actually settles. `FIELDS (lv_list)` appears in no SAP
+    material — not in the FIELDS variant table, not in the dynamic-programming
+    cheat sheet — so matching it would be inventing syntax. That is exactly how
+    ABAP-CDS-002 spent its life matching a `WHERE TRUE` that DCL has never had
+    (U5), and this test exists so nobody adds it on symmetry.
+    """
+    src = "FORM f.\n  SELECT FROM zdemo FIELDS (lv_list) INTO TABLE @lt.\nENDFORM.\n"
+    assert "ABAP-SQLI-013" not in _ids(src, "z.abap")
+
+
+def test_the_reason_for_leaving_it_alone_is_recorded_beside_the_rule():
+    """A rule that does not match something looks identical to a rule nobody
+    thought about. The distinction has to be written down, or U2 gets re-opened
+    by the next person who notices FIELDS is missing."""
+    source = (ROOT / "modules" / "abap_sast_extra.py").read_text(encoding="utf-8")
+    assert "U2, settled" in source
+    assert "NONE of them is" in source

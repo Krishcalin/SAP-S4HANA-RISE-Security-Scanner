@@ -290,6 +290,29 @@ DYNAMIC_SQL_RULES: List[Dict[str, Any]] = [
         # A1. Bounded deliberately: with `[^)]*` this fires on parenthesised
         # arithmetic in a static select list — three HIGH CWE-89 findings on
         # correct code, measured.
+        #
+        # U2, settled, and the answer is NO — so this rule is unchanged and
+        # that is the finding rather than an omission. The question was
+        # whether the `FIELDS` addition also accepts a parenthesised dynamic
+        # list, which would have needed a second alternative here.
+        #
+        # SAP documents the dynamic column list exactly once, and it is the
+        # form already matched:
+        #
+        #     DATA(select_list) = `CARRID, CONNID, FLDATE`.
+        #     SELECT (select_list) FROM zdemo_abap_fli INTO ...
+        #
+        # The `FIELDS` clause gets its own variant table listing five forms —
+        # `FIELDS *`, a comma-separated column list, `data_source~col`,
+        # `data_source~*`, and `col AS alias` — and NONE of them is
+        # parenthesised. SAP describes the two spellings as "basically the
+        # same but differently arranged", which is a statement about the
+        # STATIC list; no dynamic counterpart is given for FIELDS anywhere in
+        # the SQL or dynamic-programming material.
+        #
+        # So `FIELDS (lv_list)` is not added. Matching a construct SAP does
+        # not document is how ABAP-CDS-002 came to spend its life matching
+        # `WHERE TRUE`, which DCL has never had (U5).
         "pattern": r"\bSELECT\s+(?:SINGLE\s+|DISTINCT\s+)*\(\s*" + _NAME + r"\s*\)",
         "cwe": "CWE-89",
         "description": (
