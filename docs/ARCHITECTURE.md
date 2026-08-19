@@ -1191,7 +1191,7 @@ Underneath, they are frequently asking about the same control — and the compan
 
 ### What the system does
 
-Every finding is associated with the specific clauses of eight frameworks it bears on. One scan therefore produces, without further work, a panel per framework listing which controls are implicated and how many findings sit under each.
+Every finding is associated with the specific clauses of nine frameworks it bears on. One scan therefore produces, without further work, a panel per framework listing which controls are implicated and how many findings sit under each.
 
 | Framework | Who asks |
 |---|---|

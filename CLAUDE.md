@@ -61,8 +61,8 @@ product became client-server**, deliberately and one-way. It has NOT been relaxe
 
 Background and the full plan: [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md),
 [`docs/BUILD_ROADMAP.md`](docs/BUILD_ROADMAP.md).
-- **664 checks across 33 audit modules.** Measure, never estimate — and know which number you
-  are quoting. `modules/` holds 62 files, of which **33 emit findings**; the other 29 are rule
+- **709 checks across 36 audit modules.** Measure, never estimate — and know which number you
+  are quoting. `modules/` holds 70 files, of which **36 emit findings**; the other 34 are rule
   tables, loaders, importers and report writers. Those 33 are exactly `sap_scanner.py`'s
   `--modules` choices. Check IDs: **363** are written as literals, and **621** exist once the
   five runtime-generated families resolve against their shipped rulesets — `PARAM-<param>` (78),
@@ -681,7 +681,7 @@ wrong in that way.
   `None → TRUE` / `[] → FALSE` semantics, different join). Two implementations of the access
   boundary is one more than is safe; do not add a third.
 
-### The 33 modules (module key → class → focus)
+### The 36 modules (module key → class → focus)
 
 | key | module | focus |
 |---|---|---|
@@ -716,6 +716,11 @@ wrong in that way.
 | `snc` | snc_posture | **the SNC family as one model** — 18 params incl. the ECS-mandated ones |
 | `ecsconfig` | ecs_config_items | the configuration half of Note 3250501 (SPWD/SPSE table groups, clients, SAL) |
 | `fincontrols` | financial_controls | **SOX ITGC / FI config**: posting-period controls (T001B), tolerance groups (T043T), payment dual-control (T055F), document-change rules (TBAER), FI number-range buffering (TNRO) |
+| `mdchange` | master_data_changes | vendor bank-detail changes matched against payment runs by ACCOUNT NUMBER, not by proximity in time |
+| `vendormaster` | vendor_master | duplicate and shell vendors, bank-detail hygiene; account numbers masked to last four on the way out |
+| `csa` | cloudalm_verdicts | SAP Cloud ALM CSA results imported and reported **as SAP's**, never re-judged |
+| `ucon` | ucon_exposure | Unified Connectivity: which function modules are actually callable from outside, and which of those were never called |
+| `webdisp` | webdisp_security | the internet-facing instance's own profile, against SAP's WEBDISP_ALL baseline (2ODISCL, 2ONETENC) |
 
 ### Deployment mode decides what "compliant" means
 

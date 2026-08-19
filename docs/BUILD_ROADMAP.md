@@ -6,7 +6,7 @@
 > outstanding. A great deal has shipped since they were written, and this document
 > has not been rewritten phase by phase:
 >
-> - **34 audit modules** (these documents say 23), 685 check ids, 132 logical sources.
+> - **36 audit modules** (these documents say 23), 709 check ids, 135 logical sources.
 >   The forward lists in Phases 5 and 6 have since been reconciled item by item
 >   against the shipped code — they had drifted in the direction that is easy to
 >   miss, understating the product, so a reader would have set out to rebuild
@@ -528,8 +528,11 @@ for SAP's content would be exactly the fabrication this project forbids.
       for what Focused Run calls it
 - [~] Map every check to its SAP Security Baseline requirement ID; ~~publish coverage
       against the **214 in-scope control points**~~ — **PARTIAL, AND HALF OF IT
-      DECLINED.** `server/sapcontent.requirement_for()` maps 208 of 685 checks to a
-      Baseline requirement, covering 17 of the 38 SAP publishes. The remaining 477 are
+      DECLINED.** `server/sapcontent.requirement_for()` maps 236 of 709 checks to a
+      Baseline requirement, covering 23 of the 38 SAP publishes — and NO ABAP
+      requirement is left unaddressed; what remains is Java, HANA and BTP, which are
+      stacks this product does not audit rather than gaps inside the one it does.
+      The remaining 473 are
       mostly things the Baseline does not describe at all — financial controls, vendor
       master integrity, resilience — so "map EVERY check" is not a target so much as a
       category error. **The 214 figure is refused outright**: parsing SAP's published

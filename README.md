@@ -16,7 +16,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/SAP%20Note%203250501-92%2F92%20parameters-0FAAFF?style=flat-square&logo=sap&logoColor=white" alt="SAP Note 3250501: 92/92"/>
-  <img src="https://img.shields.io/badge/checks-664%20across%2033%20modules-red?style=flat-square" alt="664 checks, 33 modules"/>
+  <img src="https://img.shields.io/badge/checks-709%20across%2036%20modules-red?style=flat-square" alt="709 checks, 36 modules"/>
   <img src="https://img.shields.io/badge/custom%20code-133%20ABAP%2FJS%2FBTP%20rules%20%2B%20taint-8A2BE2?style=flat-square" alt="133 static-analysis rules with taint analysis"/>
   <img src="https://img.shields.io/badge/reports-HTML%20%C2%B7%20PDF%20%C2%B7%20PPTX-555?style=flat-square" alt="HTML · PDF · PPTX Reports"/>
   <img src="https://img.shields.io/badge/server-FastAPI%20%2B%20PostgreSQL%2016-336791?style=flat-square&logo=postgresql&logoColor=white" alt="Server: FastAPI + PostgreSQL 16"/>
@@ -54,7 +54,7 @@
 - **[Server mode — quick start](#server-mode--quick-start)**
 - **[Connected mode](#connected-mode)**
   - [What the server adds over the CLI](#what-the-server-adds-over-the-cli)
-- **[Audit Modules](#audit-modules)** &nbsp;<sub>33 modules · 80 documented families</sub>
+- **[Audit Modules](#audit-modules)** &nbsp;<sub>36 modules · 80 documented families</sub>
   <details><summary><sub>expand by family</sub></summary>
 
   - **Identity & Access** &nbsp; [Segregation of Duties](#segregation-of-duties-iam-sod-) · [Firefighter / Emergency Access](#firefighter--emergency-access-iam-ff-) · [Role Expiry & Validity](#role-expiry--validity-iam-exp-) · [Cross-System Identity](#cross-system-identity-iam-xid-) · [Access Review Compliance](#access-review-compliance-iam-rev-) · [Role Design Quality](#role-design-quality-iam-role-)
@@ -129,7 +129,7 @@ It runs in **two modes that share one scanner core**:
 
 - **No direct system connection required** — offline & agentless by default. Nothing is ever installed in the SAP system and no RFC user is created, in either mode.
 - **Connected mode is optional and separately invoked.** `python -m collect …` reads from a system you authorise and writes the same export files the offline path consumes — read-only, enforced in the transport rather than promised. The scanner itself still connects to nothing. See [Connected mode](#connected-mode). In RISE, third-party ABAP add-ons are an Excluded Task requiring an additional SKU and a multi-week evaluation; an export bundle needs none of that.
-- **664 security checks across 33 audit modules** — ABAP authorizations, HANA DB, BTP/Cloud, GRC Access Control, SOX financial-config controls, permission-level Segregation of Duties, and a custom-code scanner. Precisely: **400** check IDs are written as literals and **664** exist once the five runtime-generated families (profile parameters, ABAP rules, SoD risks, ATC families, conflicting-duty pairs) resolve against their shipped rulesets.
+- **709 security checks across 36 audit modules** — ABAP authorizations, HANA DB, BTP/Cloud, GRC Access Control, SOX financial-config controls, permission-level Segregation of Duties, and a custom-code scanner. Precisely: **400** check IDs are written as literals and **664** exist once the five runtime-generated families (profile parameters, ABAP rules, SoD risks, ATC families, conflicting-duty pairs) resolve against their shipped rulesets.
 - **Findings map to OWASP and ASVS, with the basis stated** — every finding carries `owasp.basis`, which is `cwe` where OWASP's own published CWE list settles the category, `family` where this product makes a curated judgement (with the reasoning recorded), or `null` where no honest mapping exists. **616 of 673** checks map; the remaining 57 are declared, not swept into A05 — RISE shared-responsibility findings are about a contract, SOX financial-configuration controls are about a different framework, and backup/DR is about availability. A scanner whose every check mapped cleanly to the Top 10 would either be a web-application scanner or be overstating itself. **CVSS vectors are attached to CVEs only** — taken from the SAP CNA record — and never invented for a configuration finding, which has no attack vector to describe.
 - **Complete against SAP's mandatory ECS baseline** — **92 of 92** profile parameters from **SAP Note 3250501** (the hardening requirements SAP makes mandatory for AS ABAP in Enterprise Cloud Services), plus its configuration half. Every value is read from a recorded extract of the note, never hand-typed, because a transcription typo tells a customer they are compliant when they are not.
 - **Deployment-aware** — `--deployment-mode` decides what *compliant* means. `snc/accept_insecure_gui = 1` is **SAP's own mandated value** in ECS, `rfc/callback_security_method = 1` is a **documented exception** SAP permits (the ECS standard is `3`), and an unlocked `DDIC` is explicitly not required to be locked. All three are findings on classic on-premise ABAP. A RISE-specific scanner that flags SAP's own baseline is confidently wrong on every compliant system.
@@ -137,12 +137,12 @@ It runs in **two modes that share one scanner core**:
 - **A release gate, not just a report** — `--gate` exits non-zero when a change would make things worse, so the scanner can sit in a pipeline. Judges the *delta* against a baseline, scopes to the objects a transport touches, never blocks on a finding the customer cannot fix, and **never fails open**: degraded coverage is "could not assess", never "pass".
 - **Stable finding identity** — every finding is fingerprinted from the concrete SAP objects it names, so it matches itself across re-uploads. That is what makes remediation tracking, aging and MTTR possible rather than approximate.
 - **Risk-prioritized (P1–P4)** — ranked by severity × exploitability × exposure × privilege, with the contributing factors shown. Works on findings CVSS cannot score at all.
-- **Compliance mapping** — **ISO/IEC 27001:2022, NIST SP 800-53 Rev 5, NIST CSF 2.0, CIS Controls v8, DORA (EU 2022/2554), TISAX/VDA ISA, SOC 2, EU GDPR**. DORA is mapped to named requirement areas, not article numbers: an auditor reading a citation expects the sub-paragraph to say what we imply it says.
+- **Compliance mapping** — **ISO/IEC 27001:2022, NIST SP 800-53 Rev 5, NIST CSF 2.0, CIS Controls v8, DORA (EU 2022/2554), TISAX/VDA ISA, SOC 2, SOX/ITGC, EU GDPR**. DORA is mapped to named requirement areas, not article numbers: an auditor reading a citation expects the sub-paragraph to say what we imply it says.
 - **Cyber-risk quantification (FAIR)** — a dollar-denominated Annualised Loss Exposure and loss-exceedance curve from a bundled Monte-Carlo engine, so the board sees financial risk rather than a severity count. On the CLI via `--crq`; in the server it runs on **every** scan and lands on the dashboard. Priced on the complete, unfiltered finding set — the input count is stored beside the figure, so a display filter can never move the number — with the unattributed count disclosed rather than hidden.
 - **RISE-aware** — findings carry a remediation owner. In RISE a customer can *see* a bad profile parameter and cannot change it, so those findings render as a pre-drafted service request to SAP, never as "change this".
 - **Standards-aligned** — CIS SAP Benchmark, DSAG best-practice guide, SAP Security Baseline
 
-**Pipeline:** &nbsp;`LOAD` CSV/JSON exports → `MODULES` (30 auditors) → `CHECKS` (~600 rules) → `RANK` by severity & P1–P4 priority → `MAP` to compliance frameworks → *(optional)* `QUANTIFY` FAIR loss exposure ($) → `REPORT` (HTML · PDF · PPTX) **or** `STORE` (PostgreSQL → web console, run-over-run diff, graph nodes).
+**Pipeline:** &nbsp;`LOAD` CSV/JSON exports → `MODULES` (36 auditors) → `CHECKS` (~709 rules) → `RANK` by severity & P1–P4 priority → `MAP` to compliance frameworks → *(optional)* `QUANTIFY` FAIR loss exposure ($) → `REPORT` (HTML · PDF · PPTX) **or** `STORE` (PostgreSQL → web console, run-over-run diff, graph nodes).
 
 > **A note on dependencies.** The CLI still runs on the Python standard library alone — the HTML, PDF and PPTX engines are all hand-built. The **server tier** deliberately ends that rule: a browser console and a durable finding store cannot be built on the stdlib. The discipline that replaces it is a **single-digit runtime dependency count** (currently 4 — Jinja2 left with the server-rendered console on 2026-08-09), no ORM and no graph database. The console is a **React + TypeScript SPA** built at build time and served as static files by the same FastAPI process at `/` — so it costs build-time tooling, not a runtime dependency and not a second service. The deployment is still one app container plus one PostgreSQL. See [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md).
 
@@ -193,7 +193,20 @@ Scanning without a browser — the air-gapped path:
 ```bash
 python -m server.cli scan "Acme Production" ./exports --sid PRD --client 100
 python -m server.cli runs
+
+# Send queued notifications to an ITSM endpoint. Credentials come from
+# ITSM_WEBHOOK_URL and ITSM_WEBHOOK_TOKEN in the environment, never from argv.
+python -m server.cli notify
+
+# A READ-ONLY MCP surface on stdio, scoped to one console account. Nothing it
+# exposes changes anything, and there is no unscoped mode.
+python -m server.cli mcp auditor
 ```
+
+The estate is also exportable as a document from the store rather than from a
+single scan — `GET /api/export/report.pdf` and `.pptx`, scoped to whatever the
+caller may see, carrying the state, assignment and due dates a scan does not
+have.
 
 **The whole deployment is one app container and one PostgreSQL.** That is deliberate: it is the
 product's clearest structural advantage, and a third service would forfeit it.
@@ -205,7 +218,7 @@ product's clearest structural advantage, and a third service would forfeit it.
   that comes back re-opens the **same row** with its history intact rather than appearing as new.
   *Unexamined* is the fifth because it has to be: a run that could not observe a finding leaves it
   open and says so, rather than reporting a remediation that never happened.
-- **Coverage manifest** — *"you supplied 105 of 123 sources; 10 modules ran with incomplete
+- **Coverage manifest** — *"you supplied 105 of 135 sources; 10 modules ran with incomplete
   input; 1 source is not obtainable in RISE at all."* Without it a partial upload produces a
   clean-looking report over a fraction of the estate.
 - **Risk acceptance with expiry**, false-positive disputes with a mandatory reason, and a
@@ -1211,7 +1224,7 @@ Findings are ranked **P1 (fix now) → P4 (backlog)** by combining severity with
 
 ### Compliance mapping
 
-Every category is mapped to control frameworks and rendered as a per-framework panel (flagged controls with severity counts) in the HTML and PDF, and as dedicated slides in the PPTX deck. **Eight frameworks**: **ISO/IEC 27001:2022** (Annex A), **NIST CSF 2.0**, **NIST SP 800-53 Rev 5**, **DORA** (Regulation (EU) 2022/2554), **CIS Controls v8**, **TISAX / VDA ISA**, **SOC 2** (Trust Services Criteria), and **EU GDPR**. All control IDs are verified against the published frameworks. DORA is mapped to named requirement areas rather than article numbers — an auditor reading a citation expects the sub-paragraph to say what we imply it says.
+Every category is mapped to control frameworks and rendered as a per-framework panel (flagged controls with severity counts) in the HTML and PDF, and as dedicated slides in the PPTX deck. **Nine frameworks**: **ISO/IEC 27001:2022** (Annex A), **NIST CSF 2.0**, **NIST SP 800-53 Rev 5**, **DORA** (Regulation (EU) 2022/2554), **CIS Controls v8**, **TISAX / VDA ISA**, **SOC 2** (Trust Services Criteria), **SOX / ITGC**, and **EU GDPR**. All control IDs are verified against the published frameworks. DORA and SOX/ITGC are mapped to named requirement areas rather than clause numbers — DORA publishes articles this product has not verified clause by clause, and ITGC publishes no numbered catalogue at all. An auditor reading a citation expects the sub-paragraph to say what we imply it says.
 
 ### The twelve security domains
 
@@ -1647,7 +1660,7 @@ SAP-S4HANA-RISE-Security-Scanner/
 ├── sample_data_cloudalm/           # SAP Cloud ALM export fixture (same-fingerprint proof)
 ├── tools/                          # build_brand_assets.py, build_abap_rules.py, add_code_kb_entries.py
 ├── data/
-│   ├── finding_details.json        # Knowledge base: 373 entries — detailed risk + remediation per check
+│   ├── finding_details.json        # Knowledge base: 380 entries — detailed risk + remediation per check
 │   ├── fair_scenarios.json         # FAIR catalog: 5 SAP loss scenarios + factor/loss ranges (--crq)
 │   ├── attack_paths.json           # 7 SAP attack-path templates (content, not code)
 │   ├── ecs_hardening_3250501.json  # SAP Note 3250501: 92 parameters + 18 config items, facts only
@@ -1756,7 +1769,7 @@ SAP-S4HANA-RISE-Security-Scanner/
 - [x] SOX ITGC / FI financial-config controls (posting periods, tolerances, dual control, number ranges)
 - [x] Detailed PDF hand-over report + per-finding risk/remediation knowledge base
 - [x] Risk prioritization (P1–P4: severity × exploitability × exposure × privilege)
-- [x] Compliance mapping (ISO 27001:2022, NIST CSF 2.0, CIS v8, TISAX/VDA ISA, SOC 2, GDPR)
+- [x] Compliance mapping (ISO 27001:2022, NIST CSF 2.0, CIS v8, TISAX/VDA ISA, SOC 2, SOX/ITGC, GDPR)
 - [x] PowerPoint (PPTX) deck export — executive summary + one slide per finding
 - [x] Cyber-risk quantification — FAIR loss exposure ($ ALE + loss-exceedance curve, `--crq`)
 - [x] Scan comparison mode (diff two scans) — run-over-run diff in the console, `GET /api/runs/{id}/diff` and `GET /api/findings/changes`
