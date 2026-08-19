@@ -47,9 +47,17 @@ class FakeConn:
         self.rows = rows
         self.statements: List[str] = []
         self.params: List[Any] = []
+        #: Set by the test's fake `post`. The ordering test compares against it
+        #: rather than against statement indices, which shift whenever the drain
+        #: gains a query.
+        self.posted = False
+        self.marked_after_post = None
 
     def execute(self, sql, params=None):
-        self.statements.append(" ".join(sql.split()))
+        flat = " ".join(sql.split())
+        if "delivered_at = now()" in flat and self.marked_after_post is None:
+            self.marked_after_post = self.posted
+        self.statements.append(flat)
         self.params.append(params)
         if "FROM notification WHERE delivered_at IS NULL" in " ".join(sql.split()):
             return FakeResult(self.rows)
@@ -138,13 +146,23 @@ def test_a_row_is_marked_delivered_only_after_the_post_returns(monkeypatch):
     which is recoverable."""
     monkeypatch.setenv("ITSM_WEBHOOK_URL", "https://itsm/hook")
     seen: List[str] = []
-    monkeypatch.setattr(webhook, "post",
-                        lambda url, body, timeout=15: seen.append("post") or 200)
     conn = FakeConn([_row()])
+
+    def fake_post(url, body, timeout=15):
+        seen.append("post")
+        conn.posted = True
+        return 200
+
+    monkeypatch.setattr(webhook, "post", fake_post)
     webhook.deliver(conn)
-    update_at = next(i for i, s in enumerate(conn.statements) if "delivered_at = now()" in s)
+    # THE ASSERTION THIS REPLACED COULD NOT FAIL EITHER: `update_at` was FOUND by
+    # searching for "delivered_at = now()", so re-asserting that the statement at
+    # that index contains it was a tautology. What matters is the ORDER, so the
+    # POST is recorded with a marker and the two positions are compared.
     assert seen == ["post"], "the POST must happen"
-    assert update_at == len(conn.statements) - 2 or "delivered_at = now()" in conn.statements[update_at]
+    marks = [i for i, s in enumerate(conn.statements) if "delivered_at = now()" in s]
+    assert len(marks) == 1, "exactly one row should be marked delivered"
+    assert conn.marked_after_post is True,         "the row was marked delivered BEFORE the POST returned — every "        "notification in flight is lost if the process dies there"
 
 
 def test_the_payload_carries_a_stable_deduplication_key(monkeypatch):

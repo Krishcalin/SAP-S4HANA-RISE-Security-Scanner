@@ -79,8 +79,15 @@ def test_the_export_is_scoped(store):
     """An export is the easiest place for a scope to be forgotten, because the
     result looks like a report rather than like data."""
     export.findings_for_report([4, 9])
-    assert "system_id" in store["sql"].lower() or "landscape" in store["sql"].lower()
-    assert [4, 9] == [p for p in store["params"] if p in (4, 9)] or store["params"]
+    # THE ASSERTION THIS REPLACED COULD NOT FAIL. It ended `or store["params"]`,
+    # so any non-empty parameter list satisfied it — and removing `_scoped` from
+    # the query entirely left the test green. Proven by mutation, not by reading.
+    sql = store["sql"].lower()
+    assert "system_id" in sql or "landscape_id" in sql,         f"no scope clause reached the query: {sql}"
+    # The scope travels as ONE parameter — `system_id = ANY(%s)` — so the list is
+    # nested rather than flattened. Asserting the flat form is what the first
+    # rewrite got wrong; the shape is checked here rather than assumed.
+    assert [4, 9] in store["params"],         f"the scope list never became a parameter: {store['params']}"
 
 
 def test_an_empty_scope_is_passed_through_rather_than_dropped(store):
