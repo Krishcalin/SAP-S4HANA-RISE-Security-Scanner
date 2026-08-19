@@ -13,6 +13,7 @@ Server administration CLI.
     python -m server.cli add-system    <landscape> <SID> <client> [--tier prod] ...
     python -m server.cli add-tenant    <landscape> <platform> <external-key> ...
     python -m server.cli scan          <landscape> <data-dir> [--sid PRD --client 100]
+    python -m server.cli notify
     python -m server.cli runs
     python -m server.cli totp-status  [username]
     python -m server.cli totp-disable <username>
@@ -32,7 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from server import auth, db, ingest, totp
+from server import auth, db, ingest, totp, webhook
 from modules.deployment_modes import DEPLOYMENT_MODES, DEFAULT_DEPLOYMENT_MODE
 from modules.platforms import PLATFORMS, TENANT_PLATFORMS, status_note
 
@@ -425,6 +426,25 @@ def cmd_rebuild_sap_catalogue(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_notify(args: argparse.Namespace) -> int:
+    """Drain the notification queue to the configured ITSM endpoint.
+
+    A COMMAND RATHER THAN A BACKGROUND WORKER, because this product has one
+    process and adding a scheduler to it would be a new failure mode for a job
+    that a cron line already runs. `queue_notifications` fills the queue during
+    ingest; this empties it, and how often is the operator's decision.
+    """
+    with db.connection() as conn:
+        result = webhook.deliver(conn, limit=args.limit)
+        conn.commit()
+    print(result["note"])
+    if not result["configured"]:
+        # Not an error. A deployment without an ITSM keeps queueing, and the rows
+        # are readable in the console either way.
+        return 0
+    return 1 if result["failed"] else 0
+
+
 def cmd_runs(args: argparse.Namespace) -> int:
     rows = db.query(
         "SELECT r.id, r.status, r.started_at, r.content_sha, s.sid, s.client "
@@ -512,6 +532,17 @@ def main(argv=None) -> int:
     rb.add_argument("repo_dir", help="checkout of SAP-samples/frun-csa-policies-best-practices")
     rb.add_argument("--version", default="v2.4", help="baseline policy version folder")
     rb.set_defaults(fn=cmd_rebuild_sap_catalogue)
+
+    nt = sub.add_parser(
+        "notify",
+        help="Send queued notifications to the ITSM endpoint and mark them "
+             "delivered. Configure with ITSM_WEBHOOK_URL and "
+             "ITSM_WEBHOOK_TOKEN in the environment — never on the command "
+             "line, where an argument is visible in ps and shell history.")
+    nt.add_argument("--limit", type=int, default=webhook.DEFAULT_LIMIT,
+                    help="How many to attempt in one drain (default %(default)s). "
+                         "The rest stay queued for the next run.")
+    nt.set_defaults(fn=cmd_notify)
 
     sub.add_parser("runs", help="List stored scan runs, newest first.").set_defaults(fn=cmd_runs)
 

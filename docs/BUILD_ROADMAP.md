@@ -745,7 +745,18 @@ the cut is genuinely evidenced.
       docstring rather than left to whoever writes the next datasheet: it is a
       retrospective review over an exported window, and no finding, title or description
       derived from it may imply monitoring, detection, real-time or streaming
-- [ ] ITSM outbound webhook + stored ticket reference (not a ServiceNow app)
+- [x] ITSM outbound webhook + stored ticket reference (not a ServiceNow app) —
+      **SHIPPED.** `queue_notifications` had been filling a queue since Phase 2 and the
+      schema already had `delivered_at`, `delivery_error` and an undelivered index —
+      everything except something that delivers. `server/webhook.py` plus
+      `python -m server.cli notify` drains it. One POST of JSON reaches ServiceNow, Jira
+      SM, a Teams channel or a customer's own bus, and the shape is theirs to map rather
+      than ours to guess. `provider_ticket_ref` on the finding was already there for the
+      reference coming back. Credentials from `ITSM_WEBHOOK_URL` / `ITSM_WEBHOOK_TOKEN`,
+      never argv; plain HTTP refused unless `ITSM_WEBHOOK_INSECURE=1` says otherwise;
+      delivery at-least-once with a stable `notification_id` to deduplicate on, because
+      marking a row delivered BEFORE the POST loses every alert in flight when the
+      process dies
 - [ ] Read-only MCP surface over the query layer
 - [ ] PDF/PPTX export driven from SQL rather than an in-memory list
 
