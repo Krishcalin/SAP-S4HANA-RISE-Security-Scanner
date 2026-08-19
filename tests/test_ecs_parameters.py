@@ -72,6 +72,10 @@ LEGACY_ONLY_COMPLIANT = {
     "rfc/reject_insecure_logon": "1",
     "rfc/reject_insecure_logon_data": "1",
     "rdisp/wpdbug_max_no": "0",
+    # SAP's FILE-A predicate is `VALUE != 'off'`, so any other value satisfies
+    # it; `on` is the fixture's choice rather than a claim about a mandated
+    # value, because the note does not mandate this parameter at all.
+    "abap/path_normalization": "on",
 }
 
 

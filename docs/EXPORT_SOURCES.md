@@ -47,7 +47,7 @@ clean — see chapter 13 of the architecture guide.
 | `cf_roles` | `cf_roles.csv`, `cf_org_space_roles.csv` | `s4_business_authz` | documented |
 | `change_document_items` | `change_document_items.csv`, `cdpos.csv` | `master_data_changes` | documented |
 | `change_documents` | `change_documents.csv`, `cdhdr.csv` | `code_transport`, `master_data_changes` | documented |
-| `client_settings` | `client_settings.csv`, `scc4.csv` | `code_transport`, `ecs_config_items`, `log_review` | documented |
+| `client_settings` | `client_settings.csv`, `scc4.csv` | `code_transport`, `ecs_config_items`, `log_review`, `system_trust` | documented |
 | `cloud_connector` | `cloud_connector.json`, `scc_config.json`, `cloud_connector_configuration.json`, `scc_api_configuration.json` | `btp_cloud_surface`, `s4_business_authz` | documented |
 | `code_inventory` | `code_inventory.csv`, `custom_objects.csv` | `atc_import`, `code_inventory_report`, `code_transport` | documented |
 | `comm_arrangements` | `comm_arrangements.json`, `comm_arr.json` | `iam_advanced`, `rise_btp_checks` | documented |

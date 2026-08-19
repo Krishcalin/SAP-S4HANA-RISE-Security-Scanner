@@ -7,7 +7,11 @@
       "repository": "SAP-samples/frun-csa-policies-best-practices",
       "licence": "Apache-2.0",
       "path": "BaselinePolicies/SOS/v2.4/WEBDISP_ALL/",
-      "files": ["2ODISCL.xml", "2ONETENC.xml", "1OSECUPD.xml"],
+      "files": [
+        "2ODISCL.xml",
+        "2ONETENC.xml",
+        "1OSECUPD.xml"
+      ],
       "policy_version": "001, dated 2023-04-28, referencing SAP Security Baseline Template v2.4 (2022/12)",
       "fetched": "2026-08-18 via api.github.com contents API with Accept: application/vnd.github.raw"
     },
@@ -35,9 +39,9 @@
         "parameter": null,
         "reason": "Reads the COMP_LEVEL store, not the profile: component='WEBDISP' with CD_HIST_DATE inside 365 days. It needs a component-level export this product does not collect for the Web Dispatcher, and its check item carries the POLICY id rather than a requirement id — which is why data/sap_baseline_requirements.json derives no SECUPD-O requirement. That is SAP's file, not a gap in our builder."
       }
-    ]
+    ],
+    "the_operator_attribute": "A checkitem may carry operator=\"NOT_EXIST\", and when it does the compliant and noncompliant predicates are IDENTICAL — the operator is the whole semantics. SAP's 2AOBSCNT does exactly that, and transcribing its compliant clause at face value would invert the check. None of the WEBDISP_ALL items carries an operator, which was verified rather than assumed; a future version might, so read the attribute before transcribing a new rule."
   },
-
   "rules": [
     {
       "check_id": "WDISP-001",
@@ -45,7 +49,11 @@
       "policy": "2ODISCL",
       "name": "is/HTTP/show_server_header",
       "operator": "value_in",
-      "values": ["FALSE", "false", "0"],
+      "values": [
+        "FALSE",
+        "false",
+        "0"
+      ],
       "severity": "MEDIUM",
       "title": "Web Dispatcher returns its server header",
       "risk": "The HTTP server header names the product and often its version to every client, including unauthenticated ones. It costs an attacker nothing to read and tells them which exploits are worth trying against the component in front of the whole landscape.",
@@ -58,7 +66,11 @@
       "policy": "2ODISCL",
       "name": "is/HTTP/show_detailed_errors",
       "operator": "value_in",
-      "values": ["FALSE", "false", "0"],
+      "values": [
+        "FALSE",
+        "false",
+        "0"
+      ],
       "severity": "MEDIUM",
       "title": "Web Dispatcher returns detailed error pages",
       "risk": "Detailed HTTP errors disclose internal host names, paths and component versions to whoever triggered them. On the internet-facing component this is reconnaissance handed out on request.",
@@ -71,7 +83,11 @@
       "policy": "2ODISCL",
       "name": "icm/SMTP/show_server_header",
       "operator": "value_in",
-      "values": ["FALSE", "false", "0"],
+      "values": [
+        "FALSE",
+        "false",
+        "0"
+      ],
       "severity": "LOW",
       "title": "SMTP server header is disclosed",
       "risk": "Same disclosure as the HTTP header, on the SMTP listener. Only relevant where SMTP is configured, which is why this is LOW rather than MEDIUM.",
@@ -84,7 +100,9 @@
       "policy": "2ODISCL",
       "name": "login/show_detailed_errors",
       "operator": "value_in",
-      "values": ["0"],
+      "values": [
+        "0"
+      ],
       "severity": "MEDIUM",
       "title": "Detailed logon errors are returned",
       "risk": "Distinguishing 'no such user' from 'wrong password' turns a password guess into two separate answers, and lets an attacker enumerate valid accounts before trying a single credential.",
@@ -97,7 +115,10 @@
       "policy": "2ODISCL",
       "name": "rdisp/TRACE_HIDE_SEC_DATA",
       "operator": "value_in",
-      "values": ["on", "ON"],
+      "values": [
+        "on",
+        "ON"
+      ],
       "severity": "HIGH",
       "title": "Security data is not hidden from traces",
       "risk": "With tracing enabled and this off, credentials and session tokens passing through the dispatcher are written to trace files. Anyone who can read a trace — including support staff and anyone who receives one attached to a ticket — reads live secrets.",
@@ -110,7 +131,11 @@
       "policy": "2ODISCL",
       "name": "icm/trace_secured_data",
       "operator": "value_in",
-      "values": ["FALSE", "false", "0"],
+      "values": [
+        "FALSE",
+        "false",
+        "0"
+      ],
       "severity": "HIGH",
       "title": "ICM traces secured data",
       "risk": "The ICM counterpart of the trace setting above: enabling it writes data the component itself classifies as secured into the trace.",
@@ -123,7 +148,11 @@
       "policy": "2ODISCL",
       "name": "icm/accept_forwarded_cert_via_http",
       "operator": "value_in",
-      "values": ["FALSE", "false", "0"],
+      "values": [
+        "FALSE",
+        "false",
+        "0"
+      ],
       "severity": "HIGH",
       "title": "Forwarded client certificates are accepted over plain HTTP",
       "risk": "The component trusts a client certificate presented in an HTTP header rather than one established by the TLS handshake. Anyone able to reach the port can assert any identity by setting a header, which turns certificate authentication into a claim rather than a proof.",
@@ -200,7 +229,10 @@
       "policy": "2ODISCL",
       "name_prefix": "icm/trusted_reverse_proxy_",
       "operator": "value_not_contains_any",
-      "values": ["SUBJECT=\"*\"", "ISSUER=\"*\""],
+      "values": [
+        "SUBJECT=\"*\"",
+        "ISSUER=\"*\""
+      ],
       "severity": "HIGH",
       "title": "Trusted reverse proxy accepts any certificate",
       "risk": "SUBJECT=\"*\" or ISSUER=\"*\" trusts every certificate rather than a named proxy, so anything that can present a certificate is treated as the trusted front end and may forward an asserted identity.",

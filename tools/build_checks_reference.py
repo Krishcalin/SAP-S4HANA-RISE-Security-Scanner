@@ -386,11 +386,29 @@ def render() -> str:
         w("These ids are constructed per entry in a shipped table, so the catalogue "
           "grows with the table and not with the code.")
         w("")
+        family_ids = {fam["pattern"]: fam["ids"] for fam in runtime_check_families()}
         for f in families:
             w(f"### `{f['pattern']}` — {f['count']}")
             w("")
             w(f"Source: `{f['source']}`")
             w("")
+            # WHICH CLAUSES THIS FAMILY ANSWERS. Without this the runtime families
+            # — 281 of the 706 checks — were the only part of the catalogue with
+            # no SAP Baseline column, so the document promised "which standard
+            # clause it satisfies" and delivered it for 60% of its own contents.
+            # Reported as a set per family rather than a row per id, because a
+            # family is one rule table and its members map by what they read: the
+            # 81 PARAM- ids reach nine different requirements and listing them
+            # individually would be 81 rows to say that.
+            ids = family_ids.get(f["pattern"], [])
+            reqs = sorted({r for r in (sapcontent.requirement_for(i) for i in ids)
+                           if r})
+            if reqs:
+                unmapped = sum(1 for i in ids if not sapcontent.requirement_for(i))
+                w("SAP Baseline: " + ", ".join(f"`{r}`" for r in reqs)
+                  + (f" — {unmapped} of {len(ids)} answer none, which for this "
+                     f"family is expected rather than a gap." if unmapped else ""))
+                w("")
             if f.get("examples"):
                 w("Examples: " + ", ".join(f"`{e}`" for e in f["examples"]))
                 w("")

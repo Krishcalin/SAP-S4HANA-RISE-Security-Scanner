@@ -6,13 +6,13 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**425** check ids are written as literals in `modules/`, across **36** modules. A further **281** are built at runtime from shipped rule tables, giving **706** in total.
+**427** check ids are written as literals in `modules/`, across **36** modules. A further **282** are built at runtime from shipped rule tables, giving **709** in total.
 
 Each check is published with **what it reads** and **which SAP Security Baseline requirement it answers** — the two things that make a catalogue auditable rather than a number. A competitor publishing a count and no itemised list is making a claim; this is a claim somebody else can check.
 
 ## What this file does not claim
 
-**46 of the 425 titles and 21 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**46 of the 427 titles and 21 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -22,9 +22,9 @@ A check's **identity** is its id. Severity is a judgement about a particular fin
 
 Every check below carries the SAP Security Baseline requirement it answers, where one exists. This is the roll-up, and it reports **three numbers rather than one percentage**, because a single percentage hides the interesting part.
 
-- **21 of 38** requirements SAP publishes are addressed by at least one check here.
-- **17** published requirements are not addressed at all. They are listed below rather than summarised away.
-- **473 of 706** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
+- **23 of 38** requirements SAP publishes are addressed by at least one check here.
+- **15** published requirements are not addressed at all. They are listed below rather than summarised away.
+- **473 of 709** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
 
 > ⚠️ These are CHECK ITEMS in the CSA policies, not the 'control points' counted in the Baseline document — the widely-quoted 214 (69/92/53) is that other unit. The two do not reconcile; do not publish a percentage of one against the other.
 
@@ -32,7 +32,7 @@ Baseline version: **v2.4**.
 
 ### Published requirements this catalogue does not address
 
-By technology: **2** ABAP, **2** BTP, **3** HANA, **10** Java. These are not the same kind of absence — a Java or HANA requirement is outside the stack this product audits, which is a scope decision; an ABAP one is a gap inside it.
+By technology: **2** BTP, **3** HANA, **10** Java. These are not the same kind of absence — a Java or HANA requirement is outside the stack this product audits, which is a scope decision; an ABAP one is a gap inside it.
 
 | Requirement | Tier | Technology | Title |
 |---|---|---|---|
@@ -40,11 +40,9 @@ By technology: **2** ABAP, **2** BTP, **3** HANA, **10** Java. These are not the
 | `AUDIT-P` | STANDARD | BTP | Audit Settings – BTP |
 | `CRITAU-J` | STANDARD | Java | Role SAP_J2EE_ADMIN must not be assigned to users other than standard users |
 | `DISCL-J` | STANDARD | Java | Disclosure of unnecessary information about versions or from errors |
-| `FILE-A` | STANDARD | ABAP | abap/path_normalization (Profile Parameter, Directory Traversal Protection) |
 | `MSGSRV-J` | CRITICAL | Java | File with access control list for message server |
 | `NETCF-H` | CRITICAL | HANA | HANA internal communication (listeninterface) |
 | `NOTEST-J` | CRITICAL | Java | InvokerServlet globally enabled |
-| `OBSCNT-A` | STANDARD | ABAP | Obsolete Client 066 must not exist. |
 | `PWDPOL-J` | CRITICAL | Java | Minimum Password Length |
 | `RFCGW-J` | CRITICAL | Java | Path-like value for ms/acl_info (message server access control list) |
 | `SECUPD-H` | CRITICAL | HANA | Security Maintenance Status of HANA Version (SPS) |
@@ -694,12 +692,14 @@ Reads: `security_params` — the sources the MODULE consumes; an individual chec
 | `CRYPTO-SNCECS-005` | MEDIUM | SNC identity is not consistent with the ECS baseline | `NETENC-A` |
 | `CRYPTO-SNCECS-006` | MEDIUM | SNC GSS-API library is not the one the ECS baseline mandates | `NETENC-A` |
 
-### `system_trust` — 13 checks
+### `system_trust` — 15 checks
 
-Reads: `ms_acl`, `rfc_destinations`, `rfc_trust`, `saprouttab`, `security_params`, `standard_users` — the sources the MODULE consumes; an individual check below reads some subset of them.
+Reads: `client_settings`, `ms_acl`, `rfc_destinations`, `rfc_trust`, `saprouttab`, `security_params`, `standard_users` — the sources the MODULE consumes; an individual check below reads some subset of them.
 
 | Check | Severity | Title | SAP Baseline |
 |---|---|---|---|
+| `OBSCNT-001` | MEDIUM | Obsolete client 066 still exists | `OBSCNT-A` |
+| `OBSCNT-002` | LOW | Template client 001 still exists | `OBSCNT-A` |
 | `STDUSR-001` | CRITICAL | SAP* kernel emergency-user auto-logon is enabled | `STDUSR-A` |
 | `STDUSR-002` | CRITICAL | Standard users still have SAP default passwords | `STDUSR-A` |
 | `STDUSR-003` | HIGH | Standard users not locked | `STDUSR-A` |
@@ -771,15 +771,19 @@ These ids are constructed per entry in a shipped table, so the catalogue grows w
 
 Source: `data/webdisp_baseline.json — rules`
 
+SAP Baseline: `DISCL-O`, `NETENC-O`
+
 Examples: `WDISP-001`, `WDISP-002`, `WDISP-003`, `WDISP-004`, `WDISP-005`, `WDISP-006`
 
 Transcribed from SAP's WEBDISP_ALL baseline policies (2ODISCL, 2ONETENC). `WDISP-COV-001` is a fixed id and appears in the literal table.
 
-### `PARAM-<parameter name>` — 78
+### `PARAM-<parameter name>` — 79
 
 Source: `modules/security_params.py — BASELINE + ECS_RULES`
 
-Examples: `PARAM-abap/ext_debugging_possible`, `PARAM-auth/check/calltransaction`, `PARAM-auth/no_check_in_some_cases`, `PARAM-auth/object_disabling_active`, `PARAM-auth/rfc_authority_check`, `PARAM-dbs/dba/ccms_maintenance`
+SAP Baseline: `CHANGE-A`, `FILE-A`, `NETCF-A`, `NETENC-A`, `PWDPOL-A`, `RFCGW-A`, `SCRIPT-A`, `USRCTR-A` — 68 of 79 answer none, which for this family is expected rather than a gap.
+
+Examples: `PARAM-abap/ext_debugging_possible`, `PARAM-abap/path_normalization`, `PARAM-auth/check/calltransaction`, `PARAM-auth/no_check_in_some_cases`, `PARAM-auth/object_disabling_active`, `PARAM-auth/rfc_authority_check`
 
 One id per judged profile parameter. `PARAM-000`, `PARAM-MISSING` and `PARAM-MISSING-OTHER` are fixed ids and appear in the literal table.
 
@@ -794,6 +798,8 @@ Custom-code scan rules. All four tables emit into the same `ABAP-` namespace: AB
 ### `ARA-<risk id>` — 36
 
 Source: `modules/access_risk_analysis.py — RULESET`
+
+SAP Baseline: `CRITAU-A`
 
 Examples: `ARA-BASIS-01`, `ARA-BASIS-02`, `ARA-BASIS-03`, `ARA-BASIS-04`, `ARA-CA-04`, `ARA-CP-05`
 

@@ -1198,6 +1198,32 @@ class SecurityParamAuditor(BaseAuditor):
     # UNVERIFIED: SAP Notes 68048, 2416093, 1408081, 510007, 2191612 and every
     # "CIS SAP Benchmark n.n.n" string below.
     BASELINE = {
+        # --- Directory traversal ---
+        "abap/path_normalization": {
+            # SAP'S OWN PREDICATE, NOT A GUESS AT ONE. Policy `2AFILE.xml`,
+            # check item `FILE-A_a2`, reads `NAME = 'abap/path_normalization'
+            # and VALUE != 'off'` — so anything but `off` is compliant, and the
+            # rule is transcribed rather than tightened. It is deliberately NOT
+            # `== on`: SAP accepts other values and a stricter rule here would
+            # report a compliant system against SAP's own baseline.
+            #
+            # Note 3250501 does not mandate this parameter, so it belongs in the
+            # legacy table rather than the ECS one.
+            "expected": "off",
+            "op": "!=",
+            "severity": "HIGH",
+            "category": "Security Parameters",
+            "desc": ("Path normalisation is switched off, so the kernel does not "
+                     "canonicalise file paths before using them. That is the "
+                     "protection standing between a crafted `../` sequence and a "
+                     "file outside the intended directory, and this product "
+                     "cannot see whether anything downstream compensates."),
+            "fix": ("Set abap/path_normalization to a value other than `off` in "
+                    "the instance profile and restart. SAP's baseline requirement "
+                    "FILE-A tests exactly this."),
+            "refs": ["SAP Security Baseline FILE-A", "SAP policy 2AFILE check FILE-A_a2"],
+        },
+
         # --- Password Policy ---
         "login/min_password_lng": {
             "expected": "15",

@@ -277,7 +277,11 @@ def test_every_absent_parameter_is_now_named_somewhere():
     info = findings.get("PARAM-MISSING-OTHER")
     assert high and info, "one of the two absence roll-ups is missing"
     named = len(high["affected_items"]) + len(info["affected_items"])
-    assert named == 42, f"{named} of the 42 absent parameters are named"
+    # 42 -> 43 when abap/path_normalization joined the legacy table to close SAP
+    # Baseline requirement FILE-A. The number moves whenever the rule set does;
+    # what must not move is that EVERY absent parameter is named by one of the
+    # two roll-ups, which is what this compares against.
+    assert named == 43, f"{named} of the 43 absent parameters are named"
 
 
 def test_the_further_parameters_finding_is_a_disclosure_not_a_verdict():

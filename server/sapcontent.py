@@ -228,6 +228,7 @@ CHECK_TO_REQUIREMENT: Dict[str, str] = {
     "TRUST-00": "RFCGW-A",
     "INTG-GW-": "RFCGW-A",
     "NET-00": "NETCF-A",
+    "OBSCNT-": "OBSCNT-A",
     "LOG-AUD": "AUDIT-A",
     "CODE-SYSCHG": "CHANGE-A",
     "CODE-CLIENT": "CHANGE-A",

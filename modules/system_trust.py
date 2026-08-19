@@ -61,6 +61,7 @@ class SystemTrustAuditor(BaseAuditor):
         self.check_standard_users_unlocked()
         # After the two it qualifies, so a reader meets the result and
         # the bound on it in that order.
+        self.check_obsolete_clients()
         self.check_client_scope()
         # trust / connectivity
         self.check_inbound_trust_tier()
@@ -160,6 +161,80 @@ class SystemTrustAuditor(BaseAuditor):
         """
         note = client_scope.caveat(self._client_scope())
         return "\n\n" + note if note else ""
+
+    def check_obsolete_clients(self):
+        """SAP's OBSCNT-A: clients 066 and 001 should not still be there.
+
+        THE OPERATOR CARRIES THE MEANING, AND READING ONLY THE PREDICATE WOULD
+        INVERT THIS CHECK. SAP's policy `2AOBSCNT.xml` writes both clauses
+        identically — `<compliant>MANDT = '066'</compliant>` and
+        `<noncompliant>MANDT = '066'</noncompliant>` — and puts the semantics in
+        `operator="NOT_EXIST"`: the system is compliant when NO such row exists.
+        Transcribing the compliant clause at face value would have reported every
+        estate that has removed client 066 as failing, and every estate that kept
+        it as passing.
+
+        WHY THE TWO ARE DIFFERENT SEVERITIES. SAP's own wording differs: 066
+        "must not exist", while 001 "must be deleted IF NOT USED". A template
+        client somebody genuinely uses is not a finding, so 001 is raised as a
+        question rather than a defect.
+        """
+        rows = self.data.get("client_settings")
+        if not rows:
+            return                     # absence is the coverage manifest's to report
+        present = {client_scope._normalise(client_scope._client_of(r))
+                   for r in rows}
+        present.discard("")
+
+        if "066" in present:
+            self.finding(
+                check_id="OBSCNT-001",
+                title="Obsolete client 066 still exists",
+                severity=self.SEVERITY_MEDIUM,
+                category=self.CATEGORY,
+                description=(
+                    "Client 066 is the EarlyWatch client. SAP's own security "
+                    "baseline requires that it not exist — it carries delivered "
+                    "users, is almost never logged into, and therefore is almost "
+                    "never noticed. Its standard-user passwords age in place."),
+                affected_items=["client 066 present in T000"],
+                affected_objects=[{"type": "client", "name": "066"}],
+                remediation=(
+                    "Delete client 066 (SCC5) once you have confirmed nothing "
+                    "uses it. SAP has not shipped it for new installations for "
+                    "many releases; an estate that still has it is usually one "
+                    "that was upgraded rather than installed."),
+                references=["SAP Security Baseline OBSCNT-A",
+                            "SAP policy 2AOBSCNT check OBSCNT-A.1"],
+                details={"sap_check_id": "OBSCNT-A.1",
+                         "sap_operator": "NOT_EXIST"},
+            )
+
+        if "001" in present:
+            self.finding(
+                check_id="OBSCNT-002",
+                title="Template client 001 still exists",
+                severity=self.SEVERITY_LOW,
+                category=self.CATEGORY,
+                description=(
+                    "Client 001 is the delivered template copy of client 000. "
+                    "SAP's baseline asks for it to be deleted IF IT IS NOT USED "
+                    "— and whether it is used is a question this export cannot "
+                    "answer, which is why this is raised at LOW rather than as a "
+                    "defect. Where it is unused it is a second copy of the "
+                    "delivered credentials nobody watches."),
+                affected_items=["client 001 present in T000"],
+                affected_objects=[{"type": "client", "name": "001"}],
+                remediation=(
+                    "Confirm whether anything uses client 001. If nothing does, "
+                    "delete it (SCC5). If something does, record that decision — "
+                    "the baseline asks the question rather than forbidding the "
+                    "client."),
+                references=["SAP Security Baseline OBSCNT-A",
+                            "SAP policy 2AOBSCNT check OBSCNT-A.2"],
+                details={"sap_check_id": "OBSCNT-A.2",
+                         "sap_operator": "NOT_EXIST"},
+            )
 
     def check_client_scope(self):
         """WHAT THE STANDARD-USER CHECKS DID NOT LOOK AT.
