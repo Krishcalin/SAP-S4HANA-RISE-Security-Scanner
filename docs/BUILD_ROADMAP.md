@@ -757,7 +757,24 @@ the cut is genuinely evidenced.
       delivery at-least-once with a stable `notification_id` to deduplicate on, because
       marking a row delivered BEFORE the POST loses every alert in flight when the
       process dies
-- [ ] Read-only MCP surface over the query layer
+- [x] Read-only MCP surface over the query layer — **SHIPPED, with no new
+      dependency.** `server/mcp.py` plus `python -m server.cli mcp <username>`: JSON-RPC
+      2.0 over stdio, seven read tools. An SDK would have broken a guarded invariant —
+      `requirements.txt` states the single-digit runtime dependency count that replaced
+      the stdlib-only charter and `test_spa_mount.py` asserts the list verbatim — to save
+      a hundred lines the standard library already writes.
+
+      **Read-only is enforced by construction, not intent.** `transition_finding`,
+      `assign_finding`, `bulk_transition`, `save_view` and `create_system` sit a few
+      lines from the readers in the same module, and a test asserts each is absent BY
+      NAME. A tool call carries no actor, so a transition made through here would be an
+      unattributable state change.
+
+      **It runs AS a named console account**, with no ambient identity and no unscoped
+      mode; scope comes from the same `auth.scope_for` the console uses. A test pins the
+      inversion that would be invisible: an empty explicit scope means NOTHING, not
+      everything, so a user with no systems does not receive the estate through a channel
+      nobody watches
 - [ ] PDF/PPTX export driven from SQL rather than an in-memory list
 
 ---

@@ -13,6 +13,7 @@ Server administration CLI.
     python -m server.cli add-system    <landscape> <SID> <client> [--tier prod] ...
     python -m server.cli add-tenant    <landscape> <platform> <external-key> ...
     python -m server.cli scan          <landscape> <data-dir> [--sid PRD --client 100]
+    python -m server.cli mcp <username>
     python -m server.cli notify
     python -m server.cli runs
     python -m server.cli totp-status  [username]
@@ -33,7 +34,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from server import auth, db, ingest, totp, webhook
+from server import auth, db, ingest, mcp, totp, webhook
 from modules.deployment_modes import DEPLOYMENT_MODES, DEFAULT_DEPLOYMENT_MODE
 from modules.platforms import PLATFORMS, TENANT_PLATFORMS, status_note
 
@@ -445,6 +446,18 @@ def cmd_notify(args: argparse.Namespace) -> int:
     return 1 if result["failed"] else 0
 
 
+def cmd_mcp(args: argparse.Namespace) -> int:
+    """Serve the read-only MCP surface on stdio, as a named console account.
+
+    RUNS AS SOMEBODY, DELIBERATELY. There is no ambient MCP identity and no
+    default of "everything": the surface sees exactly what that account's
+    `auth.scope_for` allows, which is the same function the console uses. An
+    assistant reading a landscape it should not see is the same breach as a user
+    doing it.
+    """
+    return mcp.serve(args.username)
+
+
 def cmd_runs(args: argparse.Namespace) -> int:
     rows = db.query(
         "SELECT r.id, r.status, r.started_at, r.content_sha, s.sid, s.client "
@@ -543,6 +556,16 @@ def main(argv=None) -> int:
                     help="How many to attempt in one drain (default %(default)s). "
                          "The rest stay queued for the next run.")
     nt.set_defaults(fn=cmd_notify)
+
+    mc = sub.add_parser(
+        "mcp",
+        help="Serve a READ-ONLY MCP surface on stdio, scoped to one console "
+             "account. Nothing it exposes changes anything: transitions and "
+             "assignment record an actor and a tool call carries none.")
+    mc.add_argument("username",
+                    help="The console account to run as. Its scope is the "
+                         "surface's scope — there is no unscoped mode.")
+    mc.set_defaults(fn=cmd_mcp)
 
     sub.add_parser("runs", help="List stored scan runs, newest first.").set_defaults(fn=cmd_runs)
 
