@@ -1,0 +1,38 @@
+{
+  "_meta": {
+    "description": "The pinned state of SAP's Security Baseline Template archive, so CI can tell when SAP moved.",
+    "what_this_is_not": "Not the policy repository. tools/build_sap_notes_catalogue.py derives data/sap_baseline_requirements.json from SAP-samples/frun-csa-policies-best-practices, and the sap-content CI job already fails when that derivation drifts. This is the Baseline Template DOCUMENT archive, a different artefact on a different cadence.",
+    "the_gap_worth_knowing": "The policy set this product derives from is v2.4. The archive currently ships V2.6. SAP's baseline document is two versions ahead of the policy content we mirror, and that is a fact about SAP's release cadence rather than a defect here — but it is the reason this record exists, because nothing else in the repository would have shown it.",
+    "why_the_change_markers_matter": "Each version carries a *_change_marker.pdf. They are what makes 'the REQUIREMENT changed' distinguishable from 'the SYSTEM changed' across two scans of one estate. This check does not read them; it detects that a new one exists, which is the trigger for a person to.",
+    "no_login_wall": "The URL returns HTTP 200 to an unauthenticated request. Most SAP content of this value sits behind SAP for Me; this does not, which is the only reason the check can run in CI rather than on somebody's laptop with an S-user.",
+    "how_it_is_checked": "HEAD for size and timestamp, then a Range request for the last 300 KB — the archive's own central directory lists all entries, so every change worth detecting is visible at 0.3% of a 99 MB transfer.",
+    "retrieved": "2026-08-19",
+    "source": "docs/RISE_SECURITY_MODEL.md section 3.4 first recorded this archive; the figures here were re-measured rather than copied."
+  },
+  "url": "https://support.sap.com/content/dam/support/en_us/library/ssp/offerings-and-programs/support-services/sap-security-optimization-services-portfolio/Security_Baseline_Template_V2.zip",
+  "content_length": 99336484,
+  "last_modified": "Wed, 23 Jul 2025 14:30:16 GMT",
+  "entries": 545,
+  "current": "V2.6",
+  "versions": [
+    "V2.0",
+    "V2.1",
+    "V2.2",
+    "V2.3",
+    "V2.4",
+    "V2.5",
+    "V2.6"
+  ],
+  "derived_catalogue_version": "v2.4",
+  "change_markers": [
+    "V2.1/Security_Baseline_Template_V2.1_change_marker.pdf",
+    "V2.2/Configuration_Validation_Template_V2.2_CV-4/Configuration_Validation_Template_V2.2_CV-4_change_markers.pdf",
+    "V2.2/Security_Baseline_Template_V2.2_change_marker.pdf",
+    "V2.3/Security_Baseline_Template_V2.3_change_marker.pdf",
+    "V2.4/Security_Baseline_Template_V2.4.1_change_marker.pdf",
+    "V2.4/Security_Baseline_Template_V2.4_change_marker.pdf",
+    "V2.5/Security_Baseline_Template_V2.5_change_marker.pdf",
+    "V2.6/Security_Baseline_Template_V2.6_change_marker.pdf",
+    "V2.6/Security_Baseline_Template_V2.6_change_marker_comments.pdf"
+  ]
+}

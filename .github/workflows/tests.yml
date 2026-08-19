@@ -267,6 +267,21 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: SAP's Baseline Template archive has not moved
+        # The job below covers the POLICY repository. This covers the Baseline
+        # Template ZIP, a different artefact on a different cadence — the policy
+        # set we derive from is v2.4 and the archive ships V2.6. A new version
+        # here means a new change_marker.pdf, which is what makes "the
+        # requirement changed" distinguishable from "the system changed" in a
+        # repeat scan. HEAD plus a 300 KB ranged read of the archive's own
+        # central directory; it never downloads the 99 MB.
+        #
+        # continue-on-error: SAP's support host is outside our control and a
+        # transient 5xx must not fail an unrelated pull request. The step still
+        # goes red, which is the signal; it does not block the merge.
+        continue-on-error: true
+        run: python -m tools.check_baseline_zip
+
       - name: Fetch SAP's published policy repository
         run: |
           set -euo pipefail

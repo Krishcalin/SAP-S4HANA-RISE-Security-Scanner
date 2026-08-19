@@ -537,10 +537,22 @@ for SAP's content would be exactly the fabrication this project forbids.
       does not reconcile with the widely-quoted 214 control points (69/92/53). Publishing
       a percentage against it would be a fabricated denominator. See the warning in
       `server/sapcontent.py`
-- [~] CI job diffing the SAP repo and the Baseline ZIP each release (no login wall) —
-      **PARTIAL.** The `sap-content` job clones SAP's policy repository on every run and
-      re-derives BOTH catalogues, failing on any drift, which is the half that needed no
-      login. The Baseline ZIP and its `change_marker` PDFs are still untouched
+- [x] CI job diffing the SAP repo and the Baseline ZIP each release (no login wall) —
+      **COMPLETE.** The policy half was already there. `tools/check_baseline_zip.py` adds
+      the archive half: HEAD for size and timestamp, then a 300 KB ranged read of the
+      ZIP's own central directory, so all 545 entries and every version folder are
+      visible without downloading 99 MB on every push. Pinned in
+      `data/sap_baseline_zip.json` and wired into the `sap-content` job.
+
+      **It immediately recorded a gap nothing else in the repository would show**: the
+      archive ships **V2.6** while the policy set this product derives from is **v2.4**.
+      Two SAP artefacts on two cadences, and the second was invisible.
+
+      The `change_marker` PDFs are detected, not read — nine of them, one per version
+      from V2.1. A new one is the trigger for a person to read it, which is what makes
+      "the requirement changed" distinguishable from "the system changed" in a repeat
+      scan. `continue-on-error` on the step: SAP's support host is outside our control
+      and a transient 5xx must not fail an unrelated pull request
 - [x] Rebuild the SAP Notes module on `NotesPolicies/ABAP` (133 policies by patch day),
       reframed around **verifying the note took effect** — **SHIPPED, and the reframing
       is the part that matters.** `HOTNEWS-012` lists SAP-published HotNews notes absent
