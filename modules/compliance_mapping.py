@@ -332,6 +332,46 @@ class ComplianceMapper:
             },
         },
         {
+            # SOX / ITGC — the four IT general-control domains a SOX 404 IT audit
+            # is organised around, as used by the external auditors who test them.
+            #
+            # CLAUSE NUMBERS ARE NOT CLAIMED, AND CANNOT BE. Unlike ISO 27001 or
+            # NIST 800-53, ITGC has no single published control catalogue with
+            # numbered clauses — the domains are an audit convention derived from
+            # COBIT, and every firm numbers its own testing programme differently.
+            # Inventing `ITGC-3.2.1` to look like a citation would be exactly the
+            # coverage that fails on the first auditor question, and the DORA entry
+            # above records the same reasoning for the same reason. The subtitle
+            # carries the caveat onto every rendered report.
+            #
+            # SCOPED TO WHAT A CONFIGURATION EXPORT CAN EVIDENCE. Program
+            # Development is mapped only through secure development, because an
+            # export shows what the code does and not whether the project that
+            # produced it was governed. The operational domain claims logging,
+            # backup and incident response and NOT `secure-config`, `vuln-mgmt` or
+            # `network-security`: those are real controls and they are not what an
+            # ITGC auditor is testing under Computer Operations, which is about
+            # whether jobs ran, failures were noticed and data could be recovered.
+            #
+            # WHY THIS ONE MATTERS COMMERCIALLY. It is the number-one SAP audit
+            # driver, and this product already loads the FI and SoD sources the
+            # Access-to-Programs-and-Data domain is tested on.
+            "id": "soxitgc", "name": "SOX / ITGC",
+            "subtitle": "IT general-control domains — clause numbers not claimed",
+            "themes": {
+                "access-control": [("APD", "Access to Programs and Data")],
+                "privileged-access": [("APD", "Access to Programs and Data")],
+                "authentication": [("APD", "Access to Programs and Data")],
+                "sod": [("APD", "Access to Programs and Data")],
+                "data-protection": [("APD", "Access to Programs and Data")],
+                "change-management": [("PC", "Program Changes")],
+                "secure-development": [("PD", "Program Development")],
+                "logging-monitoring": [("CO", "Computer Operations")],
+                "backup-recovery": [("CO", "Computer Operations")],
+                "incident-response": [("CO", "Computer Operations")],
+            },
+        },
+        {
             # DORA — Regulation (EU) 2022/2554.
             #
             # ARTICLE-LEVEL MAPPING IS DELIBERATELY NOT CLAIMED. The ids below are

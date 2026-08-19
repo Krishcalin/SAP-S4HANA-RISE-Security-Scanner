@@ -548,7 +548,28 @@ for SAP's content would be exactly the fabrication this project forbids.
       DETERMINATION — the installed component, kernel or HANA revision is below the level
       SAP publishes as carrying the fix, with the evidence in the finding. That is
       "verifying the note took effect" as far as an offline export can reach it
-- [ ] SOX/ITGC framework mapping; "SAP ECS mandatory hardening" framework
+- [x] SOX/ITGC framework mapping; "SAP ECS mandatory hardening" framework —
+      **SHIPPED, as two things rather than one.** Only the first is a framework in
+      this product's sense. Every entry in `ComplianceMapper.FRAMEWORKS` is a
+      theme-to-control map; SAP Note 3250501 is 92 named parameters with a mandated
+      value each, and its question is "is this parameter what SAP requires", one
+      parameter at a time. Forcing it into a theme table would lose the parameter —
+      which IS the control — and report a domain score where the note gives a list.
+
+      **SOX/ITGC** is a ninth framework on the DORA pattern: the four IT
+      general-control domains (APD / PC / PD / CO), with **no clause numbers
+      claimed**, because unlike ISO 27001 or NIST 800-53 ITGC publishes no single
+      catalogue — the domains are an audit convention and every firm numbers its own
+      testing programme. Six themes are deliberately left unmapped, on this file's
+      own rule that a defensible gap beats indefensible coverage.
+
+      **ECS hardening** is `ecs_baseline.compliance()`, a roll-up beside the
+      frameworks. Four outcomes, not two: compliant, deviating, ABSENT FROM THE
+      EXPORT, and governed-but-no-opinion — and the rate is over what was ASSESSED,
+      never over the 92 mandated, or an export covering 25 of them reports the other
+      67 as failures. Empty outside ECS/RISE: scoring an on-premise estate against a
+      contract it is not under is the confidently-wrong reporting that module exists
+      to prevent.
 - [x] Populate `owning_team` and `responsibility` across the catalogue — **SHIPPED,
       with one half narrower than the heading.** `owning_team` is derived for every
       check from `rise_ownership.TEAM_BY_PREFIX` and stored on `check_definition`.

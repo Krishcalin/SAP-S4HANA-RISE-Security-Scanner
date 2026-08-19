@@ -120,3 +120,89 @@ def is_compliant(param: str, value: Any, deployment_mode: str = "") -> Optional[
         if got == allowed:
             return True
     return False
+
+
+def compliance(security_params: Any,
+               deployment_mode: str = "") -> Dict[str, Any]:
+    """How the estate stands against SAP's MANDATORY ECS hardening, as a roll-up.
+
+    WHY THIS IS NOT A `compliance_mapping` FRAMEWORK. Every other framework in
+    this product is a theme-to-control map: a finding about privileged access
+    reaches ISO A.8.2 because both describe a kind of control. SAP Note 3250501 is
+    not that shape. It is 92 named parameters with a mandated value each, and the
+    question it answers is "is this parameter set to what SAP requires", one
+    parameter at a time. Forcing it into a theme table would lose the parameter —
+    which IS the control — and report a domain score where the note gives a list.
+
+    So this is a roll-up beside the frameworks rather than one of them, and the
+    distinction is worth keeping: a customer asking "am I ISO-aligned?" wants
+    themes, and one asking "am I compliant with what SAP mandates for ECS?" wants
+    the parameter that is wrong.
+
+    FOUR OUTCOMES, NOT TWO. A parameter can be compliant, deviating, ABSENT FROM
+    THE EXPORT — which is not a deviation, it is a thing we did not see — or one
+    the note governs while this module holds no opinion. Collapsing "absent" into
+    "deviating" would report an incomplete export as a non-compliant system, and
+    collapsing it into "compliant" would do the reverse and worse.
+
+    Returns `{}` outside ECS/RISE. The note governs SAP Enterprise Cloud Services,
+    and scoring an on-premise estate against a contract it is not under would be
+    the confidently-wrong reporting this module's docstring already warns about.
+    """
+    if deployment_mode and not deployment_mode.lower().startswith(ECS_MODE_PREFIX):
+        return {}
+    mandated = parameters()
+    supplied: Dict[str, str] = {}
+    for row in (security_params or ()):
+        if not isinstance(row, dict):
+            continue
+        upper = {str(k).strip().upper(): v for k, v in row.items() if k is not None}
+        name = ""
+        for key in ("NAME", "PARAMETER", "PARAMETER_NAME", "PARAM", "PNAME"):
+            if str(upper.get(key, "") or "").strip():
+                name = str(upper[key]).strip()
+                break
+        if not name:
+            continue
+        for key in ("VALUE", "PARAMETER_VALUE", "PVALUE", "CURRENT_VALUE"):
+            if upper.get(key) is not None:
+                supplied[name] = str(upper[key]).strip()
+                break
+
+    compliant, deviating, no_opinion, absent = [], [], [], []
+    for param in sorted(mandated):
+        if param not in supplied:
+            absent.append(param)
+            continue
+        verdict = is_compliant(param, supplied[param], deployment_mode or "rise_pce")
+        if verdict is True:
+            compliant.append(param)
+        elif verdict is False:
+            deviating.append({"parameter": param,
+                              "found": supplied[param],
+                              "sap_standard": ecs_value(param)})
+        else:
+            no_opinion.append(param)
+
+    assessed = len(compliant) + len(deviating)
+    return {
+        "note": "SAP Note 3250501",
+        "mandated": len(mandated),
+        "assessed": assessed,
+        "compliant": compliant,
+        "deviating": deviating,
+        "no_opinion": no_opinion,
+        "absent_from_export": absent,
+        # DENOMINATOR IS WHAT WAS ASSESSED, not what the note mandates. A rate over
+        # all 92 when only 40 were exported reports the 52 nobody looked at as
+        # failures, which is the same defect the coverage manifest exists to stop.
+        "rate": (len(compliant) / assessed) if assessed else None,
+        "summary": (
+            "%d of %d mandated parameters assessed: %d compliant, %d deviating. "
+            "%d were not in the export and are neither." % (
+                assessed, len(mandated), len(compliant), len(deviating),
+                len(absent))
+            if assessed else
+            "None of SAP's %d mandated parameters were present in the export, so "
+            "this says nothing about compliance with them." % len(mandated)),
+    }
