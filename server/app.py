@@ -48,13 +48,13 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile, File
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import Scope
 
-from server import analytics, auth, crq, db, graph, ingest, queries, sapcontent
+from server import analytics, auth, crq, db, export, graph, ingest, queries, sapcontent
 from modules import domains, nist_csf, platforms
 #: SESSION_COOKIE is imported but not USED here any more — the routes that set and
 #: cleared it were the Jinja form's sign-in and sign-out, and the SPA uses
@@ -432,6 +432,30 @@ def api_paths(user: Dict[str, Any] = Depends(current_user),
             "chokepoints": graph.chokepoints(scope),
             "closed": graph.recently_closed(scope),
             "template_count": len(graph.load_templates().get("paths", []))}
+
+
+@app.get("/api/export/report.{fmt}")
+def api_export_report(fmt: str, user: Dict[str, Any] = Depends(current_user)):
+    """The estate as a document, built from the store rather than from one scan.
+
+    SCOPED LIKE EVERY OTHER READ. `auth.scope_for` decides what goes in, so a
+    user who cannot see a landscape cannot export it either — an export is the
+    easiest place for a scope to be forgotten, because the result looks like a
+    report rather than like data.
+
+    NOT PAGINATED. `list_findings` pages because a screen does; a document that
+    inherited that would cover the first fifty findings and look complete.
+    """
+    if fmt not in export.FORMATS:
+        raise HTTPException(status_code=404,
+                            detail=f"no such format; expected one of "
+                                   f"{', '.join(export.FORMATS)}")
+    payload = export.build(auth.scope_for(user), fmt)
+    return Response(
+        content=payload,
+        media_type=export.MEDIA_TYPES[fmt],
+        headers={"Content-Disposition":
+                 f'attachment; filename="monitorrisk-report.{fmt}"'})
 
 
 @app.get("/api/coverage")

@@ -775,7 +775,25 @@ the cut is genuinely evidenced.
       inversion that would be invisible: an empty explicit scope means NOTHING, not
       everything, so a user with no systems does not receive the estate through a channel
       nobody watches
-- [ ] PDF/PPTX export driven from SQL rather than an in-memory list
+- [x] PDF/PPTX export driven from SQL rather than an in-memory list — **SHIPPED, and
+      the defect this entry implied was not there.** It reads like a correctness bug — a
+      display filter silently narrowing an export — and both generators already take
+      `full_findings`, the corpus as scanned, so an estate-level claim never read the
+      filtered set. The offline path was already right and a test now pins it.
+
+      The real gap was larger: **the server could not export at all.** A PDF existed only
+      if somebody re-ran the offline scanner over a directory of files, so the artefact a
+      customer forwards to an auditor could carry nothing the store knows.
+      `server/export.py` plus `GET /api/export/report.{pdf,pptx}` builds from the query
+      layer — scoped by `auth.scope_for`, unpaginated, with resolved and false-positive
+      findings excluded because listing them would report closed work as outstanding.
+
+      **What the store adds**: state, assignee, due date, provider ticket, regression
+      count and first-seen date. A scan describes a moment; the store describes the
+      managed estate over time. **The one honest difference is stated in the document**:
+      the store keeps typed `subject` objects rather than the module's prose
+      `affected_items`, so the affected list is a rendering rather than a recovery and
+      the note says it does not read identically to an offline export
 
 ---
 
