@@ -734,6 +734,33 @@ class CodeTransportAuditor(BaseAuditor):
     #  CODE-CLIENT-*: Client Configuration
     # ════════════════════════════════════════════════════════════════
 
+    #: SAP's compliant values for a production client, from policy 1ACHANGE
+    #: check item CHANGE-A_b. Transcribed, not derived — and deliberately NOT
+    #: widened: the note accepts exactly these, and guessing that '1' also means
+    #: "locked" is how this check came to report SAP's own standard as CRITICAL.
+    _T000_PROD_COMPLIANT = {"CCCORACTIV": ("2",), "CCNOCLIIND": ("3",),
+                            "CCCOPYLOCK": ("X", "L")}
+
+    def _t000_verdict(self, row):
+        """True/False for a raw T000 row, or None when this is not one.
+
+        None means "this export is in the descriptive SCC4 form" and the caller
+        falls back to word matching. Distinguishing the two is the whole point:
+        the same column name carries different vocabularies on the two documented
+        export routes.
+        """
+        upper = {str(k).strip().upper(): str(v or "").strip()
+                 for k, v in row.items() if k is not None}
+        if not any(c in upper for c in self._T000_PROD_COMPLIANT):
+            return None
+        category = upper.get("CCCATEGORY", "").upper()
+        if category != "P":
+            # SAP's predicate treats every non-production client as compliant
+            # HERE. Other checks judge those clients on other grounds.
+            return True
+        return all(upper.get(col, "").upper() in vals
+                   for col, vals in self._T000_PROD_COMPLIANT.items())
+
     def check_client_settings(self):
         """
         Audit SCC4 client configuration for production client:
@@ -756,6 +783,32 @@ class CodeTransportAuditor(BaseAuditor):
                           row.get("CROSS_CLIENT", "")))
             repo_changes = row.get("REPOSITORY_CHANGES", row.get("CCCOPYLOCK",
                           row.get("REPO_CHANGES", "")))
+
+            # RAW T000 CODES ARE JUDGED BY SAP'S OWN PREDICATE, NOT BY THE
+            # DESCRIPTIVE MATCHING BELOW.
+            #
+            # `SCC4` shows words — NO_CHANGES, MODIFIABLE — and `SE16 on T000`
+            # shows codes, and docs/EXPORT_GUIDE.md documents both routes. The
+            # allow-lists below only know the words, so SAP's own COMPLIANT
+            # production client — CCCORACTIV='2', CCNOCLIIND='3', CCCOPYLOCK='X'
+            # — matched nothing and was reported CRITICAL "Production client
+            # allows changes (not locked)". A scanner that flags SAP's own
+            # mandated configuration is confidently wrong on every correctly
+            # locked estate.
+            #
+            # The rule is SAP policy 1ACHANGE, check item CHANGE-A_b, verbatim:
+            #   (CCCATEGORY = 'P' and CCCORACTIV = '2' and CCNOCLIIND = '3'
+            #    and (CCCOPYLOCK = 'X' or CCCOPYLOCK = 'L')) OR CCCATEGORY != 'P'
+            raw_verdict = self._t000_verdict(row)
+            if raw_verdict is not None:
+                if raw_verdict is False:
+                    risky_clients.append(
+                        f"Client {client} (T000 codes) — not locked per SAP "
+                        f"policy 1ACHANGE check CHANGE-A_b")
+                    if client:
+                        risky_client_objects.append(
+                            {"type": "client", "name": str(client)})
+                continue
 
             is_prod = str(role).upper() in ("P", "PRODUCTION", "PROD")
             if not is_prod:

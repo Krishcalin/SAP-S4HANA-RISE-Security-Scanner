@@ -743,10 +743,41 @@ class DataLoader:
                     # field dropped by a spreadsheet round-trip was enough.
                     #
                     # An absent cell is an empty cell — that is what the file says.
+                    # A LONG ROW IS AN UNQUOTED DELIMITER, NOT AN EXTRA COLUMN.
+                    #
+                    # `if k` below drops csv.DictReader's overflow key — the None
+                    # key it uses when a row has MORE fields than headers — and
+                    # that is where an unquoted delimiter inside a value lands.
+                    # SAP profile values routinely contain commas:
+                    #
+                    #   icm/HTTP/admin_0,PREFIX=/sap/admin,CLIENTHOST=10.0.0.1
+                    #
+                    # arrived as VALUE='PREFIX=/sap/admin' with the CLIENTHOST
+                    # restriction discarded, and webdisp_security then reported a
+                    # correctly restricted admin handler as unrestricted at HIGH.
+                    # The module has its own recovery for exactly this and could
+                    # never fire, because the loader had already thrown the pieces
+                    # away one layer earlier.
+                    #
+                    # Rejoined with the delimiter that split it, which is lossless
+                    # and reverses the exact operation. A file with genuinely more
+                    # columns than headers gets them concatenated into its last
+                    # field — visible and wrong, rather than invisible and wrong.
+                    overflow = row.get(None)
                     normalized = {
                         k.strip().upper().replace(" ", "_"): (v or "").strip()
                         for k, v in row.items() if k
                     }
+                    if overflow and normalized:
+                        parts = overflow if isinstance(overflow, (list, tuple)) \
+                            else [overflow]
+                        extra = delimiter.join(str(p) for p in parts if p is not None)
+                        if extra:
+                            last = list(normalized)[-1]
+                            normalized[last] = (
+                                f"{normalized[last]}{delimiter}{extra}".strip()
+                                if normalized[last] else extra.strip())
+                            self._long_rows = getattr(self, "_long_rows", 0) + 1
                     rows.append(normalized)
         except Exception as e:
             print(f"    [WARN] Failed to load {path}: {e}")

@@ -612,6 +612,28 @@ async def api_upload(request: Request,
     if landscape is None:
         raise HTTPException(404, "unknown landscape")
 
+    # SCOPE THE WRITE, NOT ONLY THE READS.
+    #
+    # This handler took `landscape_id` and `system_id` straight from the form and
+    # checked only that the landscape EXISTED. Every read path in the product runs
+    # through `auth.scope_for`; this one did not, so an analyst restricted to one
+    # landscape could upload a scan into another and attach findings to systems
+    # they may not read. A write is the worse half of that: they cannot see the
+    # result, and the owner of the landscape gets findings from a bundle nobody
+    # authorised.
+    scope = auth.scope_for(user)
+    if scope is not None:
+        if system_id is None:
+            raise HTTPException(
+                403, "your account is restricted to specific systems, so an "
+                     "upload must name the system it belongs to")
+        if int(system_id) not in set(scope):
+            raise HTTPException(403, "that system is not in your scope")
+        owns = db.one("SELECT 1 AS ok FROM sap_system WHERE id = %s "
+                      "AND landscape_id = %s", (system_id, landscape_id))
+        if owns is None:
+            raise HTTPException(400, "that system is not in that landscape")
+
     run_dir = Path(tempfile.mkdtemp(prefix="run_", dir=str(settings.upload_dir)))
     try:
         count = _extract(files, run_dir)
