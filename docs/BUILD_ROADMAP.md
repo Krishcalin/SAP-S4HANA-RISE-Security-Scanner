@@ -563,9 +563,30 @@ for SAP's content would be exactly the fabrication this project forbids.
       values are derived from check-ID prefixes and a destination-naming
       heuristic, not reviewed check by check, and the heuristic half says so in
       the report footer.
-- [ ] **Publish the check catalogue** — 323 auditable vs 550 asserted. *(Partly overtaken:
-      `docs/CHECKS_REFERENCE.md` is generated and published, 685 checks. What is still
-      unpublished is the auditable/asserted SPLIT, which is the honest half)*
+- [x] **Publish the check catalogue** — **SHIPPED, and this entry had misread its own
+      source.** "323 auditable vs 550 asserted" is not a split within OUR checks. All
+      three sources — `COMPETITIVE_ANALYSIS.md` §3.2, `COMPETITOR_SECURITYBRIDGE.md`,
+      `PIVOT_PLAN.md` — say 323 is OUR count (published-and-auditable, because we publish
+      the catalogue) and 550 is a COMPETITOR's (asserted-and-unverifiable, because no
+      itemised list exists publicly). It is a comparison between two products. Read as an
+      internal taxonomy it sent the plan toward an `evidence_basis` attribute nobody had
+      asked for.
+
+      What the sources actually ask for is the catalogue published with "ID, what it
+      reads, which standard clause it satisfies". Two of those three were missing and
+      both were derivable: `docs/CHECKS_REFERENCE.md` now carries a per-module **Reads**
+      line (module granularity, labelled as such — the per-check subset is recorded
+      nowhere) and a **SAP Baseline** column per check, plus a roll-up reporting three
+      numbers rather than one percentage, and the unaddressed requirements listed rather
+      than summarised away.
+
+      **Publishing it immediately found a bug of exactly the kind publication is for.**
+      `PWDPOL-A` — minimum password length, CRITICAL — rendered as "not addressed" while
+      this product has always checked `login/min_password_lng`. The mapping was the prefix
+      `PARAM-PWD`, and every id in that family is `PARAM-<parameter name>`, so it had
+      matched none of the 81 for its whole life. Nothing published the result, so nothing
+      contradicted it. Replaced by a mapping derived from SAP's own requirement titles:
+      209 → 233 checks mapped, 17 → 21 of 38 requirements covered.
 
 ✅ **SATISFIED, 2026-08-07.** A customer supplied SAP Note 3250501 v46 (released
 2026-05-15) from their own S-user. It is recorded as facts in

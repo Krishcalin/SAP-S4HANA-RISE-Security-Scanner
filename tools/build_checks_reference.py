@@ -57,7 +57,9 @@ TARGET = ROOT / "docs" / "CHECKS_REFERENCE.md"
 # denominator was blind to every positionally-passed check id. Imported rather
 # than duplicated so the document and the score cannot disagree about what a
 # check is.
-from modules.coverage import runtime_check_families, EMITTERS, wrapper_signatures        # noqa: E402,F401
+from modules.coverage import (all_check_ids, module_sources,          # noqa: E402
+                              runtime_check_families, EMITTERS, wrapper_signatures)
+from server import sapcontent        # noqa: E402,F401
 
 #: BaseAuditor's severity constants, resolved so `self.SEVERITY_HIGH` reads as
 #: HIGH rather than as an unresolvable attribute.
@@ -236,9 +238,24 @@ def _cell(value: Optional[str], template: Optional[str]) -> str:
     return VARIES
 
 
+def _requirement_cell(check_id: str) -> str:
+    """The SAP Security Baseline requirement this check answers, or an em dash.
+
+    AN EM DASH IS NOT A GAP. Segregation of duties, GRC, financial controls, the
+    attack-path content and the RISE-specific checks have no Baseline equivalent,
+    and that is precisely where this product goes beyond it — `sapcontent.coverage`
+    calls the same set `beyond_baseline` for the same reason. Rendering it as
+    "unmapped" would invite a reader to score the catalogue against a standard
+    that does not describe the check.
+    """
+    requirement = sapcontent.requirement_for(check_id)
+    return f"`{requirement}`" if requirement else "—"
+
+
 def render() -> str:
     checks = collect_literal_checks()
     families = collect_dynamic_families()
+    sources = module_sources()
     by_module: Dict[str, List[Check]] = {}
     for c in checks:
         by_module.setdefault(c.module, []).append(c)
@@ -262,6 +279,11 @@ def render() -> str:
       f"runtime from shipped rule tables, giving **{len(checks) + dynamic_total}** "
       f"in total.")
     w("")
+    w("Each check is published with **what it reads** and **which SAP Security "
+      "Baseline requirement it answers** — the two things that make a catalogue "
+      "auditable rather than a number. A competitor publishing a count and no "
+      "itemised list is making a claim; this is a claim somebody else can check.")
+    w("")
     w("## What this file does not claim")
     w("")
     w(f"**{varying_titles} of the {len(checks)} titles and {varying_sev} of the "
@@ -278,6 +300,57 @@ def render() -> str:
     w("A check's **identity** is its id. Severity is a judgement about a particular "
       "finding and is not part of it.")
     w("")
+    # ── how this catalogue lines up against SAP's own published baseline ──
+    every_id = sorted({cid for ids in all_check_ids().values() for cid in ids})
+    cov = sapcontent.coverage(every_id)
+    beyond = len(set(cov["beyond_baseline"]))
+
+    w("## Coverage of SAP's published Baseline")
+    w("")
+    w("Every check below carries the SAP Security Baseline requirement it "
+      "answers, where one exists. This is the roll-up, and it reports **three "
+      "numbers rather than one percentage**, because a single percentage hides "
+      "the interesting part.")
+    w("")
+    w(f"- **{cov['requirements_covered']} of {cov['requirements_published']}** "
+      f"requirements SAP publishes are addressed by at least one check here.")
+    w(f"- **{len(cov['not_covered'])}** published requirements are not addressed "
+      f"at all. They are listed below rather than summarised away.")
+    w(f"- **{beyond} of {len(every_id)}** checks answer no Baseline requirement "
+      f"— **which is not a failure.** Segregation of duties, GRC, financial "
+      f"controls, the attack-path content and the RISE-specific checks have no "
+      f"Baseline equivalent, and that is where this product goes beyond it.")
+    w("")
+    if cov.get("note"):
+        w(f"> ⚠️ {cov['note']}")
+        w("")
+    w(f"Baseline version: **{cov['baseline_version']}**.")
+    w("")
+    if cov["not_covered"]:
+        by_tech: Dict[str, int] = {}
+        for r in cov["not_covered"]:
+            by_tech[r["technology"]] = by_tech.get(r["technology"], 0) + 1
+        w("### Published requirements this catalogue does not address")
+        w("")
+        # NOT ALL ABSENCES ARE THE SAME ABSENCE. A Java requirement is unaddressed
+        # because this product does not audit the Java stack at all, which is a
+        # scope decision; an ABAP one is unaddressed inside the stack the product
+        # is about, which is a gap. Reporting them as one number would let the
+        # larger, less interesting group hide the smaller, more interesting one.
+        w("By technology: "
+          + ", ".join(f"**{n}** {tech}" for tech, n in sorted(by_tech.items()))
+          + ". These are not the same kind of absence — a Java or HANA "
+            "requirement is outside the stack this product audits, which is a "
+            "scope decision; an ABAP one is a gap inside it.")
+        w("")
+        w("| Requirement | Tier | Technology | Title |")
+        w("|---|---|---|---|")
+        for r in cov["not_covered"]:
+            title = (r["title"] or "").replace("|", "\\|")
+            w(f"| `{r['requirement']}` | {r['tier']} | {r['technology']} "
+              f"| {title} |")
+        w("")
+
     w("## Checks by module")
     w("")
     for module in sorted(by_module):
@@ -289,11 +362,22 @@ def render() -> str:
         if categories:
             w(f"Category: {', '.join(categories)}")
             w("")
-        w("| Check | Severity | Title |")
-        w("|---|---|---|")
+        # WHAT IT READS, at MODULE granularity and labelled as such. A module
+        # reads several sources and any one check reads some subset of them; the
+        # subset is recorded nowhere, and a per-check figure would be more precise
+        # than the truth.
+        reads = sorted(sources.get(module, ()))
+        if reads:
+            w("Reads: " + ", ".join(f"`{s}`" for s in reads)
+              + " — the sources the MODULE consumes; an individual check below "
+                "reads some subset of them.")
+            w("")
+        w("| Check | Severity | Title | SAP Baseline |")
+        w("|---|---|---|---|")
         for c in rows:
             w(f"| `{c.check_id}` | {_cell(c.severity, c.severity_template)} "
-              f"| {_cell(c.title, c.title_template)} |")
+              f"| {_cell(c.title, c.title_template)} "
+              f"| {_requirement_cell(c.check_id)} |")
         w("")
 
     if families:

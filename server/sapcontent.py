@@ -212,7 +212,15 @@ def write_catalogue(catalogue: Dict[str, Any], path: Optional[Path] = None) -> N
 #: requirement are asserted; everything else stays unmapped and is reported as
 #: such on the coverage page.
 CHECK_TO_REQUIREMENT: Dict[str, str] = {
-    "PARAM-PWD": "PWDPOL-A",
+    # "PARAM-PWD": "PWDPOL-A" WAS HERE AND NEVER MATCHED ANYTHING. Every id in
+    # that family is `PARAM-<parameter name>` — `PARAM-login/min_password_lng` —
+    # so the prefix `PARAM-PWD` matched none of the 81. It was invisible because
+    # nothing published the result: PWDPOL-A, a CRITICAL requirement whose
+    # parameters this product has always checked, read as "not addressed" and no
+    # reader ever saw the line. Publishing the catalogue is what found it.
+    #
+    # Replaced by `parameter_requirements()` below, which derives the mapping
+    # from SAP's own requirement titles rather than guessing a prefix.
     "USR-00": "STDUSR-A",
     "STDUSR-": "STDUSR-A",
     "AUTH-": "CRITAU-A",
@@ -246,8 +254,111 @@ CHECK_TO_REQUIREMENT: Dict[str, str] = {
 }
 
 
+#: Path to the Web Dispatcher rule set, whose rows already name the SAP check
+#: item each was transcribed from.
+_WEBDISP_PATH = Path(__file__).resolve().parents[1] / "data" / "webdisp_baseline.json"
+_EXACT_CACHE: Optional[Dict[str, str]] = None
+
+
+#: Profile parameters SAP's own requirement titles do NOT name, mapped from the
+#: policy predicate instead. PWDPOL-A's titles are prose — "Minimum password
+#: length" — so a title-derived mapping cannot reach it, while the policy itself
+#: is explicit.
+#:
+#: SOURCED, NOT GUESSED: docs/RISE_SECURITY_MODEL.md section 3.3 records the
+#: `1APWDPOL.xml` predicates as `login/min_password_lng >= 0008`,
+#: `login/password_max_idle_initial` and `login/password_downwards_compatibility`.
+#: Kept deliberately short. A long hand-written list here would be exactly the
+#: guessing the derivation replaced.
+_PARAMETERS_FROM_PREDICATE: Dict[str, str] = {
+    "login/min_password_lng": "PWDPOL-A",
+    "login/password_max_idle_initial": "PWDPOL-A",
+    "login/password_downwards_compatibility": "PWDPOL-A",
+}
+
+_PARAM_NAME = re.compile(r"\b([a-z][a-z0-9_]*(?:/[A-Za-z0-9_]+)+)")
+_PARAM_CACHE: Optional[Dict[str, str]] = None
+
+
+def parameter_requirements(catalogue: Optional[Dict[str, Any]] = None
+                           ) -> Dict[str, str]:
+    """`{profile parameter: SAP requirement}`, read out of SAP's own titles.
+
+    WHY DERIVED. The prefix table cannot express this family: `PARAM-` ids carry
+    the parameter name, and two parameters sharing that prefix belong to
+    different requirements — `auth/check/calltransaction` to USRCTR-A,
+    `snc/enable` to NETENC-A. A prefix guess produced `PARAM-PWD`, which matched
+    none of the 81 ids for the whole life of the table.
+
+    SAP's requirement titles name the parameter in most cases — "dynp/
+    checkskip1screen (User Control Profile Parameter)" — so the mapping is read
+    from the published content rather than assembled by hand. The handful whose
+    titles are prose are listed above with the source that supplies them.
+    """
+    global _PARAM_CACHE
+    if _PARAM_CACHE is None or catalogue is not None:
+        cat = catalogue or load_catalogue()
+        out: Dict[str, str] = dict(_PARAMETERS_FROM_PREDICATE)
+        for req in cat.get("requirements", []):
+            name = req.get("requirement")
+            # ABAP requirements only. The Java and HANA technologies name the
+            # same parameter (`ms/acl_info` is both RFCGW-A and RFCGW-J) and this
+            # product's PARAM- family reads an ABAP profile.
+            if not name or req.get("technology") != "ABAP":
+                continue
+            for title in req.get("titles") or ():
+                for parameter in _PARAM_NAME.findall(title):
+                    out.setdefault(parameter, name)
+        if catalogue is not None:
+            return out
+        _PARAM_CACHE = out
+    return _PARAM_CACHE
+
+
+def requirement_exact() -> Dict[str, str]:
+    """`{our check id: SAP requirement}` for checks that name their SAP check item.
+
+    DERIVED, NOT TYPED. The prefix table below cannot express these: `WDISP-001`
+    was transcribed from SAP check `DISCL-O_a.1` and `WDISP-014` from
+    `NETENC-O.a1`, so two checks sharing a prefix belong to two different
+    requirements. Reading the requirement out of the rule's own `sap_check_id` is
+    both more precise and impossible to get wrong by hand — the rows already had
+    to be right for the checks to fire.
+
+    An unreadable rule file yields an empty map and the prefix table answers
+    alone, which is where this started.
+    """
+    global _EXACT_CACHE
+    if _EXACT_CACHE is None:
+        out: Dict[str, str] = {}
+        try:
+            payload = json.loads(_WEBDISP_PATH.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            payload = {}
+        for rule in (payload.get("rules") or ()):
+            ours, theirs = rule.get("check_id"), rule.get("sap_check_id") or ""
+            # `DISCL-O_a.1` and `NETENC-O.a1` -> `DISCL-O`, `NETENC-O`.
+            requirement = re.split(r"[._]", theirs)[0].strip().upper()
+            if ours and requirement:
+                out[str(ours).upper()] = requirement
+        _EXACT_CACHE = out
+    return _EXACT_CACHE
+
+
 def requirement_for(check_id: str) -> Optional[str]:
     cid = (check_id or "").upper()
+    # An exact match beats every prefix: it came from the check's own recorded
+    # provenance, while a prefix is a generalisation about a family.
+    exact = requirement_exact().get(cid)
+    if exact:
+        return exact
+    # `PARAM-<parameter name>`: the parameter is the lookup key, and its case is
+    # the profile's rather than upper.
+    if cid.startswith("PARAM-"):
+        parameter = (check_id or "")[len("PARAM-"):].strip()
+        by_parameter = parameter_requirements()
+        return (by_parameter.get(parameter)
+                or by_parameter.get(parameter.lower()))
     best = ""
     req = None
     for prefix, requirement in CHECK_TO_REQUIREMENT.items():
