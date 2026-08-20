@@ -47,6 +47,7 @@ from server import db
 from server.coverage import build_manifest
 from modules.coverage import UNSUPPLIED, look_verdict
 from modules.coverage import modules_for_categories as coverage_modules_for
+from modules.coverage import CLI_MODULE_ALIASES
 from modules.rise_ownership import destination_hosts
 from server.edges import active_users, extract_edges, observed_users
 from server.identity import extract_nodes, fingerprint_finding
@@ -98,14 +99,15 @@ AUDITORS: List[Tuple[str, str]] = [
 #: passed rather than assumed, because a module deciding to defer needs to know
 #: that its deeper sibling is genuinely running, not merely that the sibling's
 #: input data was loaded.
-MODULE_KEYS = frozenset({
-    "users", "params", "network", "rise", "iam", "btpcloud", "intglayer",
-    "dataprot", "codetrans", "atc", "cva", "logmon", "logreview", "fiori", "crypto", "hanadb",
-    "hotnews", "authz", "systrust", "baseline", "s4authz", "ara", "jobcmd",
-    "grcac", "rolegov", "fincontrols", "mdchange", "vendormaster", "capxsuaa", "codeinv",
-    "resilience", "snc",
-    "ecsconfig",
-})
+MODULE_KEYS = frozenset(CLI_MODULE_ALIASES)
+#
+# DERIVED, AFTER THE THIRD HAND-WRITTEN COPY OF THIS LIST WENT STALE. It was
+# spelled out here and twice more in sap_scanner.py, while
+# modules/coverage.py:CLI_MODULE_ALIASES held the authority. The three modules
+# added in one session — csa, ucon, webdisp — reached the alias table and none of
+# the copies, so `--modules all` skipped them offline and their keys were absent
+# from run_context on the server, leaving a module that defers to a sibling
+# unable to tell that the sibling was running.
 
 RUN_CONTEXT = {"modules": MODULE_KEYS}
 

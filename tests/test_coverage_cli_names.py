@@ -218,3 +218,42 @@ def test_every_declared_dependency_is_known_to_the_derivation():
     assert declared == set(DECLARED_IMPORT_NAMES), (
         f"requirements.txt and the import-name map disagree: "
         f"{declared ^ set(DECLARED_IMPORT_NAMES)}")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  `--modules all` must mean all
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_every_module_the_alias_table_knows_can_actually_be_run():
+    """THE DEFECT. sap_scanner.py held the module list TWICE — as argparse
+    `choices` and as the expansion of `all` — while CLI_MODULE_ALIASES held it a
+    third time as the authority. Three modules added in one session (csa, ucon,
+    webdisp) reached the dispatch and the alias table and NEITHER copy, so a
+    default run skipped them entirely and their coverage checks — the ones that
+    arm the release gate when UCON or Web Dispatcher data is absent — could not
+    fire at all.
+
+    The test above compares the alias table against what the scanner DISPATCHES,
+    and all three were dispatched, so it passed. Nothing compared either list
+    against the alias table."""
+    import sap_scanner
+    from modules.coverage import CLI_MODULE_ALIASES
+    assert set(sap_scanner.ALL_MODULE_KEYS) == set(CLI_MODULE_ALIASES)
+
+
+def test_the_module_list_is_derived_rather_than_written_out_again():
+    """A fourth copy would rot the same way the second and third did."""
+    src = (ROOT / "sap_scanner.py").read_text(encoding="utf-8")
+    assert "ALL_MODULE_KEYS = sorted(CLI_MODULE_ALIASES)" in src
+    assert 'choices=ALL_MODULE_KEYS + ["all"]' in src
+    assert '"ecsconfig",' not in src, "the hand-written expansion is back"
+
+
+def test_a_default_run_executes_every_module():
+    """`all` has to mean all, or a scan quietly covers less than it reports."""
+    import argparse
+    import sap_scanner
+    from modules.coverage import CLI_MODULE_ALIASES
+    args = argparse.Namespace(modules=["all"])
+    run = args.modules if "all" not in args.modules else list(sap_scanner.ALL_MODULE_KEYS)
+    assert set(run) == set(CLI_MODULE_ALIASES)

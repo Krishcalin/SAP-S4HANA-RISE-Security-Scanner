@@ -117,25 +117,30 @@ def test_module_is_running_reports_unknown_rather_than_guessing():
 
 
 def test_the_two_module_vocabularies_cannot_drift_apart():
-    """`server.ingest.MODULE_KEYS` is hand-written and must match the CLI's
-    `--modules` choices. A prefix/key table that drifts is exactly how eight
-    checks previously ended up routed to no owning team — silently."""
-    import re
+    """`server.ingest.MODULE_KEYS` and the CLI's `--modules` vocabulary must
+    both match `modules/coverage.py:CLI_MODULE_ALIASES`, which is the authority
+    the coverage manifest already depends on being right.
+
+    COMPARED AGAINST THE AUTHORITY, NOT AGAINST THE OTHER COPY. This test used
+    to parse sap_scanner.py's literal `choices=[...]` and compare it with
+    MODULE_KEYS — two hand-written lists — and it PASSED while both omitted
+    csa, ucon and webdisp. Two copies agreeing is not the same as either being
+    right, and the modules they both missed were the three added most
+    recently."""
+    import sap_scanner
+    from modules.coverage import CLI_MODULE_ALIASES
     from server.ingest import MODULE_KEYS
 
-    src = (ROOT / "sap_scanner.py").read_text(encoding="utf-8")
-    cli = None
-    for m in re.finditer(r"choices=\[(.*?)\]", src, re.S):
-        vals = {c.strip().strip("\"'") for c in m.group(1).split(",") if c.strip()}
-        if "users" in vals:              # the modules list, not the severity list
-            cli = vals - {"all"}
-            break
-
-    assert cli, "could not locate the CLI's --modules choices"
-    assert cli == set(MODULE_KEYS), (
-        f"module vocabularies have drifted.\n"
-        f"  missing from server.ingest.MODULE_KEYS: {sorted(cli - set(MODULE_KEYS))}\n"
-        f"  present there but not in the CLI:       {sorted(set(MODULE_KEYS) - cli)}")
+    authority = set(CLI_MODULE_ALIASES)
+    assert set(MODULE_KEYS) == authority, (
+        "server.ingest.MODULE_KEYS has drifted from CLI_MODULE_ALIASES: "
+        "missing %s, extra %s"
+        % (sorted(authority - set(MODULE_KEYS)),
+           sorted(set(MODULE_KEYS) - authority)))
+    assert set(sap_scanner.ALL_MODULE_KEYS) == authority, (
+        "the CLI has drifted from CLI_MODULE_ALIASES: missing %s, extra %s"
+        % (sorted(authority - set(sap_scanner.ALL_MODULE_KEYS)),
+           sorted(set(sap_scanner.ALL_MODULE_KEYS) - authority)))
 
 
 @pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")

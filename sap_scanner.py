@@ -70,7 +70,11 @@ from modules.finding_kb import FindingKB
 from modules.risk_prioritizer import RiskPrioritizer
 from modules import fair_adapter
 from modules import rise_ownership
-from modules.coverage import build_manifest
+from modules.coverage import CLI_MODULE_ALIASES, build_manifest
+
+#: Every module key the scanner can run, from the one table that already has
+#: to be right for the coverage manifest to name modules correctly.
+ALL_MODULE_KEYS = sorted(CLI_MODULE_ALIASES)
 from modules.data_loader import DataLoader
 from modules.deployment_modes import DEPLOYMENT_MODES, DEFAULT_DEPLOYMENT_MODE
 
@@ -144,7 +148,7 @@ def main():
     )
     parser.add_argument(
         "--modules", nargs="+",
-        choices=["users", "params", "network", "rise", "iam", "btpcloud", "intglayer", "dataprot", "codetrans", "atc", "cva", "logmon", "logreview", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust", "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov", "fincontrols", "mdchange", "vendormaster", "capxsuaa", "codeinv", "resilience", "snc", "ecsconfig", "all"],
+        choices=ALL_MODULE_KEYS + ["all"],
         default=["all"],
         help="Which audit modules to run (default: all)"
     )
@@ -279,11 +283,13 @@ def main():
             baseline_overrides = json.load(f)
         print(f"[*] Loaded custom baseline from {args.config}")
 
-    run_modules = args.modules if "all" not in args.modules else [
-        "users", "params", "network", "rise", "iam", "btpcloud",
-        "intglayer", "dataprot", "codetrans", "atc", "cva", "logmon", "logreview", "fiori", "crypto", "hanadb", "hotnews", "authz", "systrust",
-        "baseline", "s4authz", "ara", "jobcmd", "grcac", "rolegov", "fincontrols", "mdchange", "vendormaster", "capxsuaa", "codeinv", "resilience", "snc", "ecsconfig"
-    ]
+    # DERIVED, NOT LISTED. This expansion and the argparse `choices` above
+    # were two hand-maintained copies of a list whose authority is
+    # `modules/coverage.py:CLI_MODULE_ALIASES`. Three modules added in one
+    # session reached the dispatch and the alias table and neither copy, so
+    # `--modules all` silently skipped them and their coverage checks — the
+    # ones that arm the release gate on absent data — could never fire.
+    run_modules = args.modules if "all" not in args.modules else list(ALL_MODULE_KEYS)
 
     # Every ECS-aware check reads the mode from here. Built once so two auditors
     # cannot disagree about which estate they are looking at.
