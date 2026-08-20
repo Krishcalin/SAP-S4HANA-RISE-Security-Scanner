@@ -404,6 +404,37 @@ def cmd_rfc(args) -> int:
         out, source="rfc", endpoint=endpoint,
         collected_at=datetime.now(timezone.utc).isoformat(timespec="seconds"), wrote=wrote, attempts=attempts,
         cannot_reach=tuple(sorted(rfc_tables.RFC_CANNOT_REACH)),
+        # WHAT THIS CONNECTION ACTUALLY WAS, stated rather than defaulted.
+        #
+        # `tls_verified` defaults to True and this collector never passed it, so
+        # the manifest asserted a verified TLS connection for a protocol that is
+        # not TLS. None is the honest third answer.
+        #
+        # SNC is SAP's transport encryption for RFC and this binding does not
+        # request it — no snc_mode, snc_partnername, snc_qop or snc_lib is set on
+        # the connection. Whether the conversation was encrypted therefore
+        # depends entirely on what the server enforces, which the collector
+        # cannot observe from its side. Recording "not requested" is a fact about
+        # us; claiming it was unencrypted would be a claim about them.
+        #
+        # This product audits exactly this question on a CUSTOMER's connections
+        # in modules/snc_posture.py. Asking it of every estate we scan and not of
+        # ourselves is the asymmetry this record removes.
+        tls_verified=None,
+        transport={
+            "protocol": "SAP RFC",
+            "encryption_requested": False,
+            "mechanism": "SNC (Secure Network Communications)",
+            "note": "This collector does not set snc_mode/snc_partnername/"
+                    "snc_qop/snc_lib, so it neither requests nor negotiates SNC. "
+                    "If the target enforces SNC the conversation is protected by "
+                    "the server's policy rather than by anything asked for here; "
+                    "if it does not, the credentials and the authorisation model "
+                    "below crossed the network unprotected. Prefer a host where "
+                    "SAP enforces SNC, or treat the extract as sensitive in "
+                    "transit.",
+            "sources_affected": "every file this collection wrote",
+        },
         caveats=("RFC_READ_TABLE returns a 512-byte row, so every extract names "
                  "its columns rather than taking the table.",
                  "rfc_destinations host and user are PARSED out of the RFCOPTIONS "

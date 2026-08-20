@@ -259,7 +259,8 @@ def write_manifest(out_dir: Path, *, source: str, endpoint: str,
                    attempts: Sequence[Mapping[str, Any]],
                    unavailable: Sequence[str] = (),
                    cannot_reach: Sequence[str] = SAPCONTROL_CANNOT_REACH,
-                   tls_verified: bool = True,
+                   tls_verified: Optional[bool] = True,
+                   transport: Optional[Mapping[str, Any]] = None,
                    caveats: Sequence[str] = (),
                    posture: Optional[Mapping[str, Any]] = None) -> Path:
     """Record what one collector got, what it did not, and under what conditions.
@@ -297,7 +298,13 @@ def write_manifest(out_dir: Path, *, source: str, endpoint: str,
         "source": source,
         "endpoint": endpoint,
         "collected_at": collected_at,
+        # None is a THIRD answer and not a missing one: this transport is not
+        # TLS, so "verified" is not a question that has a yes or a no. The
+        # parameter defaults to True, which meant the RFC collector — the only
+        # one that never passed it — published a manifest asserting a verified
+        # TLS connection for a protocol that has none.
         "tls_verified": tls_verified,
+        "transport": dict(transport or {}),
         "files_written": {name: n for name, n in sorted(wrote.items()) if n},
         "operations_attempted": list(attempts),
         "operations_failed": [a for a in attempts if not a.get("ok")],
@@ -348,7 +355,20 @@ def summarise(manifest_path: Path) -> str:
     if posture.get("unauthenticated_read") is True:
         lines.append("  ATTENTION: this endpoint answered a read with NO "
                      "credentials — see service/protectedwebmethods")
-    if not c.get("tls_verified", True):
+    if c.get("tls_verified") is None:
+        transport = c.get("transport") or {}
+        name = transport.get("protocol", "this transport")
+        if transport.get("encryption_requested") is False:
+            lines.append(
+                "  ATTENTION: %s carried this collection and NO transport "
+                "encryption was requested by the collector. The credentials and "
+                "every source below crossed the network as the server chose to "
+                "accept them, which this tool cannot observe. %s"
+                % (name, transport.get("note", "")))
+        else:
+            lines.append("  NOTE: %s is not TLS; certificate verification does "
+                         "not apply to this collection" % name)
+    elif not c.get("tls_verified", True):
         lines.append("  ATTENTION: TLS certificate verification was DISABLED for "
                      "this collection")
     lines.append(f"  {len(c.get('not_reachable') or [])} logical source(s) are "
