@@ -110,7 +110,22 @@ def test_an_unmapped_check_is_reported_as_beyond_the_baseline_not_as_a_gap():
 def test_coverage_never_claims_more_requirements_than_are_published():
     cov = coverage([r["check_id"] for r in []] or ["PARAM-PWD-001", "USR-001"])
     assert cov["requirements_covered"] <= cov["requirements_published"]
-    assert len(cov["covered"]) + len(cov["not_covered"]) == cov["requirements_published"]
+    assert cov["requirements_in_scope"] <= cov["requirements_published"]
+    # The three lists partition the published set. This is the guard that a scope
+    # rule cannot quietly shrink the denominator: a requirement moved out of scope
+    # has to appear in `out_of_scope`, and one that appears nowhere fails here.
+    assert (len(cov["covered"]) + len(cov["not_covered"])
+            + len(cov["out_of_scope"])) == cov["requirements_published"]
+
+
+def test_a_covered_requirement_is_never_moved_out_of_scope():
+    """Otherwise the scope rule becomes a way to flatter the ratio: drop the
+    technology, and both the numerator and the denominator fall by one while the
+    percentage rises. A requirement we answer counts, whatever stack it names."""
+    cov = coverage(["USR-001"])
+    covered = {r["requirement"] for r in cov["covered"]}
+    out = {r["requirement"] for r in cov["out_of_scope"]}
+    assert not (covered & out)
 
 
 @pytest.mark.skipif(not (ROOT / "sample_data").is_dir(), reason="sample_data absent")
@@ -133,10 +148,18 @@ def test_coverage_over_the_real_check_set_is_honest():
 
     cov = coverage(ids)
     assert cov["requirements_covered"] > 0, "we cover none of SAP's own baseline"
-    assert cov["not_covered"], (
-        "we appear to cover every SAP requirement — implausible, and a sign the "
-        "denominator has collapsed")
+    # The old guard here was "not_covered must be non-empty", on the reasoning that
+    # covering everything would mean the denominator had collapsed. Covering every
+    # IN-SCOPE requirement is now the actual state, so the guard moved to the thing
+    # it was really protecting: the published total, which no mapping change can
+    # move because it is read from SAP's files.
+    assert cov["requirements_published"] > cov["requirements_in_scope"] > 0
+    assert (len(cov["covered"]) + len(cov["not_covered"])
+            + len(cov["out_of_scope"])) == cov["requirements_published"]
     assert cov["beyond_baseline"], "no checks beyond the Baseline; mapping is too greedy"
-    # Java is a deliberate non-goal; it should show up as an honest gap.
-    assert any(r["technology"] == "Java" for r in cov["not_covered"]), \
-        "NetWeaver Java is out of scope and should appear as an uncovered gap"
+    # Java is a deliberate non-goal, and it must be NAMED rather than dropped —
+    # a reader has to be able to see which requirements were excluded and why.
+    assert any(r["technology"] == "Java" for r in cov["out_of_scope"]), \
+        "NetWeaver Java is out of scope and should be named as such"
+    assert all(r.get("reason") for r in cov["out_of_scope"]), \
+        "an out-of-scope requirement without a stated reason is just a dropped one"

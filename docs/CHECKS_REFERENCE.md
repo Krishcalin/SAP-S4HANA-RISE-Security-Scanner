@@ -6,13 +6,13 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**427** check ids are written as literals in `modules/`, across **36** modules. A further **282** are built at runtime from shipped rule tables, giving **709** in total.
+**432** check ids are written as literals in `modules/`, across **36** modules. A further **282** are built at runtime from shipped rule tables, giving **714** in total.
 
 Each check is published with **what it reads** and **which SAP Security Baseline requirement it answers** — the two things that make a catalogue auditable rather than a number. A competitor publishing a count and no itemised list is making a claim; this is a claim somebody else can check.
 
 ## What this file does not claim
 
-**46 of the 427 titles and 21 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**47 of the 432 titles and 21 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -22,9 +22,10 @@ A check's **identity** is its id. Severity is a judgement about a particular fin
 
 Every check below carries the SAP Security Baseline requirement it answers, where one exists. This is the roll-up, and it reports **three numbers rather than one percentage**, because a single percentage hides the interesting part.
 
-- **23 of 38** requirements SAP publishes are addressed by at least one check here.
-- **15** published requirements are not addressed at all. They are listed below rather than summarised away.
-- **473 of 709** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
+- **28 of 28** requirements that are IN SCOPE for this product are addressed by at least one check here.
+- **10 of 38** published requirements are out of scope, because they are for a stack this product does not read. They are named below, not dropped: the denominator has to be honest in both directions, and a reader comparing 28 against 38 has no way to know that.
+- **0** in-scope requirements are not addressed at all. They are listed below rather than summarised away.
+- **518 of 714** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
 
 > ⚠️ These are CHECK ITEMS in the CSA policies, not the 'control points' counted in the Baseline document — the widely-quoted 214 (69/92/53) is that other unit. The two do not reconcile; do not publish a percentage of one against the other.
 
@@ -32,25 +33,22 @@ Baseline version: **v2.4**.
 
 ### Published requirements this catalogue does not address
 
-By technology: **2** BTP, **3** HANA, **10** Java. These are not the same kind of absence — a Java or HANA requirement is outside the stack this product audits, which is a scope decision; an ABAP one is a gap inside it.
+**In scope, and not addressed: none.** Every requirement SAP publishes for a stack this product reads is answered by at least one check. That is a statement about coverage of the requirement, not about depth against it — SAP's requirements carry 351 check items between them and this product does not claim to reproduce each one.
+
+**Out of scope.** These are not gaps but a scope decision, and it is not one more work here would reverse. By technology: **10** Java. SAP NetWeaver AS Java is a separate stack from the ABAP server S/4HANA runs on. This product reads no Java export and ships no Java check, so these requirements are out of its scope rather than unmet by it.
 
 | Requirement | Tier | Technology | Title |
 |---|---|---|---|
 | `AUDIT-J` | EXTENDED | Java | Enable XML Hardener |
-| `AUDIT-P` | STANDARD | BTP | Audit Settings – BTP |
 | `CRITAU-J` | STANDARD | Java | Role SAP_J2EE_ADMIN must not be assigned to users other than standard users |
 | `DISCL-J` | STANDARD | Java | Disclosure of unnecessary information about versions or from errors |
 | `MSGSRV-J` | CRITICAL | Java | File with access control list for message server |
-| `NETCF-H` | CRITICAL | HANA | HANA internal communication (listeninterface) |
 | `NOTEST-J` | CRITICAL | Java | InvokerServlet globally enabled |
 | `PWDPOL-J` | CRITICAL | Java | Minimum Password Length |
 | `RFCGW-J` | CRITICAL | Java | Path-like value for ms/acl_info (message server access control list) |
-| `SECUPD-H` | CRITICAL | HANA | Security Maintenance Status of HANA Version (SPS) |
 | `SECUPD-J` | CRITICAL | Java | Last detected Update older than 1 year |
-| `SECUPD-P` | CRITICAL | BTP | Last detected Update within 1 year (SAP Cloud Connector) |
 | `SESS-J` | STANDARD | Java | SystemCookiesDataProtection |
 | `SSO-J` | EXTENDED | Java | Send SAP logon ticket only via HTTPS |
-| `TRACES-H` | CRITICAL | HANA | SQL trace level: ALL_WITH_RESULTS |
 
 ## Checks by module
 
@@ -152,7 +150,7 @@ Reads: `background_job_steps`, `background_jobs`, `ext_os_commands`, `ext_os_com
 | `JOBCMD-JOB-005` | MEDIUM | Background job step user differs from scheduler (identity borrowing) | — |
 | `JOBCMD-JOB-001B` | HIGH | Armed background job runs under a standard/technical step user | — |
 
-### `btp_cloud_surface` — 42 checks
+### `btp_cloud_surface` — 44 checks
 
 Category: BTP Cloud Attack Surface
 
@@ -160,48 +158,50 @@ Reads: `btp_destinations`, `btp_entitlements`, `btp_network`, `btp_security_sett
 
 | Check | Severity | Title | SAP Baseline |
 |---|---|---|---|
-| `BTP-AUD-001` | INFO | Audit-log state could not be determined for some subaccounts | `NETCF-P` |
-| `BTP-CC-001` | CRITICAL | Cloud Connector backends with wildcard resource mappings | `NETCF-P` |
-| `BTP-CC-002` | HIGH | High-risk backend services exposed via Cloud Connector | `NETCF-P` |
-| `BTP-CC-003` | MEDIUM | *varies* — Excessive Cloud Connector backend systems (…) | `NETCF-P` |
-| `BTP-CC-004` | HIGH | Cloud Connector with unrestricted access control lists | `NETCF-P` |
-| `BTP-CC-005` | HIGH | Cloud Connector certificates expiring or expired | `NETCF-P` |
-| `BTP-CC-006` | HIGH | Cloud Connector certificates with weak cryptography | `NETCF-P` |
-| `BTP-CC-007` | MEDIUM | *varies* — Stale Cloud Connector backends (…+ days unused) | `NETCF-P` |
-| `BTP-CC-008` | *varies* — MEDIUM | *varies* — Cloud Connector … is vulnerable to CVE-2024-25642 | `NETCF-P` |
-| `BTP-CPI-001` | HIGH | *varies* — CPI credentials not rotated in …+ days | `NETCF-P` |
-| `BTP-CPI-002` | MEDIUM | CPI credentials using basic/plaintext authentication | `NETCF-P` |
-| `BTP-CPI-003` | CRITICAL | CPI iFlows with hardcoded/embedded credentials | `NETCF-P` |
-| `BTP-CPI-004` | HIGH | CPI iFlows with no sender authentication | `NETCF-P` |
-| `BTP-CPI-005` | HIGH | CPI iFlows using unencrypted HTTP endpoints | `NETCF-P` |
-| `BTP-DST-001` | HIGH | BTP destinations with stored credentials | `NETCF-P` |
-| `BTP-DST-002` | CRITICAL | BTP destinations with TLS verification disabled | `NETCF-P` |
-| `BTP-DST-003` | MEDIUM | BTP destinations with proxy type mismatch | `NETCF-P` |
-| `BTP-DST-004` | LOW | Stale BTP destinations (not modified in 365+ days) | `NETCF-P` |
-| `BTP-EM-001` | HIGH | Event Mesh queues with wildcard topic subscriptions | `NETCF-P` |
-| `BTP-EM-002` | HIGH | Event Mesh queues without access control policies | `NETCF-P` |
-| `BTP-EM-003` | MEDIUM | Event Mesh queues subscribing to foreign namespaces | `NETCF-P` |
-| `BTP-ENT-001` | LOW | BTP services entitled but never provisioned | `NETCF-P` |
-| `BTP-ENT-002` | MEDIUM | Security-critical BTP services entitled but not provisioned | `NETCF-P` |
-| `BTP-FRM-001` | HIGH | Subaccount login pages may be framed by an unrestricted origin | `NETCF-P` |
-| `BTP-FRM-002` | MEDIUM | Iframe embedding enabled for the subaccount (SAP default is off) | `NETCF-P` |
-| `BTP-GOV-001` | HIGH | BTP subaccounts without audit logging | `NETCF-P` |
-| `BTP-GOV-002` | MEDIUM | BTP subaccounts using default SAP IDP only | `NETCF-P` |
-| `BTP-IAS-001` | MEDIUM | IAS applications without conditional authentication rules | `NETCF-P` |
-| `BTP-IAS-002` | MEDIUM | IAS applications without IP-based access restrictions | `NETCF-P` |
-| `BTP-IAS-003` | HIGH | IAS applications without multi-factor authentication | `NETCF-P` |
-| `BTP-IAS-004` | *varies* | IAS password policy for local users is weak | `NETCF-P` |
-| `BTP-IAS-005` | HIGH | Corporate IdP not enforced — local password fallback allowed | `NETCF-P` |
-| `BTP-IDL-001` | MEDIUM | Email address links identities across multiple identity providers | `NETCF-P` |
-| `BTP-MIG-001` | MEDIUM | Applications still using XSUAA authentication (not migrated to IAS) | `NETCF-P` |
-| `BTP-NET-001` | MEDIUM | BTP services using public internet endpoints | `NETCF-P` |
-| `BTP-NET-002` | HIGH | Critical BTP services without Private Link | `NETCF-P` |
-| `BTP-SB-001` | HIGH | *varies* — Service bindings not rotated in …+ days | `NETCF-P` |
-| `BTP-SB-002` | HIGH | Service bindings with admin-level scopes | `NETCF-P` |
-| `BTP-SB-003` | MEDIUM | Orphaned service bindings (deleted/failed instances) | `NETCF-P` |
-| `BTP-TOK-001` | HIGH | OAuth token validity relaxed beyond the SAP default | `NETCF-P` |
-| `BTP-TOK-002` | LOW | OAuth token validity left at the SAP default (12 hours / 7 days) | `NETCF-P` |
-| `BTP-TOK-003` | LOW | OAuth token validity set below the 30-minute floor SAP states | `NETCF-P` |
+| `BTP-AUD-001` | INFO | Audit-log state could not be determined for some subaccounts | — |
+| `BTP-CC-001` | CRITICAL | Cloud Connector backends with wildcard resource mappings | — |
+| `BTP-CC-002` | HIGH | High-risk backend services exposed via Cloud Connector | — |
+| `BTP-CC-003` | MEDIUM | *varies* — Excessive Cloud Connector backend systems (…) | — |
+| `BTP-CC-004` | HIGH | Cloud Connector with unrestricted access control lists | — |
+| `BTP-CC-005` | HIGH | Cloud Connector certificates expiring or expired | — |
+| `BTP-CC-006` | HIGH | Cloud Connector certificates with weak cryptography | — |
+| `BTP-CC-007` | MEDIUM | *varies* — Stale Cloud Connector backends (…+ days unused) | — |
+| `BTP-CC-008` | *varies* — MEDIUM | *varies* — Cloud Connector … is vulnerable to CVE-2024-25642 | `SECUPD-P` |
+| `BTP-CC-009` | MEDIUM | Cloud Connector runs as a single instance with no shadow | `NETCF-P` |
+| `BTP-CC-010` | HIGH | Cloud Connector audit logging is switched off | `AUDIT-P` |
+| `BTP-CPI-001` | HIGH | *varies* — CPI credentials not rotated in …+ days | — |
+| `BTP-CPI-002` | MEDIUM | CPI credentials using basic/plaintext authentication | — |
+| `BTP-CPI-003` | CRITICAL | CPI iFlows with hardcoded/embedded credentials | — |
+| `BTP-CPI-004` | HIGH | CPI iFlows with no sender authentication | — |
+| `BTP-CPI-005` | HIGH | CPI iFlows using unencrypted HTTP endpoints | — |
+| `BTP-DST-001` | HIGH | BTP destinations with stored credentials | — |
+| `BTP-DST-002` | CRITICAL | BTP destinations with TLS verification disabled | — |
+| `BTP-DST-003` | MEDIUM | BTP destinations with proxy type mismatch | — |
+| `BTP-DST-004` | LOW | Stale BTP destinations (not modified in 365+ days) | — |
+| `BTP-EM-001` | HIGH | Event Mesh queues with wildcard topic subscriptions | — |
+| `BTP-EM-002` | HIGH | Event Mesh queues without access control policies | — |
+| `BTP-EM-003` | MEDIUM | Event Mesh queues subscribing to foreign namespaces | — |
+| `BTP-ENT-001` | LOW | BTP services entitled but never provisioned | — |
+| `BTP-ENT-002` | MEDIUM | Security-critical BTP services entitled but not provisioned | — |
+| `BTP-FRM-001` | HIGH | Subaccount login pages may be framed by an unrestricted origin | — |
+| `BTP-FRM-002` | MEDIUM | Iframe embedding enabled for the subaccount (SAP default is off) | — |
+| `BTP-GOV-001` | HIGH | BTP subaccounts without audit logging | — |
+| `BTP-GOV-002` | MEDIUM | BTP subaccounts using default SAP IDP only | — |
+| `BTP-IAS-001` | MEDIUM | IAS applications without conditional authentication rules | — |
+| `BTP-IAS-002` | MEDIUM | IAS applications without IP-based access restrictions | — |
+| `BTP-IAS-003` | HIGH | IAS applications without multi-factor authentication | — |
+| `BTP-IAS-004` | *varies* | IAS password policy for local users is weak | — |
+| `BTP-IAS-005` | HIGH | Corporate IdP not enforced — local password fallback allowed | — |
+| `BTP-IDL-001` | MEDIUM | Email address links identities across multiple identity providers | — |
+| `BTP-MIG-001` | MEDIUM | Applications still using XSUAA authentication (not migrated to IAS) | — |
+| `BTP-NET-001` | MEDIUM | BTP services using public internet endpoints | — |
+| `BTP-NET-002` | HIGH | Critical BTP services without Private Link | — |
+| `BTP-SB-001` | HIGH | *varies* — Service bindings not rotated in …+ days | — |
+| `BTP-SB-002` | HIGH | Service bindings with admin-level scopes | — |
+| `BTP-SB-003` | MEDIUM | Orphaned service bindings (deleted/failed instances) | — |
+| `BTP-TOK-001` | HIGH | OAuth token validity relaxed beyond the SAP default | — |
+| `BTP-TOK-002` | LOW | OAuth token validity left at the SAP default (12 hours / 7 days) | — |
+| `BTP-TOK-003` | LOW | OAuth token validity set below the 30-minute floor SAP states | — |
 
 ### `cap_xsuaa` — 15 checks
 
@@ -407,9 +407,9 @@ Reads: `grac_access_requests`, `grac_firefighter_log`, `grac_firefighter_owners`
 | `GRC-SYNC-001` | MEDIUM | GRC synchronisation jobs are behind — every export here inherits the gap | — |
 | `GRC-SYNC-002` | LOW | GRC job-log export contains no recognisable synchronisation job | — |
 
-### `hana_db_security` — 19 checks
+### `hana_db_security` — 22 checks
 
-Reads: `hana_audit_policies`, `hana_db_users`, `hana_granted_privileges`, `hana_granted_roles`, `hana_parameters` — the sources the MODULE consumes; an individual check below reads some subset of them.
+Reads: `hana_audit_policies`, `hana_db_users`, `hana_granted_privileges`, `hana_granted_roles`, `hana_parameters`, `hana_version` — the sources the MODULE consumes; an individual check below reads some subset of them.
 
 | Check | Severity | Title | SAP Baseline |
 |---|---|---|---|
@@ -418,10 +418,11 @@ Reads: `hana_audit_policies`, `hana_db_users`, `hana_granted_privileges`, `hana_
 | `HANADB-AUDIT-003` | HIGH | No active HANA audit policies | `AUDIT-H` |
 | `HANADB-AUDIT-004` | MEDIUM | Audit policies do not cover critical action groups | `AUDIT-H` |
 | `HANADB-PARAM-001` | HIGH | Weak HANA password-policy parameters | `PWDPOL-H` |
-| `HANADB-PARAM-002` | MEDIUM | Detailed connect errors exposed to clients | `PWDPOL-H` |
-| `HANADB-PARAM-003` | HIGH | TLS not enforced for HANA SQL connections | `PWDPOL-H` |
-| `HANADB-PARAM-004` | HIGH | HANA log_mode = overwrite (no point-in-time recovery) | `PWDPOL-H` |
-| `HANADB-PARAM-005` | MEDIUM | HANA cross-database (MDC) access is enabled | `PWDPOL-H` |
+| `HANADB-PARAM-002` | MEDIUM | Detailed connect errors exposed to clients | — |
+| `HANADB-PARAM-003` | HIGH | TLS not enforced for HANA SQL connections | — |
+| `HANADB-PARAM-004` | HIGH | HANA log_mode = overwrite (no point-in-time recovery) | — |
+| `HANADB-PARAM-005` | MEDIUM | HANA cross-database (MDC) access is enabled | — |
+| `HANADB-PARAM-006` | CRITICAL | HANA internal communication listens on all network interfaces | `NETCF-H` |
 | `HANADB-PRIV-001` | CRITICAL | Sensitive privileges granted to PUBLIC | `CRITAU-H` |
 | `HANADB-PRIV-002` | CRITICAL | Critical system privileges granted directly to users | `CRITAU-H` |
 | `HANADB-PRIV-003` | HIGH | Broad system privileges granted directly to users | `CRITAU-H` |
@@ -429,9 +430,11 @@ Reads: `hana_audit_policies`, `hana_db_users`, `hana_granted_privileges`, `hana_
 | `HANADB-PRIV-005` | CRITICAL | Analytic-privilege bypass (_SYS_BI_CP_ALL) granted | `CRITAU-H` |
 | `HANADB-PRIV-006` | HIGH | Debug privileges (DEBUG / ATTACH DEBUGGER) granted to users | `CRITAU-H` |
 | `HANADB-ROLE-001` | HIGH | Powerful predefined roles granted to users | — |
+| `HANADB-TRACE-001` | CRITICAL | HANA SQL trace is set to record query results | `TRACES-H` |
 | `HANADB-USER-001` | CRITICAL | *varies* | `STDUSR-H` |
 | `HANADB-USER-002` | HIGH | DB users with password lifetime check disabled | `STDUSR-H` |
 | `HANADB-USER-003` | MEDIUM | *varies* — Dormant HANA DB users (no logon in …+ days) | `STDUSR-H` |
+| `HANADB-VER-001` | CRITICAL | *varies* | `SECUPD-H` |
 
 ### `iam_advanced` — 30 checks
 

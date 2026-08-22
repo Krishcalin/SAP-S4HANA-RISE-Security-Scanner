@@ -1214,11 +1214,9 @@ class ReportGenerator:
     Generated {html.escape(self.meta.get('scan_time', '')[:19])} &middot;
     For authorized security assessments only<br>
     <span style="opacity:.75">
-      &copy; 2026 Krishnendu De. All rights reserved. MonitorRisk is proprietary
-      software, licensed &mdash; not sold &mdash; and this report is generated
-      output, not a grant of any licence to the tool.
-      This report describes the security posture of the assessed system and
-      should be handled accordingly.
+      MonitorRisk is open source under the MIT licence. This report describes
+      the security posture of the assessed system and should be handled
+      accordingly.
     </span>
   </div>
 </div>

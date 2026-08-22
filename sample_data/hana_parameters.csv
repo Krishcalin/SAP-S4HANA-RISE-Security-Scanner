@@ -10,3 +10,6 @@ global.ini,communication,sslenforce,false
 global.ini,persistence,log_mode,overwrite
 global.ini,cross_database_access,enabled,true
 global.ini,system_replication_communication,enable_ssl,false
+global.ini,communication,listeninterface,.global
+indexserver.ini,sqltrace,level,ALL_WITH_RESULTS
+indexserver.ini,sqltrace,trace,on

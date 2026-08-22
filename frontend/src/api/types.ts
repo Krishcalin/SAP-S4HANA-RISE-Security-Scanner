@@ -746,13 +746,28 @@ export interface Journey {
 export interface Coverage {
   baseline_version: string | null
   requirements_published: number
+  /** Published minus the technologies this product does not scan. The ratio a
+   *  reader should judge us on: comparing `requirements_covered` against
+   *  `requirements_published` counts ten NetWeaver Java requirements as gaps,
+   *  and no amount of work here would ever close them. */
+  requirements_in_scope: number
   requirements_covered: number
   covered: {
     requirement: string; tier: string; technology: string
     title: string; our_checks: string[]
   }[]
+  /** IN-SCOPE gaps only. `covered`, `not_covered` and `out_of_scope` partition
+   *  the published set, so the three still add up and nothing was dropped. */
   not_covered: {
     requirement: string; tier: string; technology: string; title: string
+  }[]
+  /** Requirements for a stack this product does not read. Named with the reason
+   *  rather than silently excluded — the denominator has to be honest in both
+   *  directions, and hiding these would flatter the ratio exactly as counting
+   *  them as gaps understates it. */
+  out_of_scope: {
+    requirement: string; tier: string; technology: string
+    title: string; reason: string
   }[]
   beyond_baseline: string[]
   note: string

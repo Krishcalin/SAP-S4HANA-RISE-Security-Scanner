@@ -1,5 +1,7 @@
 {
   "version": "2.15.2",
+  "isHaActive": false,
+  "auditLevel": "Off",
   "backends": [
     {
       "name": "S4H_Production",

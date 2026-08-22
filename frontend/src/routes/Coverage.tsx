@@ -131,10 +131,18 @@ function Body({ cov }: { cov: CoverageView }) {
               a narrow set and most of what this product checks lies outside it,
               so colouring the empty part red would be a claim the number does
               not support. */}
+          {/* Against IN-SCOPE, not against published. Ten of the published
+              requirements are NetWeaver Java, a stack this product does not
+              read at all, and measuring against a denominator that includes
+              them would report as a gap something no work here would close.
+              The note carries the published total so the narrower denominator
+              is visible rather than assumed. */}
           <Meter value={cov.requirements_covered}
-                 limit={cov.requirements_published}
-                 label="families"
-                 note={`Baseline ${cov.baseline_version ?? '—'}`} />
+                 limit={cov.requirements_in_scope}
+                 label="families in scope"
+                 note={`Baseline ${cov.baseline_version ?? '—'} · `
+                       + `${cov.out_of_scope.length} of `
+                       + `${cov.requirements_published} out of scope`} />
         </div>
         <div className={CARD}>
           <h3 className={CARD_H3}>Beyond the Baseline</h3>
@@ -142,9 +150,19 @@ function Body({ cov }: { cov: CoverageView }) {
           <div className={KPI_NOTE}>SoD, GRC, financial controls, risk paths</div>
         </div>
         <div className={CARD}>
-          <h3 className={CARD_H3}>Not covered</h3>
-          <div className={`${KPI} text-high`}>{cov.not_covered.length}</div>
-          <div className={KPI_NOTE}>stated, not hidden</div>
+          <h3 className={CARD_H3}>In-scope gaps</h3>
+          {/* Green at zero is the honest colour here, and it is a narrow claim:
+              every requirement SAP publishes for a stack we read is answered by
+              at least one check. It says nothing about depth — SAP's 38
+              requirements carry 351 check items between them. */}
+          <div className={`${KPI} ${cov.not_covered.length ? 'text-high' : 'text-ok'}`}>
+            {cov.not_covered.length}
+          </div>
+          <div className={KPI_NOTE}>
+            {cov.not_covered.length
+              ? 'stated, not hidden'
+              : 'every in-scope requirement answered'}
+          </div>
         </div>
       </div>
 
@@ -195,12 +213,25 @@ function Body({ cov }: { cov: CoverageView }) {
 
       <h2 className={H2}>SAP Baseline requirements we do not address</h2>
       {/* Publishing this is the point. A coverage page that only lists what you cover
-          is marketing; one that lists what you do not is evidence. */}
-      <div className="banner banner-warn">
-        Most of these are <strong className="font-[650]">NetWeaver Java</strong>, which
-        this tool does not cover — a deliberate scope decision, not an oversight. The rest
-        are listed so nobody has to discover them in a proof of concept.
-      </div>
+          is marketing; one that lists what you do not is evidence.
+
+          Two tables rather than one, because these are two different statements
+          and the larger group used to hide the smaller one. A gap is work; a
+          scope decision is not work, and no amount of it would close them. */}
+      {cov.not_covered.length > 0 ? (
+        <div className="banner banner-warn">
+          These are gaps <strong className="font-[650]">inside</strong> the stack this
+          tool reads. They are listed so nobody has to discover them in a proof of
+          concept.
+        </div>
+      ) : (
+        <div className="banner banner-ok">
+          Every requirement SAP publishes for a stack this tool reads is answered by at
+          least one check. That is coverage of the requirement, not depth against it —
+          SAP&rsquo;s 38 requirements carry 351 check items between them, and this tool
+          does not claim to reproduce each one.
+        </div>
+      )}
       <div className={TABLE_CARD}>
         <table className="w-full border-collapse">
           <thead>
@@ -232,14 +263,52 @@ function Body({ cov }: { cov: CoverageView }) {
             {cov.not_covered.length === 0 && (
               <tr>
                 <td className={EMPTY} colSpan={4}>
-                  Every requirement family published in this Baseline version maps to at
-                  least one check.
+                  No in-scope gaps. The out-of-scope requirements are below.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {cov.out_of_scope.length > 0 && (
+        <>
+          <h2 className={H2}>Requirements out of scope for this tool</h2>
+          <div className="banner">
+            {cov.out_of_scope[0].reason} They are named here rather than dropped from
+            the count: a landscape that <em>does</em> run these needs them answered by
+            something, and this tool is not that something.
+          </div>
+          <div className={TABLE_CARD}>
+            <table className="w-full border-collapse">
+              <thead>
+                <tr>
+                  <th className={`${TH} w-[110px]`}>Requirement</th>
+                  <th className={`${TH} w-[92px]`}>Tier</th>
+                  <th className={`${TH} w-[76px]`}>Stack</th>
+                  <th className={TH}>SAP&rsquo;s description</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cov.out_of_scope.map((r) => (
+                  <tr key={r.requirement} className="hover:bg-panel2">
+                    <td className={`${TD} font-mono text-[12px]`}>
+                      <RequirementRef id={r.requirement} />
+                    </td>
+                    <td className={TD}>
+                      <span className={`pill sev-${tierSeverity(r.tier)}`}>
+                        {r.tier || 'untiered'}
+                      </span>
+                    </td>
+                    <td className={`${TD} text-[12px] text-ink2`}>{r.technology}</td>
+                    <td className={`${TD} text-[12px]`}>{r.title}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       <h2 className={H2}>Checks that go beyond the Baseline</h2>
       <p className="text-ink2 text-[12px] mb-2.5">

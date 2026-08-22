@@ -6,7 +6,7 @@
 > outstanding. A great deal has shipped since they were written, and this document
 > has not been rewritten phase by phase:
 >
-> - **36 audit modules** (these documents say 23), 709 check ids, 135 logical sources.
+> - **36 audit modules** (these documents say 23), 714 check ids, 135 logical sources.
 >   The forward lists in Phases 5 and 6 have since been reconciled item by item
 >   against the shipped code — they had drifted in the direction that is easy to
 >   miss, understating the product, so a reader would have set out to rebuild
@@ -606,10 +606,10 @@ defect.
 
 ### What was added
 
-- **`/checks/:id` and `/requirements/:id`.** 709 check ids and 38 Baseline
+- **`/checks/:id` and `/requirements/:id`.** 714 check ids and 38 Baseline
   requirements were dead strings; on the coverage screen they were not even
   links. `server/checkdocs.py` assembles from what was already authoritative and
-  authors nothing. The knowledge base covers 357 of 709, and the rest say so
+  authors nothing. The knowledge base covers 362 of 714, and the rest say so
   rather than rendering an empty panel.
 - **`/chokepoints`.** The worklist uncapped — 71 on the bundled corpus against the
   15 the paths screen showed.
@@ -718,6 +718,64 @@ path. Required hops cite emittable checks; optional hops were never checked.
 | `rebuild-sap-catalogue` CLI command | `server/cli.py` | ✅ |
 | Static check-id collision guard | `tests/test_check_id_uniqueness.py` | ✅ |
 
+### The Baseline recount, 2026-08-22
+
+**The figure carried into this work was wrong, and wrong in the flattering
+direction.** "15 of 38" was the UNCOVERED count read as the covered one.
+Recomputing gave 23 covered — and then the recount found that one of the 23 was
+false.
+
+`CHECK_TO_REQUIREMENT` mapped the prefix `BTP-` to `NETCF-P`. `NETCF-P` is a
+**single check item** reading one Cloud Connector parameter, `isHaActive`, and
+nothing in this product read it. Forty-two BTP checks were claiming a requirement
+none of them tested. `HANADB-PARAM` → `PWDPOL-H` was the same shape at smaller
+scale: PWDPOL-H's four published titles are all password policy, and only
+`HANADB-PARAM-001` reads it — error disclosure, TLS enforcement, log mode and
+cross-database access were claiming a password requirement they have nothing to
+do with.
+
+This is the `PARAM-PWD` bug inverted. That one matched nothing and under-reported
+in silence; this one matched everything and over-reported out loud. The second is
+worse: it tells an auditor we satisfy a control we do not test.
+
+**What the roadmap said about the remainder was also wrong.** It recorded that
+"what remains is Java, HANA and BTP, which are stacks this product does not audit
+rather than gaps inside the one it does." HANA and BTP are stacks this product
+very much audits — `modules/hana_db_security.py` and
+`modules/btp_cloud_surface.py` are two of the larger modules in it. Five real
+gaps were sitting behind that sentence.
+
+**Five checks closed them**, each mapped to the requirement it demonstrably
+reads:
+
+| Check | Requirement | Tier | What it reads |
+|---|---|---|---|
+| `HANADB-PARAM-006` | `NETCF-H` | CRITICAL | `[communication] listeninterface = .global` — HANA's internal control-plane channels bound to every interface |
+| `HANADB-TRACE-001` | `TRACES-H` | CRITICAL | `[sqltrace] level = ALL_WITH_RESULTS` — query **results** written to a trace file, outside every access control the database has |
+| `HANADB-VER-001` | `SECUPD-H` | CRITICAL | a revision below every maintained SPS line: not a missing note but a stopped delivery channel |
+| `BTP-CC-009` | `NETCF-P` | STANDARD | `isHaActive` — no shadow connector, so patching the BTP-to-on-premise bridge costs an outage and loses |
+| `BTP-CC-010` | `AUDIT-P` | STANDARD | Cloud Connector audit level Off — the backend allow-list can be widened with no record of by whom |
+
+**And the denominator now states its own scope.** Ten of the 38 published
+requirements are NetWeaver AS Java, a stack S/4HANA does not run and this product
+does not read. Counting them as gaps understates coverage by something no work
+here would ever close; dropping them silently would flatter it. So
+`OUT_OF_SCOPE_TECHNOLOGY` names them with the reason, `covered` / `not_covered` /
+`out_of_scope` partition the published set so the three still add up, and a
+covered requirement can never be moved out of scope — otherwise excluding a
+technology would raise the percentage without changing a check.
+
+```
+in scope 28 of 38 · covered 28 of 28 · out of scope 10
+checks mapped to a requirement: 236 → 196 (the false claims withdrawn)
+```
+
+Fewer checks claim a Baseline requirement than before, and more requirements are
+actually answered. That is the direction this number should move in.
+
+The five new checks were written into `data/finding_details.json` at the same
+time, so the undocumented count stayed at 352 rather than becoming 357.
+
 ### Measured against SAP's real files
 
 Parsed from **58 policy files** actually fetched from
@@ -725,8 +783,8 @@ Parsed from **58 policy files** actually fetched from
 
 ```
 38 requirement families · 351 check items · CRITICAL 97 / STANDARD 175 / EXTENDED 79
-we cover 17 of 38 · 162 of our checks go beyond the Baseline entirely
-uncovered by stack: Java 10 · ABAP 4 · HANA 3 · BTP 2 · Other 2
+in scope 28 of 38 · covered 28 of 28 · out of scope 10 (NetWeaver AS Java)
+518 of our 714 checks go beyond the Baseline entirely
 ```
 
 **Ten of the 21 gaps are NetWeaver Java**, which this tool deliberately does not cover. The
@@ -790,11 +848,17 @@ for SAP's content would be exactly the fabrication this project forbids.
       for what Focused Run calls it
 - [~] Map every check to its SAP Security Baseline requirement ID; ~~publish coverage
       against the **214 in-scope control points**~~ — **PARTIAL, AND HALF OF IT
-      DECLINED.** `server/sapcontent.requirement_for()` maps 236 of 709 checks to a
-      Baseline requirement, covering 23 of the 38 SAP publishes — and NO ABAP
-      requirement is left unaddressed; what remains is Java, HANA and BTP, which are
-      stacks this product does not audit rather than gaps inside the one it does.
-      The remaining 473 are
+      DECLINED.** `server/sapcontent.requirement_for()` maps 196 of 714 checks to a
+      Baseline requirement, covering **28 of the 28 that are in scope** — every
+      requirement SAP publishes for a stack this product reads. The 10 that remain
+      are NetWeaver AS Java, which S/4HANA does not run and this product does not
+      read; they are reported as out of scope, with the reason, rather than as gaps.
+
+      This paragraph previously read "what remains is Java, HANA and BTP, which are
+      stacks this product does not audit". That was wrong — `hana_db_security` and
+      `btp_cloud_surface` are two of the larger modules here — and five real gaps
+      were sitting behind the sentence. See "The Baseline recount" below.
+      The remaining 518 are
       mostly things the Baseline does not describe at all — financial controls, vendor
       master integrity, resilience — so "map EVERY check" is not a target so much as a
       category error. **The 214 figure is refused outright**: parsing SAP's published

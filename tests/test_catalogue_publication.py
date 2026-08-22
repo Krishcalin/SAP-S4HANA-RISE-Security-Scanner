@@ -125,7 +125,9 @@ def test_the_rollup_reports_three_numbers_rather_than_one_percentage():
     """A single percentage hides the interesting part, and the interesting part
     is which of the three kinds of absence a reader is looking at."""
     assert "three numbers rather than one percentage" in DOC
-    assert re.search(r"\*\*\d+ of \d+\*\* requirements SAP publishes", DOC)
+    assert re.search(r"\*\*\d+ of \d+\*\* requirements that are IN SCOPE", DOC)
+    assert re.search(r"\*\*\d+ of \d+\*\* published requirements are out of scope",
+                     DOC)
 
 
 def test_an_unmapped_check_is_not_presented_as_a_gap():
@@ -151,6 +153,9 @@ def test_the_two_kinds_of_absence_are_separated():
     and less interesting group hides the smaller and more interesting one."""
     assert "By technology:" in DOC
     assert "scope decision" in DOC
+    # Both halves are labelled, so neither can hide inside the other's count.
+    assert "In scope, and not addressed" in DOC
+    assert "**Out of scope.**" in DOC
 
 
 def test_the_unit_warning_survives_into_the_published_document():
@@ -165,7 +170,9 @@ def test_the_published_figures_match_what_the_code_computes():
     than a hand-written one because nobody re-reads it."""
     cov = sapcontent.coverage(ALL_IDS)
     assert (f"**{cov['requirements_covered']} of "
-            f"{cov['requirements_published']}** requirements") in DOC
+            f"{cov['requirements_in_scope']}** requirements") in DOC
+    assert (f"**{len(cov['out_of_scope'])} of "
+            f"{cov['requirements_published']}** published requirements") in DOC
     beyond = len(set(cov["beyond_baseline"]))
     assert f"**{beyond} of {len(ALL_IDS)}** checks" in DOC
 

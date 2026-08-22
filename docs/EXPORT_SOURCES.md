@@ -88,7 +88,7 @@ clean — see chapter 13 of the architecture guide.
 | `hana_granted_privileges` | `hana_granted_privileges.csv`, `granted_privileges.csv` | `hana_db_security` | documented |
 | `hana_granted_roles` | `hana_granted_roles.csv`, `granted_roles.csv` | `hana_db_security` | documented |
 | `hana_parameters` | `hana_parameters.csv`, `m_inifile_contents.csv`, `hana_ini.csv` | `crypto_posture`, `hana_db_security`, `resilience_posture` | documented |
-| `hana_version` | `hana_version.csv`, `hdb_version.csv`, `m_database.csv` | `sap_hotnews` | documented |
+| `hana_version` | `hana_version.csv`, `hdb_version.csv`, `m_database.csv` | `hana_db_security`, `sap_hotnews` | documented |
 | `ias_config` | `ias_config.json`, `ias_applications.json` | `btp_cloud_surface`, `iam_advanced` | documented |
 | `icf_services` | `icf_services.csv`, `sicf.csv`, `icf_nodes.csv` | `network_services` | documented |
 | `idoc_partners` | `idoc_partners.csv`, `we20.csv` | `integration_layer` | documented |

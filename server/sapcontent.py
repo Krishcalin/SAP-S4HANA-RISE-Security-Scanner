@@ -231,9 +231,30 @@ CHECK_TO_REQUIREMENT: Dict[str, str] = {
     "HANADB-USER": "STDUSR-H",
     "HANADB-PRIV": "CRITAU-H",
     "HANADB-AUDIT": "AUDIT-H",
-    "HANADB-PARAM": "PWDPOL-H",
+    # NOT the `HANADB-PARAM` family. PWDPOL-H's four titles are all password
+    # policy, and only HANADB-PARAM-001 reads it; -002 (detailed_error_on_connect),
+    # -003 (sslenforce), -004 (log_mode) and -005 (cross_database_access) were
+    # claiming a password requirement they have nothing to do with. The catalogue
+    # has no HANA equivalent for those four, so they are honestly unmapped. The
+    # longest matching prefix wins, so the ids below override this one.
+    "HANADB-PARAM-001": "PWDPOL-H",
+    "HANADB-PARAM-006": "NETCF-H",
+    "HANADB-TRACE": "TRACES-H",
+    "HANADB-VER": "SECUPD-H",
     "CRYPTO-": "NETENC-A",
-    "BTP-": "NETCF-P",
+    # `BTP-` -> NETCF-P WAS HERE, AND IT WAS THE OPPOSITE OF THE PWDPOL-A BUG.
+    # That one under-reported silently; this one over-reported loudly: NETCF-P is
+    # a SINGLE check item reading one Cloud Connector parameter, isHaActive, and
+    # the prefix handed it all 42 `BTP-` checks — none of which read that
+    # parameter, because until BTP-CC-009 nothing in this product did. A
+    # requirement we do not test was published as covered, which is the one
+    # direction an error here must never go. SAP's BTP baseline is only these
+    # three requirements and all three read the Cloud Connector, so the rest of
+    # the `BTP-` family — CPI, IAS, destinations, tokens, service bindings — has
+    # no Baseline equivalent at all and is now correctly reported as unmapped.
+    "BTP-CC-008": "SECUPD-P",
+    "BTP-CC-009": "NETCF-P",
+    "BTP-CC-010": "AUDIT-P",
     # Verified by comparing SAP's requirement title against our check title:
     #   MSGSRV-A "File with access control list for message server" (store MS_SECINFO)
     #   SCRIPT-A "Scripting Protection profile parameter (sapgui/nwbc_scripting)"
@@ -362,6 +383,30 @@ def requirement_for(check_id: str) -> Optional[str]:
     return req
 
 
+#: Technologies this product does not scan, and therefore does not count as a
+#: coverage gap.
+#:
+#: WHY THIS EXISTS. The denominator has to be honest in both directions. Silently
+#: dropping these would inflate coverage, which is the failure the `BTP-` prefix
+#: committed. Counting them as gaps understates it in a way that is just as
+#: misleading, because no amount of work on this product would ever close them:
+#: SAP NetWeaver AS Java is a separate stack that S/4HANA does not run, this
+#: scanner reads no Java export and has no Java check, and a reader comparing 22
+#: against 38 has no way to know that ten of the sixteen missing are for a server
+#: that is not in the landscape being scanned. So they are named, with the reason,
+#: and reported beside the in-scope figure rather than inside it.
+#:
+#: This is a product-scope statement, not a judgement about the requirements. A
+#: landscape that does run AS Java — a legacy Portal or a dual-stack PI — needs
+#: these ten answered by something, and this product is not that something.
+OUT_OF_SCOPE_TECHNOLOGY: Dict[str, str] = {
+    "Java": ("SAP NetWeaver AS Java is a separate stack from the ABAP server "
+             "S/4HANA runs on. This product reads no Java export and ships no "
+             "Java check, so these requirements are out of its scope rather "
+             "than unmet by it."),
+}
+
+
 def coverage(check_ids: Iterable[str],
              catalogue: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """How our catalogue lines up against SAP's requirement vocabulary.
@@ -388,18 +433,40 @@ def coverage(check_ids: Iterable[str],
 
     covered = sorted(mapped)
     not_covered = sorted(set(published) - set(covered))
+
+    # In scope = published minus the technologies this product does not scan. A
+    # covered requirement is never moved out of scope, however its technology is
+    # labelled: if we answer it, it counts, and a scope rule that could hide a
+    # requirement we already cover would be a way to flatter the ratio.
+    out_of_scope = sorted(
+        r for r in not_covered
+        if published[r].get("technology") in OUT_OF_SCOPE_TECHNOLOGY)
+    in_scope = sorted(set(published) - set(out_of_scope))
+
     return {
         "baseline_version": cat.get("_meta", {}).get("baseline_version"),
         "requirements_published": len(published),
+        "requirements_in_scope": len(in_scope),
         "requirements_covered": len(covered),
+        "out_of_scope": [{"requirement": r,
+                          "tier": published[r]["tier"],
+                          "technology": published[r]["technology"],
+                          "title": (published[r]["titles"] or [""])[0],
+                          "reason": OUT_OF_SCOPE_TECHNOLOGY[
+                              published[r]["technology"]]}
+                         for r in out_of_scope],
         "covered": [{"requirement": r, "tier": published[r]["tier"],
                      "technology": published[r]["technology"],
                      "title": (published[r]["titles"] or [""])[0],
                      "our_checks": mapped[r]} for r in covered],
+        # In-scope gaps only. Every one of the published requirements appears in
+        # exactly one of `covered`, `not_covered` and `out_of_scope`, so the three
+        # lists still add up to the published total and nothing has been dropped
+        # — the Java requirements moved list, they did not disappear.
         "not_covered": [{"requirement": r, "tier": published[r]["tier"],
                          "technology": published[r]["technology"],
                          "title": (published[r]["titles"] or [""])[0]}
-                        for r in not_covered],
+                        for r in not_covered if r not in set(out_of_scope)],
         "beyond_baseline": unmapped,
         "note": cat.get("_meta", {}).get("unit_warning", ""),
     }

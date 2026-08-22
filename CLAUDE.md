@@ -61,7 +61,7 @@ product became client-server**, deliberately and one-way. It has NOT been relaxe
 
 Background and the full plan: [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md),
 [`docs/BUILD_ROADMAP.md`](docs/BUILD_ROADMAP.md).
-- **709 checks across 36 audit modules.** Measure, never estimate — and know which number you
+- **714 checks across 36 audit modules.** Measure, never estimate — and know which number you
   are quoting. `modules/` holds 70 files, of which **36 emit findings**; the other 34 are rule
   tables, loaders, importers and report writers. Those 33 are exactly `sap_scanner.py`'s
   `--modules` choices. Check IDs: **363** are written as literals, and **621** exist once the
@@ -1016,7 +1016,7 @@ quantification. And absence of a capability in a competitor's public material is
 Twenty-two routes. The ones added most recently, and why each exists:
 
 - **`/checks/:id`** — what a check IS. The console could always say `LOG-AUD-001`
-  fired and never what it is; 709 ids were explained only in a markdown file no
+  fired and never what it is; 714 ids were explained only in a markdown file no
   console reader can open. `server/checkdocs.py` ASSEMBLES this from the sources
   already authoritative for each field — it authors nothing.
 - **`/requirements/:id`** — one SAP Baseline requirement family, SAP's own wording

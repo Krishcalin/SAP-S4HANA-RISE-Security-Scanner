@@ -158,6 +158,8 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
         self.check_ias_password_policy()
         self.check_ias_idp_enforcement()
         self.check_cloud_connector_version()
+        self.check_cloud_connector_ha()
+        self.check_cloud_connector_audit()
         self.check_entitlement_sprawl()
         self.check_event_mesh_topics()
         self.check_cpi_credential_stores()
@@ -680,6 +682,152 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                 # property rather than a subject.
                 scope="aggregate",
             )
+
+    # ----------------------------------------------------- SAP Baseline NETCF-P
+    #: Where an export may carry the Cloud Connector's high-availability state.
+    #: `isHaActive` is SAP's own name for it in the SCC_CONFIG configuration store,
+    #: which is what the Baseline requirement reads; the rest are the spellings a
+    #: hand-assembled export tends to use.
+    _SCC_HA_KEYS = ("isHaActive", "haActive", "highAvailability", "ha_active")
+
+    def check_cloud_connector_ha(self):
+        """MEDIUM: the Cloud Connector runs without a shadow instance.
+
+        SAP Security Baseline requirement NETCF-P, config store SCC_CONFIG.
+        """
+        cc = self.data.get("cloud_connector")
+        if not isinstance(cc, dict):
+            return
+        raw = None
+        for key in self._SCC_HA_KEYS:
+            if key in cc:
+                raw = cc[key]
+                break
+        if raw is None:
+            # Absent is not false. An export that never carried the field would
+            # otherwise make every customer fail a requirement on the strength of
+            # a missing column, which is the failure mode this catalogue exists to
+            # avoid — BTP-AUD-001 makes the same distinction for audit state.
+            return
+        if isinstance(raw, str):
+            active = raw.strip().lower() in ("true", "yes", "on", "1", "active")
+        else:
+            active = bool(raw)
+        if active:
+            return
+
+        backends = cc.get("backends") or []
+        items = ["high availability is not active (no shadow Cloud Connector)"]
+        if backends:
+            items.append("%d backend system(s) reach the estate through this "
+                         "single instance" % len(backends))
+
+        self.finding(
+            check_id="BTP-CC-009",
+            title="Cloud Connector runs as a single instance with no shadow",
+            severity=self.SEVERITY_MEDIUM,
+            category="BTP Cloud Attack Surface",
+            description=(
+                "The Cloud Connector reports that high availability is not "
+                "active, so there is no shadow instance to take the tunnel over. "
+                "This is an availability control that SAP places in its Security "
+                "Baseline, and the reason is that the alternatives to a planned "
+                "failover are worse than the outage: with a single instance, "
+                "patching the Cloud Connector costs a tunnel outage, so the "
+                "patch gets deferred, and a component that bridges BTP to the "
+                "on-premise network is exactly the one that must not fall "
+                "behind. The same pressure drives the workarounds — a "
+                "temporary direct route around the connector, a widened "
+                "firewall rule for the duration — that outlive the incident "
+                "and become the exposure. An unplanned failure has the same "
+                "shape with less warning."
+            ),
+            affected_items=items,
+            remediation=(
+                "Install a second Cloud Connector as a shadow instance and pair "
+                "it with the master, then verify a failover before relying on "
+                "it. With the pair in place, upgrade by patching the shadow, "
+                "failing over, and patching the former master, so Cloud "
+                "Connector patching no longer needs a maintenance window and "
+                "stops competing with the tunnel's availability."
+            ),
+            references=[
+                "SAP Security Baseline — NETCF-P (SCC parameter isHaActive)",
+                "SAP BTP Cloud Connector — Configuring High Availability",
+            ],
+            # Same singleton reasoning as BTP-CC-008: the export names no Cloud
+            # Connector instance, and inventing one would merge every customer's
+            # connector into a single node.
+            scope="aggregate",
+        )
+
+    # ----------------------------------------------------- SAP Baseline AUDIT-P
+    #: Cloud Connector audit levels, weakest first. SAP's own vocabulary.
+    _SCC_AUDIT_LEVELS = ("off", "security", "all")
+
+    def check_cloud_connector_audit(self):
+        """HIGH: the Cloud Connector is not auditing.
+
+        SAP Security Baseline requirement AUDIT-P, config store SCC_CONFIG.
+        """
+        cc = self.data.get("cloud_connector")
+        if not isinstance(cc, dict):
+            return
+        raw = cc.get("auditLevel", cc.get("audit_level"))
+        if raw is None:
+            audit = cc.get("audit")
+            if isinstance(audit, dict):
+                raw = audit.get("level", audit.get("auditLevel"))
+        if raw is None:
+            return
+        level = str(raw).strip().lower()
+        if level not in self._SCC_AUDIT_LEVELS:
+            # A level this check does not recognise is not evidence of anything.
+            # Reporting it as "off" would be a guess about a customer's estate.
+            return
+        if level != "off":
+            return
+
+        self.finding(
+            check_id="BTP-CC-010",
+            title="Cloud Connector audit logging is switched off",
+            severity=self.SEVERITY_HIGH,
+            category="BTP Cloud Attack Surface",
+            description=(
+                "The Cloud Connector's audit level is Off, so it records "
+                "neither the administrative changes made to it nor the requests "
+                "that pass through it. Both halves matter and they are "
+                "different losses. The administrative half means a change to "
+                "the backend allow-list — the list that decides which "
+                "on-premise systems and which paths BTP can reach at all — "
+                "leaves no record of who widened it or when, which is the "
+                "single most consequential configuration this component holds. "
+                "The traffic half means that when a question is asked about "
+                "what came through the tunnel, the answer has to be assembled "
+                "from the backends' own logs, if they kept any; the connector "
+                "sits at the trust boundary and is the one place the whole flow "
+                "is visible. Neither gap is recoverable after the fact, because "
+                "the records were never written."
+            ),
+            affected_items=["Cloud Connector audit level: %s" % raw],
+            remediation=(
+                "Set the Cloud Connector audit level to All in production, or "
+                "to Security where the traffic volume makes All impractical — "
+                "Security still records the configuration changes and the "
+                "connection decisions, which is the half that cannot be "
+                "reconstructed from anywhere else. Forward the audit files off "
+                "the Cloud Connector host to the same destination as the rest of "
+                "the estate's logs, so they survive the host and are reviewed "
+                "with everything else, and confirm the retention matches the "
+                "estate's standard."
+            ),
+            references=[
+                "SAP Security Baseline — AUDIT-P (BTP audit settings)",
+                "SAP BTP Cloud Connector — Audit Logging",
+            ],
+            # Singleton component, as BTP-CC-008 and BTP-CC-009.
+            scope="aggregate",
+        )
 
     # ════════════════════════════════════════════════════════════════
     #  BTP-SB-*: Service Binding Secrets

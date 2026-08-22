@@ -91,6 +91,21 @@ class HanaDbSecurityAuditor(BaseAuditor):
         "AFL__SYS_AFL_AFLPAL_EXECUTE",
     }
 
+    #: HANA revision lines SAP still issues security corrections for.
+    #:
+    #: SOURCED, AND DELIBERATELY COARSE. SAP publishes the maintained revision of
+    #: each SPS line in its release strategy, and that number moves. Rather than
+    #: restate a moving number, this check asks the weaker question an export can
+    #: settle on its own: is the installed line one SAP still maintains at all? A
+    #: line below the oldest entry here is out of maintenance whatever its patch
+    #: level, which is a verdict that does not go stale in the direction that
+    #: matters — it can only become more conservative as SAP retires lines.
+    HANA_MAINTAINED_LINES = {
+        (2, 0, 67): "SPS06",
+        (2, 0, 76): "SPS07",
+        (2, 0, 79): "SPS08",
+    }
+
     def run_all_checks(self) -> List[Dict[str, Any]]:
         self.check_privileged_users()
         self.check_password_lifetime()
@@ -109,6 +124,9 @@ class HanaDbSecurityAuditor(BaseAuditor):
         self.check_log_mode()
         self.check_cross_database_access()
         self.check_debug_privileges()
+        self.check_internal_listen_interface()
+        self.check_sql_trace_results()
+        self.check_hana_maintenance_status()
         return self.findings
 
     # ------------------------------------------------------------------ helpers
@@ -1097,3 +1115,234 @@ class HanaDbSecurityAuditor(BaseAuditor):
                 # rather than close it and open a fresh, zero-age one.
                 scope="aggregate",
             )
+    # ----------------------------------------------------- SAP Baseline NETCF-H
+    def check_internal_listen_interface(self):
+        """CRITICAL: HANA internal communication listens on every interface.
+
+        SAP Security Baseline requirement NETCF-H, config store HDB_PARAMETER.
+        """
+        idx = self._param_index()
+        if not idx:
+            return
+        val = self._get_param(idx, "listeninterface", "communication", strict=True)
+        if val is None:
+            return
+        setting = str(val).strip().lower()
+        # `.local` binds the internal services to loopback; `.internal` binds them
+        # to the internal network defined by internal_hostname_resolution. Only
+        # `.global` puts them on every interface, so anything else — including a
+        # spelling this check does not know — is left alone rather than guessed at.
+        if setting != ".global":
+            return
+
+        resolution = self._get_param(idx, "internal_hostname_resolution", None)
+        items = ["[communication] listeninterface = .global"]
+        if resolution is None:
+            items.append("internal_hostname_resolution is not set, so no internal "
+                         "network is defined to bind to instead")
+
+        self.finding(
+            check_id="HANADB-PARAM-006",
+            title="HANA internal communication listens on all network interfaces",
+            severity=self.SEVERITY_CRITICAL,
+            category=self.CATEGORY,
+            description=(
+                "global.ini [communication] listeninterface = .global. HANA's "
+                "internal service ports — the nameserver, indexserver, "
+                "preprocessor, compileserver and the internal request channels "
+                "— are bound to every network interface on the host rather "
+                "than to loopback or to a dedicated internal network. Those "
+                "channels carry inter-service traffic that is authenticated "
+                "largely by the fact that it arrives on the internal network, so "
+                "reaching them from outside the host means reaching the "
+                "database's own control plane rather than its SQL port: the SQL "
+                "authorization model and the audit policies that sit on it are "
+                "not in that path at all. In a scale-out landscape .global is "
+                "sometimes set to make the hosts reach one another and then left "
+                "in place, which is why this is worth checking on a system that "
+                "otherwise looks hardened."
+            ),
+            affected_items=items,
+            remediation=(
+                "Set [communication] listeninterface = .local on a single-host "
+                "system, so the internal channels bind to loopback and are "
+                "unreachable from the network. On a scale-out system set it to "
+                ".internal and define the internal network with "
+                "internal_hostname_resolution, so the channels bind only to the "
+                "dedicated internal interface. Restart the database for the "
+                "change to take effect, and confirm afterwards that the internal "
+                "ports are no longer bound to an external address. Where .global "
+                "genuinely cannot be avoided, firewall the internal port range to "
+                "the other HANA hosts only."
+            ),
+            references=[
+                "SAP Security Baseline — NETCF-H (HANA internal communication)",
+                "SAP HANA Security Guide — Network and Communication Security",
+                "SAP HANA Administration Guide — Configuring Internal Host Name Resolution",
+            ],
+            # One parameter, one defect. The section qualifies a key name generic
+            # enough to recur, exactly as check_cross_database_access does.
+            affected_objects=[{"type": "parameter_name", "name": "listeninterface",
+                               "qualifier": "section=communication"}],
+            scope="object",
+        )
+
+    # ---------------------------------------------------- SAP Baseline TRACES-H
+    def check_sql_trace_results(self):
+        """CRITICAL: SQL trace is recording result sets to a file.
+
+        SAP Security Baseline requirement TRACES-H, config store HDB_PARAMETER.
+        """
+        idx = self._param_index()
+        if not idx:
+            return
+        level = self._get_param(idx, "level", "sqltrace", strict=True)
+        if level is None:
+            # Some exports flatten the section into the key name. Match that
+            # spelling too, but never a bare `level` — every ini section has
+            # one, and reading an unrelated section's level as a trace level is
+            # the kind of wrong answer this module must not produce.
+            level = self._get_param(idx, "sql_trace_level", None)
+        if level is None or str(level).strip().upper() != "ALL_WITH_RESULTS":
+            return
+
+        items = ["[sqltrace] level = ALL_WITH_RESULTS"]
+        enabled = self._get_param(idx, "trace", "sqltrace", strict=True)
+        if enabled is not None:
+            items.append("[sqltrace] trace = %s" % enabled)
+        user = self._get_param(idx, "user", "sqltrace", strict=True)
+        if user is not None:
+            items.append("[sqltrace] user = %s (whose statements are traced)" % user)
+
+        self.finding(
+            check_id="HANADB-TRACE-001",
+            title="HANA SQL trace is set to record query results",
+            severity=self.SEVERITY_CRITICAL,
+            category=self.CATEGORY,
+            description=(
+                "indexserver.ini [sqltrace] level = ALL_WITH_RESULTS. At this "
+                "level HANA writes not only the statements it executes but the "
+                "rows they return into a plain trace file on the database host. "
+                "Business data therefore leaves the database's access-control "
+                "boundary entirely: the trace file is read through the "
+                "filesystem, so the analytic privileges, the row-level "
+                "restrictions and the audit policies that govern a SELECT do not "
+                "apply to reading it, and anyone holding the operating-system "
+                "account or a HANA trace-file privilege sees whatever the traced "
+                "sessions saw. Where the traced tables carry personal data this "
+                "also creates a copy outside every retention, masking and "
+                "residency control the estate has. ALL_WITH_RESULTS exists for "
+                "reproducing a defect under support supervision; it is "
+                "frequently switched on for an incident and not switched off "
+                "afterwards."
+            ),
+            affected_items=items,
+            remediation=(
+                "Set [sqltrace] trace = off, or reduce [sqltrace] level to "
+                "NORMAL or ERROR, so results are no longer written. Delete the "
+                "trace files already produced at this level and treat them as "
+                "the data they contain — if the traced statements touched "
+                "personal data, that is a disclosure to be assessed rather than "
+                "a file to be tidied. Where SAP support asks for "
+                "ALL_WITH_RESULTS, scope it with [sqltrace] user or object to "
+                "the single session under investigation, agree an end time, and "
+                "confirm it is off afterwards."
+            ),
+            references=[
+                "SAP Security Baseline — TRACES-H (SQL trace level)",
+                "SAP HANA Troubleshooting and Performance Analysis Guide — SQL Trace",
+                "SAP HANA Security Guide — Trace and Dump Files",
+            ],
+            # The section qualifies `level`, which is far too generic to identify
+            # on its own — the same reasoning as cross_database_access's `enabled`.
+            affected_objects=[{"type": "parameter_name", "name": "level",
+                               "qualifier": "section=sqltrace"}],
+            scope="object",
+        )
+
+    # ---------------------------------------------------- SAP Baseline SECUPD-H
+    def check_hana_maintenance_status(self):
+        """CRITICAL: the installed HANA revision is out of security maintenance.
+
+        SAP Security Baseline requirement SECUPD-H, config store HDB_VERSION.
+        """
+        installed = None
+        for row in (self.data.get("hana_version") or []):
+            if not isinstance(row, dict):
+                continue
+            keys = {str(k).strip().upper(): v for k, v in row.items()}
+            name = str(keys.get("NAME", keys.get("PARAMETER", ""))).strip().upper()
+            value = str(keys.get("VALUE", keys.get("VERSION", ""))).strip()
+            if value and (not name or name in ("VERSION", "HDB_VERSION")):
+                installed = value
+                break
+        if not installed:
+            return
+
+        parts = []
+        for chunk in installed.split("."):
+            digits = "".join(c for c in chunk if c.isdigit())
+            if not digits:
+                break
+            parts.append(int(digits))
+        if len(parts) < 3:
+            # A revision this cannot order must not be reported as old. Silence is
+            # the correct answer; sap_hotnews.py takes the same position.
+            return
+        line = (parts[0], parts[1], parts[2])
+
+        maintained = sorted(self.HANA_MAINTAINED_LINES)
+        if line >= maintained[0]:
+            return
+        oldest = maintained[0]
+        oldest_name = self.HANA_MAINTAINED_LINES[oldest]
+        oldest_text = "%s (%d.%d.%03d)" % (oldest_name, oldest[0], oldest[1], oldest[2])
+
+        self.finding(
+            check_id="HANADB-VER-001",
+            title="HANA %s is below every security-maintained revision line" % installed,
+            severity=self.SEVERITY_CRITICAL,
+            category=self.CATEGORY,
+            description=(
+                "The database reports revision %s, which is below %s, the oldest "
+                "line SAP still issues security corrections for. An "
+                "out-of-maintenance HANA does not receive the fixes published on "
+                "Patch Day, so a vulnerability disclosed from now on stays open "
+                "on this system and no note can be applied to close it. That is "
+                "a different statement from a missing individual note: the notes "
+                "checked elsewhere in this scan have fixes that exist and have "
+                "not been applied, while this one says the delivery channel "
+                "itself has stopped. Under RISE the database is operated by SAP, "
+                "so an out-of-maintenance revision is normally evidence of a "
+                "deferred upgrade to be scheduled with SAP rather than a "
+                "misconfiguration the customer can correct alone — but it is "
+                "the customer who carries the exposure in the meantime."
+                % (installed, oldest_text)
+            ),
+            affected_items=[
+                "installed revision: %s" % installed,
+                "oldest maintained line: %s" % oldest_text,
+            ],
+            remediation=(
+                "Plan an upgrade to a currently-maintained SPS line with SAP. "
+                "Under RISE raise it against the operations contract: the "
+                "revision is SAP's to move, and the customer's obligation is to "
+                "agree the maintenance window and run the regression test. "
+                "Confirm the target line against SAP's HANA maintenance strategy "
+                "at the time of planning rather than against this check, which "
+                "knows only that the installed line is below all of them. Until "
+                "the upgrade lands, treat the compensating controls as the real "
+                "protection: network exposure of the SQL and internal ports, the "
+                "privilege review, and the audit policy."
+            ),
+            references=[
+                "SAP Security Baseline — SECUPD-H (HANA maintenance status)",
+                "SAP Note 2378962 — SAP HANA 2.0 revision and maintenance strategy",
+                "SAP HANA Platform — Release and Maintenance Strategy",
+            ],
+            # The revision is a property, not a subject — the same reasoning
+            # BTP-CC-008 records for the Cloud Connector version. Carrying it into
+            # identity would retire this finding on an upgrade that is still out of
+            # maintenance, resetting the age of an exposure that has not moved.
+            scope="aggregate",
+        )

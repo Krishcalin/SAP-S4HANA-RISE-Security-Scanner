@@ -93,12 +93,11 @@ Things worth looking at hardest, because they carry the most consequence:
 The source is readable so it can be reviewed — including by people looking for
 weaknesses in it, which is welcome and is part of why it is public.
 
-It is **not** open source. Reading and reviewing are permitted; running, copying,
-forking, modifying or redistributing it are not, without written permission. See
-[LICENSE](LICENSE) and [CONTRIBUTING.md](CONTRIBUTING.md).
+It is open source under the [MIT licence](LICENSE) — running, copying, forking,
+modifying and redistributing are all permitted. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Security research on your **own** copy, for the purpose of reporting to me, is
-permitted and encouraged — that permission is granted here explicitly so nobody
-has to wonder whether the licence forbids the thing this file asks for.
+Security research on your own copy is welcome and needs no permission from
+anybody. Reports are still appreciated: a weakness found here is a weakness in
+every deployment.
 
 **Contact:** krishnendu.de@hotmail.com

@@ -306,9 +306,16 @@ def render() -> str:
       "numbers rather than one percentage**, because a single percentage hides "
       "the interesting part.")
     w("")
-    w(f"- **{cov['requirements_covered']} of {cov['requirements_published']}** "
-      f"requirements SAP publishes are addressed by at least one check here.")
-    w(f"- **{len(cov['not_covered'])}** published requirements are not addressed "
+    w(f"- **{cov['requirements_covered']} of {cov['requirements_in_scope']}** "
+      f"requirements that are IN SCOPE for this product are addressed by at "
+      f"least one check here.")
+    w(f"- **{len(cov['out_of_scope'])} of {cov['requirements_published']}** "
+      f"published requirements are out of scope, because they are for a stack "
+      f"this product does not read. They are named below, not dropped: the "
+      f"denominator has to be honest in both directions, and a reader comparing "
+      f"{cov['requirements_covered']} against {cov['requirements_published']} "
+      f"has no way to know that.")
+    w(f"- **{len(cov['not_covered'])}** in-scope requirements are not addressed "
       f"at all. They are listed below rather than summarised away.")
     w(f"- **{beyond} of {len(every_id)}** checks answer no Baseline requirement "
       f"— **which is not a failure.** Segregation of duties, GRC, financial "
@@ -320,26 +327,51 @@ def render() -> str:
         w("")
     w(f"Baseline version: **{cov['baseline_version']}**.")
     w("")
+    # NOT ALL ABSENCES ARE THE SAME ABSENCE, and the two are now separated in
+    # the data rather than only in this prose. A Java requirement is unaddressed
+    # because this product does not read the Java stack at all, which is a scope
+    # decision no amount of work here would change; an in-scope one is a gap
+    # inside the stack the product is about. Reporting them as one number let the
+    # larger, less interesting group hide the smaller, more interesting one.
+    w("### Published requirements this catalogue does not address")
+    w("")
+    if not cov["not_covered"] and not cov["out_of_scope"]:
+        w("None — every published requirement is addressed.")
+        w("")
     if cov["not_covered"]:
         by_tech: Dict[str, int] = {}
         for r in cov["not_covered"]:
             by_tech[r["technology"]] = by_tech.get(r["technology"], 0) + 1
-        w("### Published requirements this catalogue does not address")
-        w("")
-        # NOT ALL ABSENCES ARE THE SAME ABSENCE. A Java requirement is unaddressed
-        # because this product does not audit the Java stack at all, which is a
-        # scope decision; an ABAP one is unaddressed inside the stack the product
-        # is about, which is a gap. Reporting them as one number would let the
-        # larger, less interesting group hide the smaller, more interesting one.
-        w("By technology: "
+        w("**In scope, and not addressed.** These are gaps. By technology: "
           + ", ".join(f"**{n}** {tech}" for tech, n in sorted(by_tech.items()))
-          + ". These are not the same kind of absence — a Java or HANA "
-            "requirement is outside the stack this product audits, which is a "
-            "scope decision; an ABAP one is a gap inside it.")
+          + ".")
         w("")
         w("| Requirement | Tier | Technology | Title |")
         w("|---|---|---|---|")
         for r in cov["not_covered"]:
+            title = (r["title"] or "").replace("|", "\\|")
+            w(f"| `{r['requirement']}` | {r['tier']} | {r['technology']} "
+              f"| {title} |")
+        w("")
+    else:
+        w("**In scope, and not addressed: none.** Every requirement SAP "
+          "publishes for a stack this product reads is answered by at least one "
+          "check. That is a statement about coverage of the requirement, not "
+          "about depth against it — SAP's requirements carry 351 check items "
+          "between them and this product does not claim to reproduce each one.")
+        w("")
+    if cov["out_of_scope"]:
+        by_tech = {}
+        for r in cov["out_of_scope"]:
+            by_tech[r["technology"]] = by_tech.get(r["technology"], 0) + 1
+        w("**Out of scope.** These are not gaps but a scope decision, and it is "
+          "not one more work here would reverse. By technology: "
+          + ", ".join(f"**{n}** {tech}" for tech, n in sorted(by_tech.items()))
+          + ". " + cov["out_of_scope"][0]["reason"])
+        w("")
+        w("| Requirement | Tier | Technology | Title |")
+        w("|---|---|---|---|")
+        for r in cov["out_of_scope"]:
             title = (r["title"] or "").replace("|", "\\|")
             w(f"| `{r['requirement']}` | {r['tier']} | {r['technology']} "
               f"| {title} |")
