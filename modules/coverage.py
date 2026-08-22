@@ -216,32 +216,74 @@ def _sources_via_helper(src: str) -> Set[str]:
     except SyntaxError:
         return set()
 
-    accessors: Set[str] = set()
+    # ── string constants, so a source named by one is not invisible ─────────
+    #
+    # `ecs_config_items` declares `TABLE_AUTH_GROUPS = "table_auth_groups"` at
+    # module level and reads `self._rows(TABLE_AUTH_GROUPS)`. Collecting only
+    # `ast.Constant` arguments missed it entirely, and the module published
+    # `client_settings` — its one literal — as the whole of what it reads. That
+    # string reaches a customer on /checks/{id} under "Exports the module reads",
+    # so it was not a missing fact but a wrong one.
+    constants: Dict[str, str] = {}
     for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        params = {a.arg for a in node.args.args[1:]}
-        if not params:
-            continue
-        for inner in ast.walk(node):
-            if (isinstance(inner, ast.Call)
-                    and isinstance(inner.func, ast.Attribute)
-                    and inner.func.attr == "get"
-                    and inner.args
-                    and isinstance(inner.args[0], ast.Name)
-                    and inner.args[0].id in params):
-                accessors.add(node.name)
-                break
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant) \
+                and isinstance(node.value.value, str):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    constants.setdefault(target.id, node.value.value)
+
+    def _literal(arg) -> Optional[str]:
+        """The string an accessor argument names, whether written or referenced."""
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+            return arg.value
+        if isinstance(arg, ast.Name):
+            return constants.get(arg.id)
+        # `self.SOME_CONSTANT` — a class attribute, resolved the same way.
+        if isinstance(arg, ast.Attribute):
+            return constants.get(arg.attr)
+        return None
+
+    # ── accessors, to a FIXED POINT ─────────────────────────────────────────
+    #
+    # A method that reads `self.data.get(<own parameter>)` is an accessor. So is
+    # one that FORWARDS its parameter to an accessor: `_filter_rows(key)` calls
+    # `self._rows(key)`, and stopping at the first round meant every literal
+    # passed to it was lost. Iterating is what makes the analysis describe the
+    # module rather than the shape of its helper chain.
+    accessors: Set[str] = set()
+    while True:
+        grew = False
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if node.name in accessors:
+                continue
+            params = {a.arg for a in node.args.args[1:]}
+            if not params:
+                continue
+            for inner in ast.walk(node):
+                if not (isinstance(inner, ast.Call)
+                        and isinstance(inner.func, ast.Attribute)
+                        and inner.args
+                        and isinstance(inner.args[0], ast.Name)
+                        and inner.args[0].id in params):
+                    continue
+                if inner.func.attr == "get" or inner.func.attr in accessors:
+                    accessors.add(node.name)
+                    grew = True
+                    break
+        if not grew:
+            break
 
     found: Set[str] = set()
     for node in ast.walk(tree):
         if (isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Attribute)
                 and node.func.attr in accessors
-                and node.args
-                and isinstance(node.args[0], ast.Constant)
-                and isinstance(node.args[0].value, str)):
-            found.add(node.args[0].value)
+                and node.args):
+            value = _literal(node.args[0])
+            if value:
+                found.add(value)
 
     # `(self.data or {}).get("literal")` and `self.data.get(self.CONST)`.
     found |= set(re.findall(r'self\.data\s*or\s*\{\}\)\.get\(\s*["\']([a-z0-9_]+)["\']',

@@ -340,7 +340,7 @@ Reads: `data_masking`, `data_residency`, `deletion_requests`, `dpp_config`, `ilm
 
 Category: ABAP Authorization & Critical Access, Cryptographic Posture, Security Audit Log Review, System Trust & Standard Users
 
-Reads: `client_settings` — the sources the MODULE consumes; an individual check below reads some subset of them.
+Reads: `audit_config`, `client_settings`, `security_audit_log`, `table_auth_groups` — the sources the MODULE consumes; an individual check below reads some subset of them.
 
 | Check | Severity | Title | SAP Baseline |
 |---|---|---|---|

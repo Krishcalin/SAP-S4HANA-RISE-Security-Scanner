@@ -24,7 +24,7 @@ clean — see chapter 13 of the architecture guide.
 | `apim_policies` | `apim_policies.json`, `api_proxies.json` | `integration_layer` | documented |
 | `applied_notes` | `applied_notes.csv`, `snote_status.csv`, `implemented_notes.csv` | `sap_hotnews` | documented |
 | `ara_ruleset` | `ara_ruleset.json`, `sod_ruleset_custom.json` | `access_risk_analysis` | documented |
-| `audit_config` | `audit_config.csv`, `sm19.csv` | `log_monitoring`, `log_review`, `network_services` | documented |
+| `audit_config` | `audit_config.csv`, `sm19.csv` | `ecs_config_items`, `log_monitoring`, `log_review`, `network_services` | documented |
 | `auth_objects` | `auth_objects.csv` | `code_transport`, `iam_advanced`, `user_auth_audit` | documented |
 | `background_job_steps` | `background_job_steps.csv`, `tbtcp.csv`, `job_steps.csv` | `basis_job_command` | documented |
 | `background_jobs` | `background_jobs.csv`, `tbtco.csv`, `sm37_jobs.csv` | `basis_job_command`, `resilience_posture` | documented |
@@ -125,7 +125,7 @@ clean — see chapter 13 of the architecture guide.
 | `sap_modifications` | `sap_modifications.csv`, `se95.csv`, `modifications.csv` | `code_transport` | documented |
 | `sap_security_notes` | `sap_security_notes.json`, `hotnews_catalog.json` | `sap_hotnews` | documented |
 | `saprouttab` | `saprouttab.csv`, `route_permission.csv` | `system_trust` | documented · not obtainable in RISE |
-| `security_audit_log` | `security_audit_log.csv`, `sm19_filters.csv` | `log_monitoring`, `log_review` | documented |
+| `security_audit_log` | `security_audit_log.csv`, `sm19_filters.csv` | `ecs_config_items`, `log_monitoring`, `log_review` | documented |
 | `security_params` | `security_params.csv`, `rsparam.csv`, `profile_params.csv` | `abap_authorizations`, `baseline_params`, `crypto_posture`, `data_protection`, `log_monitoring`, `security_params`, `snc_posture`, `system_trust` | documented |
 | `sensitive_fields` | `sensitive_fields.csv`, `pii_fields.csv` | `data_protection` | documented |
 | `siem_config` | `siem_config.json` | `log_monitoring` | documented |
@@ -137,7 +137,7 @@ clean — see chapter 13 of the architecture guide.
 | `system_change` | `system_change.csv`, `se06.csv`, `system_change_option.csv` | `code_transport` | documented |
 | `system_component` | `system_component.csv`, `cvers.csv`, `component_versions.csv` | `sap_hotnews` | documented |
 | `system_landscape` | `system_landscape.csv`, `landscape.csv` | `data_protection` | documented |
-| `table_auth_groups` | `table_auth_groups.csv`, `table_authorization_groups.csv`, `se54.csv` | — | documented |
+| `table_auth_groups` | `table_auth_groups.csv`, `table_authorization_groups.csv`, `se54.csv` | `ecs_config_items` | documented |
 | `table_logging` | `table_logging.csv`, `dd09l.csv` | `log_monitoring` | documented |
 | `tls_config` | `tls_config.csv`, `icm_ssl.csv` | `crypto_posture` | documented |
 | `tolerance_groups` | `tolerance_groups.csv`, `t043t.csv`, `oba4.csv` | `financial_controls` | documented |
