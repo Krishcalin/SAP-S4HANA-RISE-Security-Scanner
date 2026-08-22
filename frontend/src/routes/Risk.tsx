@@ -101,7 +101,7 @@ const TH = 'text-left text-[11px] font-semibold uppercase tracking-[.05em] text-
 const TD = 'px-2.5 py-2.5 border-b border-line align-top'
 
 export function Risk() {
-  useTitle('Financial risk')
+  useTitle('Financial Risk')
   const [view, setView] = useState<RiskView | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
 
@@ -124,7 +124,7 @@ export function Risk() {
     <>
       <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
         <CircleDollarSign size={22} className="text-accent shrink-0" />
-        Financial risk exposure
+        Financial Risk Exposure
       </h1>
       <p className="text-ink2 mb-5">
         Findings expressed as annualised loss exposure, using a FAIR Monte-Carlo model

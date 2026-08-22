@@ -53,7 +53,7 @@ export function stateChip(d: SecurityDomain): { cls: string; text: string } {
 }
 
 export function Domains() {
-  useTitle('Security domains')
+  useTitle('Security Domains')
   const [view, setView] = useState<DomainsView | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
 
@@ -73,7 +73,7 @@ export function Domains() {
     <>
       <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
         <LayoutGrid size={22} className="text-accent shrink-0" />
-        Security domains
+        Security Domains
       </h1>
       <p className="text-ink2 mb-5 max-w-[80ch]">
         Your open findings in the twelve domains this market talks in. Each tile

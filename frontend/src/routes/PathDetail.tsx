@@ -103,7 +103,7 @@ export function PathDetail() {
   return (
     <>
       <p className="text-[12px] mb-2">
-        <Link className={LINK} to="/paths">&larr; Risk paths</Link>
+        <Link className={LINK} to="/paths">&larr; Risk Paths</Link>
       </p>
       {failure && <div className="banner banner-bad">{failure}</div>}
       {!failure && view === null && <p className="text-[13px] text-ink3">Loading…</p>}

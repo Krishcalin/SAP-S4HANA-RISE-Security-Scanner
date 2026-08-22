@@ -67,7 +67,7 @@ function destination(resolved: ResolvedView): string {
 type Failure = { kind: 'missing' } | { kind: 'other'; message: string }
 
 export function SavedView() {
-  useTitle('Saved view')
+  useTitle('Saved View')
   const { slug } = useParams<{ slug: string }>()
   const [resolved, setResolved] = useState<ResolvedView | null>(null)
   const [failure, setFailure] = useState<Failure | null>(null)

@@ -68,7 +68,7 @@ function unitHint(unit: string): string {
 }
 
 export function CrqInputs() {
-  useTitle('Risk quantification')
+  useTitle('Risk Quantification')
   const [params, setParams] = useSearchParams()
   const [scapes, setScapes] = useState<Landscape[] | null>(null)
   const selected = Number(params.get('landscape') || 0)
@@ -183,7 +183,7 @@ export function CrqInputs() {
     <>
       <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
         <Calculator size={22} className="text-accent shrink-0" />
-        Risk quantification
+        Risk Quantification
       </h1>
       {/* THE PROMISE IS ONLY MADE WHEN IT IS BEING KEPT.
           This sentence used to render unconditionally, and with no saved

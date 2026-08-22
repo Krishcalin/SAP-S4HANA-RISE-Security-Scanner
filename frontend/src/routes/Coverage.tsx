@@ -86,7 +86,7 @@ export function Coverage() {
     <>
       <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
         <ShieldCheck size={22} className="text-accent shrink-0" />
-        Check catalogue and control coverage
+        Check Catalogue and Control Coverage
       </h1>
       <p className="text-ink2 mb-5">
         What this tool checks, and how it lines up against SAP&rsquo;s own published

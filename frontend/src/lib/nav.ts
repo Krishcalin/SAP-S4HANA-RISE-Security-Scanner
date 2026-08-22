@@ -52,13 +52,13 @@ export const NAV_MAIN: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/findings', label: 'Findings', icon: CircleAlert },
   { to: '/trend', label: 'Trend', icon: TrendingUp },
-  { to: '/paths', label: 'Risk paths', icon: Waypoints },
+  { to: '/paths', label: 'Risk Paths', icon: Waypoints },
   // The currency figure. Neither incumbent produces one at all, which is why it
   // sits in the main list rather than under a reports submenu.
   { to: '/risk', label: 'Risk ($)', icon: CircleDollarSign },
   { to: '/coverage', label: 'Coverage', icon: ShieldCheck },
   { to: '/domains', label: 'Domains', icon: LayoutGrid },
-  { to: '/crq', label: 'Quantify risk', icon: Calculator },
+  { to: '/crq', label: 'Quantify Risk', icon: Calculator },
   { to: '/csf', label: 'NIST CSF', icon: Landmark },
   { to: '/upload', label: 'Upload', icon: Upload, minRole: 'analyst' },
 ]

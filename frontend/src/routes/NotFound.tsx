@@ -32,13 +32,13 @@ import { SearchX } from 'lucide-react'
  * as a screen with no data.
  */
 export function NotFound() {
-  useTitle('Page not found')
+  useTitle('Page Not Found')
   const { pathname } = useLocation()
   return (
     <div className="max-w-xl">
       <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
         <SearchX size={22} className="text-accent shrink-0" />
-        Page not found
+        Page Not Found
       </h1>
       <p className="text-ink2 text-[13px] mb-4">
         <code className="font-mono text-ink">{pathname}</code> is not a screen in

@@ -61,7 +61,7 @@ const LINK = 'text-accent hover:underline'
 const EMPTY = 'p-9 text-center text-ink2'
 
 export function Paths() {
-  useTitle('Risk paths')
+  useTitle('Risk Paths')
   const [view, setView] = useState<PathsOverview | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
 
@@ -86,7 +86,7 @@ export function Paths() {
     <>
       <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
         <Waypoints size={22} className="text-accent shrink-0" />
-        Risk paths
+        Risk Paths
       </h1>
       <p className="text-ink2 mb-5">
         Conditions that co-exist in your exported configuration and, together, form a route.

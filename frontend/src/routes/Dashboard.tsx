@@ -117,7 +117,7 @@ export function Dashboard() {
           posture assembled from the part of the estate a customer exported. */}
       <h1 className="text-2xl font-extrabold tracking-tight text-ink mb-1 flex items-center gap-2">
         <ShieldHalf size={22} className="text-accent" />
-        Security posture
+        Security Posture
       </h1>
       <p className="text-ink2 mb-5">
         Open findings across {systems.length} system{systems.length === 1 ? '' : 's'}.
@@ -287,7 +287,7 @@ export function Dashboard() {
       {domainView && (
         <>
           <h2 className={H2}>
-            Security domains
+            Security Domains
             <Link className="ml-2.5 text-[12px] font-normal text-accent hover:underline"
                   to="/domains">
               All twelve, and what we see in each →

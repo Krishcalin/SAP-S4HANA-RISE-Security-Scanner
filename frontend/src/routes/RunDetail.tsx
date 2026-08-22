@@ -319,7 +319,7 @@ export function RunDetail() {
       <div className="max-w-2xl">
         <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
           <ScanLine size={22} className="text-accent shrink-0" />
-          Scan run #{runId}
+          Scan Run #{runId}
         </h1>
         <div className="banner banner-bad" role="alert">{loadError.message}</div>
         {loadError.retryable && (
@@ -364,7 +364,7 @@ export function RunDetail() {
     <div>
       <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
         <ScanLine size={22} className="text-accent shrink-0" />
-        Scan run #{r.id}
+        Scan Run #{r.id}
       </h1>
       <p className="mb-5 text-ink2">
         {r.landscape_name ?? `Landscape ${r.landscape_id}`}

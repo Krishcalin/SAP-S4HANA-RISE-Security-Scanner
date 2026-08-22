@@ -148,7 +148,7 @@ export function Upload() {
       <div className="max-w-2xl">
         <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
           <UploadIcon size={22} className="text-accent shrink-0" />
-          Upload an export bundle
+          Upload an Export Bundle
         </h1>
         <div className="banner banner-info">
           Uploading requires the analyst role. Your account can read the console
@@ -165,7 +165,7 @@ export function Upload() {
     <div>
       <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
         <UploadIcon size={22} className="text-accent shrink-0" />
-        Upload an export bundle
+        Upload an Export Bundle
       </h1>
       <p className="mb-5 text-ink2">
         CSV/JSON exports, or a zip of them. Nothing is installed in your SAP system

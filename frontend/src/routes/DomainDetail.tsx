@@ -61,7 +61,7 @@ export function DomainDetail() {
   return (
     <>
       <p className="text-[12px] mb-1.5">
-        <Link className={LINK} to="/domains">← Security domains</Link>
+        <Link className={LINK} to="/domains">← Security Domains</Link>
       </p>
       {failure && <div className="banner banner-bad" role="alert">{failure}</div>}
       {!failure && view === null && <p className="text-[13px] text-ink3">Loading…</p>}

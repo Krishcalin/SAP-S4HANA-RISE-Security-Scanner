@@ -82,7 +82,7 @@ export function Sidebar() {
         {saved.length > 0 && (
           <>
             <div className="mt-4 mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-ink3">
-              Saved views
+              Saved Views
             </div>
             {saved.map((v) => (
               <NavLink
