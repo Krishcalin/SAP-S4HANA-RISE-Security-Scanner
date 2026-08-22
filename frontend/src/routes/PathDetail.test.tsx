@@ -272,3 +272,82 @@ describe('the route diagram', () => {
     })
   })
 })
+
+
+/**
+ * Which way the arrows point.
+ *
+ * THE DEFECT. The resize commit unified the entry connector with the
+ * between-steps ones and computed its start as a constant, 26, while its end
+ * stayed relative to the first box at `x - 11`. The first box sat at x = 30, so
+ * the line ran from 26 to 19 -- right to left. `orient="auto"` faithfully turned
+ * the arrowhead round to follow it, so the diagram pointed its entry arrow
+ * BACKWARDS into its own start dot and drew it across the box it was meant to
+ * point at.
+ *
+ * Nothing failed. Every existing test asserted what the boxes SAY; none asserted
+ * where anything IS, and on a diagram whose entire subject is direction of
+ * travel, a reversed arrow is a statement of the opposite of the truth.
+ *
+ * Geometry is testable in jsdom because it is plain SVG attributes -- one of the
+ * quieter arguments for not reaching for a chart library.
+ */
+describe('the route diagram geometry', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  async function diagramLines(count: number) {
+    draw(Array.from({ length: count }, (_, i) => hop({ name: `Step ${i + 1} name` })))
+    let svg!: HTMLElement
+    await waitFor(() => { svg = screen.getByRole('img', { name: 'Risk path diagram' }) })
+    return Array.from(svg.querySelectorAll('line'))
+  }
+
+  it('every connector runs left to right, entry arrow included', async () => {
+    // Three hops so the entry connector, a between-steps connector and the
+    // terminus connector are all present in one render.
+    const lines = await diagramLines(3)
+    expect(lines.length).toBeGreaterThanOrEqual(4)
+    for (const l of lines) {
+      const x1 = Number(l.getAttribute('x1'))
+      const x2 = Number(l.getAttribute('x2'))
+      expect(Number.isFinite(x1) && Number.isFinite(x2)).toBe(true)
+      expect(x2).toBeGreaterThan(x1)
+    }
+  })
+
+  it('no connector starts inside the box it points at', async () => {
+    // The other half of the same defect: the reversed line also overlapped the
+    // first box. Every connector must finish before its target begins.
+    const lines = await diagramLines(3)
+    for (const l of lines) {
+      expect(Number(l.getAttribute('x2')) - Number(l.getAttribute('x1')))
+        .toBeGreaterThanOrEqual(12)
+    }
+  })
+
+  it('the first connector clears the entry dot', async () => {
+    const lines = await diagramLines(1)
+    draw([hop({})])
+    const svg = await screen.findByRole('img', { name: 'Risk path diagram' })
+    const dot = svg.querySelector('circle')
+    expect(dot).toBeTruthy()
+    const edge = Number(dot!.getAttribute('cx')) + Number(dot!.getAttribute('r'))
+    const first = Math.min(...lines.map((l) => Number(l.getAttribute('x1'))))
+    expect(first).toBeGreaterThan(edge)
+  })
+
+  it('arrowheads do not scale with the stroke they sit on', async () => {
+    // markerUnits defaults to "strokeWidth", which multiplies the marker by the
+    // stroke. The resize took connectors from 1.5 to 3 and every arrowhead
+    // silently doubled -- 9 units wide became 27, wide enough to cover the edge
+    // of the box. A fixed head also keeps the live and still connectors wearing
+    // the same arrow, which is what makes their weights comparable.
+    draw([hop({})])
+    const svg = await screen.findByRole('img', { name: 'Risk path diagram' })
+    const markers = Array.from(svg.querySelectorAll('marker'))
+    expect(markers.length).toBeGreaterThan(0)
+    for (const m of markers) {
+      expect(m.getAttribute('markerUnits')).toBe('userSpaceOnUse')
+    }
+  })
+})

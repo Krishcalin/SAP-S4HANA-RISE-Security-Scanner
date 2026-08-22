@@ -377,6 +377,13 @@ const BOX_Y = 34
 const MID = BOX_Y + BOX_H / 2
 const END_W = 210
 const HEIGHT = 180
+/* Left margin before the FIRST box, and the reason it is not 30.
+   The entry arrow has to fit between the start dot and box one. At 30 there was
+   no room for it: the connector ran from 26 to (30 - 11) = 19, which is
+   right-to-left, so `orient="auto"` faced the arrowhead BACKWARDS into the dot
+   and drew it over the box it was supposed to point at. A reversed arrow on a
+   diagram whose whole subject is direction is not a cosmetic defect. */
+const LEFT = 88
 
 /**
  * Word-aware wrapping for SVG `<text>`, which does not wrap on its own.
@@ -454,7 +461,7 @@ function RouteDiagram({ hops, scenario, ale, selected, onSelect }: {
   // the reader chase it.
   const [hovered, setHovered] = useState<number | null>(null)
   const active = hovered ?? selected
-  const width = 30 + hops.length * PITCH + END_W + 30
+  const width = LEFT + hops.length * PITCH + END_W + 30
   const detail = active !== null ? hops[active] : null
 
   return (
@@ -467,20 +474,30 @@ function RouteDiagram({ hops, scenario, ale, selected, onSelect }: {
              style={{ display: 'block' }}
              role="img" aria-label="Risk path diagram">
           <defs>
-            <marker id="rp-ar" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto">
-              <polygon points="0 0, 9 3.5, 0 7" fill="var(--ink-faint)" />
+{/* markerUnits="userSpaceOnUse" is load-bearing. The DEFAULT is
+                "strokeWidth", which multiplies the marker by the stroke it sits
+                on — so when the resize took connectors from 1.5 to 3, every
+                arrowhead silently went from 9 units wide to 27 and swallowed the
+                edge of the box. A fixed head keeps the two weights of connector
+                (live and still) wearing the same arrow, which is what makes them
+                comparable at a glance. refX = markerWidth puts the TIP on the
+                line's end point, so the endpoint is where the arrow lands. */}
+            <marker id="rp-ar" markerUnits="userSpaceOnUse"
+                    markerWidth="13" markerHeight="10" refX="13" refY="5" orient="auto">
+              <polygon points="0 0, 13 5, 0 10" fill="var(--ink-faint)" />
             </marker>
-            <marker id="rp-ar-live" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto">
-              <polygon points="0 0, 9 3.5, 0 7" fill="var(--accent)" />
+            <marker id="rp-ar-live" markerUnits="userSpaceOnUse"
+                    markerWidth="13" markerHeight="10" refX="13" refY="5" orient="auto">
+              <polygon points="0 0, 13 5, 0 10" fill="var(--accent)" />
             </marker>
           </defs>
 
           {/* Where the route starts. Without it the first box reads as though it
               followed something off-screen. */}
-          <circle cx={18} cy={MID} r={6} fill="var(--accent)" />
+          <circle cx={22} cy={MID} r={7} fill="var(--accent)" />
 
           {hops.map((h, i) => {
-            const x = 30 + i * PITCH
+            const x = LEFT + i * PITCH
             const cut = h.is_cut && h.present
             const dim = active !== null && active !== i
             const lines = wrapWords(h.name, 23, 3)
@@ -488,7 +505,10 @@ function RouteDiagram({ hops, scenario, ale, selected, onSelect }: {
             // the one before it does. Movement therefore stops at the first step
             // that is not present, which is exactly where the route stops.
             const live = h.present && (i === 0 || hops[i - 1].present)
-            const from = i === 0 ? 26 : x - PITCH + BOX_W + 8
+            // Start just clear of the entry dot for step one, and just clear
+            // of the previous box for every other step. Both END at the same
+            // offset from the box they point at, so the arrows line up.
+            const from = i === 0 ? 33 : x - PITCH + BOX_W + 6
             return (
               <g key={`${i}-${h.name}`}
                  className={`rp-step rp-node${dim ? ' rp-dim' : ''}`}
@@ -511,7 +531,7 @@ function RouteDiagram({ hops, scenario, ale, selected, onSelect }: {
                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(i) }
                  }}>
 
-                <line x1={from} y1={MID} x2={x - 11} y2={MID}
+                <line x1={from} y1={MID} x2={x - 4} y2={MID}
                       className={live ? 'rp-flow' : undefined}
                       stroke={live ? 'var(--accent)' : 'var(--ink-faint)'}
                       strokeWidth={live ? 3 : 2}
@@ -592,11 +612,11 @@ function RouteDiagram({ hops, scenario, ale, selected, onSelect }: {
               The fix is upstream: put `loss_model` on the path payload and gate
               this the way Risk.tsx and Dashboard.tsx already do. */}
           {(() => {
-            const xe = 30 + hops.length * PITCH
+            const xe = LEFT + hops.length * PITCH
             const reached = hops.every((h) => !h.required || h.present)
             return (
               <g>
-                <line x1={xe - PITCH + BOX_W + 8} y1={MID} x2={xe - 11} y2={MID}
+                <line x1={xe - PITCH + BOX_W + 6} y1={MID} x2={xe - 4} y2={MID}
                       className={reached ? 'rp-flow' : undefined}
                       stroke={reached ? 'var(--crit)' : 'var(--ink-faint)'}
                       strokeWidth={reached ? 3 : 2}
