@@ -26,10 +26,10 @@ more expensive outcome than losing the deal.
 
 The honest pitch is the one the module is built around: an auditor asking "show me
 that you can recover" wants the evidence chain, and this reports whether the
-evidence chain exists. Onapsis's checklist devotes four items to this axis
-("review SAP ransomware readiness", "validate SAP backups & restore SLAs", "test
-SAP disaster recovery scenarios", "confirm workflow-level resilience") and EU DORA
-makes operational resilience a regulatory obligation for financial services, so the
+evidence chain exists. Published SAP audit checklists devote several items to this
+axis — ransomware readiness, backup and restore SLAs, disaster-recovery testing,
+workflow-level resilience — and EU DORA makes operational resilience a regulatory
+obligation for financial services, so the
 evidence question is the question that gets asked — not the restore itself, which
 an auditor cannot perform either.
 
@@ -1302,8 +1302,8 @@ class ResiliencePostureAuditor(BaseAuditor):
         is allowed where `server/coverage.py` already reports absent sources: the
         pairing is the point. A customer who can produce a backup catalogue is a
         customer whose backup tooling is instrumented and exportable; the absence of
-        any restore record alongside it is the specific gap Onapsis sells against
-        ("validate SAP backups & restore SLAs") and is worth naming.
+        any restore record alongside it is a specific, nameable gap — backups are
+        instrumented and restores are not — and it is worth naming.
 
         INFO, and worded as an evidence gap, because absence of evidence is not
         evidence of absence — the reachability module's doctrine, and it applies with

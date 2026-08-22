@@ -718,6 +718,60 @@ path. Required hops cite emittable checks; optional hops were never checked.
 | `rebuild-sap-catalogue` CLI command | `server/cli.py` | ✅ |
 | Static check-id collision guard | `tests/test_check_id_uniqueness.py` | ✅ |
 
+### Edge provenance, and the backlog's last items, 2026-08-22
+
+**19 edges, one provenance value.** The cause was not the design — it was that
+the sample corpus could not exercise it.
+
+`graph_edge.provenance` is `configured` unless the logon export shows the user on
+that edge is live, in which case it is `used`. The corpus's logon export named
+JSMITH, AGARCIA, MWILSON, SVC_RFC_01 and ADMIN_TEST; its role assignments named
+ADMIN1, BATCH1, CONTRACTOR7, DEV1 and TRUST_ADMIN. **Disjoint populations**, so
+`used` was structurally zero and the distinction the module exists for had never
+fired end to end — reachable only from hand-built fixtures.
+
+Worse, that was RECORDED rather than fixed: the corpus test asserted
+`users_in_logon_export == 0` with a comment calling it "the awkward case rather
+than the happy one". Recording a limitation is not the same as testing the
+feature.
+
+The export now also covers the users who hold edges, in three deliberately
+different states, so all three answers are exercised against real files:
+
+```
+ADMIN1, DEV1, TRUST_ADMIN   successful logons        -> used
+CONTRACTOR7                 named, SUCCESS,0         -> configured
+BATCH1                      absent from the export   -> configured
+
+provenance: configured 16 · used 3      (was configured 19 · used 0)
+```
+
+The assertion that is the whole feature now runs on real files: **ADMIN1 and
+CONTRACTOR7 both hold `Z_BASIS_SUPER`, and get different provenance.** A dormant
+account holding it and a live one holding it are different risks, and until the
+export covered both that could not be demonstrated on anything but a fixture.
+
+**Competitor names — positioning removed, sourcing kept.** Four passages were us
+talking about them ("the specific gap Onapsis sells against", a list of competing
+scanners in a module docstring) and are gone. Eight are citations behind factual
+claims and stay, because stripping a source name turns a sourced claim into an
+unsourced one. The sharpest is
+`exploited_basis: "vendor-reported (SecurityBridge, not in CISA KEV)"` — its
+entire value is naming who reported the exploitation and recording that CISA did
+not. This codebase declines that trade elsewhere for the same reason (HOTNEWS-011
+refuses to replace one publisher's CVSS with another's), and it should not make
+it here.
+
+**`origin/risk-paths`** was fully contained in `main` (zero commits not on it)
+and is deleted.
+
+**The `cesc-prod` external key does not exist.** `sap_system.external_key` is
+empty for every row and `landscape` has no such column — the note was wrong. What
+does still carry the old name is correct to keep: ten `graph_node` rows that are
+real SAP object names in the customer's own system (`ZCESC_ARCHIVE`,
+`CESCK900341`, `CESC_ADMIN1`), and one `scan_run.upload_name` recording which
+file was uploaded. Renaming either would falsify a record rather than tidy one.
+
 ### The quantification funnel, 2026-08-22
 
 **One priced landscape out of three**, and the cause was not the form — it was

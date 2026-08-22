@@ -2483,7 +2483,8 @@ class AdvancedIamAuditor(BaseAuditor):
     def check_scim_deprovisioning(self):
         """IAM-FED-004 — identities appear automatically; does anything remove them?
 
-        THE classic federation failure, and the reason Onapsis names SCIM explicitly.
+        THE classic federation failure in a federated SAP landscape, and the one
+        every published BTP hardening checklist reaches for SCIM to answer.
         A trust with shadow-user creation enabled materialises a BTP principal — with
         whatever role collections a group mapping grants it — the first time somebody
         authenticates. Nothing in that flow runs in reverse. When HR processes a leaver

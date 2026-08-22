@@ -3,9 +3,10 @@ Is this custom code reachable?
 ==============================
 The question that separates this product from a code scanner.
 
-SAP's Code Vulnerability Analyzer, Onapsis, SecurityBridge and Fortify all read
-ABAP and tell you a statement is dangerous. None of them can tell you whether
-anybody can *get* to it, because they see the code and not the estate around it.
+A code scanner reads ABAP and tells you a statement is dangerous. It cannot tell
+you whether anybody can *get* to it, because it sees the code and not the estate
+around it — and that is true of SAP's own Code Vulnerability Analyzer as much as
+of any general-purpose SAST tool.
 This product already holds the estate: the custom-code inventory, the ICF service
 tree, the OData catalogue, the Fiori tiles, the RFC destinations.
 

@@ -396,20 +396,36 @@ def test_the_sample_corpus_separates_live_holders_from_dormant_ones():
     assert active is not None and "JSMITH" in active
     assert "UNKNOWN_USER1" not in active     # SUCCESS,0 — never actually got in
 
-    # WHAT THE SAMPLE CORPUS ACTUALLY IS, and it is the awkward case rather than
-    # the happy one: its logon export names JSMITH, AGARCIA, MWILSON, SVC_RFC_01
-    # and ADMIN_TEST, while its role assignments name ADMIN1, BATCH1,
-    # CONTRACTOR7 and DEV1. The populations are DISJOINT. So `used` is 0 for a
-    # reason that has nothing to do with activity, and a fixture asserting only
-    # "the counts add up" would have passed while the product reported a fully
-    # dormant estate.
-    _, stats = extract_edges(findings, default_system="PRD", active=active,
-                             observed=observed_users(data))
+    # WHAT THE SAMPLE CORPUS USED TO BE, and why this test changed. Its logon
+    # export named JSMITH, AGARCIA, MWILSON, SVC_RFC_01 and ADMIN_TEST while its
+    # role assignments named ADMIN1, BATCH1, CONTRACTOR7 and DEV1 — DISJOINT
+    # populations, so `used` was structurally 0 and the provenance distinction
+    # this module exists for had never once fired end to end. That was recorded
+    # here rather than fixed, and recording it is not the same as testing it: the
+    # `used` branch was reachable only from the synthetic fixtures above.
+    #
+    # The export now also covers the users who actually hold edges, and covers
+    # them in three deliberately different states, so all three answers are
+    # exercised against real files:
+    #
+    #   ADMIN1, DEV1, TRUST_ADMIN   successful logons     -> used
+    #   CONTRACTOR7                 named, SUCCESS,0      -> configured
+    #   BATCH1                      absent from the export -> configured
+    edges, stats = extract_edges(findings, default_system="PRD", active=active,
+                                 observed=observed_users(data))
     assert stats["provenance_evidence"] == "logon_events"
-    assert stats["users_on_edges"] > 0
-    assert stats["users_in_logon_export"] == 0
-    assert stats["users_absent_from_logon_export"] == stats["users_on_edges"]
-    assert stats["used"] == 0                # and the reason is above, not below
+    assert stats["used"] and stats["configured"]
+    assert stats["users_on_edges"] > stats["users_in_logon_export"] > 0
+    assert stats["users_absent_from_logon_export"] >= 1
+
+    # THE ASSERTION THAT IS THE WHOLE FEATURE. One role, two holders, two
+    # verdicts: a dormant account holding Z_BASIS_SUPER and a live one holding it
+    # are different risks, and until the export covered both this could not be
+    # demonstrated on anything but a hand-built fixture.
+    by_pair = {(e["from_key"], e["to_key"]): e["provenance"] for e in edges}
+    assert by_pair.get(("user:ADMIN1@PRD", "role:Z_BASIS_SUPER@PRD")) == "used"
+    assert by_pair.get(("user:CONTRACTOR7@PRD",
+                        "role:Z_BASIS_SUPER@PRD")) == "configured"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
