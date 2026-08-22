@@ -88,3 +88,70 @@ def test_every_check_prefix_resolves_to_a_valid_team():
         "these published checks resolve to a team the schema rejects, so a scan "
         "producing any of them fails at insert: %s"
         % sorted(bad.items())[:8])
+
+
+# ── the same question, asked of every vocabulary the database enforces ────────
+
+def _enum_constraints() -> dict:
+    """`{column: allowed values}` for every enum-style CHECK in the schema.
+
+    Derived rather than listed for the same reason as `_allowed_teams`: a hand-
+    written copy is a third thing to keep in step.
+    """
+    text = SCHEMA.read_text(encoding="utf-8")
+    pattern = re.compile(r"(\w+)\s+text\s+CHECK\s*\(\s*\1\s+IN\s*\((.*?)\)\s*\)",
+                         re.S)
+    out = {}
+    for match in pattern.finditer(text):
+        values = set(re.findall(r"'([^']+)'", match.group(2)))
+        # A one-or-two-letter capture is the regex meeting a CHECK that is not an
+        # enum at all; a real column name here is always longer.
+        if len(match.group(1)) > 2:
+            out[match.group(1)] = values
+    return out
+
+
+def test_the_corpus_produces_no_value_the_database_would_reject():
+    """The general form of the CSA- bug, asked of the data rather than the table.
+
+    `owning_team` was wrong in a mapping; the next one could be wrong in a module
+    that computes its value instead. This walks every finding the bundled corpus
+    produces and checks each field the schema constrains — so a module whose
+    vocabulary drifts fails here rather than at insert, in a CI job most local
+    runs skip.
+    """
+    import contextlib
+    import importlib
+    import io
+
+    sample = ROOT / "sample_data"
+    if not sample.is_dir():
+        import pytest
+        pytest.skip("sample_data absent")
+
+    from modules.data_loader import DataLoader
+    from server.ingest import AUDITORS, RUN_CONTEXT
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        data = DataLoader(sample).load_all()
+        findings = []
+        for module_name, class_name in AUDITORS:
+            auditor = getattr(importlib.import_module(f"modules.{module_name}"),
+                              class_name)
+            findings += auditor(data, None, RUN_CONTEXT).run_all_checks() or []
+
+    constraints = _enum_constraints()
+    assert constraints, "no enum constraints found; the schema has moved"
+
+    offenders = {}
+    for finding in findings:
+        details = finding.get("details") or {}
+        for column, allowed in constraints.items():
+            for source in (finding, details if isinstance(details, dict) else {}):
+                value = source.get(column)
+                if value is not None and str(value) not in allowed:
+                    offenders.setdefault(column, set()).add(
+                        (finding.get("check_id"), str(value)))
+    assert not offenders, (
+        "the corpus produces values PostgreSQL would reject: %s"
+        % {k: sorted(v)[:4] for k, v in offenders.items()})
