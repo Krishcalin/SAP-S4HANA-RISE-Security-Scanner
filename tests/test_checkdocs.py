@@ -357,28 +357,41 @@ def test_the_remaining_gap_is_still_reported_as_a_gap():
 # "no published description" has been let down at the one moment the product was
 # being most useful.
 
-def test_no_check_on_a_cut_is_undocumented():
-    """The invariant the first batch of hand-written entries established.
-
-    Deliberately phrased over the CUT hops rather than over a list of ids: adding
-    a template, or marking an existing hop as a cut, should fail this test until
-    the checks it cites are explained. That is the correct order of work — the
-    path content and the prose that supports it move together."""
+def _path_citations(cuts_only=False):
     import json
-    from pathlib import Path
 
     paths = json.loads((ROOT / "data" / "attack_paths.json").read_text(
         encoding="utf-8"))["paths"]
-    cited = {(p["id"], hop["name"], check)
-             for p in paths for hop in p["hops"] if hop.get("cut")
-             for check in (hop.get("checks") or [])}
+    return {(p["id"], hop["name"], check)
+            for p in paths for hop in p["hops"]
+            if hop.get("cut") or not cuts_only
+            for check in (hop.get("checks") or [])}
 
-    undocumented = sorted(
-        {(template, hop, check) for template, hop, check in cited
-         if checkdocs.known_check(check)
-         and not checkdocs.check(check)["documented"]})
+
+def _undocumented(citations):
+    return sorted({c for c in citations
+                   if checkdocs.known_check(c[2])
+                   and not checkdocs.check(c[2])["documented"]})
+
+
+def test_no_check_on_a_cut_is_undocumented():
+    """The first invariant the hand-written entries established, kept separate
+    from the broader one below because it is the one that matters most: a check
+    whose closure severs a path is what the choke-point screen sends a reader
+    to."""
+    assert not _undocumented(_path_citations(cuts_only=True))
+
+
+def test_no_check_a_risk_path_cites_is_undocumented():
+    """The broader invariant, and the reason both are phrased over the TEMPLATES
+    rather than over a list of ids: adding a path, or citing a new check on an
+    existing hop, should fail until that check is explained. The path content and
+    the prose that supports it move together, which is the order that stops the
+    library growing past what the product can account for."""
+    undocumented = _undocumented(_path_citations())
     assert not undocumented, (
-        "checks on a cut with no published description: %s" % undocumented[:8])
+        "checks cited by a risk path with no published description: %s"
+        % undocumented[:8])
 
 
 def test_a_hand_written_entry_carries_both_halves_and_says_something():

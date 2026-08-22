@@ -736,8 +736,26 @@ reading.
 | **`webdisp_baseline`** | 14 | `risk` + `fix`, already named for this |
 
 ```
-undocumented: 352 -> 154
+undocumented: 352 -> 154   (recovered)
+              154 -> 104   (written)
 ```
+
+**The 50 that were written next were chosen by the paths, not by the catalogue.**
+20 sat on a risk-path CUT — the most actionable thing this product says about any
+check, and what the choke-point screen sends a reader to — and 30 more were cited
+by some other hop. A reader who follows a path to its evidence and finds "no
+published description" has been let down at the moment the product was being most
+useful. Two tests now pin it, both phrased over the TEMPLATES rather than over a
+list of ids, so citing a new check on a hop fails the build until that check is
+explained. The path content and the prose that supports it move together.
+
+A third test puts a floor under length and requires numbered remediation. It is
+crude on purpose: the cheapest way to raise this file's coverage number is to
+write two sentences, and two sentences about a control this specific is not an
+explanation.
+
+The 104 that remain are cited by no path, and 81 of them never fire on the
+bundled corpus at all.
 
 **The nineteen family entries were found by wiring the rule corpora**, not by
 review. Counting how many knowledge-base entries the index could reach turned up
