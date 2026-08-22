@@ -2077,6 +2077,6 @@ The analysis still runs, and still tells you which scenarios dominate. What it w
 
 The counts this document states — 709 checks, 427 written as literals, 282 generated at run time from 6 rule families, 36 modules, 136 custom-code rules, 27 duty-separation risks, 78 profile parameters and 135 logical sources — are derived from the code by `tests/test_architecture_doc.py`, which fails the build if this page and the source disagree. Edition 1.1 corrected three figures that had drifted from the source.
 
-**Confidential.** This document is not for publication. It describes the internal design, the current limitations and the forward direction of a commercial product; treat it as you would any other confidential product document.
+**Published.** This document describes the internal design, the current limitations and the forward direction of the product, and it is meant to be read by anyone — the limitations especially. A design document that only lists what works is marketing.
 
-Copyright © 2026 Krishnendu De. All rights reserved. Source-available, not open source — reading and review are permitted; any use requires written permission.
+Licensed [MIT](../LICENSE), like the rest of the repository.

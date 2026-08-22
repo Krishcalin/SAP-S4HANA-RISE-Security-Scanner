@@ -46,9 +46,10 @@
 
 ## Contents
 
-- **[System Architecture](docs/ARCHITECTURE.md)** &nbsp;<sub>plain-language guide · 35 chapters · **confidential**</sub>
+- **[System Architecture](docs/ARCHITECTURE.md)** &nbsp;<sub>plain-language guide · 35 chapters · no SAP background assumed</sub>
 - **[Overview](#overview)**
 - **[Server mode — quick start](#server-mode--quick-start)**
+  - [What the console holds](#what-the-console-holds)
 - **[Connected mode](#connected-mode)**
   - [What the server adds over the CLI](#what-the-server-adds-over-the-cli)
 - **[Audit Modules](#audit-modules)** &nbsp;<sub>36 modules · 80 documented families</sub>
@@ -184,6 +185,23 @@ docker compose exec app python -m server.cli set-password admin --generate
 ```
 
 Then upload an export bundle. The scan runs automatically and the findings land in the console.
+
+### What the console holds
+
+| Screen | What it answers |
+|---|---|
+| **Dashboard** | Where the estate stands: open findings by severity, by who can fix them, and by where the work has got to |
+| **Findings** | The triage queue — one lifecycle for every finding type, filterable by domain, priority, system, severity, state, ownership and team |
+| **Risk Paths** | Conditions that co-exist and together form a route, each hop evidenced by real checks and each path ending at a priced loss scenario |
+| **Choke Points** | The shortest worklist the product makes: one fix, one or more paths gone, ranked by consequence |
+| **Trend** | The mitigation journey — what closed, what regressed, and how long fixes actually take |
+| **Risk ($)** | FAIR loss exposure, and the share of it each scenario carries |
+| **Coverage** | What the catalogue checks, and how much of SAP's own Security Baseline it answers |
+| **Domains / NIST CSF** | The same findings in the buyer's vocabulary, and in the framework's |
+
+Any check id in the console opens **`/checks/{id}`** — what it looks for, why it matters, how to
+remediate it, the Baseline requirement it answers and the risk paths it appears on. A check id that
+names a *finding* still opens that finding; the definition is reachable from the finding's own page.
 
 Scanning without a browser — the air-gapped path:
 
@@ -1635,7 +1653,7 @@ SAP-S4HANA-RISE-Security-Scanner/
 │   ├── queries.py                  # The query layer — every read the JSON API serves
 │   ├── enrich.py                   # Priority tier, owning team, RISE remediation owner, SLA
 │   ├── analytics.py                # MTTR, burndown, aging, trajectory, scorecards
-│   ├── graph.py                    # Attack paths: instantiation, cuts, choke points, closure
+│   ├── graph.py                    # Risk paths: instantiation, cuts, choke points, closure
 │   ├── crq.py                      # FAIR quantification per run (portfolio + 5 scenarios)
 │   ├── coverage.py                 # Per-upload coverage manifest (module→source map is derived)
 │   ├── ingest.py                   # upload → parse → scan → store → run-over-run diff
@@ -1777,12 +1795,18 @@ SAP-S4HANA-RISE-Security-Scanner/
 - [x] CI/CD integration with exit codes — `--gate`, exit 0/1/2, see [Release Gate](#release-gate)
 - [x] Client-server tier: PostgreSQL persistence, RBAC with per-system row scoping, audit log
 - [x] Twelve security domains — the buyer's own vocabulary, each stating what we can see there as well as what we found (`/domains`, `?domain=` on the queue, deck slide)
-- [x] Attack-path graph — templates instantiated from co-existing findings, with cuts and choke points
+- [x] Risk-path graph — 13 templates instantiated from co-existing findings, each hop evidenced by
+      checks that already exist and each ending at a priced loss scenario, with cuts and choke points
 - [x] SAP Note 3250501 — 92 of 92 mandatory ECS profile parameters, plus the configuration half
 - [x] Custom-code scanner (CVA) — 133 rules, statement lexer, intra-procedural taint analysis
 - [x] React + TypeScript console, compiled at build time and served by the same FastAPI process
 - [x] SAP's published Security Baseline policies adopted as the control vocabulary (CI fails on drift)
 - [x] Generate `docs/CHECKS_REFERENCE.md` from the code and fail CI on drift
+- [x] Every check id and Baseline requirement is a link — `/checks/{id}` says what a check looks
+      for, why it matters and how to remediate it; `/requirements/{id}` carries SAP's own wording
+      for a Baseline family and the checks of ours that answer it
+- [x] Choke-point worklist (`/chokepoints`) — the findings that sit on a *cut*, ranked by how many
+      paths each one severs, uncapped
 - [ ] Sample fixtures for `resilience`, `ecsconfig` and `cva` so they fire on the bundled `sample_data`
 
 ---
