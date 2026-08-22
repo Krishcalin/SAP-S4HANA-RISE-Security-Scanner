@@ -7,18 +7,7 @@
  */
 
 import {
-  Calculator,
-  CircleAlert,
-  CircleDollarSign,
-  Landmark,
-  LayoutDashboard,
-  LayoutGrid,
-  ShieldCheck,
-  TrendingUp,
-  Upload,
-  UserCog,
-  Waypoints,
-  type LucideIcon,
+  Calculator, CircleAlert, CircleDollarSign, Landmark, LayoutDashboard, LayoutGrid, Scissors, ShieldCheck, TrendingUp, Upload, UserCog, Waypoints, type LucideIcon,
 } from 'lucide-react'
 import type { Role } from '../api/types'
 
@@ -53,6 +42,9 @@ export const NAV_MAIN: NavItem[] = [
   { to: '/findings', label: 'Findings', icon: CircleAlert },
   { to: '/trend', label: 'Trend', icon: TrendingUp },
   { to: '/paths', label: 'Risk Paths', icon: Waypoints },
+  // Directly under the paths it cuts. The shortest worklist the product makes:
+  // one fix, one or more paths gone.
+  { to: '/chokepoints', label: 'Choke Points', icon: Scissors },
   // The currency figure. Neither incumbent produces one at all, which is why it
   // sits in the main list rather than under a reports submenu.
   { to: '/risk', label: 'Risk ($)', icon: CircleDollarSign },

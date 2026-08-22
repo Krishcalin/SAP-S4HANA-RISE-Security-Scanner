@@ -499,6 +499,43 @@ def api_coverage(user: Dict[str, Any] = Depends(current_user)):
             "observed_checks": observed}
 
 
+@app.get("/api/chokepoints")
+def api_chokepoints(user: Dict[str, Any] = Depends(current_user),
+                    limit: int = 200):
+    """The choke-point worklist, on its own and in full.
+
+    The paths screen already shows these, capped at the query's default of 15,
+    because there it is a summary beside the path list. THIS is the screen for
+    working them, so the cap is the caller's and the default is high enough that
+    an ordinary landscape is never silently cut off.
+
+    `truncated` is returned rather than left for the reader to infer from a round
+    number. A list that stops at exactly the limit looks identical to a list that
+    happened to end there, and the difference matters when the thing being read
+    is "everything worth fixing first".
+
+    The counts are computed from the rows returned, so they can never disagree
+    with the table under them. `open_paths` comes from the path summary instead:
+    it is the denominator the page needs — how many paths exist to be severed —
+    and summing `paths_cut` would double-count every path that has more than one
+    cut, which most of them do.
+    """
+    limit = max(1, min(limit, 500))
+    scope = auth.scope_for(user)
+    rows = graph.chokepoints(scope, limit=limit)
+    return {
+        "chokepoints": rows,
+        "truncated": len(rows) >= limit,
+        "summary": {
+            "total": len(rows),
+            "multi_path": sum(1 for r in rows if (r["paths_cut"] or 0) > 1),
+            "customer_fixable": sum(
+                1 for r in rows if r["remediation_owner"] == "customer_fixable"),
+            "open_paths": graph.path_summary(scope).get("open", 0),
+        },
+    }
+
+
 @app.get("/api/checks")
 def api_check_index(user: Dict[str, Any] = Depends(current_user)):
     """Every check id the scanner publishes, with its category.

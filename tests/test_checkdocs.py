@@ -160,3 +160,45 @@ def test_a_cut_check_says_so():
     cuts = [p for p in doc["paths"] if p["is_cut"]]
     assert cuts, "INTG-GW-001 is a cut on SAPPATH-04 and SAPPATH-13"
     assert {p["template_id"] for p in cuts} >= {"SAPPATH-04", "SAPPATH-13"}
+
+
+# ── the choke-point worklist endpoint ────────────────────────────────────────
+
+def test_the_chokepoint_limit_is_clamped_both_ways():
+    """A caller-supplied limit reaches a SQL LIMIT. Zero returns an empty
+    worklist that reads as "nothing to fix", and an unbounded one lets a query
+    string decide how much of the graph to walk.
+
+    Read off the source rather than exercised through HTTP: the clamp is two
+    expressions and standing a database up to prove `max(1, min(n, 500))` would
+    test psycopg.
+    """
+    src = (ROOT / "server" / "app.py").read_text(encoding="utf-8")
+    body = src.split("def api_chokepoints")[1].split("\ndef ")[0]
+    assert "max(1, min(limit, 500))" in body, \
+        "the choke-point limit is no longer clamped"
+
+
+def test_the_chokepoint_summary_is_counted_from_the_rows_returned():
+    """Counts computed from anything other than the rows on screen can disagree
+    with the table under them, and the reader has no way to tell which is right.
+
+    `open_paths` is the deliberate exception and comes from the path summary:
+    summing `paths_cut` would count every path with more than one cut repeatedly,
+    and most paths have more than one.
+    """
+    src = (ROOT / "server" / "app.py").read_text(encoding="utf-8")
+    body = src.split("def api_chokepoints")[1].split("\ndef ")[0]
+    assert '"total": len(rows)' in body
+    assert 'for r in rows if (r["paths_cut"] or 0) > 1' in body
+    assert 'graph.path_summary(scope)' in body, \
+        "open_paths must not be derived from the choke-point rows"
+    assert 'sum(r["paths_cut"]' not in body, \
+        "open_paths is being summed from paths_cut, which double-counts"
+
+
+def test_the_worklist_says_when_it_was_capped():
+    src = (ROOT / "server" / "app.py").read_text(encoding="utf-8")
+    body = src.split("def api_chokepoints")[1].split("\ndef ")[0]
+    assert '"truncated": len(rows) >= limit' in body, \
+        "a capped list is indistinguishable from a complete one without this"

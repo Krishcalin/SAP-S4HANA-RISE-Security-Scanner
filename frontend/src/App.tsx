@@ -16,6 +16,7 @@ import { SavedView } from './routes/SavedView'
 import { RunDetail } from './routes/RunDetail'
 import { Upload } from './routes/Upload'
 import { CheckDetail } from './routes/CheckDetail'
+import { Chokepoints } from './routes/Chokepoints'
 import { Coverage } from './routes/Coverage'
 import { RequirementDetail } from './routes/RequirementDetail'
 import { CrqInputs } from './routes/CrqInputs'
@@ -74,6 +75,7 @@ export default function App() {
           <Route path="/account" element={<Account />} />
           <Route path="/coverage" element={<Coverage />} />
           <Route path="/checks/:id" element={<CheckDetail />} />
+          <Route path="/chokepoints" element={<Chokepoints />} />
           <Route path="/requirements/:id" element={<RequirementDetail />} />
           <Route path="/crq" element={<CrqInputs />} />
           <Route path="/domains" element={<Domains />} />

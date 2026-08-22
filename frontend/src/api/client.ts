@@ -37,13 +37,13 @@
 
 import type {
   AccountInfo, AssignResult, BulkTransitionResult, ChangesSince, CheckDoc,
-  CheckIndexEntry, Coverage, CrqControlsView, CrqParametersView,
-  CrqQuantifyResult, CrqTrendPoint, CsfFunctionView, CsfView, Dashboard,
-  DomainsView, FindingDetail, FindingFilters, FindingHistory, FindingPage,
-  GeneratedPassword, Health, Journey, Landscape, Me, PathView, PathsOverview,
-  RequirementDoc, ResolvedView, RiskView, RunDiff, SapSystem, SaveViewResult,
-  SavedView, ScanRun, SecurityDomain, TotpConfirmed, TotpEnrolment,
-  TotpStatus, TransitionResult, UploadResult
+  CheckIndexEntry, ChokepointsView, Coverage, CrqControlsView,
+  CrqParametersView, CrqQuantifyResult, CrqTrendPoint, CsfFunctionView,
+  CsfView, Dashboard, DomainsView, FindingDetail, FindingFilters,
+  FindingHistory, FindingPage, GeneratedPassword, Health, Journey, Landscape,
+  Me, PathView, PathsOverview, RequirementDoc, ResolvedView, RiskView,
+  RunDiff, SapSystem, SaveViewResult, SavedView, ScanRun, SecurityDomain,
+  TotpConfirmed, TotpEnrolment, TotpStatus, TransitionResult, UploadResult
 } from './types'
 
 /** Same-origin by default: FastAPI serves this bundle and the API. The override
@@ -338,6 +338,14 @@ export function paths(includeClosed = false): Promise<PathsOverview> {
 
 export function path(id: number): Promise<PathView> {
   return get<PathView>(`/paths/${id}`)
+}
+
+/** The choke-point worklist. Its own call rather than a slice of `paths()`,
+ *  because that one caps the list at 15 to keep the paths screen legible and a
+ *  cap that exists for another screen must not decide how much work is shown
+ *  here. */
+export function chokepoints(limit?: number): Promise<ChokepointsView> {
+  return get<ChokepointsView>('/chokepoints', limit ? { limit } : undefined)
 }
 
 // ══ the check catalogue and SAP's Baseline requirements ═════════════════════

@@ -489,6 +489,25 @@ export interface Chokepoint {
   client: string | null
 }
 
+/** server/app.py `api_chokepoints` — the worklist on its own screen.
+ *
+ *  Counts come from the rows returned, so they cannot disagree with the table
+ *  under them. `open_paths` is the exception and comes from the path summary:
+ *  summing `paths_cut` would count every path with more than one cut repeatedly,
+ *  and most of them have more than one. */
+export interface ChokepointsView {
+  chokepoints: Chokepoint[]
+  /** True when the query hit its cap. Returned rather than inferred: a list that
+   *  stops at a round number looks identical to one that happened to end. */
+  truncated: boolean
+  summary: {
+    total: number
+    multi_path: number
+    customer_fixable: number
+    open_paths: number
+  }
+}
+
 /** server/graph.py `path_summary`. `stale` counts paths derived under an older
  *  ruleset — say so rather than silently showing them as current. */
 export interface PathSummary {
