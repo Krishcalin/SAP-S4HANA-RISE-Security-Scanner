@@ -282,7 +282,7 @@ console* reached main. Exactly one skip is expected and accounted for; more fail
 
 | Component | File | Status |
 |---|---|---|
-| Path templates as **content, not code** | `data/attack_paths.json` (13 paths) | ✅ |
+| Path templates as **content, not code** | `data/attack_paths.json` (17 paths) | ✅ |
 | Instantiation, cuts, chokepoints, closure | `server/graph.py` | ✅ |
 | `/paths` ranked list + choke-point table | `frontend/src/routes/Paths.tsx` | ✅ |
 | Per-path detail, SVG, mitigate-vs-additional | `frontend/src/routes/PathDetail.tsx` | ✅ |
@@ -462,7 +462,7 @@ PostgreSQL, not a mock. It does.
 ```
 
 `sample_data` ingested through `server.cli scan` — 375 findings, 906 graph nodes — and **all
-13 templates instantiate, with every hop holding**:
+17 templates instantiate, with every hop holding**:
 
 ```
 SAPPATH-01..07   open   the seven that already shipped, unchanged
@@ -623,6 +623,34 @@ defect.
   `_rebase` could not carry it: that crosses a change of BASIS and this keeps the
   basis at `objects`. Measured: 9 findings re-identified, 10 stale nodes removed,
   and the rescan afterwards reported `new 0 · persisting 375 · resolved 0`.
+
+### Four more, over the domains the library still could not see
+
+After the first six, 196 checks that fire on `sample_data` were on no path at all
+and **98 of them were CRITICAL or HIGH**. Grouped by family, the gaps were not
+subtle:
+
+| Path | Domain it closes |
+|---|---|
+| **14** Unpatched, actively exploited, reachable without credentials | `HOTNEWS-*`. The library had thirteen paths and not the ordinary one — a missing patch. `CVE-2025-31324` was cited in the template file's own sources and used by nothing |
+| **15** Custom code is the vulnerability | `ATC-*`, `CODE-INJ-*`, `CODE-STMT-001`. A 133-rule custom-code scanner with taint analysis, and no path used a single one of its findings |
+| **16** A business role opens the data underneath it | `S4AUTHZ-*`. The one path specific to S/4HANA rather than to SAP generally: a restriction at the top of a business role means nothing over a CDS view built with checking off |
+| **17** A RISE communication arrangement as the front door | `RISE-*`. The most RISE-specific exposure in the product, and the customer's to configure under the shared-responsibility split |
+
+SAPPATH-14's cut is the only one in the library that SAP has already written: the
+note exists, and applying it removes the vulnerability rather than compensating
+for it. Its exposure hop is the cut a customer can take the same afternoon —
+closing an ICF node needs no maintenance window and applying a note does.
+
+Measured on `sample_data` after the four: **17 paths, all instantiating, every hop
+holding, no churn on the thirteen that already existed.** Checks cited by some
+path went 174 → 207. Choke points went 71 → 106, and those severing more than one
+path 15 → 20 — with `NET-005`, *active ICF services without authentication*,
+emerging as the single highest-leverage fix in the estate at **three paths
+severed**. Nobody chose that; it fell out of four templates written independently
+and is exactly what a path library is for.
+
+---
 
 ### Three defects in content, found by guards written for something else
 

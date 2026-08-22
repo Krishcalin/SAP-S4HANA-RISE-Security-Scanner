@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "version": "1.1.0",
+    "version": "1.2.0",
     "description": "SAP attack-path templates. CONTENT, not code: a new path is a new entry here, never a code change. Each template names the checks that evidence each hop, so every hop is grounded in a check that already exists and a path can never claim more than the scanner actually detected.",
     "how_a_path_instantiates": "Every REQUIRED hop must have at least one OPEN finding in the landscape. Optional hops enrich a path but do not gate it. A path is therefore a statement that these conditions CO-EXIST, derived from exported configuration — never a claim that anything was traversed or validated. The console must say so.",
     "cut_semantics": "A hop marked cut=true appears on every variant of the path, so closing it disconnects the path. Non-cut hops reduce exploitability without severing it. This is the mitigate-vs-additional split: it needs no clever algorithm, only that each hop knows whether removing it disconnects.",
@@ -15,7 +15,10 @@
       "SAP Help — Sensitive fields and dual control for payee bank details (T055F)",
       "SAP Help — Gateway access control lists reginfo/secinfo and gw/acl_mode",
       "SAP Help — Message server ACL (ms/acl_info) and rogue application servers",
-      "SAP Secure Operations Map — transport protection as a control in its own right"
+      "SAP Secure Operations Map — transport protection as a control in its own right",
+      "SAP Security Notes / HotNews — Priority 1 and actively-exploited advisories",
+      "SAP Help — S/4HANA business roles, business catalogs and CDS access control",
+      "SAP Help — Communication arrangements and communication users in RISE"
     ]
   },
   "paths": [
@@ -1068,6 +1071,326 @@
             "parameter_name"
           ],
           "note": "The Security Audit Log records ABAP events. A registered program that never logs on to ABAP produces none, which is why gateway logging (gw/logging) is the control that would actually have seen this — and no export we read today carries it."
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-14",
+      "name": "Unpatched, actively exploited, and reachable without credentials",
+      "summary": "A note SAP has published, for a vulnerability someone is already exploiting, on a surface that asks for no logon.",
+      "narrative": "The library had thirteen paths and none of them was the ordinary one. Every other path here is a configuration argument — conditions that co-exist and together permit something. This one is a missing patch, which is the plainest statement a security product can make and the one an executive already understands. It is also the only path whose cut SAP has already written: the note exists, it is published, and applying it removes the vulnerability rather than compensating for it. CVE-2025-31324 is cited in this file's own sources and no template used it.",
+      "fair_scenario": "SAP-RCE-01",
+      "severity": "CRITICAL",
+      "crosses_tier": false,
+      "hops": [
+        {
+          "name": "A published fix is missing",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "HOTNEWS-003",
+            "HOTNEWS-001",
+            "HOTNEWS-006",
+            "HOTNEWS-013",
+            "HOTNEWS-012",
+            "HOTNEWS-002"
+          ],
+          "node_types": [
+            "sap_note"
+          ],
+          "why_cut": "Applying the note removes the vulnerability rather than making it harder to reach, which no other cut in this library does — the rest reduce exposure to a defect that remains. HOTNEWS-003 is the one to apply first: it names notes for vulnerabilities that are being exploited now, not ones that might be."
+        },
+        {
+          "name": "It needs no credentials",
+          "required": true,
+          "cut": false,
+          "checks": [
+            "HOTNEWS-007"
+          ],
+          "note": "This is what separates this path from a patch backlog. An unpatched note requiring a privileged logon is a queue item; one exploitable by anybody who can reach the port is an open door, and the two should not be read at the same urgency. Not a cut, because the vulnerability's own precondition is not something a customer can change — only the note or the exposure can move."
+        },
+        {
+          "name": "The vulnerable surface is exposed",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "NET-005",
+            "NET-004",
+            "INTG-WS-003",
+            "INTG-APIM-002",
+            "WDISP-008",
+            "WDISP-011",
+            "RISE-007"
+          ],
+          "node_types": [
+            "icf_path",
+            "endpoint",
+            "function_module",
+            "parameter_name"
+          ],
+          "why_cut": "Deactivating the ICF node, or putting an authentication policy on the endpoint, removes the route to the vulnerable code while the note is still outstanding. That matters operationally: applying a note needs a maintenance window and a regression test, and closing a service does not. It is the cut a customer can take this afternoon."
+        },
+        {
+          "name": "Reaching it yields privileged execution",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "AUTH-003",
+            "JOBCMD-CMD-001",
+            "JOBCMD-CMD-002",
+            "HANADB-USER-001"
+          ],
+          "node_types": [
+            "auth_object",
+            "os_command",
+            "hana_user"
+          ],
+          "note": "What the vulnerability is worth once used. A remote-code defect on a host that also holds an OS-command bridge and an active database superuser is a different loss from the same defect on a hardened one."
+        },
+        {
+          "name": "The attempt would not be seen",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "LOG-AUD-010",
+            "NET-008",
+            "LOG-SIEM-002",
+            "INTG-MON-002"
+          ],
+          "node_types": [
+            "parameter_name"
+          ],
+          "note": "Actively-exploited means attempts are being made against estates like this one. Whether yours would produce a record is therefore a live question rather than a hypothetical."
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-15",
+      "name": "Custom code is the vulnerability",
+      "summary": "A Z-program with an injectable defect, callable from outside, with no authority check in front of it.",
+      "narrative": "This product ships a custom-code scanner — 133 rules, a statement lexer and taint analysis — and until now no path used a single one of its findings. That is a strange omission for an estate where the code is written by the customer: SAP's own defects arrive with a note and a fix, and these do not. The cut here is a code change rather than a configuration change, which makes it the slowest to close in the library and the only one no parameter can compensate for.",
+      "fair_scenario": "SAP-RCE-01",
+      "severity": "CRITICAL",
+      "crosses_tier": false,
+      "hops": [
+        {
+          "name": "Custom code carries an injectable defect",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "ATC-SQLI",
+            "ATC-CINJ",
+            "ATC-CMDI",
+            "ATC-CRED",
+            "CODE-INJ-001",
+            "CODE-INJ-003",
+            "CODE-STMT-001"
+          ],
+          "node_types": [
+            "program"
+          ],
+          "why_cut": "Fixing the statement removes the defect, and nothing else does. A parameter can narrow who reaches a program; none can make a concatenated SQL string safe. Note that both this scanner's findings and SAP's own ATC results appear here — where the customer already licenses ATC, its verdict is authoritative and duplicating it would only disagree with SAP about SAP's own tool."
+        },
+        {
+          "name": "Nothing checks the caller's authority",
+          "required": false,
+          "cut": true,
+          "checks": [
+            "ATC-AUTHCHK",
+            "CODE-INJ-002",
+            "AUTH-001"
+          ],
+          "node_types": [
+            "program",
+            "auth_object"
+          ],
+          "why_cut": "An AUTHORITY-CHECK in the program means the caller must hold the object before the defect is reachable at all. It severs the path without fixing the defect, which is what makes it worth having: it is a change a Basis team can transport in days, where the code fix waits on the team that owns the program."
+        },
+        {
+          "name": "The program is reachable from outside",
+          "required": true,
+          "cut": false,
+          "checks": [
+            "NET-005",
+            "NET-004",
+            "INTG-WS-001",
+            "RISE-005",
+            "RISE-007"
+          ],
+          "node_types": [
+            "icf_path",
+            "endpoint",
+            "function_module"
+          ],
+          "note": "Custom code with no external caller is still a defect and is not this path. The scanner reports it either way; the path exists to say which ones have a route to them."
+        },
+        {
+          "name": "The customer's own tooling already said so",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "CODE-ATC-001",
+            "CODE-ATC-002"
+          ],
+          "node_types": [
+            "program"
+          ],
+          "note": "An unresolved ATC finding is a different argument from one this scanner discovered: SAP's tool raised it, somebody saw it, and it is still open. That is a governance fact rather than a technical one, and it is usually the more persuasive half."
+        },
+        {
+          "name": "The transport route carries it to production",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "CODE-TMS-001",
+            "CODE-CLIENT-001",
+            "CODE-SYSCHG-001"
+          ],
+          "node_types": [
+            "transport_request",
+            "client",
+            "namespace"
+          ],
+          "note": "How the defect arrives, rather than what it does. Present here because a code path that reaches production through an open change option is one nobody had to approve."
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-16",
+      "name": "A business role opens the data underneath it",
+      "summary": "An S/4HANA business role assigned in production, over a CDS view or an OData service that does not check authorization at all.",
+      "narrative": "The S/4HANA authorization model is business roles over business catalogs over CDS views, and a restriction at the top means nothing if the view underneath it was built with authorization checking switched off. This is the one path in the library that is specific to S/4HANA rather than to SAP generally — classic ABAP authorization objects do not have this shape, and an estate migrated from ECC inherits the roles without inheriting this exposure.",
+      "fair_scenario": "SAP-DATA-04",
+      "severity": "HIGH",
+      "crosses_tier": false,
+      "hops": [
+        {
+          "name": "A super-admin business role is live in production",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "S4AUTHZ-001",
+            "S4AUTHZ-002",
+            "S4AUTHZ-003"
+          ],
+          "node_types": [
+            "role",
+            "user"
+          ],
+          "why_cut": "SAP ships the SAP_BR_ADMINISTRATOR templates for configuration, not for production use, and says so. Withdrawing the template — or narrowing a restriction field left at 'Unrestricted' — is a role change rather than a code or platform change, and it is the step this path cannot survive."
+        },
+        {
+          "name": "Authorization is switched off below the role",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "S4AUTHZ-004",
+            "S4AUTHZ-005"
+          ],
+          "node_types": [
+            "cds_view",
+            "service_group"
+          ],
+          "why_cut": "A CDS view annotated to skip authorization, or an OData V4 service group published without any, defeats whatever the role above it restricts — the check that would have narrowed the rows simply does not run. Re-enabling it restores every restriction already defined, which is why this is the cheaper of the two cuts even though it is the deeper one."
+        },
+        {
+          "name": "Platform roles are over-assigned too",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "S4AUTHZ-006",
+            "S4AUTHZ-007"
+          ],
+          "node_types": [
+            "cc_backend",
+            "cf_role",
+            "user"
+          ],
+          "note": "The same failure a layer out: a Cloud Connector mapping without principal propagation, or a Cloud Foundry platform role handed to more people than administer the platform. Neither is required for this path and both widen who can walk it."
+        },
+        {
+          "name": "The read would leave no trace",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "DPP-RAL-002",
+            "LOG-TBL-001",
+            "HANADB-AUDIT-001"
+          ],
+          "node_types": [
+            "table",
+            "parameter_name"
+          ],
+          "note": "Shares its ending with the database-layer path: a read is not a change, so table change logging never sees it, and Read Access Logging is the only control on this list that would have produced evidence."
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-17",
+      "name": "A RISE communication arrangement as the front door",
+      "summary": "A communication arrangement with weak or absent authentication, carrying more scope than it needs, in front of published services.",
+      "narrative": "Communication arrangements are how a RISE tenant is integrated, and they are configured by the customer rather than by SAP — which puts them squarely on the customer's side of the shared-responsibility line and makes them the most RISE-specific exposure in this product. An arrangement is a named user, a scope and an endpoint in one object, so a weak one is simultaneously a credential problem, an authorization problem and an exposure problem, and reading it as any one of those understates it.",
+      "fair_scenario": "SAP-INTF-05",
+      "severity": "CRITICAL",
+      "crosses_tier": true,
+      "hops": [
+        {
+          "name": "An arrangement authenticates weakly or not at all",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "RISE-004",
+            "RISE-007"
+          ],
+          "node_types": [
+            "comm_arrangement",
+            "user",
+            "endpoint"
+          ],
+          "why_cut": "Certificate-based authentication on the arrangement ends the anonymous and shared-secret routes in one change, and it is a change the customer can make: the arrangement is theirs to configure under RISE, unlike the parameters SAP holds."
+        },
+        {
+          "name": "It carries more scope than it needs",
+          "required": false,
+          "cut": true,
+          "checks": [
+            "RISE-003",
+            "RISE-006"
+          ],
+          "node_types": [
+            "comm_arrangement",
+            "user"
+          ],
+          "why_cut": "Narrowing the scenario list, or giving each arrangement its own communication user rather than sharing one across many, means a compromised arrangement reaches only what it was built for. It severs the path from the arrangement to everything else the shared user could do."
+        },
+        {
+          "name": "Sensitive services are published behind it",
+          "required": true,
+          "cut": false,
+          "checks": [
+            "RISE-005",
+            "NET-005",
+            "INTG-WS-003"
+          ],
+          "node_types": [
+            "endpoint",
+            "icf_path",
+            "function_module"
+          ],
+          "note": "What the arrangement reaches. Published OData and SOAP surfaces are the point of an arrangement, so this hop is never a cut — removing it removes the integration, which is not remediation."
+        },
+        {
+          "name": "Identity trust is loose around it",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "RISE-001",
+            "RISE-002"
+          ],
+          "node_types": [
+            "idp_trust"
+          ],
+          "note": "SAP's default IDP trust left active, or automatic shadow-user creation, means an identity from outside the corporate directory can become a user here. It widens who reaches the arrangement rather than what the arrangement reaches."
         }
       ]
     }
