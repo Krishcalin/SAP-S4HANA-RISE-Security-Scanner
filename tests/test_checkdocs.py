@@ -89,7 +89,7 @@ def test_every_check_a_requirement_claims_resolves():
 # ── the honest gap ───────────────────────────────────────────────────────────
 
 def test_an_undocumented_check_still_resolves():
-    """357 of 709 ids have a knowledge-base entry. The other 352 are REAL checks
+    """154 of the 714 ids have no narrative from any source. They are REAL checks
     that run like any other; only the prose is missing.
 
     404-ing them would be the wrong answer to "what is this?" — we know the
@@ -196,3 +196,152 @@ def test_the_worklist_says_when_it_was_capped():
     body = src.split("def api_chokepoints")[1].split("\ndef ")[0]
     assert '"truncated": len(rows) >= limit' in body, \
         "a capped list is indistinguishable from a complete one without this"
+
+
+# ── prose the product already shipped, in corpora nothing was reading ────────
+#
+# 352 of the 714 published ids had no narrative, and `/checks/{id}` said so on
+# every one. But 175 of those checks are GENERATED FROM RULE TABLES THAT ALREADY
+# DESCRIBE THEM — a rule cannot match a pattern without saying what the pattern
+# means. The prose existed; the only thing missing was a reader.
+#
+# The risk in reading it is overstatement, and that is what these tests are for:
+# a rule's two sentences must not be presented as, or counted as, a written page.
+
+def test_the_two_derived_tiers_close_most_of_the_gap():
+    """Stated as a floor, not a number: adding a check should not fail this, and
+    the count moving DOWN means a source stopped being read."""
+    index = checkdocs.catalogue_index()
+    derived = [e for e in index
+               if e["doc_source"] in ("knowledge_base_family", "rule_definition")]
+    assert len(derived) >= 190, (
+        "only %d checks documented from the family entries and rule corpora; a "
+        "source has stopped being read" % len(derived))
+    undocumented = [e for e in index if not e["documented"]]
+    assert len(undocumented) <= 160, (
+        "%d checks undocumented; this went from 352 to 154 and should not "
+        "climb back" % len(undocumented))
+
+
+def test_a_derived_check_says_which_corpus_it_came_from():
+    doc = checkdocs.check("WDISP-001")
+    assert doc["documented"] is True
+    assert doc["doc_source"] == "rule_definition"
+    assert doc["doc_detail"], "a derived narrative with no stated origin"
+    assert doc["risk"] and doc["mitigation"]
+
+
+@pytest.mark.parametrize("check_id,corpus", [
+    ("WDISP-001", "Web Dispatcher rule"),
+    ("PARAM-abap/path_normalization", "profile-parameter rule"),
+])
+def test_each_corpus_is_actually_read(check_id, corpus):
+    """One corpus silently failing to load would look like progress that had
+    simply not happened — the checks would go back to undocumented and nothing
+    would say why."""
+    assert checkdocs.check(check_id)["doc_detail"] == corpus
+
+
+def test_the_abap_corpus_is_read_even_though_a_family_narrative_outranks_it():
+    """The ABAP rules no longer supply the narrative — the nineteen family
+    entries are better prose and win. But the rule is still the only thing that
+    can say which of a family's sixteen patterns this check matches, so it must
+    still be loaded. If the corpus stopped loading, every ABAP check would keep
+    its family narrative and quietly lose the specific line, which is a
+    regression nothing else here would catch."""
+    doc = checkdocs.check("ABAP-SQLI-001")
+    assert doc["doc_source"] == "knowledge_base_family"
+    assert "WHERE" in (doc["doc_specific"] or ""), doc["doc_specific"]
+
+
+def test_a_profile_parameter_is_described_by_its_own_rule():
+    doc = checkdocs.check("PARAM-abap/path_normalization")
+    assert doc["doc_source"] == "rule_definition"
+    assert "normalis" in (doc["risk"] or "").lower()
+
+
+def test_the_knowledge_base_wins_where_both_exist():
+    """A hand-written entry is longer, names the transactions and reports, and
+    was written for a reader rather than for a matcher. A derived entry must
+    never displace one."""
+    doc = checkdocs.check("LOG-AUD-001")
+    assert doc["doc_source"] == "knowledge_base"
+    assert doc["doc_detail"] is None
+
+
+def test_the_three_sources_are_counted_separately():
+    """The load-bearing one. Reporting all three under a single `documented`
+    flag would let a reader conclude the written knowledge base is 560 entries
+    when the part written for a specific check is 362 — the overstatement this
+    whole module exists to avoid."""
+    index = checkdocs.catalogue_index()
+    sources = {e["doc_source"] for e in index}
+    assert sources == {"knowledge_base", "knowledge_base_family",
+                       "rule_definition", None}
+    written = {e["check_id"] for e in index
+               if e["doc_source"] == "knowledge_base"}
+    assert written <= set(checkdocs._details()), (
+        "the index claims a knowledge-base entry the file does not have")
+
+
+def test_a_family_narrative_is_read_and_labelled_as_one():
+    """Nineteen family entries covering 128 checks had never been rendered:
+    `_details().get()` is an exact lookup and `ABAP-SQLI` is not a published id.
+    Reading them must not blur into claiming somebody wrote about this rule."""
+    doc = checkdocs.check("ABAP-SQLI-001")
+    assert doc["doc_source"] == "knowledge_base_family"
+    assert doc["doc_detail"] == "ABAP-SQLI"
+    assert doc["risk"] and doc["mitigation"]
+    # And the rule's own line survives beside it — the family cannot say which
+    # of its sixteen patterns fired, and that is what a reader arriving from a
+    # finding actually wants.
+    assert doc["doc_specific"]
+    assert doc["doc_specific"] != doc["risk"]
+
+
+def test_a_family_prefix_cannot_claim_an_unrelated_check():
+    """`ABAP-CD` must never reach `ABAP-CDS-001`. The separator is required, so
+    a family entry can only claim ids in its own family."""
+    families = checkdocs._families()
+    details = checkdocs._details()
+    for cid, family in families.items():
+        assert cid.startswith(family + "-"), (cid, family)
+        assert family in details
+        assert cid not in details, "an exact entry should have won"
+
+
+def test_a_rule_narrative_does_not_repeat_itself():
+    """Where the rule IS the narrative, printing its description again as the
+    lead line would show the reader the same sentences twice."""
+    for entry in checkdocs.catalogue_index():
+        if entry["doc_source"] == "rule_definition":
+            assert checkdocs.check(entry["check_id"])["doc_specific"] is None
+
+
+def test_every_knowledge_base_entry_reaches_a_check():
+    """A written narrative nothing can render is work that was done and lost —
+    which is exactly what the nineteen family entries were until they were
+    wired up. This is the guard that catches the next one.
+
+    Four entries fail this today and are listed rather than silently allowed:
+    they name ids the catalogue no longer publishes, so the checks were renamed
+    or removed and the prose was left behind."""
+    details = set(checkdocs._details())
+    catalogue = set(checkdocs._catalogue())
+    families = set(checkdocs._families().values())
+    orphaned = sorted(details - catalogue - families)
+    assert orphaned == ["CAPX-COV-001", "IAM-SOD-HEUR-001", "IAM-SOD-HEUR-002",
+                        "IAM-SOD-HEUR-003"], (
+        "the set of unreachable knowledge-base entries has changed: %s"
+        % orphaned)
+
+
+def test_the_remaining_gap_is_still_reported_as_a_gap():
+    """Half the gap closing must not quietly close the other half."""
+    index = checkdocs.catalogue_index()
+    undocumented = [e for e in index if not e["documented"]]
+    assert undocumented, "every check documented — implausible; check the sources"
+    for entry in undocumented:
+        doc = checkdocs.check(entry["check_id"])
+        assert doc["risk"] is None and doc["mitigation"] is None
+        assert doc["doc_source"] is None

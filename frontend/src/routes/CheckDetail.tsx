@@ -22,12 +22,20 @@ import { CARD_TITLE as CARD_H3 } from '../lib/ui'
  * the one place every other filter is scoped. A second query on this page would
  * be a second chance to get scoping wrong.
  *
- * UNDOCUMENTED IS SAID OUT LOUD. The knowledge base covers 357 of 709 ids. The
- * rest render everything else that is known — category, module, what that module
- * reads, the requirement it answers, the paths it evidences — above a plain
- * statement that no narrative is published yet. An empty panel would read as "we
- * have nothing", and a sentence assembled from the id would read as a
+ * UNDOCUMENTED IS SAID OUT LOUD, AND SO IS HALF-DOCUMENTED. Of 714 ids, 362 have
+ * a narrative written for them, 127 inherit one written about their family, 71
+ * carry the description of the rule that generates them, and 154 have nothing.
+ * The last group renders everything else that is known — category, module, what
+ * that module reads, the requirement it answers, the paths it evidences — above a
+ * plain statement that no narrative is published yet. An empty panel would read
+ * as "we have nothing", and a sentence assembled from the id would read as a
  * description while carrying no information.
+ *
+ * The middle two groups are LABELLED, because a page about sixteen patterns and
+ * two sentences about a regex are both worth showing and neither is a page
+ * written about this check. Nothing is said for the first group: an unqualified
+ * narrative is the default a reader is entitled to assume, and captioning it
+ * would make them doubt the one source that needs no caveat.
  */
 
 const CARD = 'rounded-lg border border-cardline bg-panel p-4'
@@ -105,7 +113,44 @@ function Body({ doc }: { doc: CheckDoc }) {
 
       {doc.documented ? (
         <>
+          {/* WHERE THE WORDS CAME FROM, SAID BEFORE THE WORDS. Two of the three
+              sources are not a page written about this check, and a reader who
+              cannot tell them apart would over-read the weaker one. Nothing is
+              said when the narrative was written for this id — that is the
+              default the reader is entitled to assume. */}
+          {doc.doc_source === 'knowledge_base_family' && (
+            <div className="banner banner-info">
+              <strong className="font-[650]">
+                Written about the {doc.doc_detail} family, not this single rule.
+              </strong>{' '}
+              The risk and remediation below apply to every check in the family —
+              they are hand-written and they are the right reading of the
+              vulnerability class. What this particular rule matches is stated
+              directly beneath.
+            </div>
+          )}
+          {doc.doc_source === 'rule_definition' && (
+            <div className="banner banner-info">
+              <strong className="font-[650]">
+                From the {doc.doc_detail ?? 'rule'} that defines this check.
+              </strong>{' '}
+              This check is generated from a rule table, and the text below is
+              that rule&rsquo;s own description and fix rather than a written
+              narrative. It is accurate and it is brief — expect what the rule
+              matches and what to do, not the attack scenario and business
+              consequence a hand-written entry carries.
+            </div>
+          )}
           <h2 className={H2}>What this check looks for, and why it matters</h2>
+          {/* The specific before the general. Somebody who arrived here from a
+              finding wants to know what fired, and the family narrative cannot
+              tell them — it is about all sixteen patterns. */}
+          {doc.doc_specific && (
+            <div className={`${CARD} mb-2.5`}>
+              <h3 className={CARD_H3}>What this rule matches</h3>
+              <p className="text-[13px]">{doc.doc_specific}</p>
+            </div>
+          )}
           <div className={CARD}>
             {paragraphs(doc.risk).map((para, i) => (
               <p key={i} className="mb-2.5 last:mb-0">{para}</p>

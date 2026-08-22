@@ -857,9 +857,26 @@ export interface CheckDoc {
    *  screen: which of them a single check touches is not derivable, and a
    *  narrower list would be a claim the parser cannot support. */
   module_reads: string[]
-  /** False for the 352 published ids with no knowledge-base entry yet. The
-   *  screen says so plainly rather than rendering an empty panel. */
+  /** True when prose exists from ANY of the three sources below. False for the
+   *  154 published ids none of them describes; the screen says so plainly rather
+   *  than rendering an empty panel. */
   documented: boolean
+  /** Which kind of answer the reader is getting. The three are NOT equivalent
+   *  and the page says which it is showing:
+   *    `knowledge_base`        a page written about this check
+   *    `knowledge_base_family` a page written about the family it belongs to —
+   *                            hand-written, but about sixteen patterns rather
+   *                            than this one
+   *    `rule_definition`       the two sentences the rule generating the check
+   *                            already carried
+   *  Counting them as one would overstate the written knowledge base by 198. */
+  doc_source: 'knowledge_base' | 'knowledge_base_family' | 'rule_definition' | null
+  /** The family id, or which rule corpus — whichever `doc_source` names. */
+  doc_detail: string | null
+  /** What THIS rule matches, when the narrative above it is about a family of
+   *  them. A family narrative cannot say which of its patterns fired; this can,
+   *  and it is never a substitute for the narrative. */
+  doc_specific: string | null
   risk: string | null
   mitigation: string | null
   requirements: {

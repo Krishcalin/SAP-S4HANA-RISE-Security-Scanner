@@ -609,8 +609,8 @@ defect.
 - **`/checks/:id` and `/requirements/:id`.** 714 check ids and 38 Baseline
   requirements were dead strings; on the coverage screen they were not even
   links. `server/checkdocs.py` assembles from what was already authoritative and
-  authors nothing. The knowledge base covers 362 of 714, and the rest say so
-  rather than rendering an empty panel.
+  authors nothing. See "The documentation that was already written" below for
+  what it now reaches.
 - **`/chokepoints`.** The worklist uncapped — 71 on the bundled corpus against the
   15 the paths screen showed.
 - **Donut, Meter.** Part-to-whole where the form is correct; a meter where the
@@ -717,6 +717,48 @@ path. Required hops cite emittable checks; optional hops were never checked.
 | CI job re-derives from SAP and fails on drift | `.github/workflows/tests.yml` | ✅ |
 | `rebuild-sap-catalogue` CLI command | `server/cli.py` | ✅ |
 | Static check-id collision guard | `tests/test_check_id_uniqueness.py` | ✅ |
+
+### The documentation that was already written, 2026-08-22
+
+**352 of 714 published check ids had no narrative**, and `/checks/{id}` said so
+on every one of them — the largest credibility gap left in the product, and one
+this session's own work had made publicly visible.
+
+**198 of those 352 were already described.** Not by anyone who had to write them
+now; by material the product has shipped all along, in places nothing was
+reading.
+
+| Source | Checks | What it is |
+|---|---:|---|
+| **Family entries in the knowledge base** | 127 | `ABAP-SQLI` is a full hand-written narrative about SQL injection in ABAP. The catalogue publishes `ABAP-SQLI-001` … `-016`. `_details().get()` is an **exact** lookup, so nineteen narratives covering 128 checks had never been rendered once |
+| **`abap_sast_rules`** | (104) | `description` + `recommendation` beside every pattern. Outranked by the family entries above — but still loaded, because only the rule can say which of a family's sixteen patterns this check matches |
+| **`security_params`** | 57 | `desc` + `fix`, written when the threshold was |
+| **`webdisp_baseline`** | 14 | `risk` + `fix`, already named for this |
+
+```
+undocumented: 352 -> 154
+```
+
+**The nineteen family entries were found by wiring the rule corpora**, not by
+review. Counting how many knowledge-base entries the index could reach turned up
+23 of 385 that it could not — and nineteen of those were somebody's work, done
+and then lost to an exact-match lookup. `_families()` derives the mapping rather
+than listing the prefixes, because a hand-written list of nineteen would go stale
+the first time a rule family was added and nobody would notice, which is exactly
+how these came to be unread.
+
+The remaining four are genuinely dead: `CAPX-COV-001` and `IAM-SOD-HEUR-001`–`003`
+name ids the catalogue no longer publishes. A test now pins that set, so the next
+narrative written against a renamed id fails the build instead of disappearing.
+
+**The risk in reading all this is overstatement, and it is handled explicitly.** A
+family narrative is a page about sixteen patterns, not about this one. A rule
+description is two sentences about a regex. Both beat "no published description"
+and neither is a page somebody wrote about *this check* — so `doc_source` travels
+with the text, the page labels the weaker two, and it says nothing at all when the
+narrative really was written for the id. Counting the three together would have
+claimed a written knowledge base of 560 where the part written for a specific
+check is 362.
 
 ### The Baseline recount, 2026-08-22
 
