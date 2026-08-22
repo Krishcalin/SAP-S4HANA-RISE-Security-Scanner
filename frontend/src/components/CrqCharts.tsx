@@ -91,7 +91,8 @@ export function LossExceedance({ current, target, height = 230 }: {
 
   return (
     <div className="overflow-x-auto">
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H}
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%"
+           style={{ height: 'auto', display: 'block' }}
            role="img"
            aria-label="Loss exceedance curve: the probability of losing at least a given amount in a year">
         {decades.map((d) => {
@@ -99,7 +100,7 @@ export function LossExceedance({ current, target, height = 230 }: {
           return (
             <g key={d}>
               <line x1={px} y1={PAD.t} x2={px} y2={H - PAD.b} stroke={GRID} strokeWidth="1" />
-              <text x={px} y={H - PAD.b + 14} fill={AXIS} fontSize="10" textAnchor="middle">
+              <text x={px} y={H - PAD.b + 14} fill={AXIS} fontSize="12" textAnchor="middle">
                 {fmtMoney(Math.pow(10, d))}
               </text>
             </g>
@@ -110,7 +111,7 @@ export function LossExceedance({ current, target, height = 230 }: {
           return (
             <g key={f}>
               <line x1={PAD.l} y1={y(p)} x2={W - PAD.r} y2={y(p)} stroke={GRID} strokeWidth="1" />
-              <text x={PAD.l - 6} y={y(p) + 3} fill={AXIS} fontSize="10" textAnchor="end">
+              <text x={PAD.l - 6} y={y(p) + 4} fill={AXIS} fontSize="12" textAnchor="end">
                 {(p * 100).toFixed(0)}%
               </text>
             </g>
@@ -128,7 +129,7 @@ export function LossExceedance({ current, target, height = 230 }: {
         <circle cx={x(head.loss)} cy={y(head.probability)} r="4"
                 fill="var(--panel)" stroke="var(--accent)" strokeWidth="2" />
         <text x={x(head.loss) + 8} y={y(head.probability) - 6}
-              fill="var(--ink-dim)" fontSize="10">
+              fill="var(--ink-dim)" fontSize="12">
           {(head.probability * 100).toFixed(0)}% chance of any loss
         </text>
         {tgtHead && (
@@ -136,7 +137,7 @@ export function LossExceedance({ current, target, height = 230 }: {
             <circle cx={x(tgtHead.loss)} cy={y(tgtHead.probability)} r="4"
                     fill="var(--panel)" stroke="var(--ok)" strokeWidth="2" />
             <text x={x(tgtHead.loss) + 8} y={y(tgtHead.probability) + 13}
-                  fill="var(--ink-dim)" fontSize="10">
+                  fill="var(--ink-dim)" fontSize="12">
               {(tgtHead.probability * 100).toFixed(0)}% fully hardened
             </text>
           </>
@@ -173,9 +174,10 @@ export function RiskTrend({ points, height = 210 }: {
     )
   }
 
-  const W = 560
+  const W = 760
   const H = height
-  const PAD = { l: 52, r: 14, t: 12, b: 26 }
+  // Top padding carries three rows of break labels now, not one line of 9px text.
+  const PAD = { l: 64, r: 16, t: 58, b: 30 }
   const values = points.flatMap((p) => [
     Number(p.ale_p90) || 0, Number(p.ale_mean) || 0, Number(p.residual_p90) || 0,
   ])
@@ -198,6 +200,23 @@ export function RiskTrend({ points, height = 210 }: {
     groups[groups.length - 1].push(i)
   })
 
+  // Break-label placement. Measured in viewBox units against an average glyph
+  // width for the font size, which is close enough for a fixed string and needs
+  // no DOM measurement — this is the same estimate wrapWords makes on the risk
+  // path diagram, and for the same reason.
+  const LABEL_FS = 12
+  const LABEL_W = 'inputs changed'.length * LABEL_FS * 0.53
+  const ROW_Y = [16, 32, 48]
+  const rowEnds = ROW_Y.map(() => -Infinity)
+  const breaks = groups.slice(1).map((idx, gi) => {
+    const prev = groups[gi][groups[gi].length - 1]
+    const mid = (x(prev) + x(idx[0])) / 2
+    const row = rowEnds.findIndex((end) => mid > end)
+    if (row >= 0) rowEnds[row] = mid + LABEL_W + 6
+    return { gi, mid, row: row >= 0 ? row : null, y: row >= 0 ? ROW_Y[row] : 0 }
+  })
+  const unlabelled = breaks.filter((b) => b.row === null).length
+
   const line = (idx: number[], key: 'ale_p90' | 'ale_mean' | 'residual_p90') =>
     idx.map((i, n) => {
       const v = Number(points[i][key]) || 0
@@ -206,13 +225,20 @@ export function RiskTrend({ points, height = 210 }: {
 
   return (
     <div className="overflow-x-auto">
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img"
+      {/* No `height` attribute, deliberately. With one, preserveAspectRatio fits
+          the viewBox to the shorter side — the height — so the chart drew at 1:1
+          and centred itself in a card twice its width, wasting the room the
+          labels needed and rendering every one of them at its raw viewBox size.
+          Letting the aspect ratio size it fills the card and scales the type up
+          with it. */}
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%"
+           style={{ height: 'auto', display: 'block' }} role="img"
            aria-label="Annual loss exposure per scan, with the line broken wherever the model inputs changed">
         {[0, 0.5, 1].map((f) => (
           <g key={f}>
             <line x1={PAD.l} y1={y(maxV * f)} x2={W - PAD.r} y2={y(maxV * f)}
                   stroke={GRID} strokeWidth="1" />
-            <text x={PAD.l - 6} y={y(maxV * f) + 3} fill={AXIS} fontSize="10"
+            <text x={PAD.l - 6} y={y(maxV * f) + 4} fill={AXIS} fontSize="12"
                   textAnchor="end">{fmtMoney(maxV * f)}</text>
           </g>
         ))}
@@ -230,32 +256,53 @@ export function RiskTrend({ points, height = 210 }: {
               </>
             )}
             {idx.map((i) => (
-              <circle key={i} cx={x(i)} cy={y(Number(points[i].ale_p90) || 0)} r="3"
+              <circle key={i} cx={x(i)} cy={y(Number(points[i].ale_p90) || 0)} r="4"
                       fill="var(--accent)" />
             ))}
           </g>
         ))}
 
-        {/* The break itself, drawn. A gap nobody explains looks like missing data. */}
-        {groups.slice(1).map((idx, gi) => {
-          const prev = groups[gi][groups[gi].length - 1]
-          const mid = (x(prev) + x(idx[0])) / 2
-          return (
-            <g key={`b${gi}`}>
-              <line x1={mid} y1={PAD.t} x2={mid} y2={H - PAD.b}
-                    stroke={AXIS} strokeWidth="1" strokeDasharray="2 3" />
-              <text x={mid + 3} y={PAD.t + 10} fill={AXIS} fontSize="9">
-                inputs changed
-              </text>
-            </g>
-          )
-        })}
+        {/* The break itself, drawn. A gap nobody explains looks like missing data.
+
+            THE LABELS USED TO OVERLAP, and on a screen whose entire job is
+            "has the exposure actually fallen?" an unreadable annotation is worse
+            than none: it is the thing that tells you two segments are NOT
+            comparable. Every break was labelled at the same y, so a run of
+            single-point groups printed "inputs changed" four times in the space
+            of one.
+
+            Placement is a stack of rows, filled left to right: a label takes the
+            highest row whose last label ends before this one starts. Rows rather
+            than rotation because horizontal text at 12px is read at a glance and
+            rotated text is not, and this label is read while scanning a line for
+            a step change.
+
+            A label that fits in NO row is dropped and counted rather than drawn
+            over its neighbour. The divider still appears — the break is the fact,
+            the words are the explanation — and the caption below says how many
+            went unlabelled, because silently dropping annotations is how a chart
+            comes to under-report the very thing it exists to flag. */}
+        {breaks.map((b) => (
+          <g key={`b${b.gi}`}>
+            <line x1={b.mid} y1={PAD.t} x2={b.mid} y2={H - PAD.b}
+                  stroke={AXIS} strokeWidth="1" strokeDasharray="2 3" />
+            {b.row !== null && (
+              <>
+                <line x1={b.mid} y1={b.y + 3} x2={b.mid} y2={PAD.t}
+                      stroke={AXIS} strokeWidth="1" strokeDasharray="2 3" />
+                <text x={b.mid + 4} y={b.y} fill={AXIS} fontSize="12">
+                  inputs changed
+                </text>
+              </>
+            )}
+          </g>
+        ))}
 
         <line x1={PAD.l} y1={H - PAD.b} x2={W - PAD.r} y2={H - PAD.b}
               stroke={AXIS} strokeWidth="1" />
       </svg>
 
-      <div className="flex flex-wrap gap-4 text-[11px] text-ink2 mt-1.5">
+      <div className="flex flex-wrap gap-4 text-[13px] text-ink2 mt-2">
         <span><i className="inline-block w-4 h-0.5 align-middle mr-1"
                  style={{ background: 'var(--accent)' }} /> Annual loss, P90</span>
         <span><i className="inline-block w-4 h-0.5 align-middle mr-1"
@@ -263,7 +310,7 @@ export function RiskTrend({ points, height = 210 }: {
         <span><i className="inline-block w-4 h-0.5 align-middle mr-1"
                  style={{ background: 'var(--ok)' }} /> Fully hardened floor</span>
       </div>
-      <p className="text-[12px] text-ink3 mt-2">
+      <p className="text-[13.5px] text-ink3 mt-2 leading-relaxed">
         The line <strong>breaks wherever the model inputs changed</strong> — a
         revised revenue figure, a different simulation count, or an export that
         went missing and made checks skip. Those move the number without anything
@@ -271,6 +318,19 @@ export function RiskTrend({ points, height = 210 }: {
         change would claim the two sides are comparable. The residual floor is
         the second guard: it does not depend on your findings, so if it moves,
         something other than remediation did.
+        {/* Said out loud rather than silently dropped. A chart that quietly
+            omits annotations under-reports the exact thing it exists to flag. */}
+        {unlabelled > 0 && (
+          <>
+            {' '}
+            <strong>
+              {unlabelled} more break{unlabelled === 1 ? ' is' : 's are'} drawn
+              without a label
+            </strong>{' '}
+            — they fall too close together to print the words legibly. Every
+            dashed divider is a break, labelled or not.
+          </>
+        )}
       </p>
     </div>
   )
