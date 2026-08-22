@@ -345,3 +345,53 @@ def test_the_remaining_gap_is_still_reported_as_a_gap():
         doc = checkdocs.check(entry["check_id"])
         assert doc["risk"] is None and doc["mitigation"] is None
         assert doc["doc_source"] is None
+
+
+# ── the prose that had to be written ─────────────────────────────────────────
+#
+# 198 of the 352 undocumented checks were recovered from material the product
+# already shipped. The rest are genuine writing debt, and the order to write them
+# in is not catalogue order. A check whose closure SEVERS a risk path is the most
+# actionable thing this product says about it — the choke-point screen is built
+# entirely on that idea — so a reader who follows a cut to its check and finds
+# "no published description" has been let down at the one moment the product was
+# being most useful.
+
+def test_no_check_on_a_cut_is_undocumented():
+    """The invariant the first batch of hand-written entries established.
+
+    Deliberately phrased over the CUT hops rather than over a list of ids: adding
+    a template, or marking an existing hop as a cut, should fail this test until
+    the checks it cites are explained. That is the correct order of work — the
+    path content and the prose that supports it move together."""
+    import json
+    from pathlib import Path
+
+    paths = json.loads((ROOT / "data" / "attack_paths.json").read_text(
+        encoding="utf-8"))["paths"]
+    cited = {(p["id"], hop["name"], check)
+             for p in paths for hop in p["hops"] if hop.get("cut")
+             for check in (hop.get("checks") or [])}
+
+    undocumented = sorted(
+        {(template, hop, check) for template, hop, check in cited
+         if checkdocs.known_check(check)
+         and not checkdocs.check(check)["documented"]})
+    assert not undocumented, (
+        "checks on a cut with no published description: %s" % undocumented[:8])
+
+
+def test_a_hand_written_entry_carries_both_halves_and_says_something():
+    """A risk paragraph and a numbered remediation. The length floor is crude and
+    it is there for one reason: the cheapest way to make this file's coverage
+    number go up is to write two sentences, and two sentences about a control
+    this specific is not an explanation."""
+    written = [e["check_id"] for e in checkdocs.catalogue_index()
+               if e["doc_source"] == "knowledge_base"]
+    thin = []
+    for check_id in written:
+        doc = checkdocs.check(check_id)
+        risk, fix = doc["risk"] or "", doc["mitigation"] or ""
+        if len(risk) < 300 or len(fix) < 200 or "1." not in fix:
+            thin.append(check_id)
+    assert not thin, "knowledge-base entries too thin to be an answer: %s" % thin[:8]
