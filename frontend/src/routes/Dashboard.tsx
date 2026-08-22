@@ -11,9 +11,10 @@ import { Link } from 'react-router'
 import { ShieldHalf } from 'lucide-react'
 import { ApiError, csf, dashboard, domains } from '../api/client'
 import type {
-  CsfView, Dashboard as DashboardData, DomainsView, RemediationOwner, ScanRun,
-  SecurityDomain, Severity,
+  CsfView, Dashboard as DashboardData, DomainsView, FindingState,
+  RemediationOwner, ScanRun, SecurityDomain, Severity,
 } from '../api/types'
+import { Donut } from '../components/Donut'
 import { useTitle } from '../lib/title'
 // The four domain states, worded once. Exported by the screen that owns them.
 import { stateChip } from './Domains'
@@ -228,50 +229,58 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className={`${G2} mt-3.5`}>
+      {/* THREE PART-TO-WHOLE SPLITS, and all three qualify for the form: the
+          segments are parts of one meaningful total, there are at most five of
+          them, and what a reader wants is the SHAPE of the split rather than a
+          comparison of close values.
+
+          Severity used to be a table whose bar was `bg-accent` for every row —
+          one blue rail under CRITICAL and under LOW alike, which threw away the
+          severity encoding the pill beside it was carrying. Ownership had no
+          visual at all. State was on the wire and shown nowhere except a single
+          "already submitted" line under a KPI. */}
+      <div className={`${G3} mt-3.5`}>
         <div className={CARD}>
           <h3 className={CARD_TITLE}>By severity</h3>
-          <table className="w-full border-collapse">
-            <tbody>
-              {SEVERITIES.map((sev) => {
-                const n = summary.by_severity[sev] ?? 0
-                if (!n) return null
-                const pct = summary.open_total ? (100 * n) / summary.open_total : 0
-                return (
-                  <tr key={sev} className="hover:bg-panel2">
-                    <td className={`${TD} w-[110px]`}>
-                      <span className={`pill sev-${sev}`}>{sev}</span>
-                    </td>
-                    <td className={`${TD} text-right font-mono`}>{n}</td>
-                    <td className={`${TD} w-[55%]`}>
-                      <div className="mt-2 h-1.5 rounded-[3px] bg-panel2 overflow-hidden">
-                        <i className="block h-full bg-accent" style={{ width: `${pct}%` }} />
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+          <Donut ariaLabel="Open findings by severity" caption="open"
+                 total={summary.open_total}
+                 slices={SEVERITIES.map((sev) => ({
+                   key: sev,
+                   label: sev,
+                   value: summary.by_severity[sev] ?? 0,
+                   color: SEV_COLOR[sev],
+                 }))} />
         </div>
 
         <div className={CARD}>
           <h3 className={CARD_TITLE}>Remediation ownership</h3>
           {/* Four classes, because reporting an SAP-owned setting as a customer
               failure — or as "unknown" — is how a RISE report fills with
-              unactionable noise. */}
-          <table className="w-full border-collapse">
-            <tbody>
-              {OWNERS.map(([key, label]) => (
-                <tr key={key} className="hover:bg-panel2">
-                  <td className={TD}><span className={`own own-${key}`}>{label}</span></td>
-                  <td className={`${TD} text-right font-mono`}>
-                    {summary.by_remediation_owner[key] ?? 0}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+              unactionable noise. It is also the split a RISE customer reads
+              first: how much of this is even mine to fix. */}
+          <Donut ariaLabel="Open findings by who can remediate them"
+                 caption="open"
+                 slices={OWNERS.map(([key, label]) => ({
+                   key,
+                   label,
+                   value: summary.by_remediation_owner[key] ?? 0,
+                   color: OWNER_COLOR[key],
+                 }))} />
+        </div>
+
+        <div className={CARD}>
+          <h3 className={CARD_TITLE}>Where the work stands</h3>
+          {/* NOT `total={open_total}`: these states span findings that are no
+              longer open, so re-basing them on the open count would put every
+              share against the wrong denominator. The component sums them. */}
+          <Donut ariaLabel="Findings by workflow state"
+                 caption="findings"
+                 slices={STATES.map(([key, label]) => ({
+                   key,
+                   label,
+                   value: summary.by_state[key] ?? 0,
+                   color: STATE_COLOR[key],
+                 }))} />
         </div>
       </div>
 
@@ -536,12 +545,57 @@ const KPI = 'text-[30px] font-semibold tracking-[-.02em] leading-[1.1]'
 const KPI_NOTE = 'mt-[5px] text-[12px] text-ink2'
 const G4 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]'
 const G2 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]'
+/* Three-up where the cards hold a donut. The min is 300 rather than 340 because
+   a donut plus its legend has a real minimum width and wraps rather than
+   squashes: below it the legend's counts would collide with its labels. */
+const G3 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(300px,1fr))]'
 const H2 = 'text-[15px] font-semibold mt-[26px] mb-2.5'
 const TH = 'text-left px-2.5 py-2 text-[11px] font-semibold uppercase tracking-[.05em] text-ink3 border-b border-line'
 const TD = 'px-2.5 py-[9px] align-top border-b border-line'
 const EMPTY = 'p-9 text-center text-ink2'
 
 const SEVERITIES: Severity[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']
+
+/* Donut palettes, taken from the tokens the pills already use rather than
+   invented, so an arc and the pill beside it are the same colour and a reader
+   never has to learn a second mapping.
+
+   Severity is the STATUS palette and is reserved for exactly this: it is not
+   available as "some categorical colours" for a chart that needs five hues.
+   Ownership is identity, not severity, so it does not borrow it — it reuses the
+   `.own-*` swatch colours instead. */
+const SEV_COLOR: Record<Severity, string> = {
+  CRITICAL: 'var(--crit)',
+  HIGH: 'var(--high)',
+  MEDIUM: 'var(--med)',
+  LOW: 'var(--low)',
+  INFO: 'var(--ink-faint)',
+}
+
+const OWNER_COLOR: Record<RemediationOwner, string> = {
+  customer_fixable: 'var(--ok)',
+  ticket_to_sap: 'var(--accent)',
+  provider_owned: 'var(--ink-dim)',
+  not_assessable: 'var(--ink-faint)',
+}
+
+const STATES: [FindingState, string][] = [
+  ['open', 'Open'],
+  ['submitted_to_provider', 'With SAP'],
+  ['mitigated', 'Mitigated'],
+  ['accepted', 'Risk accepted'],
+  ['resolved', 'Resolved'],
+  ['false_positive', 'False positive'],
+]
+
+const STATE_COLOR: Record<FindingState, string> = {
+  open: 'var(--crit)',
+  submitted_to_provider: 'var(--accent)',
+  mitigated: 'var(--ok)',
+  accepted: 'var(--med)',
+  resolved: 'var(--ink-dim)',
+  false_positive: 'var(--ink-faint)',
+}
 
 const OWNERS: [RemediationOwner, string][] = [
   ['customer_fixable', 'Yours to fix'],
