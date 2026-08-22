@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "version": "1.2.0",
+    "version": "1.3.0",
     "description": "SAP attack-path templates. CONTENT, not code: a new path is a new entry here, never a code change. Each template names the checks that evidence each hop, so every hop is grounded in a check that already exists and a path can never claim more than the scanner actually detected.",
     "how_a_path_instantiates": "Every REQUIRED hop must have at least one OPEN finding in the landscape. Optional hops enrich a path but do not gate it. A path is therefore a statement that these conditions CO-EXIST, derived from exported configuration — never a claim that anything was traversed or validated. The console must say so.",
     "cut_semantics": "A hop marked cut=true appears on every variant of the path, so closing it disconnects the path. Non-cut hops reduce exploitability without severing it. This is the mitigate-vs-additional split: it needs no clever algorithm, only that each hop knows whether removing it disconnects.",
@@ -67,11 +67,21 @@
             "USR-002",
             "USR-001",
             "STDUSR-002",
-            "STDUSR-003"
+            "STDUSR-003",
+            "AUTH-004",
+            "AUTH-005",
+            "AUTH-007",
+            "AUTH-008",
+            "AUTH-009",
+            "AUTH-012",
+            "AUTH-013"
           ],
           "node_types": [
             "user",
-            "profile"
+            "profile",
+            "auth_object",
+            "role",
+            "tcode"
           ]
         },
         {
@@ -139,7 +149,8 @@
           "required": false,
           "cut": false,
           "checks": [
-            "AUTH-006"
+            "AUTH-006",
+            "AUTH-016"
           ],
           "node_types": [
             "role",
@@ -290,13 +301,16 @@
             "ABAP-CMDI-003",
             "ABAP-CMDI-004",
             "ABAP-CMDI-005",
-            "ATC-CMDI"
+            "ATC-CMDI",
+            "UCON-003",
+            "UCON-001"
           ],
           "node_types": [
             "auth_object",
             "os_command",
             "role",
-            "program"
+            "program",
+            "function_module"
           ],
           "why_cut": "Withdrawing S_LOG_COM / the external command definition removes the bridge from the application layer to the operating system.",
           "note": "Custom ABAP that builds an OS command from external input is a way this hop becomes reachable without any gateway or job misconfiguration — the code IS the mechanism. ABAP-CMDI-* comes from our own scanner, ATC-CMDI from SAP's."
@@ -348,11 +362,14 @@
             "BTP-IAS-003",
             "BTP-IAS-005",
             "BTP-IAS-001",
-            "BTP-IAS-002"
+            "BTP-IAS-002",
+            "IAM-XID-003",
+            "BTP-IAS-004"
           ],
           "node_types": [
             "btp_user",
-            "subaccount"
+            "subaccount",
+            "role_collection"
           ]
         },
         {
@@ -393,10 +410,12 @@
           "required": false,
           "cut": false,
           "checks": [
-            "BTP-CC-008"
+            "BTP-CC-008",
+            "BTP-GOV-001"
           ],
           "node_types": [
-            "cc_backend"
+            "cc_backend",
+            "subaccount"
           ]
         }
       ]
@@ -420,7 +439,8 @@
             "ARA-R2R-01",
             "ARA-H2R-01",
             "ARA-BASIS-01",
-            "ARA-BASIS-02"
+            "ARA-BASIS-02",
+            "ARA-WM-01"
           ],
           "node_types": [
             "user",
@@ -551,11 +571,13 @@
           "checks": [
             "HANADB-USER-001",
             "HANADB-USER-002",
-            "HANADB-ROLE-001"
+            "HANADB-ROLE-001",
+            "HANADB-PARAM-001"
           ],
           "node_types": [
             "hana_user",
-            "hana_role"
+            "hana_role",
+            "parameter_name"
           ],
           "note": "Not a cut. Deactivating SYSTEM and DBADMIN is worth doing and does not disconnect anything: the path needs SOME database principal, and an estate always has several."
         },
@@ -609,7 +631,8 @@
           "checks": [
             "HANADB-PARAM-003",
             "HANADB-PARAM-005",
-            "CRYPTO-HANA-005"
+            "CRYPTO-HANA-005",
+            "HANADB-PARAM-004"
           ],
           "node_types": [
             "parameter_name"
@@ -778,12 +801,14 @@
           "checks": [
             "NET-001",
             "BTP-DST-001",
-            "INTG-CPI-DS-001"
+            "INTG-CPI-DS-001",
+            "BTP-CPI-001"
           ],
           "node_types": [
             "destination",
             "btp_destination",
-            "cpi_datastore"
+            "cpi_datastore",
+            "cpi_credential"
           ],
           "why_cut": "Principal propagation makes the backend see the real caller, so an anonymous request at the edge no longer arrives as a privileged technical user. It severs the path at the point where the caller's identity is currently discarded — which is also the point that makes the activity attributable afterwards."
         },
@@ -796,7 +821,8 @@
             "BTP-EM-002",
             "INTG-WH-002",
             "INTG-WH-003",
-            "INTG-IDOC-003"
+            "INTG-IDOC-003",
+            "INTG-WH-001"
           ],
           "node_types": [
             "event_queue",
@@ -859,7 +885,9 @@
             "INTG-IDOC-001",
             "INTG-APIM-003",
             "INTG-APIM-004",
-            "INTG-TOPO-001"
+            "INTG-TOPO-001",
+            "BTP-CPI-005",
+            "BASELINE-003"
           ],
           "node_types": [
             "endpoint",
@@ -867,7 +895,9 @@
             "file",
             "parameter_name",
             "idoc_port",
-            "system"
+            "system",
+            "iflow",
+            "url"
           ],
           "note": "Deliberately excludes CRYPTO-SNCECS-000. That finding says the SNC posture COULD NOT BE ASSESSED from the export supplied, and a hop that holds because we cannot see would let a path instantiate on our own blind spot. Missing evidence is reported as coverage, never as evidence."
         },
@@ -1007,11 +1037,13 @@
             "INTG-GW-004",
             "INTG-GW-003",
             "INTG-GW-002",
-            "INTG-GW-005"
+            "INTG-GW-005",
+            "UCON-003"
           ],
           "node_types": [
             "gateway",
-            "program"
+            "program",
+            "function_module"
           ],
           "why_cut": "reginfo and secinfo with a deny-all default and specific permits are the whole control. It is a file change on the gateway host, needs no ABAP transport and no downtime beyond a gateway restart, which makes it the cheapest cut on any CRITICAL path here. A permit-all rule (P TP=* HOST=* USER=*) is the exact 10KBLAZE condition rather than an approximation of it."
         },
@@ -1093,7 +1125,8 @@
             "HOTNEWS-006",
             "HOTNEWS-013",
             "HOTNEWS-012",
-            "HOTNEWS-002"
+            "HOTNEWS-002",
+            "HOTNEWS-004"
           ],
           "node_types": [
             "sap_note"
@@ -1120,7 +1153,8 @@
             "INTG-APIM-002",
             "WDISP-008",
             "WDISP-011",
-            "RISE-007"
+            "RISE-007",
+            "BASELINE-006"
           ],
           "node_types": [
             "icf_path",
@@ -1184,7 +1218,8 @@
             "ATC-CRED",
             "CODE-INJ-001",
             "CODE-INJ-003",
-            "CODE-STMT-001"
+            "CODE-STMT-001",
+            "CODE-MOD-002"
           ],
           "node_types": [
             "program"
@@ -1198,11 +1233,13 @@
           "checks": [
             "ATC-AUTHCHK",
             "CODE-INJ-002",
-            "AUTH-001"
+            "AUTH-001",
+            "BASELINE-002"
           ],
           "node_types": [
             "program",
-            "auth_object"
+            "auth_object",
+            "parameter_name"
           ],
           "why_cut": "An AUTHORITY-CHECK in the program means the caller must hold the object before the defect is reachable at all. It severs the path without fixing the defect, which is what makes it worth having: it is a change a Basis team can transport in days, where the code fix waits on the team that owns the program."
         },
@@ -1391,6 +1428,309 @@
             "idp_trust"
           ],
           "note": "SAP's default IDP trust left active, or automatic shadow-user creation, means an identity from outside the corporate directory can become a user here. It widens who reaches the arrangement rather than what the arrangement reaches."
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-18",
+      "name": "Straight in through the front door",
+      "summary": "A standard account with its shipped password, or the SAP* kernel backdoor, against a password policy that does not lock anybody out.",
+      "narrative": "No exploit, no misconfiguration of anything clever — someone logs in. This is the path with the lowest skill floor in the library and the library did not have it: standard users, password policy, lockout and the SAP* emergency backdoor were all checked and none of them formed a route. It is also the one path where the evidence includes an attacker already trying, because a brute-force pattern in the logon history is not a weakness, it is an observation.",
+      "fair_scenario": "SAP-PRIV-03",
+      "severity": "CRITICAL",
+      "crosses_tier": false,
+      "hops": [
+        {
+          "name": "An account can be logged into without discovering anything",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "STDUSR-002",
+            "STDUSR-001",
+            "STDUSR-003",
+            "USR-001",
+            "USR-004"
+          ],
+          "node_types": [
+            "user",
+            "parameter_name"
+          ],
+          "why_cut": "Locking the standard users and clearing their shipped passwords ends this outright, and it is the single cheapest cut in the library — no design decision, no maintenance window, no conversation with a business owner. STDUSR-001 is the sharpest of them: with the SAP* user master deleted and login/no_automatic_user_sapstar unset, the kernel recreates SAP* with a hard-coded password and SAP_ALL, which is a backdoor the customer did not install and cannot see in a role review."
+        },
+        {
+          "name": "Guessing is not punished",
+          "required": false,
+          "cut": true,
+          "checks": [
+            "PARAM-login/fails_to_user_lock",
+            "PARAM-login/fails_to_session_end",
+            "PARAM-login/min_password_lng",
+            "PARAM-login/password_hash_algorithm",
+            "PARAM-login/password_downwards_compatibility",
+            "BASELINE-005",
+            "BASELINE-011",
+            "BASELINE-004"
+          ],
+          "node_types": [
+            "parameter_name"
+          ],
+          "why_cut": "A lockout threshold turns an unlimited number of attempts into a handful, which is what makes a weak password survivable. Note this hop cites the PARAM-* family rather than its twins elsewhere: these particular settings have no second representation, unlike gw/sec_info or rsau/enable, which arrive twice and are cited once."
+        },
+        {
+          "name": "Somebody is already trying",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "LOG-LOGON-001",
+            "LOG-LOGON-002"
+          ],
+          "node_types": [
+            "user"
+          ],
+          "note": "Not a weakness — an observation, and the only hop in the library that reports the attacker rather than the opening. A brute-force pattern against an estate whose lockout is unset is the two halves of this path meeting in the logon history."
+        },
+        {
+          "name": "The account reached is privileged",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "USR-002",
+            "AUTH-002",
+            "S4AUTHZ-001"
+          ],
+          "node_types": [
+            "user",
+            "profile",
+            "role"
+          ],
+          "note": "SAP_ALL on the account that was guessed is the difference between an incident and a breach."
+        },
+        {
+          "name": "The logon would not stand out",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "LOG-AUD-010",
+            "LREV-FLT-001",
+            "LREV-FLT-002",
+            "NET-008"
+          ],
+          "node_types": [
+            "parameter_name",
+            "audit_filter",
+            "client"
+          ],
+          "note": "LREV-FLT-002 is the quiet one: audit filters that cover some clients and not others produce a log that looks complete. A successful logon in an unfiltered client is indistinguishable from one that never happened."
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-19",
+      "name": "Fiori and OData as the reachable surface",
+      "summary": "An OData service that checks no authorization, published through a catalog anyone can see, in front of business data.",
+      "narrative": "Fiori is how a modern SAP estate is actually used, and its exposure model is not the classic one: a tile lives in a catalog, a catalog is assigned to a role, and the OData service behind it does its own authorization or does not. The library modelled the ABAP surface, the integration surface, the gateway and the database, and not the surface every business user touches.",
+      "fair_scenario": "SAP-DATA-04",
+      "severity": "CRITICAL",
+      "crosses_tier": false,
+      "hops": [
+        {
+          "name": "An OData service checks no authorization",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "FIORI-ODATA-001",
+            "FIORI-ODATA-002"
+          ],
+          "node_types": [
+            "odata_service"
+          ],
+          "why_cut": "The service is the last thing between a request and the data, so an authorization check there ends the path whatever the catalog above it allows. This is the same shape as the CDS-view hop on the business-role path, one layer out."
+        },
+        {
+          "name": "The catalog puts it in reach",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "FIORI-CAT-001",
+            "FIORI-APP-001",
+            "FIORI-SPACE-001"
+          ],
+          "node_types": [
+            "fiori_catalog",
+            "fiori_app",
+            "fiori_space",
+            "role"
+          ],
+          "why_cut": "Narrowing the catalog's scope, or removing an administrative app from a widely-assigned one, takes the service out of reach without changing the service. It is the faster of the two cuts and the one a launchpad administrator owns."
+        },
+        {
+          "name": "The service is reachable from outside",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "NET-005",
+            "NET-004",
+            "RISE-005",
+            "RISE-007"
+          ],
+          "node_types": [
+            "icf_path",
+            "endpoint"
+          ],
+          "note": "Internal-only exposure still leaves a business user reaching data the role model says they should not, which is why this hop enriches rather than gates."
+        },
+        {
+          "name": "The read leaves no record",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "DPP-RAL-002",
+            "LOG-TBL-001"
+          ],
+          "node_types": [
+            "table"
+          ],
+          "note": "Shares its ending with the other two data paths. Read Access Logging is the only control here that records a read rather than a change."
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-20",
+      "name": "Personal data leaves the jurisdiction",
+      "summary": "Special-category personal data crossing a border with no legal safeguard, kept past its purpose, in systems that hold it unmasked.",
+      "narrative": "The only path here whose loss event is regulatory rather than technical, and the reason it belongs in the same model is that the mechanism is identical: conditions that co-exist and together produce an outcome. Nobody has to attack anything. The estate is configured such that data goes somewhere it may not go, stays longer than it may stay, and is readable in places it need not be — and the loss is a fine plus a notification obligation rather than a ransom.",
+      "fair_scenario": "SAP-DATA-04",
+      "severity": "CRITICAL",
+      "crosses_tier": true,
+      "hops": [
+        {
+          "name": "Data crosses a border without a safeguard",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "DPP-RES-001",
+            "DPP-RES-002"
+          ],
+          "node_types": [
+            "data_transfer"
+          ],
+          "why_cut": "Standard contractual clauses, an adequacy decision or binding corporate rules make the same transfer lawful without moving the data. The transfer is usually load-bearing for the business; the safeguard is paperwork, which is why this is the cut rather than stopping the flow."
+        },
+        {
+          "name": "It is kept past its purpose",
+          "required": false,
+          "cut": true,
+          "checks": [
+            "DPP-ILM-004",
+            "DPP-ILM-003",
+            "DPP-POP-001",
+            "DPP-POP-002",
+            "DPP-DEL-001"
+          ],
+          "node_types": [
+            "ilm_policy",
+            "table",
+            "processing_purpose"
+          ],
+          "why_cut": "A retention rule with an end-of-purpose definition destroys the data on schedule, and data that is gone cannot be transferred, read or breached. It is the only cut in the library that removes the asset rather than the access to it."
+        },
+        {
+          "name": "Copies of it are unmasked",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "DPP-MASK-001",
+            "DPP-MASK-002",
+            "DPP-FIELD-003"
+          ],
+          "node_types": [
+            "system"
+          ],
+          "note": "The same production data in systems with non-production controls, which multiplies every other hop on this path by the number of copies."
+        },
+        {
+          "name": "Nothing records who read it",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "DPP-RAL-002",
+            "DPP-RAL-003",
+            "DPP-TOOLKIT-001",
+            "DPP-DEL-002"
+          ],
+          "node_types": [
+            "ral_channel",
+            "dsar_request"
+          ],
+          "note": "A notification obligation asks what was accessed and by whom. Read Access Logging absent, or retained for less than a year, is the difference between answering that and estimating it."
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-21",
+      "name": "The edge terminates TLS and trusts whatever it is told",
+      "summary": "A Web Dispatcher with no HTTPS listener, accepting forwarded client certificates over plain HTTP from any upstream.",
+      "narrative": "The Web Dispatcher is the front door of an SAP estate and it is the one component whose misconfiguration is invisible from inside: everything behind it sees a well-formed, authenticated-looking request. `icm/trusted_reverse_proxy` accepting any certificate means the identity in the forwarded header is asserted by whoever sent it, which turns an authentication control into a formality.",
+      "fair_scenario": "SAP-INTF-05",
+      "severity": "HIGH",
+      "crosses_tier": false,
+      "hops": [
+        {
+          "name": "The edge does not insist on TLS",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "WDISP-014",
+            "WDISP-007",
+            "CRYPTO-TLS-001",
+            "CRYPTO-TLS-002"
+          ],
+          "node_types": [
+            "parameter_name",
+            "endpoint"
+          ],
+          "why_cut": "An HTTPS listener, and refusing forwarded certificates over plain HTTP, closes the channel this path runs on. WDISP-007 is the specific one: a client certificate arriving over cleartext is an identity anybody on the path can write."
+        },
+        {
+          "name": "It trusts any upstream that asks",
+          "required": false,
+          "cut": true,
+          "checks": [
+            "WDISP-013"
+          ],
+          "node_types": [
+            "parameter_name"
+          ],
+          "why_cut": "Naming the reverse proxy's certificate, rather than accepting any, means only the intended proxy can assert a forwarded identity. Without it `icm/trusted_reverse_proxy` is an instruction to believe the header."
+        },
+        {
+          "name": "Its administration surface is open",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "WDISP-008",
+            "WDISP-011",
+            "WDISP-012"
+          ],
+          "node_types": [
+            "parameter_name"
+          ],
+          "note": "The ICM administration handler reachable, or not restricted to a host and port, puts the dispatcher's own configuration in reach of whoever gets through it."
+        },
+        {
+          "name": "It leaks what it knows",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "WDISP-005",
+            "WDISP-001",
+            "WDISP-002",
+            "WDISP-004"
+          ],
+          "node_types": [
+            "parameter_name"
+          ],
+          "note": "Server headers, detailed errors and unredacted traces are reconnaissance rather than access. On their own they are hygiene; behind an edge that does not insist on TLS they tell an attacker which version to target."
         }
       ]
     }

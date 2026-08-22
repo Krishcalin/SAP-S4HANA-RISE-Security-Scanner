@@ -1681,7 +1681,7 @@ SAP-S4HANA-RISE-Security-Scanner/
 ├── data/
 │   ├── finding_details.json        # Knowledge base: 380 entries — detailed risk + remediation per check
 │   ├── fair_scenarios.json         # FAIR catalog: 5 SAP loss scenarios + factor/loss ranges (--crq)
-│   ├── attack_paths.json           # 17 SAP risk-path templates (content, not code)
+│   ├── attack_paths.json           # 21 SAP risk-path templates (content, not code)
 │   ├── ecs_hardening_3250501.json  # SAP Note 3250501: 92 parameters + 18 config items, facts only
 │   └── sap_baseline_requirements.json  # Derived from SAP's published CSA policies; CI fails on drift
 ├── tests/                          # 4,015 tests across 123 files
@@ -1795,7 +1795,7 @@ SAP-S4HANA-RISE-Security-Scanner/
 - [x] CI/CD integration with exit codes — `--gate`, exit 0/1/2, see [Release Gate](#release-gate)
 - [x] Client-server tier: PostgreSQL persistence, RBAC with per-system row scoping, audit log
 - [x] Twelve security domains — the buyer's own vocabulary, each stating what we can see there as well as what we found (`/domains`, `?domain=` on the queue, deck slide)
-- [x] Risk-path graph — 17 templates instantiated from co-existing findings, each hop evidenced by
+- [x] Risk-path graph — 21 templates instantiated from co-existing findings, each hop evidenced by
       checks that already exist and each ending at a priced loss scenario, with cuts and choke points
 - [x] SAP Note 3250501 — 92 of 92 mandatory ECS profile parameters, plus the configuration half
 - [x] Custom-code scanner (CVA) — 133 rules, statement lexer, intra-procedural taint analysis

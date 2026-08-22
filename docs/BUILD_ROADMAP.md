@@ -282,7 +282,7 @@ console* reached main. Exactly one skip is expected and accounted for; more fail
 
 | Component | File | Status |
 |---|---|---|
-| Path templates as **content, not code** | `data/attack_paths.json` (17 paths) | ✅ |
+| Path templates as **content, not code** | `data/attack_paths.json` (21 paths) | ✅ |
 | Instantiation, cuts, chokepoints, closure | `server/graph.py` | ✅ |
 | `/paths` ranked list + choke-point table | `frontend/src/routes/Paths.tsx` | ✅ |
 | Per-path detail, SVG, mitigate-vs-additional | `frontend/src/routes/PathDetail.tsx` | ✅ |
@@ -649,6 +649,45 @@ path 15 → 20 — with `NET-005`, *active ICF services without authentication*,
 emerging as the single highest-leverage fix in the estate at **three paths
 severed**. Nobody chose that; it fell out of four templates written independently
 and is exactly what a path library is for.
+
+---
+
+### What "502 checks are on no path" actually decomposed into
+
+Raised as a coverage gap, and worth writing down because the headline number is
+misleading in both directions and nobody could tell without running it.
+
+`data/attack_paths.json` says a short list is the feature — free traversal over a
+graph this dense yields hundreds of paths, nearly all noise — so 709 of 709 was
+never the target. But "502 uncited" is not a claim anyone can act on either. It
+decomposes:
+
+| | |
+|---|---|
+| **339** | never fire on `sample_data` at all. Path membership is not assessable for a check that produces nothing; most are per-rule code findings represented at family level |
+| **44** | coverage checks, INFO and LOW. A check that reports what we could not see is not an attack step and must never be one |
+| **~16** | `PARAM-<name>` SECOND REPRESENTATIONS of a fact already cited |
+| **the rest** | genuinely unrepresented, and the actual work |
+
+THE DUPLICATION IS THE FINDING. Every `PARAM-<name>` has a twin in another
+family — `PARAM-rsau/enable` and `LOG-AUD-010`, `PARAM-gw/sec_info` and
+`INTG-GW-001`, `PARAM-rec/client` and `LOG-TBL-010` — because a profile parameter
+arrives both in the parameter export and in the export of the thing it governs.
+In four of six sampled pairs the twin was already on a path. Citing both would
+put one estate fact on one hop twice and inflate every choke-point count that
+touches it. The same shape as the `parameter` / `parameter_name` node duplication
+fixed earlier in this branch, one layer up.
+
+So the remaining 16 are correct to be uncited, and the number should be read as
+16 duplicates rather than 16 gaps.
+
+MEASURED across the lane: CRITICAL/HIGH checks that fire and sit on no path went
+**98 → 16, and genuinely unrepresented ones to zero**. Distinct checks cited
+174 → 269. Choke points 71 → 143, those severing more than one path 15 → 22.
+
+Eight new templates (14–21) and 29 citations added to hops that already existed —
+the second half deliberately, because a twenty-second template carrying one check
+would be exactly the noise the short-list rule exists to prevent.
 
 ---
 
