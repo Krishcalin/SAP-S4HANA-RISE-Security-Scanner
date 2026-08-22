@@ -100,7 +100,32 @@ def _docstring_sources(src: str, known: set) -> set:
             if name in known}
 
 
-@pytest.mark.parametrize("path", sorted(MODULES.glob("*.py")), ids=lambda p: p.stem)
+def _auditor_modules():
+    """The auditor source files, decided ONCE at collection time.
+
+    PARAMETRISED OVER AUDITORS, NOT OVER `modules/*.py`. The first version
+    parametrised over every file and skipped the two thirds that are not
+    auditors, which produced 34 skips — and the CI job caps DB-backed skips at
+    one, precisely because "a suite that silently skips is worse than one that
+    does not exist, because it LOOKS verified". Thirty-four decorative skips
+    would have blinded that guard to a real one. Deciding here means every case
+    that runs is a case worth running.
+    """
+    from modules.coverage import _NOT_AN_AUDITOR
+
+    out = []
+    for path in sorted(MODULES.glob("*.py")):
+        if path.stem in _NOT_AN_AUDITOR:
+            continue
+        try:
+            if "BaseAuditor" in path.read_text(encoding="utf-8"):
+                out.append(path)
+        except OSError:                                  # pragma: no cover
+            continue
+    return out
+
+
+@pytest.mark.parametrize("path", _auditor_modules(), ids=lambda p: p.stem)
 def test_the_derived_answer_agrees_with_the_module_s_own_prose(path):
     """The comparison nobody had made.
 
@@ -109,16 +134,7 @@ def test_the_derived_answer_agrees_with_the_module_s_own_prose(path):
     decide which is right — it requires them to agree, which is what forces the
     question to be asked at all.
     """
-    from modules.coverage import _NOT_AN_AUDITOR
-
-    # Deferring to the module's OWN exclusion list rather than keeping a second
-    # one. `data_loader` mentions BaseAuditor and is not an auditor; a private
-    # copy of that judgement here would be one more thing to keep in step.
-    if path.stem in _NOT_AN_AUDITOR:
-        pytest.skip("not an auditor")
     src = path.read_text(encoding="utf-8")
-    if "BaseAuditor" not in src:
-        pytest.skip("not an auditor")
     declared = set(module_sources().get(path.stem, []))
     known = set(all_logical_sources())
     in_prose = _docstring_sources(src, known)
