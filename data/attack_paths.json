@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "version": "1.3.0",
+    "version": "1.7.0",
     "description": "SAP attack-path templates. CONTENT, not code: a new path is a new entry here, never a code change. Each template names the checks that evidence each hop, so every hop is grounded in a check that already exists and a path can never claim more than the scanner actually detected.",
     "how_a_path_instantiates": "Every REQUIRED hop must have at least one OPEN finding in the landscape. Optional hops enrich a path but do not gate it. A path is therefore a statement that these conditions CO-EXIST, derived from exported configuration — never a claim that anything was traversed or validated. The console must say so.",
     "cut_semantics": "A hop marked cut=true appears on every variant of the path, so closing it disconnects the path. Non-cut hops reduce exploitability without severing it. This is the mitigate-vs-additional split: it needs no clever algorithm, only that each hop knows whether removing it disconnects.",
@@ -18,8 +18,12 @@
       "SAP Secure Operations Map — transport protection as a control in its own right",
       "SAP Security Notes / HotNews — Priority 1 and actively-exploited advisories",
       "SAP Help — S/4HANA business roles, business catalogs and CDS access control",
-      "SAP Help — Communication arrangements and communication users in RISE"
-    ]
+      "SAP Help — Communication arrangements and communication users in RISE",
+      "SAP Help — CAP authorization (@requires/@restrict) and XSUAA security descriptors"
+    ],
+    "uncited_by_design": {
+      "CSA-*": "SAP's own compliance verdicts, imported and reported as SAP's. They are somebody else's finding rather than our evidence, and a hop that cited them would make the path depend on whether the customer licenses Focused Run — the same estate would instantiate different paths according to its SAP contract. modules/cloudalm_verdicts.py reports them beside our own verdicts for comparison, which is the right place for them."
+    }
   },
   "paths": [
     {
@@ -631,13 +635,12 @@
           "checks": [
             "HANADB-PARAM-003",
             "HANADB-PARAM-005",
-            "CRYPTO-HANA-005",
-            "HANADB-PARAM-004"
+            "CRYPTO-HANA-005"
           ],
           "node_types": [
             "parameter_name"
           ],
-          "note": "Cross-database (MDC) access matters here specifically: it turns a tenant boundary into a reachable one, so a principal in a non-production tenant is adjacent to the production tenant's data."
+          "note": "HANADB-PARAM-004 (log_mode) was cited here and has moved to SAPPATH-22. It is a recovery setting and this hop is about the channel; it sat here because the library had no path about recovery to put it on."
         },
         {
           "name": "The read would not be recorded",
@@ -910,13 +913,14 @@
             "CRYPTO-CERT-003",
             "CRYPTO-KEY-001",
             "BTP-CC-005",
-            "BTP-CC-006"
+            "BTP-CC-006",
+            "CRYPTO-ECS-001"
           ],
           "node_types": [
             "certificate",
             "cc_backend"
           ],
-          "note": "An expired certificate usually presents as an outage rather than a breach — its risk here is the workaround it provokes, because verification switched off to restore an interface is rarely switched back on."
+          "note": "CRYPTO-ECS-001 is the one that undoes the rest: SSF_PSE_D holds the system's private keys, and a key read out of a table is a key however well the channel using it is configured. Every other check on this hop is about whether the anchors are sound; this one is about whether they are still only yours."
         },
         {
           "name": "The credential unlocks a trust relationship",
@@ -1219,12 +1223,23 @@
             "CODE-INJ-001",
             "CODE-INJ-003",
             "CODE-STMT-001",
-            "CODE-MOD-002"
+            "CODE-MOD-002",
+            "ABAP-CINJ-001",
+            "ABAP-CINJ-002",
+            "ABAP-CINJ-007",
+            "ABAP-CINJ-011",
+            "ABAP-CMDI-001",
+            "ABAP-SQLI-001",
+            "ABAP-SQLI-002",
+            "ABAP-SQLI-003",
+            "ABAP-SQLI-004",
+            "ABAP-SQLI-009"
           ],
           "node_types": [
             "program"
           ],
-          "why_cut": "Fixing the statement removes the defect, and nothing else does. A parameter can narrow who reaches a program; none can make a concatenated SQL string safe. Note that both this scanner's findings and SAP's own ATC results appear here — where the customer already licenses ATC, its verdict is authoritative and duplicating it would only disagree with SAP about SAP's own tool."
+          "why_cut": "Fixing the statement removes the defect, and nothing else does. A parameter can narrow who reaches a program; none can make a concatenated SQL string safe. Note that both this scanner's findings and SAP's own ATC results appear here — where the customer already licenses ATC, its verdict is authoritative and duplicating it would only disagree with SAP about SAP's own tool.",
+          "note": "Both this product's own scanner and SAP's ATC results appear here, and the two are not duplicates: `ATC-*` is SAP's verdict where the customer licenses ATC, and `ABAP-*` is what this scanner found in the abapGit export. Where both are present ATC is authoritative — duplicating it would only disagree with SAP about SAP's own tool. The `ABAP-*` ids cited are the CRITICAL-severity rules of the injection families; the scanner represents each rule as a check while ATC represents each family as one, so citing every rule would put fifty-nine ids on this hop."
         },
         {
           "name": "Nothing checks the caller's authority",
@@ -1234,14 +1249,27 @@
             "ATC-AUTHCHK",
             "CODE-INJ-002",
             "AUTH-001",
-            "BASELINE-002"
+            "BASELINE-002",
+            "ABAP-AUTH-001",
+            "ABAP-AUTH-002",
+            "ABAP-AUTH-003",
+            "ABAP-AUTH-004",
+            "ABAP-AUTH-005",
+            "ABAP-AUTH-006",
+            "ABAP-AUTH-008",
+            "ABAP-BKDR-001",
+            "ABAP-BKDR-002",
+            "ABAP-BKDR-003",
+            "ABAP-BKDR-004",
+            "ABAP-BKDR-006"
           ],
           "node_types": [
             "program",
             "auth_object",
             "parameter_name"
           ],
-          "why_cut": "An AUTHORITY-CHECK in the program means the caller must hold the object before the defect is reachable at all. It severs the path without fixing the defect, which is what makes it worth having: it is a change a Basis team can transport in days, where the code fix waits on the team that owns the program."
+          "why_cut": "An AUTHORITY-CHECK in the program means the caller must hold the object before the defect is reachable at all. It severs the path without fixing the defect, which is what makes it worth having: it is a change a Basis team can transport in days, where the code fix waits on the team that owns the program.",
+          "note": "The backdoor rules sit here rather than on the hop above because that is what they are: a hardcoded user comparison or a hidden bypass is an authority check that was written to pass, not an injectable defect. Cited at CRITICAL and HIGH only, by the same rule as the hop above."
         },
         {
           "name": "The program is reachable from outside",
@@ -1469,12 +1497,13 @@
             "PARAM-login/password_downwards_compatibility",
             "BASELINE-005",
             "BASELINE-011",
-            "BASELINE-004"
+            "BASELINE-004",
+            "AUTH-ECS-001"
           ],
           "node_types": [
             "parameter_name"
           ],
-          "why_cut": "A lockout threshold turns an unlimited number of attempts into a handful, which is what makes a weak password survivable. Note this hop cites the PARAM-* family rather than its twins elsewhere: these particular settings have no second representation, unlike gw/sec_info or rsau/enable, which arrive twice and are cited once."
+          "why_cut": "A lockout threshold turns an unlimited number of attempts into a handful, which is what makes a weak password survivable. Note this hop cites the PARAM-* family rather than its twins elsewhere: these particular settings have no second representation, unlike gw/sec_info or rsau/enable, which arrive twice and are cited once. AUTH-ECS-001 changes what this hop is about where it fires: with the password-hash tables not behind authorization group SPWD, guessing moves OFFLINE, and offline guessing is bounded by nothing on this list — no lockout, no logon record, nothing to alert on. Assigning the group is what keeps the attack in the bounded case these parameters govern."
         },
         {
           "name": "Somebody is already trying",
@@ -1731,6 +1760,161 @@
             "parameter_name"
           ],
           "note": "Server headers, detailed errors and unredacted traces are reconnaissance rather than access. On their own they are hygiene; behind an edge that does not insist on TLS they tell an attacker which version to target."
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-22",
+      "name": "Recovery is not assured",
+      "summary": "No recent full backup, no log chain, no tested restore, and backups that are readable by whoever holds them.",
+      "narrative": "Every other template in this library describes somebody reaching something. This one describes what is true afterwards, and it needs no attacker of its own — it is the multiplier on all twenty-one of them. A destructive event has one answer that makes it survivable: restore to just before it. These conditions remove that answer, and they remove it quietly, because a backup chain that is not working looks exactly like one that is until somebody tries. It is also the path an attacker most wants to find. Ransomware economics are entirely about whether the target can roll back, and a destructive insider needs the same thing to be true. The last hop is the one that surprises people: unencrypted backups mean the recovery chain is also a disclosure route, so the same weakness that leaves you unable to recover leaves a complete copy of the business readable by anyone who reaches the storage.",
+      "fair_scenario": "SAP-DATA-04",
+      "severity": "HIGH",
+      "crosses_tier": false,
+      "hops": [
+        {
+          "name": "There is no recent base to restore from",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "RES-BCK-001",
+            "RES-BCK-002",
+            "RES-JOB-001"
+          ],
+          "node_types": [],
+          "why_cut": "A full data backup is the base of the chain and everything else replays onto it, so re-establishing one severs this path at its root. It is also the cheapest cut in the library by a wide margin — a schedule and a destination, no design decision and no conversation with a business owner. RES-BCK-002 belongs on the same hop because an intermittent chain is not a working one: the recovery point is whatever the last SUCCESSFUL run was, and nobody knows that number without reading the catalogue run by run."
+        },
+        {
+          "name": "Nothing bridges the gap since that base",
+          "required": false,
+          "cut": true,
+          "checks": [
+            "RES-BCK-003",
+            "HANADB-PARAM-004"
+          ],
+          "node_types": [
+            "parameter_name"
+          ],
+          "why_cut": "Log backups turn a set of discrete restore points into a continuous one, so scheduling them collapses the exposure from a day to an interval you choose. HANADB-PARAM-004 is cited here rather than on the database path where it used to sit: log_mode = overwrite is not a channel weakness, it is the configuration that makes log backups impossible, and it has to be fixed before RES-BCK-003 can be."
+        },
+        {
+          "name": "Nobody has proved the chain works",
+          "required": false,
+          "cut": true,
+          "checks": [
+            "RES-DR-001",
+            "RES-DR-002",
+            "RES-DR-003"
+          ],
+          "node_types": [],
+          "why_cut": "A restore test is the only control on this path that cannot be satisfied by configuration, and it is the one that finds what the others cannot: an encryption key held only on the system being restored, a chain missing a segment, a procedure that assumes somebody who has left. RES-DR-003 is the most useful member — a test that RAN and missed its objective has already told you the number the business plans against is wrong, which is worth more than a test that passed."
+        },
+        {
+          "name": "The backups are readable by whoever holds them",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "CRYPTO-HANA-004"
+          ],
+          "node_types": [],
+          "note": "The hop that surprises people. Backup encryption is keyed independently of data-volume encryption, so an estate that encrypted at rest has usually not encrypted its backups — and a backup is the whole database in a file, outside every control the source system applies. Not a cut, because encrypting the backups does not restore the ability to recover; it changes what a copy is worth to somebody who takes one, which is a different loss on the same weakness."
+        },
+        {
+          "name": "The evidence cannot settle the question",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "RES-BCK-004",
+            "RES-EVD-001"
+          ],
+          "node_types": [],
+          "note": "Not a weakness — a boundary, and the only hop of its kind in the library. Recovery is the subject where 'we found nothing' and 'we could not look' are most easily confused, because nobody exercises the capability until the worst day. Where these fire, the hops above are unanswered rather than clean, and the honest reading of this path is that it may or may not be open."
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-23",
+      "name": "The CAP application is the reachable surface",
+      "summary": "A CAP service that checks nothing, a role collection granted by birthright, and a token anybody can obtain.",
+      "narrative": "A RISE estate is not only the ABAP stack. Custom applications built on the Cloud Application Programming Model run on BTP beside it, hold their own business data, and are governed by an entirely different authorization model — XSUAA scopes and role collections rather than authorization objects. This product ships fifteen checks for that surface and, until this template, cited none of them on any path: the module reads a project directory that no upload could supply, so there was nothing to cite. The route is short and needs no exploitation. A CAP service without `@requires` answers any authenticated caller; a role collection granted to every federated user by birthright makes 'authenticated' mean 'anybody in the corporate directory'; and a wildcard redirect URI decides how hard the token is to obtain in the first place. Read this beside SAPPATH-19, which is the same shape one stack over: that one is ABAP Fiori and OData, this one is the application the customer wrote themselves.",
+      "fair_scenario": "SAP-DATA-04",
+      "severity": "HIGH",
+      "crosses_tier": true,
+      "hops": [
+        {
+          "name": "A CAP service checks no authorization",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "CAPX-CDS-001",
+            "CAPX-CDS-002",
+            "CAPX-CDS-003"
+          ],
+          "node_types": [
+            "cap_service"
+          ],
+          "why_cut": "The service is the last thing between a request and the data, so a `@requires` there ends the path whatever the role model above it allows. CAPX-CDS-003 is the one worth reading twice: a model enforcing a role no security descriptor grants is not protected but broken — the annotation names something that cannot be held, so either nobody can use the service or the check does not bite, and both are worse than the author intended."
+        },
+        {
+          "name": "The role that reaches it is granted by birthright",
+          "required": false,
+          "cut": true,
+          "checks": [
+            "CAPX-GRAPH-002",
+            "CAPX-SCOPE-001",
+            "CAPX-AUTH-001",
+            "BTP-IAS-005",
+            "BTP-IAS-004"
+          ],
+          "node_types": [
+            "xsuaa_application",
+            "role_collection"
+          ],
+          "why_cut": "Withdrawing a birthright grant narrows who can reach the service without touching the service, and it is the faster of the two cuts because it is a cockpit change rather than a code change and a deployment. CAPX-AUTH-001 belongs here because an application that accepts every authority granted to it, without naming them, cannot be reasoned about at all: what it can do is whatever it was last given."
+        },
+        {
+          "name": "The token is easy to obtain",
+          "required": false,
+          "cut": true,
+          "checks": [
+            "CAPX-URI-001",
+            "CAPX-TOK-001",
+            "CAPX-TEN-001",
+            "CAPX-CRED-001"
+          ],
+          "node_types": [
+            "xsuaa_application",
+            "url"
+          ],
+          "why_cut": "Naming the redirect host rather than accepting a wildcard closes the authorization-code interception this hop is about. The other three lengthen the window rather than opening it: a token policy overriding the subaccount's, a shared tenant mode putting one client secret everywhere, and an instance secret that cannot be rotated all mean a credential, once obtained, stays useful."
+        },
+        {
+          "name": "The restriction that exists is not enforced",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "CAPX-ATTR-001",
+            "CAPX-CDS-004",
+            "CAPX-GRAPH-001"
+          ],
+          "node_types": [
+            "cap_service"
+          ],
+          "note": "The hop where the model looks right and the runtime disagrees. CAP evaluates authorization on the request target only, so a single `$expand` reaches a restricted entity through an unrestricted one — documented behaviour rather than a defect, which is why it cannot be waited out. `valueRequired=false` on an attribute restriction is the same shape: the restriction is declared and does not constrain."
+        },
+        {
+          "name": "What it returns is personal",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "CAPX-CDS-005",
+            "DPP-FIELD-003",
+            "DPP-RAL-002"
+          ],
+          "node_types": [
+            "cap_service"
+          ],
+          "note": "CAP has no property-level authorization, so the projection IS the access control for these fields: whoever may read the entity reads every column of it. Shares its ending with the other data paths, and for the same reason — a read is not a change, so nothing in the change log sees it."
         }
       ]
     }

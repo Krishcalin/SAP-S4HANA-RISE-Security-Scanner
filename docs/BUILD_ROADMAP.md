@@ -718,6 +718,62 @@ path. Required hops cite emittable checks; optional hops were never checked.
 | `rebuild-sap-catalogue` CLI command | `server/cli.py` | ✅ |
 | Static check-id collision guard | `tests/test_check_id_uniqueness.py` | ✅ |
 
+### Wiring the newly-reachable families into the path library, 2026-08-22
+
+Making the five silent modules fire exposed the next thing: the paths were
+written while those modules produced nothing, so there was nothing to cite and no
+way to test a citation. Five families were almost entirely absent from a library
+that has a template for several of their stories.
+
+| Family | Catalogue | Cited before | Cited now |
+|---|---:|---:|---:|
+| `ABAP-*` (this product's own scanner) | 144 | 5 | **26** |
+| `CAPX-*` (CAP / XSUAA) | 15 | 0 | **14** |
+| `RES-*` (resilience) | 9 | 0 | **9** |
+| `AUTH-ECS` / `CRYPTO-ECS` | 3 | 0 | **2** |
+| `CSA-*` (SAP's own verdicts) | 4 | 0 | **0, by design** |
+
+```
+distinct checks cited by some path: 269 -> 315
+templates: 21 -> 23
+```
+
+**SAPPATH-15 was called "Custom code is the vulnerability" and cited SAP's
+IMPORTED ATC results, not our scanner.** The reason was granularity rather than
+oversight: `ATC-*` represents each family as one check id, `abap_sast` represents
+each RULE as a check, so the same concept is sixteen ids and citing every rule
+would put fifty-nine on one hop. The citation is therefore a STATED RULE — the
+CRITICAL-severity rules of the injection families, the CRITICAL and HIGH rules of
+the authority and backdoor families — and `tests/test_abap_path_citations.py`
+derives the same set and requires equality in both directions, so a new CRITICAL
+rule fails the build until it is cited and a downgraded one fails as a stale
+citation.
+
+**SAPPATH-22, "Recovery is not assured", is the first template with no attacker
+in it that is about impact rather than access.** The library admits non-exploit
+paths already (SAPPATH-06, SAPPATH-20); this is the third, and it finally gives
+`HANADB-PARAM-004` a home. log_mode = overwrite had been filed under SAPPATH-08's
+hop "The channel to the database is unprotected" — it is not a channel, it is a
+recovery setting, and it was there because no path about recovery existed. It has
+moved, and the old hop records why.
+
+**SAPPATH-23, "The CAP application is the reachable surface"**, is SAPPATH-19's
+shape one stack over: that one is ABAP Fiori and OData, this one is the
+application the customer wrote themselves. Its fourth hop is the one worth
+reading — CAP evaluates authorization on the request target ONLY, so a single
+`$expand` reaches a restricted entity through an unrestricted one. That is
+documented behaviour rather than a defect, which is why it cannot be waited out.
+
+**`CSA-*` is uncited on purpose, and the reason is recorded in the file rather
+than left to be rediscovered as an omission.** Those are SAP's own compliance
+verdicts, imported and reported as SAP's. A hop citing them would make the path
+depend on whether the customer licenses Focused Run — the same estate would
+instantiate different paths according to its SAP contract.
+
+Thirteen narratives were written first, because the guard added earlier refuses a
+path citation of an undocumented check. That ordering is the guard working as
+intended: path content and the prose supporting it move together.
+
 ### The five modules that produced nothing, 2026-08-22
 
 The roadmap's last unchecked item said three modules never fire on `sample_data`.
