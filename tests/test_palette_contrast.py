@@ -243,3 +243,68 @@ def test_there_are_still_cards_to_check():
     found = sum(len(CARD_PATTERN.findall(f.read_text(encoding="utf-8")))
                 for f in ROUTES.rglob("*.tsx") if not f.name.endswith(".test.tsx"))
     assert found >= 30, f"only {found} card containers matched; the pattern has drifted"
+
+
+# ── the stat tile ────────────────────────────────────────────────────────────
+
+UI = ROOT / "frontend" / "src" / "lib" / "ui.ts"
+
+#: A local re-declaration of a shared tile class. This is exactly how the drift
+#: happened: twelve files each spelling out their own, none of them wrong on its
+#: own page, four different tiles across the console.
+LOCAL_TILE = re.compile(r"^const (CARD_H3|CARD_TITLE|KPI|KPI_NOTE)\s*=", re.M)
+
+
+def test_the_stat_tile_lives_in_one_place():
+    assert UI.exists(), "frontend/src/lib/ui.ts is gone"
+    src = UI.read_text(encoding="utf-8")
+    for name in ("CARD_TITLE", "KPI", "KPI_NOTE"):
+        assert f"export const {name}" in src, f"lib/ui no longer exports {name}"
+
+
+def test_the_headline_number_is_extrabold():
+    """The point of the whole exercise.
+
+    Eleven of twelve screens rendered the figure at `font-semibold`, where it
+    read as a large paragraph rather than as the number the card exists to
+    deliver. One screen used `font-extrabold`, and that is the one someone
+    pointed at and said the numbers looked right.
+    """
+    kpi = [l for l in UI.read_text(encoding="utf-8").splitlines()
+           if l.startswith("export const KPI =")]
+    assert kpi, "KPI is no longer a single-line declaration"
+    assert "font-extrabold" in kpi[0], f"the headline number is not extrabold: {kpi[0]}"
+
+
+def test_no_screen_declares_its_own_stat_tile():
+    """Structural. A screen that re-declares one of these gets a tile that is
+    correct in isolation and different from every other page, which is invisible
+    until two screens are open side by side."""
+    offenders = []
+    for f in sorted((ROOT / "frontend" / "src" / "routes").glob("*.tsx")):
+        if f.name.endswith(".test.tsx"):
+            continue
+        for m in LOCAL_TILE.finditer(f.read_text(encoding="utf-8")):
+            offenders.append(f"{f.name}: {m.group(1)}")
+    assert not offenders, (
+        "these screens re-declare a shared stat-tile class instead of importing "
+        "it from lib/ui: " + "; ".join(offenders))
+
+
+def test_the_screens_actually_use_it():
+    """The guard above is satisfied by a console with no stat tiles at all. This
+    is the half that notices."""
+    routes = ROOT / "frontend" / "src" / "routes"
+    users = [f.name for f in routes.glob("*.tsx")
+             if not f.name.endswith(".test.tsx")
+             and "from '../lib/ui'" in f.read_text(encoding="utf-8")]
+    assert len(users) >= 12, f"only {len(users)} screens import the stat tile"
+
+
+def test_the_note_under_a_number_uses_the_readable_ink():
+    """`--ink-faint` is held to 3:1 and is for labels and hints. The note under a
+    KPI is a sentence explaining what the figure counts, so it gets `--ink-dim`,
+    which the tests above hold to 4.5:1. One screen had it on the faint token."""
+    note = [l for l in UI.read_text(encoding="utf-8").splitlines()
+            if l.startswith("export const KPI_NOTE =")]
+    assert note and "text-ink2" in note[0], f"KPI_NOTE is not on --ink-dim: {note}"

@@ -24,6 +24,7 @@ import { stateChip } from './Domains'
 // is how a board pack and the dashboard beside it start disagreeing.
 import { isPriced } from '../lib/pricing'
 import { money } from './Risk'
+import { CARD_TITLE, KPI, KPI_NOTE } from '../lib/ui'
 
 /**
  * The landing screen — ported from server/templates/dashboard.html.
@@ -540,9 +541,6 @@ const CSF_SLUG: Record<string, string> = {
 }
 
 const CARD = 'rounded-lg border border-cardline bg-panel p-4'
-const CARD_TITLE = 'mb-3 text-[12px] font-semibold uppercase tracking-[.06em] text-ink3'
-const KPI = 'text-[30px] font-semibold tracking-[-.02em] leading-[1.1]'
-const KPI_NOTE = 'mt-[5px] text-[12px] text-ink2'
 const G4 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]'
 const G2 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]'
 /* Three-up where the cards hold a donut. The min is 300 rather than 340 because

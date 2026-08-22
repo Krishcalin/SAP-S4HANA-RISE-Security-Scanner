@@ -13,6 +13,7 @@ import type { CheckDoc } from '../api/types'
 import { useTitle } from '../lib/title'
 import { RequirementRef } from '../components/Refs'
 import { ScanSearch } from 'lucide-react'
+import { CARD_TITLE as CARD_H3 } from '../lib/ui'
 
 /**
  * What one check IS.
@@ -38,7 +39,6 @@ import { ScanSearch } from 'lucide-react'
  */
 
 const CARD = 'rounded-lg border border-cardline bg-panel p-4'
-const CARD_H3 = 'text-[12px] font-semibold uppercase tracking-[.06em] text-ink3 mb-3'
 const H2 = 'text-[15px] font-semibold text-ink mt-7 mb-2.5'
 const LINK = 'text-accent hover:underline'
 const G2 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]'

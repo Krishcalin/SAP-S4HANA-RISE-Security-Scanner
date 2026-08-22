@@ -12,6 +12,7 @@ import type { Coverage as CoverageView, Severity } from '../api/types'
 import { useTitle } from '../lib/title'
 import { CheckRefs, RequirementRef } from '../components/Refs'
 import { ShieldCheck } from 'lucide-react'
+import { CARD_TITLE as CARD_H3, KPI, KPI_NOTE } from '../lib/ui'
 
 /**
  * The published check catalogue and its coverage of SAP's own Security Baseline —
@@ -54,9 +55,6 @@ function str(v: unknown): string | null {
 }
 
 const CARD = 'rounded-lg border border-cardline bg-panel p-4'
-const CARD_H3 = 'text-[12px] font-semibold uppercase tracking-[.06em] text-ink3 mb-3'
-const KPI = 'text-[30px] font-semibold tracking-[-.02em] leading-[1.1]'
-const KPI_NOTE = 'text-ink2 text-[12px] mt-1.5'
 const G4 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]'
 const H2 = 'text-[15px] font-semibold text-ink mt-7 mb-2.5'
 const TH = 'text-left text-[11px] font-semibold uppercase tracking-[.05em] text-ink3 px-2.5 py-2 border-b border-line'

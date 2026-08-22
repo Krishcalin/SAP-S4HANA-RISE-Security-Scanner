@@ -16,6 +16,7 @@ import { useSession } from '../lib/session'
 import { useTitle } from '../lib/title'
 import { CheckRef } from '../components/Refs'
 import { CircleAlert } from 'lucide-react'
+import { CARD_TITLE } from '../lib/ui'
 
 /**
  * One finding in full — ported from server/templates/finding_detail.html.
@@ -754,7 +755,6 @@ function describe(e: unknown): string {
 }
 
 const CARD = 'rounded-lg border border-cardline bg-panel p-4'
-const CARD_TITLE = 'mb-3 text-[12px] font-semibold uppercase tracking-[.06em] text-ink3'
 const G2 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]'
 const H2 = 'text-[15px] font-semibold mt-[26px] mb-2.5'
 const KV = 'grid [grid-template-columns:auto_1fr] gap-y-1.5 gap-x-4 m-0'

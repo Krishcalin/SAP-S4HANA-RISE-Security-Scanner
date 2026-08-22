@@ -14,6 +14,7 @@ import { useTitle } from '../lib/title'
 import { money } from './Risk'
 import { CheckRefs } from '../components/Refs'
 import { Waypoints } from 'lucide-react'
+import { CARD_TITLE as CARD_H3 } from '../lib/ui'
 
 /**
  * One risk path with its evidence — ported from server/templates/path_detail.html.
@@ -65,7 +66,6 @@ function dayMonthYear(iso: string | null, month: 'short' | 'long' = 'short'): st
 }
 
 const CARD = 'rounded-lg border border-cardline bg-panel p-4'
-const CARD_H3 = 'text-[12px] font-semibold uppercase tracking-[.06em] text-ink3 mb-3'
 const G2 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]'
 const H2 = 'text-[15px] font-semibold text-ink mt-7 mb-2.5'
 const TH = 'text-left text-[11px] font-semibold uppercase tracking-[.05em] text-ink3 px-2.5 py-2 border-b border-line'

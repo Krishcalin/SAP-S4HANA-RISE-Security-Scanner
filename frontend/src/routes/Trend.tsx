@@ -12,6 +12,7 @@ import { ApiError, trend } from '../api/client'
 import type { BurndownPoint, Journey } from '../api/types'
 import { useTitle } from '../lib/title'
 import { TrendingUp } from 'lucide-react'
+import { CARD_TITLE as CARD_H3, KPI, KPI_NOTE } from '../lib/ui'
 
 /**
  * The mitigation journey — ported from server/templates/trend.html. It answers
@@ -52,9 +53,6 @@ function days(value: number | null): string {
 }
 
 const CARD = 'rounded-lg border border-cardline bg-panel p-4'
-const CARD_H3 = 'text-[12px] font-semibold uppercase tracking-[.06em] text-ink3 mb-3'
-const KPI = 'text-[30px] font-semibold tracking-[-.02em] leading-[1.1]'
-const KPI_NOTE = 'text-ink2 text-[12px] mt-1.5'
 const G4 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]'
 const G2 = 'grid gap-3.5 mt-3.5 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]'
 const H2 = 'text-[15px] font-semibold text-ink mt-7 mb-2.5'

@@ -12,6 +12,7 @@ import { ApiError, chokepoints as fetchChokepoints } from '../api/client'
 import type { ChokepointsView, RemediationOwner } from '../api/types'
 import { useTitle } from '../lib/title'
 import { Scissors } from 'lucide-react'
+import { CARD_TITLE as CARD_H3, KPI, KPI_NOTE } from '../lib/ui'
 
 /**
  * The shortest worklist this product can produce.
@@ -40,9 +41,6 @@ import { Scissors } from 'lucide-react'
  */
 
 const CARD = 'rounded-lg border border-cardline bg-panel p-4'
-const CARD_H3 = 'text-[12px] font-semibold uppercase tracking-[.06em] text-ink3 mb-3'
-const KPI = 'text-[28px] font-extrabold tracking-tight leading-none'
-const KPI_NOTE = 'text-[12px] text-ink3 mt-1.5'
 const G4 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]'
 const H2 = 'text-[15px] font-semibold text-ink mt-7 mb-2.5'
 const TH = 'text-left text-[11px] font-semibold uppercase tracking-[.05em] text-ink3 px-2.5 py-2 border-b border-line'

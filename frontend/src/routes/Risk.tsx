@@ -17,6 +17,7 @@ import {
 import { RiskTrend } from '../components/CrqCharts'
 import { useTitle } from '../lib/title'
 import { CircleDollarSign } from 'lucide-react'
+import { CARD_TITLE as CARD_H3, KPI, KPI_NOTE } from '../lib/ui'
 
 /**
  * Financial risk exposure — the board view, ported from server/templates/risk.html.
@@ -92,9 +93,6 @@ const TABLE_CARD = 'rounded-lg border border-cardline bg-panel overflow-x-auto'
 const EMPTY = 'p-9 text-center text-ink2'
 const LINK = 'text-accent hover:underline'
 const CARD = 'rounded-lg border border-cardline bg-panel p-4'
-const CARD_H3 = 'text-[12px] font-semibold uppercase tracking-[.06em] text-ink3 mb-3'
-const KPI = 'text-[30px] font-semibold tracking-[-.02em] leading-[1.1]'
-const KPI_NOTE = 'text-ink2 text-[12px] mt-1.5'
 const G4 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]'
 const H2 = 'text-[15px] font-semibold text-ink mt-7 mb-2.5'
 const TH = 'text-left text-[11px] font-semibold uppercase tracking-[.05em] text-ink3 px-2.5 py-2 border-b border-line'
