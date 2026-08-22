@@ -14,7 +14,8 @@ import { stateChip } from './Domains'
 // currency figure belongs to. A second copy here read identically today and
 // would drift from it and from the server on the first rounding change — which
 // is how a board pack and the dashboard beside it start disagreeing.
-import { isPriced } from '../lib/pricing'
+import { isPriced, UNPRICED_CELL, UNPRICED_PROMPT_ACTION,
+         UNPRICED_PROMPT_BODY, UNPRICED_PROMPT_TITLE } from '../lib/pricing'
 import { money } from './Risk'
 import { CARD_TITLE, KPI, KPI_NOTE } from '../lib/ui'
 
@@ -175,6 +176,39 @@ export function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* THE INVITATION, where the figure would be.
+          Gating the NUMBER on isPriced is right and stays. Gating the whole
+          feature on it was not: a landscape with no answers showed nothing at
+          all about quantification on the page everybody lands on, so the one
+          output neither incumbent produces was invisible to anybody who had not
+          already been told it existed. One priced landscape out of three is what
+          that costs.
+
+          Carries no currency figure and must never start to. The counts below
+          are facts about the FINDINGS — scenario matching runs on them and needs
+          no answers — which is exactly why they can be shown when the money
+          cannot. */}
+      {crq && !isPriced(crq) && (
+        <div className={`${CARD} mt-3.5`}>
+          <h3 className={CARD_TITLE}>{UNPRICED_PROMPT_TITLE}</h3>
+          <div className="flex items-baseline gap-[18px] flex-wrap">
+            <div className={KPI}>{UNPRICED_CELL}</div>
+            <div className="text-ink2 text-[12px] max-w-[64ch]">
+              {UNPRICED_PROMPT_BODY}
+            </div>
+          </div>
+          <div className={KPI_NOTE}>
+            {crq.input_finding_count > 0 && (
+              <><strong className="font-[650]">{crq.input_finding_count}</strong>
+              {' '}finding{crq.input_finding_count === 1 ? '' : 's'} already
+              matched to a loss scenario. </>
+            )}
+            {UNPRICED_PROMPT_ACTION}{' '}
+            <Link className="text-accent" to="/crq">Supply your figures →</Link>
+          </div>
+        </div>
+      )}
 
       {/* isPriced GATES THIS, NOT JUST ale_p90 !== null.
           A figure exists on every stored row; whether it was the CUSTOMER'S is a

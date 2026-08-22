@@ -718,6 +718,40 @@ path. Required hops cite emittable checks; optional hops were never checked.
 | `rebuild-sap-catalogue` CLI command | `server/cli.py` | ✅ |
 | Static check-id collision guard | `tests/test_check_id_uniqueness.py` | ✅ |
 
+### The quantification funnel, 2026-08-22
+
+**One priced landscape out of three**, and the cause was not the form — it was
+that the dashboard hid the CAPABILITY along with the number.
+
+`isPriced` gates the figure everywhere, and that rule is right and stays: the
+shipped catalogue is calibrated to an illustrative $1bn manufacturer, so printing
+that company's losses under a customer's name is a fabrication rather than an
+estimate, and a card nobody can screenshot is the only caveat that survives being
+screenshotted. But the gate was applied to the whole feature. A landscape with no
+answers showed **nothing at all** about quantification on the page everybody
+lands on, so the one output neither incumbent produces was invisible to anybody
+who had not already been told it existed.
+
+What the two unpriced deployed landscapes were sitting on, unseen:
+
+```
+Acme Production   unpriced   306 findings already matched to a loss scenario
+ABC Corp          unpriced   386 findings already matched to a loss scenario
+```
+
+Scenario matching runs on the findings and needs no answers, so those counts are
+facts about the estate rather than about the money — which is exactly why they
+can be shown when the figure cannot. The dashboard now renders an invitation in
+place of the hidden pair: an em dash where the figure goes, what is already
+matched, and the honest hook — **you do not have to answer all fourteen**. Each
+figure prices the loss components it feeds and the rest stay openly unpriced, so
+the first few already produce a number with its working shown.
+
+`frontend/src/routes/Dashboard.test.tsx` pins both halves as a pair, because
+fixing the funnel by relaxing the gate would pass the first and fail the second:
+the invitation appears when nothing is priced, **and no currency figure appears
+with it** — asserted over the whole rendered container, not over one element.
+
 ### Closing the documentation lane where it is visible, 2026-08-22
 
 Two things, in the order they had to happen.

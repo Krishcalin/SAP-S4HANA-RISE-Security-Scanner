@@ -68,6 +68,31 @@ export const UNPRICED_ACTION =
   + 'figure here becomes arithmetic on them, with the working shown.'
 
 /**
+ * The dashboard's invitation when nothing is priced.
+ *
+ * SEPARATE FROM `UNPRICED_BODY`, which explains an ABSENCE on a screen the
+ * reader chose to open. This one has to work on a page nobody navigated to for
+ * this purpose: it is the only place the product ever offers quantification to
+ * somebody who does not already know it exists.
+ *
+ * It states no currency figure, and it must not start doing so. What it states
+ * instead is true regardless of pricing — the scenario matching runs on the
+ * findings, so "your findings are already matched" is a fact about the estate.
+ */
+export const UNPRICED_PROMPT_TITLE = 'This estate has no loss figure yet'
+
+export const UNPRICED_PROMPT_BODY =
+  'Scenario matching has already run against your findings — that half is driven '
+  + 'by the estate and needs nothing from you. What is missing is what a loss '
+  + 'costs YOU: an hour of SAP downtime, a personal record, a payment run.'
+
+/** Partial answers price partially, and saying so is what makes the ask small. */
+export const UNPRICED_PROMPT_ACTION =
+  'You do not have to answer all fourteen. Each figure prices the loss components '
+  + 'it feeds and the rest stay openly unpriced, so the first few already produce '
+  + 'a number with its working shown.'
+
+/**
  * What to show in place of a figure. An em dash, not a zero.
  *
  * `money(0)` renders "$0", which is a claim — that the exposure was computed and
