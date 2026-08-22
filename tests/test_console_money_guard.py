@@ -49,7 +49,21 @@ def _code_only(path: Path) -> str:
 
 
 def _sources():
-    return {p.name: p.read_text(encoding="utf-8") for p in ROUTES.glob("*.tsx")}
+    """Every SCREEN in the routes directory.
+
+    `.test.tsx` is excluded deliberately. The rule is about what a customer can
+    be shown, and a test file shows a customer nothing — but it lives in this
+    directory and it discusses `money()`, so an unfiltered glob fails on a
+    comment in a test that is doing its job. That is the same code-versus-prose
+    confusion `_code_only` exists for, arriving through the file list instead of
+    through the file contents.
+
+    Narrowing a guard deserves suspicion, so: no screen is reachable from a
+    `.test.tsx` file, and the widest thing this could hide is a screen someone
+    named as a test, which would not render either.
+    """
+    return {p.name: p.read_text(encoding="utf-8")
+            for p in ROUTES.glob("*.tsx") if not p.name.endswith(".test.tsx")}
 
 
 # ── the rule exists in one place ─────────────────────────────────────────────

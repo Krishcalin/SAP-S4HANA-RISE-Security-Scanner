@@ -412,6 +412,9 @@ export interface UploadResult {
 }
 
 // ── attack paths ────────────────────────────────────────────────────────────
+// Called RISK PATHS in every word a reader sees. The wire shape, the table and
+// the type keep `attack_path`: renaming those is a schema migration that moves
+// every stored path's identity, and this was a change of articulation.
 /** One hop of server/graph.py `_detail`. */
 export interface PathHop {
   name: string
@@ -421,6 +424,7 @@ export interface PathHop {
    *  whole value of the screen and must not be flattened in the UI. */
   is_cut: boolean
   why_cut: string | null
+  note: string | null
   present: boolean
   checks: string[]
   finding_ids: number[]

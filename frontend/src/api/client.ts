@@ -327,6 +327,9 @@ export function bulkSetState(
 }
 
 // ══ attack paths ════════════════════════════════════════════════════════════
+// Called RISK PATHS in every word a reader sees. The wire shape, the table and
+// the type keep `attack_path`: renaming those is a schema migration that moves
+// every stored path's identity, and this was a change of articulation.
 
 export function paths(includeClosed = false): Promise<PathsOverview> {
   return get<PathsOverview>('/paths', { include_closed: includeClosed })

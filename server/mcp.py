@@ -103,7 +103,7 @@ TOOLS: Dict[str, Dict[str, Any]] = {
             scope, limit=min(int(args.get("limit") or 10), 50)),
     },
     "attack_paths": {
-        "description": "Open attack paths and the choke points that sever them. "
+        "description": "Open risk paths and the choke points that sever them. "
                        "Derived from configuration, never traversed.",
         "properties": {},
         "handler": lambda scope, args: {

@@ -138,7 +138,7 @@ function Body({ cov }: { cov: CoverageView }) {
         <div className={CARD}>
           <h3 className={CARD_H3}>Beyond the Baseline</h3>
           <div className={`${KPI} text-ok`}>{cov.beyond_baseline.length}</div>
-          <div className={KPI_NOTE}>SoD, GRC, financial controls, attack paths</div>
+          <div className={KPI_NOTE}>SoD, GRC, financial controls, risk paths</div>
         </div>
         <div className={CARD}>
           <h3 className={CARD_H3}>Not covered</h3>

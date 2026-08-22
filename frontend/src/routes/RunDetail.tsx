@@ -66,7 +66,7 @@ const PHASE: Record<RunStatus, string> = {
   pending: 'Queued. The scan starts when a worker picks the bundle up.',
   parsing: 'Reading the uploaded export files.',
   scanning: 'Running the audit modules.',
-  deriving: 'Deriving attack paths, financial risk and the run-over-run diff.',
+  deriving: 'Deriving risk paths, financial risk and the run-over-run diff.',
   complete: 'Finished.',
   failed: 'Stopped on an error.',
   cancelled: 'Stopped on request.',

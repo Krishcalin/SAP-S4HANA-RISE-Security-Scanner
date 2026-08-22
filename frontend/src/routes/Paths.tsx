@@ -16,7 +16,7 @@ import { money } from './Risk'
 import { Waypoints } from 'lucide-react'
 
 /**
- * Attack paths — ported from server/templates/paths.html.
+ * Risk paths — ported from server/templates/paths.html.
  *
  * THE LANDING SCREEN IS A RANKED LIST AND A CHOKE-POINT TABLE, NOT A GRAPH. Both
  * documented incumbents do the same: the diagram is the evidence pane you open
@@ -61,7 +61,7 @@ const LINK = 'text-accent hover:underline'
 const EMPTY = 'p-9 text-center text-ink2'
 
 export function Paths() {
-  useTitle('Attack paths')
+  useTitle('Risk paths')
   const [view, setView] = useState<PathsOverview | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
 
@@ -76,8 +76,8 @@ export function Paths() {
         if (!live) return
         const status = e instanceof ApiError ? e.status : 0
         setFailure(status === 403
-          ? 'Your account is not permitted to see the attack-path model.'
-          : `The attack paths could not be loaded${status ? ` (HTTP ${status})` : ''}.`)
+          ? 'Your account is not permitted to see the risk-path model.'
+          : `The risk paths could not be loaded${status ? ` (HTTP ${status})` : ''}.`)
       })
     return () => { live = false }
   }, [])
@@ -86,7 +86,7 @@ export function Paths() {
     <>
       <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1">
         <Waypoints size={22} className="text-accent shrink-0" />
-        Attack paths
+        Risk paths
       </h1>
       <p className="text-ink2 mb-5">
         Conditions that co-exist in your exported configuration and, together, form a route.
@@ -254,7 +254,7 @@ function Body({ view }: { view: PathsOverview }) {
             {view.paths.length === 0 && (
               <tr>
                 <td className={EMPTY} colSpan={6}>
-                  No open attack paths. That is a legitimate result, not an empty screen —
+                  No open risk paths. That is a legitimate result, not an empty screen —
                   paths are only raised when every required condition genuinely holds.
                 </td>
               </tr>

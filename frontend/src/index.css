@@ -256,3 +256,64 @@ body {
    the check is one local request, and chrome that appears and vanishes reads
    worse than a beat of nothing. */
 .auth-checking { min-height:100vh; background:var(--bg); }
+
+
+/* ── Risk-path diagram ────────────────────────────────────────────────────────
+   Motion here is NOT decoration; each animation encodes something the static
+   drawing already claims, and nothing animates that does not.
+
+   - `rp-flow` travels only along connectors whose next condition HOLDS. A route
+     that is live moves; a route interrupted by a condition that is not present
+     stays still. That is the same fact the dashed stroke carries, said twice,
+     because the dash is easy to miss at a glance and the movement is not.
+   - `rp-pulse` marks a CUT. It is the one thing on the screen a reader can act
+     on to end the path, so it is the one thing that asks for attention.
+   - `rp-rise` plays once, left to right, on mount. A risk path is a SEQUENCE,
+     and revealing it in order says so before anyone reads a word.
+
+   EVERY ONE OF THEM STOPS under prefers-reduced-motion. Vestibular disorders are
+   not an edge case, and a diagram whose meaning depends on movement a reader
+   cannot tolerate is a diagram that fails for them — so the colour, the dash and
+   the ring all still carry the meaning on their own with motion switched off. */
+
+.rp-flow {
+  stroke-dasharray: 5 7;
+  animation: rp-flow 1.05s linear infinite;
+}
+@keyframes rp-flow { to { stroke-dashoffset: -12; } }
+
+/* fill-box so the ring scales about the node it surrounds rather than the SVG origin. */
+.rp-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: rp-pulse 2.3s cubic-bezier(.4, 0, .6, 1) infinite;
+}
+@keyframes rp-pulse {
+  0%, 100% { opacity: .55; transform: scale(1); }
+  50%      { opacity: 0;   transform: scale(1.055); }
+}
+
+.rp-step {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: rp-rise .42s cubic-bezier(.2, .7, .3, 1) both;
+}
+@keyframes rp-rise {
+  from { opacity: 0; transform: translateY(9px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Hover/selection. The dim is on the SIBLINGS, so attention moves without
+   anything growing or shifting layout — a node that jumps under the cursor makes
+   a diagram feel unstable and makes clicking the next one harder. */
+.rp-node { cursor: pointer; transition: opacity .2s ease; }
+.rp-node:focus { outline: none; }
+.rp-dim { opacity: .34; }
+
+.rp-halo { transition: opacity .2s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rp-flow, .rp-pulse, .rp-step { animation: none; }
+  .rp-flow { stroke-dasharray: 5 7; }
+  .rp-node, .rp-dim, .rp-halo { transition: none; }
+}
