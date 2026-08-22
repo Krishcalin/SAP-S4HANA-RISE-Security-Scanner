@@ -718,6 +718,51 @@ path. Required hops cite emittable checks; optional hops were never checked.
 | `rebuild-sap-catalogue` CLI command | `server/cli.py` | ✅ |
 | Static check-id collision guard | `tests/test_check_id_uniqueness.py` | ✅ |
 
+### Closing the documentation lane where it is visible, 2026-08-22
+
+Two things, in the order they had to happen.
+
+**A WRONG statement on /checks/{id} outranks a missing one.** `module_sources()`
+is rendered to customers as "Exports the module reads" and is what
+`build_manifest` uses to decide whether a module got what it needs. For
+`ecs_config_items` it published `client_settings` — its single written literal —
+while the module actually reads four sources. Two general gaps in the AST
+analysis:
+
+- a source named by a **constant** was invisible (`TABLE_AUTH_GROUPS =
+  "table_auth_groups"`, then `self._rows(TABLE_AUTH_GROUPS)` — an `ast.Name` is
+  not an `ast.Constant`);
+- an accessor that **forwards** was not recognised as one (`_rows(key)` reads
+  `self.data.get(key)` and was detected, `_filter_rows(key)` calls
+  `self._rows(key)` and was not).
+
+Fixed by generalising — constants resolve, accessor detection runs to a fixed
+point. Exactly **one** module's answer changed and none lost a source.
+
+How it stood so long is the interesting part: the module's own docstring named
+`table_auth_groups` in its first paragraph. The prose was right, the derived
+answer was wrong, and **nobody had compared them**.
+`tests/test_module_sources_accuracy.py` now does, for every auditor. It
+immediately found three more disagreements, all prose rather than analysis —
+`webdisp_security` names `security_params` to explain why it does NOT use it,
+`cap_xsuaa` says `btp_users` "is not collected at all", and `data_loader` is in
+the module's own `_NOT_AN_AUDITOR` set, which the test now defers to.
+
+**Then the seventeen.** Of 91 undocumented checks, 17 were real checks that FIRE
+on the corpus — the ones a customer is actually looking at when the page says
+"no published description". All 17 written.
+
+```
+undocumented: 91 -> 75
+  coverage / boundary checks : 23   (a different, smaller job)
+  real checks that fire      :  0   <- was 17
+  real, dormant              : 51
+```
+
+A new test asserts the middle line stays zero, with the coverage checks NAMED
+rather than pattern-matched — excluding them by a regex over ids would silently
+absorb any future check whose id happened to contain COV.
+
 ### Wiring the newly-reachable families into the path library, 2026-08-22
 
 Making the five silent modules fire exposed the next thing: the paths were

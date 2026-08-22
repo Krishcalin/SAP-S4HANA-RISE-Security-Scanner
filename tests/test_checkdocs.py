@@ -408,3 +408,53 @@ def test_a_hand_written_entry_carries_both_halves_and_says_something():
         if len(risk) < 300 or len(fix) < 200 or "1." not in fix:
             thin.append(check_id)
     assert not thin, "knowledge-base entries too thin to be an answer: %s" % thin[:8]
+
+
+def test_every_check_that_fires_on_the_corpus_is_documented():
+    """The line this lane was driven to, and the one worth holding.
+
+    A check nobody can trigger being undocumented is a gap in a catalogue. A check
+    that FIRES being undocumented is a finding a customer is looking at, on a page
+    that says "no published description" — which is the moment the product asks to
+    be trusted and offers nothing.
+
+    Coverage checks are excluded and named rather than pattern-matched. They report
+    what the scan could NOT see; several are still undocumented and that is a
+    different, smaller job — but excluding them by a regex over ids would silently
+    absorb any future check whose id happened to contain COV.
+    """
+    import contextlib
+    import importlib
+    import io
+
+    from modules.data_loader import DataLoader
+    from server.ingest import AUDITORS, RUN_CONTEXT
+
+    sample = ROOT / "sample_data"
+    if not sample.is_dir():
+        pytest.skip("sample_data absent")
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        data = DataLoader(sample).load_all()
+        fired = set()
+        for module_name, class_name in AUDITORS:
+            auditor = getattr(importlib.import_module(f"modules.{module_name}"),
+                              class_name)
+            fired |= {f["check_id"] for f in
+                      (auditor(data, None, RUN_CONTEXT).run_all_checks() or [])}
+
+    coverage_checks = {
+        "ABAP-COV-001", "AUTH-ECS-000", "CAPX-COV-001", "CRYPTO-SNCECS-000",
+        "CSA-COV-001", "HOTNEWS-COVERAGE", "IAM-FEDCOV-002", "IAM-FEDCOV-003",
+        "IAM-SOD-DEFERRED", "LREV-SRC-001", "PARAM-MISSING-OTHER",
+        "RES-EVD-001", "STDUSR-COV-001",
+    }
+
+    undocumented = sorted(
+        c for c in fired
+        if c not in coverage_checks
+        and checkdocs.known_check(c)
+        and not checkdocs.check(c)["documented"])
+    assert not undocumented, (
+        "these checks FIRE on the bundled corpus and render \"no published "
+        "description\" on /checks/{id}: %s" % undocumented)
