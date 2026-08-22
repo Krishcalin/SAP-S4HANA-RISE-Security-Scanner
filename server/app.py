@@ -54,7 +54,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import Scope
 
-from server import analytics, auth, crq, db, export, graph, ingest, queries, sapcontent
+from server import analytics, auth, checkdocs, crq, db, export, graph, ingest, queries, sapcontent
 from modules import domains, nist_csf, platforms
 #: SESSION_COOKIE is imported but not USED here any more — the routes that set and
 #: cleared it were the Jinja form's sign-in and sign-out, and the SPA uses
@@ -499,6 +499,54 @@ def api_coverage(user: Dict[str, Any] = Depends(current_user)):
             "observed_checks": observed}
 
 
+@app.get("/api/checks")
+def api_check_index(user: Dict[str, Any] = Depends(current_user)):
+    """Every check id the scanner publishes, with its category.
+
+    The index behind the per-check pages. It is the CATALOGUE, parsed from the
+    modules, not the set of ids that have produced a finding here — the same
+    distinction `/api/coverage` draws between `our_checks` and
+    `observed_checks`, and for the same reason: a check that ran and passed
+    still exists, and a reader looking up an id needs it to resolve.
+    """
+    return {"checks": checkdocs.catalogue_index()}
+
+
+@app.get("/api/checks/{check_id}")
+def api_check(check_id: str, user: Dict[str, Any] = Depends(current_user)):
+    """What one check is: what it looks for, why it matters, what it answers.
+
+    NOT TENANT DATA. Everything here is a property of the product, so it carries
+    no row scoping and needs none — which is also why the page can link out to
+    the findings queue for the estate-specific half rather than running a second,
+    separately-scoped query of its own.
+
+    404 on an id the catalogue does not publish, because a check page that
+    rendered an empty shell for a typo would look like a check that exists and
+    does nothing.
+    """
+    doc = checkdocs.check(check_id)
+    if doc is None:
+        raise HTTPException(404, f"no such check id: {check_id}")
+    return doc
+
+
+@app.get("/api/requirements/{requirement_id}")
+def api_requirement(requirement_id: str,
+                    user: Dict[str, Any] = Depends(current_user)):
+    """One SAP Baseline requirement family, and how this product answers it.
+
+    `titles` is SAP's own wording for each check item in the family, carried
+    verbatim. A requirement page that paraphrased SAP would be answering a
+    question the auditor did not ask, and the value of citing the Baseline at
+    all is that the words are theirs.
+    """
+    doc = checkdocs.requirement(requirement_id)
+    if doc is None:
+        raise HTTPException(404, f"no such Baseline requirement: {requirement_id}")
+    return doc
+
+
 @app.post("/api/views")
 def api_save_view(name: str = Form(...), slug: str = Form(...),
                   kind: str = Form("findings"), shared: bool = Form(True),
@@ -726,7 +774,7 @@ def api_findings(user: Dict[str, Any] = Depends(current_user),
                  owner: Optional[str] = None, tier: Optional[str] = None,
                  category: Optional[str] = None, assignee: Optional[str] = None,
                  overdue: bool = False, domain: Optional[str] = None,
-                 page: int = 1):
+                 check: Optional[str] = None, page: int = 1):
     """The triage queue.
 
     THE FILTER LIST IS THE CONSOLE'S, IN FULL. It was once a strict subset —
@@ -736,6 +784,11 @@ def api_findings(user: Dict[str, Any] = Depends(current_user),
     is now the only reader of `list_findings`, so the subset could not come back
     by accident; the parameters stay because an integrator wants exactly the
     filters an analyst has.
+
+    `check` IS REFUSED THE SAME WAY, and for the same reason. An id the catalogue
+    does not publish is a typo or a stale link, and answering it with every open
+    finding would read as "this check is everywhere" — the widest possible answer
+    to the narrowest possible question.
 
     `domain` IS REFUSED RATHER THAN IGNORED when it names nothing we assess. An
     unknown value silently dropped would answer a narrow question with the whole
@@ -761,11 +814,13 @@ def api_findings(user: Dict[str, Any] = Depends(current_user),
                 status_code=400,
                 detail=f"{definition['label']} is not assessed by this product, "
                        "so the queue cannot be filtered by it")
+    if check is not None and not checkdocs.known_check(check):
+        raise HTTPException(404, f"no such check id: {check}")
     return queries.list_findings(auth.scope_for(user), system_id=system_id,
                                  state=state, severity=severity, team=team,
                                  remediation_owner=owner, tier=tier,
                                  category=category, assignee=assignee,
-                                 overdue=overdue, domain=domain, page=page)
+                                 overdue=overdue, domain=domain, check=check, page=page)
 
 
 @app.get("/api/findings/changes")

@@ -182,11 +182,24 @@ export function Findings() {
         </button>
       </div>
 
-      {/* `category` and `assignee` are accepted by the query and can arrive from a
-          saved view, but have no control above — say so rather than filtering the
-          queue by something invisible. */}
-      {(params.get('category') || params.get('assignee')) && (
+      {/* `category`, `assignee` and `check` are accepted by the query and can
+          arrive from a saved view or a link, but have no control above — say so
+          rather than filtering the queue by something invisible. `check` is the
+          one a reader most often arrives on: it is how a check's own page hands
+          off the "and where does it bite in my estate" half of the question. */}
+      {(params.get('category') || params.get('assignee') || params.get('check')) && (
         <div className="flex gap-2 flex-wrap items-center mb-3.5 text-[12px] text-ink2">
+          {params.get('check') && (
+            <span>
+              Check <span className="font-mono text-ink">{params.get('check')}</span>{' '}
+              <Link className="text-accent"
+                    to={`/checks/${encodeURIComponent(params.get('check') as string)}`}>
+                what is it?
+              </Link>{' '}
+              <button type="button" className="text-accent"
+                      onClick={() => setFilter('check', '')}>clear</button>
+            </span>
+          )}
           {params.get('category') && (
             <span>
               Category <span className="font-mono text-ink">{params.get('category')}</span>{' '}
@@ -635,6 +648,7 @@ function queryFrom(sp: URLSearchParams): FindingFilters {
     category: sp.get('category') || null,
     assignee: sp.get('assignee') || null,
     domain: sp.get('domain') || null,
+    check: sp.get('check') || null,
     overdue: sp.get('overdue') === 'true',
     page: Number.isFinite(page) && page > 0 ? Math.floor(page) : 1,
   }

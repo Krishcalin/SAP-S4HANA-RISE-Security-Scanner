@@ -431,7 +431,6 @@
           "cut": true,
           "checks": [
             "GRC-MIT-001",
-            "GRC-MIT-002",
             "ARA-SCORE-001"
           ],
           "node_types": [
@@ -447,8 +446,6 @@
           "checks": [
             "FIN-PP-001",
             "FIN-TOL-001",
-            "FIN-DUAL-001",
-            "FIN-CHG-001",
             "FIN-NR-001"
           ],
           "node_types": [

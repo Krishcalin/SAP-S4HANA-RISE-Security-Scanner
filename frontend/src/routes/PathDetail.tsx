@@ -12,6 +12,7 @@ import { ApiError, path as fetchPath } from '../api/client'
 import type { PathFinding, PathHop, PathView, RemediationOwner } from '../api/types'
 import { useTitle } from '../lib/title'
 import { money } from './Risk'
+import { CheckRefs } from '../components/Refs'
 import { Waypoints } from 'lucide-react'
 
 /**
@@ -199,7 +200,7 @@ function Body({ view }: { view: PathView }) {
                       file unrendered until now. Muted below why_cut: it is
                       context for the step, not an instruction. */}
                   {h.note && <div className="text-[12px] text-ink3">{h.note}</div>}
-                  <div className="text-[12px] text-ink3 font-mono">{h.checks.join(' · ')}</div>
+                  <div className="text-[12px]"><CheckRefs ids={h.checks} /></div>
                 </td>
                 <td className={`${TD} text-[12px]`}>
                   {h.required ? 'required' : 'contributing'}
@@ -672,8 +673,8 @@ function RouteDiagram({ hops, scenario, ale, selected, onSelect }: {
               <p className="text-[13.5px] text-ink3 mt-1.5">{detail.note}</p>
             )}
             {detail.checks.length > 0 && (
-              <p className="text-[12.5px] text-ink3 font-mono mt-2">
-                {detail.checks.join(' · ')}
+              <p className="text-[12.5px] mt-2">
+                <CheckRefs ids={detail.checks} />
               </p>
             )}
           </>

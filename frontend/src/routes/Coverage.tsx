@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import { ApiError, coverage } from '../api/client'
 import type { Coverage as CoverageView, Severity } from '../api/types'
 import { useTitle } from '../lib/title'
+import { CheckRefs, RequirementRef } from '../components/Refs'
 import { ShieldCheck } from 'lucide-react'
 
 /**
@@ -162,7 +163,9 @@ function Body({ cov }: { cov: CoverageView }) {
           <tbody>
             {cov.covered.map((r) => (
               <tr key={r.requirement} className="hover:bg-panel2">
-                <td className={`${TD} font-mono text-[12px]`}>{r.requirement}</td>
+                <td className={`${TD} font-mono text-[12px]`}>
+                  <RequirementRef id={r.requirement} />
+                </td>
                 <td className={TD}>
                   <span className={`pill sev-${tierSeverity(r.tier)}`}>
                     {r.tier || 'untiered'}
@@ -171,10 +174,11 @@ function Body({ cov }: { cov: CoverageView }) {
                 <td className={`${TD} text-[12px] text-ink2`}>{r.technology}</td>
                 <td className={`${TD} text-[12px]`}>{r.title}</td>
                 {/* Six ids and a count, not the whole list: a requirement family can
-                    map to thirty checks and the column is a sample, not the index. */}
-                <td className={`${TD} font-mono text-[12px] text-ink3`}>
-                  {r.our_checks.slice(0, 6).join(', ')}
-                  {r.our_checks.length > 6 && ` +${r.our_checks.length - 6}`}
+                    map to thirty checks and the column is a sample, not the index.
+                    The sampling survives the ids becoming links — CheckRefs takes
+                    the same limit and renders the same `+N`. */}
+                <td className={`${TD} text-[12px]`}>
+                  <CheckRefs ids={r.our_checks} limit={6} separator=", " />
                 </td>
               </tr>
             ))}
@@ -210,7 +214,12 @@ function Body({ cov }: { cov: CoverageView }) {
           <tbody>
             {cov.not_covered.map((r) => (
               <tr key={r.requirement} className="hover:bg-panel2">
-                <td className={`${TD} font-mono text-[12px]`}>{r.requirement}</td>
+                {/* Linked even though we do not answer it: the page says so, and
+                    "what does this require, and why don't we do it" is a fair
+                    question to be able to click on. */}
+                <td className={`${TD} font-mono text-[12px]`}>
+                  <RequirementRef id={r.requirement} />
+                </td>
                 <td className={TD}>
                   <span className={`pill sev-${tierSeverity(r.tier)}`}>
                     {r.tier || 'untiered'}

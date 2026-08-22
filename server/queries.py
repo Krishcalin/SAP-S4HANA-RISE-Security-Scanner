@@ -290,7 +290,8 @@ def list_findings(scope: Optional[Sequence[int]], system_id: Optional[int] = Non
                   team: Optional[str] = None, remediation_owner: Optional[str] = None,
                   tier: Optional[str] = None, category: Optional[str] = None,
                   assignee: Optional[str] = None, overdue: bool = False,
-                  domain: Optional[str] = None, page: int = 1) -> Dict[str, Any]:
+                  domain: Optional[str] = None, check: Optional[str] = None,
+                  page: int = 1) -> Dict[str, Any]:
     where: List[str] = []
     params: List[Any] = []
     _scoped(where, params, scope)
@@ -311,6 +312,12 @@ def list_findings(scope: Optional[Sequence[int]], system_id: Optional[int] = Non
         where.append("f.priority_tier = %s"); params.append(tier)
     if category:
         where.append("cd.category = %s"); params.append(category)
+    # One check id, exactly. This is what makes a check's own page able to answer
+    # "and where does it bite in MY estate" without a second, differently-scoped
+    # query living on that page -- row scoping is applied once, above, for every
+    # filter including this one.
+    if check:
+        where.append("f.check_id = %s"); params.append(check)
     if assignee:
         where.append("f.assignee = %s"); params.append(assignee)
     if overdue:
@@ -605,6 +612,11 @@ def bulk_transition(finding_ids: Sequence[int], to_state: str, actor: str,
 VIEW_FILTER_KEYS = frozenset({
     "system_id", "state", "severity", "team", "owner", "tier", "category",
     "assignee", "overdue", "days", "domain",
+    # `check` qualifies on the allowlist's own terms: it is validated before the
+    # query layer sees it -- server/app.py refuses an id the catalogue does not
+    # publish -- and "every open instance of LOG-AUD-001" is exactly the kind of
+    # view worth saving a link to.
+    "check",
 })
 
 

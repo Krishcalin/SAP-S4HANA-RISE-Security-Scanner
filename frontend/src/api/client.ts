@@ -36,13 +36,14 @@
 // server/api_auth.py — and it must not be "harmonised" with the above.
 
 import type {
-  AccountInfo, AssignResult, BulkTransitionResult, ChangesSince, Coverage,
-  CrqControlsView, CrqParametersView, CrqQuantifyResult, CrqTrendPoint,
-  CsfFunctionView, CsfView, Dashboard, DomainsView, FindingDetail,
-  FindingFilters, FindingHistory, FindingPage, GeneratedPassword, Health,
-  Journey, Landscape, Me, PathView, PathsOverview, ResolvedView, RiskView,
-  RunDiff, SapSystem, SaveViewResult, SavedView, ScanRun, SecurityDomain,
-  TotpConfirmed, TotpEnrolment, TotpStatus, TransitionResult, UploadResult
+  AccountInfo, AssignResult, BulkTransitionResult, ChangesSince, CheckDoc,
+  CheckIndexEntry, Coverage, CrqControlsView, CrqParametersView,
+  CrqQuantifyResult, CrqTrendPoint, CsfFunctionView, CsfView, Dashboard,
+  DomainsView, FindingDetail, FindingFilters, FindingHistory, FindingPage,
+  GeneratedPassword, Health, Journey, Landscape, Me, PathView, PathsOverview,
+  RequirementDoc, ResolvedView, RiskView, RunDiff, SapSystem, SaveViewResult,
+  SavedView, ScanRun, SecurityDomain, TotpConfirmed, TotpEnrolment,
+  TotpStatus, TransitionResult, UploadResult
 } from './types'
 
 /** Same-origin by default: FastAPI serves this bundle and the API. The override
@@ -337,6 +338,23 @@ export function paths(includeClosed = false): Promise<PathsOverview> {
 
 export function path(id: number): Promise<PathView> {
   return get<PathView>(`/paths/${id}`)
+}
+
+// ══ the check catalogue and SAP's Baseline requirements ═════════════════════
+// Product facts, not tenant data: these carry no row scoping and need none. The
+// estate-specific half is a link to the findings queue, which is scoped once, in
+// the place every other filter is scoped.
+
+export function checkDoc(id: string): Promise<CheckDoc> {
+  return get<CheckDoc>(`/checks/${encodeURIComponent(id)}`)
+}
+
+export function requirementDoc(id: string): Promise<RequirementDoc> {
+  return get<RequirementDoc>(`/requirements/${encodeURIComponent(id)}`)
+}
+
+export function checkIndex(): Promise<{ checks: CheckIndexEntry[] }> {
+  return get<{ checks: CheckIndexEntry[] }>('/checks')
 }
 
 // ══ financial risk, journey, coverage ═══════════════════════════════════════

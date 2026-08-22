@@ -14,6 +14,7 @@ import {
 import type { FindingDetail as Finding, FindingHistory } from '../api/types'
 import { useSession } from '../lib/session'
 import { useTitle } from '../lib/title'
+import { CheckRef } from '../components/Refs'
 import { CircleAlert } from 'lucide-react'
 
 /**
@@ -98,7 +99,10 @@ export function FindingDetail() {
         {finding.title}
       </h1>
       <p className="text-ink2 mb-5">
-        <span className="font-mono">{finding.check_id}</span>
+        {/* The one place a finding links to its DEFINITION. Doing it here,
+            once, rather than from every row that names the check, is what keeps
+            the triage queue's own links pointing at the defect a reader clicked. */}
+        <CheckRef id={finding.check_id} />
         {finding.system_label && <> · <span className="font-mono">{finding.system_label}</span></>}
         {finding.baseline_req_id && (
           <> · SAP Security Baseline <span className="font-mono">{finding.baseline_req_id}</span></>

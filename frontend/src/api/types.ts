@@ -806,7 +806,70 @@ export interface FindingFilters {
    *  one and refuses the domain it does not assess, rather than answering the
    *  first with the whole queue and the second with an empty one. */
   domain?: string | null
+  /** One check id. The server refuses an id the catalogue does not publish,
+   *  rather than answering the narrowest possible question with the whole
+   *  queue. This is what a check's own page links out to. */
+  check?: string | null
   page?: number
+}
+
+// ── the check catalogue, and SAP's Baseline requirements ────────────────────
+/** server/checkdocs.py `check` — what one check IS, assembled from the sources
+ *  that are each already the authority for their own field. */
+export interface CheckDoc {
+  check_id: string
+  category: string | null
+  /** The module that emits it, or null for an id the parser cannot attribute. */
+  module: string | null
+  /** The exports that MODULE reads. Module-level and labelled as such on the
+   *  screen: which of them a single check touches is not derivable, and a
+   *  narrower list would be a claim the parser cannot support. */
+  module_reads: string[]
+  /** False for the 352 published ids with no knowledge-base entry yet. The
+   *  screen says so plainly rather than rendering an empty panel. */
+  documented: boolean
+  risk: string | null
+  mitigation: string | null
+  requirements: {
+    requirement: string
+    tier: string | null
+    technology: string | null
+    title: string | null
+  }[]
+  /** Risk-path steps this check evidences. `is_cut` is the most actionable
+   *  thing this page can say: closing it severs a route. */
+  paths: {
+    template_id: string
+    path_name: string | null
+    severity: Severity | null
+    fair_scenario: string | null
+    hop: string | null
+    is_cut: boolean
+    required: boolean
+  }[]
+}
+
+/** server/checkdocs.py `requirement` — one SAP Baseline requirement family. */
+export interface RequirementDoc {
+  requirement: string
+  family: string | null
+  technology: string | null
+  tier: string | null
+  /** SAP's own wording for every check item in the family, carried verbatim. */
+  titles: string[]
+  config_stores: string[]
+  check_items: number | null
+  policies: string[]
+  our_checks: string[]
+  covered: boolean
+}
+
+/** server/app.py `api_check_index`. */
+export interface CheckIndexEntry {
+  check_id: string
+  category: string | null
+  module: string | null
+  documented: boolean
 }
 
 /** server/api_auth.py `api_totp_status`. */
