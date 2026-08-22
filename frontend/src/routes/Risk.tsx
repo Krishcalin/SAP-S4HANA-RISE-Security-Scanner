@@ -10,6 +10,7 @@ import { RiskTrend } from '../components/CrqCharts'
 import { useTitle } from '../lib/title'
 import { CircleDollarSign } from 'lucide-react'
 import { CARD_TITLE as CARD_H3, KPI, KPI_NOTE } from '../lib/ui'
+import { Donut } from '../components/Donut'
 
 /**
  * Financial risk exposure — the board view, ported from server/templates/risk.html.
@@ -85,6 +86,14 @@ const TABLE_CARD = 'rounded-lg border border-cardline bg-panel overflow-x-auto'
 const EMPTY = 'p-9 text-center text-ink2'
 const LINK = 'text-accent hover:underline'
 const CARD = 'rounded-lg border border-cardline bg-panel p-4'
+
+/* Fixed order, assigned by position in the scenario list rather than by size, so
+   a scenario does not change colour when the exposure moves. Not the severity
+   palette: a loss scenario is not a severity. */
+const SCENARIO_COLOR = [
+  'var(--accent)', 'var(--ok)', 'var(--med)', 'var(--high)',
+  'var(--low)', 'var(--ink-dim)',
+]
 const G4 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]'
 const H2 = 'text-[15px] font-semibold text-ink mt-7 mb-2.5'
 const TH = 'text-left text-[11px] font-semibold uppercase tracking-[.05em] text-ink3 px-2.5 py-2 border-b border-line'
@@ -181,7 +190,29 @@ function Body({ view }: { view: RiskView }) {
           Scenario matching is real and independent of the money: it is driven by
           your findings. Only the loss magnitude is unpriced.
         </p>
-        <div className={TABLE_CARD}>
+        {/* WHERE THE MONEY IS, before the table that itemises it. Five loss
+          scenarios, parts of one priced total — the form's conditions exactly.
+          This is also the one place in the product where a part-to-whole is the
+          actual question a board asks: not "how many findings" but "which of
+          these five is most of the exposure".
+
+          Everything here is downstream of the isPriced gate and the
+          ale_p90 === null early return above, so an unpriced landscape never
+          reaches this line. */}
+      {view.scenarios.length > 1 && (
+        <div className={`${CARD} mb-3.5`}>
+          <h3 className={CARD_H3}>Share of the annualised exposure</h3>
+          <Donut ariaLabel="Annualised loss exposure by scenario"
+                 caption="P90"
+                 slices={view.scenarios.map((sc, i) => ({
+                   key: String(sc.id),
+                   label: sc.scenario_id ?? String(sc.id),
+                   value: Math.round(num(sc.ale_p90) ?? 0),
+                   color: SCENARIO_COLOR[i % SCENARIO_COLOR.length],
+                 }))} />
+        </div>
+      )}
+      <div className={TABLE_CARD}>
           <table className="w-full border-collapse">
             <thead>
               <tr>

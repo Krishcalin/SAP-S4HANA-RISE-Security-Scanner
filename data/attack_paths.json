@@ -446,13 +446,16 @@
           "checks": [
             "FIN-PP-001",
             "FIN-TOL-001",
+            "FIN-SF-001",
+            "FIN-DOC-001",
             "FIN-NR-001"
           ],
           "node_types": [
             "posting_period_variant",
             "tolerance_group",
             "document_field"
-          ]
+          ],
+          "note": "FIN-SF-001 and FIN-DOC-001 replace FIN-DUAL-001 and FIN-CHG-001, which this hop cited for the life of the template and which no module has ever emitted. The names line up with what the phantoms were reaching for — dual control on payment-relevant master-data fields, and whether payment-relevant document fields stay editable after posting — so the hop is evidenced now rather than quietly short of two of its five checks. It stays a NON-cut: dual control on a bank field does not sever a path whose mechanism is one person holding conflicting duties. It makes the conflict harder to exploit, which is exactly what a non-cut hop is for."
         },
         {
           "name": "Activity would not be reviewed",

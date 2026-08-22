@@ -3,6 +3,7 @@ import { ApiError, coverage } from '../api/client'
 import type { Coverage as CoverageView, Severity } from '../api/types'
 import { useTitle } from '../lib/title'
 import { CheckRefs, RequirementRef } from '../components/Refs'
+import { Meter } from '../components/Meter'
 import { ShieldCheck } from 'lucide-react'
 import { CARD_TITLE as CARD_H3, KPI, KPI_NOTE } from '../lib/ui'
 
@@ -120,11 +121,20 @@ function Body({ cov }: { cov: CoverageView }) {
         </div>
         <div className={CARD}>
           <h3 className={CARD_H3}>SAP requirements covered</h3>
-          <div className={KPI}>
-            {cov.requirements_covered}
-            <span className="text-ink2 text-[16px]">/{cov.requirements_published}</span>
-          </div>
-          <div className={KPI_NOTE}>Baseline {cov.baseline_version ?? '—'} families</div>
+          {/* A meter, not a donut. This is one value against a ceiling and the
+              ceiling is the point; a covered-vs-uncovered pie would turn the
+              denominator into a second slice, which reads as though "not
+              covered" were something the product produces rather than the room
+              left in SAP's list.
+
+              Neutral rather than a traffic light on purpose: the Baseline covers
+              a narrow set and most of what this product checks lies outside it,
+              so colouring the empty part red would be a claim the number does
+              not support. */}
+          <Meter value={cov.requirements_covered}
+                 limit={cov.requirements_published}
+                 label="families"
+                 note={`Baseline ${cov.baseline_version ?? '—'}`} />
         </div>
         <div className={CARD}>
           <h3 className={CARD_H3}>Beyond the Baseline</h3>

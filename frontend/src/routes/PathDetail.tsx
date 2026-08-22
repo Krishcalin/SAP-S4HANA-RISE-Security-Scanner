@@ -4,6 +4,7 @@ import { ApiError, path as fetchPath } from '../api/client'
 import type { PathFinding, PathHop, PathView, RemediationOwner } from '../api/types'
 import { useTitle } from '../lib/title'
 import { money } from './Risk'
+import { isPriced } from '../lib/pricing'
 import { CheckRefs } from '../components/Refs'
 import { Waypoints } from 'lucide-react'
 import { CARD_TITLE as CARD_H3 } from '../lib/ui'
@@ -113,6 +114,9 @@ function Body({ view }: { view: PathView }) {
   // same reason. A path row stored by an older ruleset without hops should cost
   // the diagram, not the whole screen.
   const hops = d.hops ?? []
+  // The figure is shown only when the model says it came from the customer's own
+  // answers. Unknown counts as unpriced, which is lib/pricing's whole point.
+  const priced = isPriced({ loss_model: path.loss_model })
   // Shared by the diagram and the steps table, so the two views of the same list
   // agree about what the reader is looking at. Selecting is a toggle: clicking the
   // step you already chose clears it rather than trapping the highlight.
@@ -132,7 +136,8 @@ function Body({ view }: { view: PathView }) {
       <p className="text-ink2 mb-5">
         <span className="font-mono">{path.template_id}</span>
         {' · ends at '}<span className="font-mono">{path.fair_scenario}</span>
-        {path.scenario_ale ? ` · exposure ${money(path.scenario_ale)}` : ''}
+        {priced && path.scenario_ale
+          ? ` · exposure ${money(path.scenario_ale)}` : ''}
         {` · first seen ${dayMonthYear(path.first_seen)}`}
       </p>
 
@@ -158,7 +163,8 @@ function Body({ view }: { view: PathView }) {
       </div>
 
       <h2 className={H2}>The route</h2>
-      <RouteDiagram hops={hops} scenario={path.fair_scenario} ale={path.scenario_ale}
+      <RouteDiagram hops={hops} scenario={path.fair_scenario}
+                    ale={priced ? path.scenario_ale : null}
                     selected={selected} onSelect={pick} />
 
       <h2 className={H2}>Steps</h2>

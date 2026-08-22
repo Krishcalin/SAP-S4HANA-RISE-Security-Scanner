@@ -28,14 +28,77 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from server import auth, db, ingest, mcp, totp, webhook
+from server import auth, db, graph, ingest, mcp, totp, webhook
 from modules.deployment_modes import DEPLOYMENT_MODES, DEFAULT_DEPLOYMENT_MODE
 from modules.platforms import PLATFORMS, TENANT_PLATFORMS, status_note
+
+
+def cmd_rederive_paths(args: argparse.Namespace) -> int:
+    """Recompute risk paths from findings already stored, with no rescan.
+
+    WHY THIS CAN EXIST AT ALL. `graph.instantiate` reads OPEN FINDINGS, not the
+    export bundle. Paths are therefore derivable from what the database already
+    holds, and a ruleset change does not need the customer to still have their
+    exports -- which they usually do not, because an upload is consumed and
+    removed once its scan completes.
+
+    WHY IT IS NEEDED. A path row carries the fingerprint of the ruleset that
+    derived it, and the console shows a staleness banner when that no longer
+    matches the current one. Before this, the only way to clear it was a full
+    rescan, because paths were recomputed only as a side effect of ingest. A
+    landscape whose exports were gone had no route at all and would have carried
+    "these derivations predate the current rules" indefinitely.
+
+    Path IDENTITY is (template, systems) and never the findings, so re-deriving
+    keeps `first_seen` and re-opens a returning path as the same path. A path the
+    new ruleset no longer supports closes with its history intact, exactly as it
+    would have on a scan.
+    """
+    with db.pool().connection() as conn:
+        land = conn.execute("SELECT id, name FROM landscape WHERE name = %s",
+                            (args.landscape,)).fetchone()
+        if land is None:
+            print(f"no such landscape: {args.landscape}")
+            return 2
+        run = conn.execute(
+            "SELECT id FROM scan_run WHERE landscape_id = %s AND status = 'complete' "
+            "ORDER BY started_at DESC LIMIT 1", (land["id"],)).fetchone()
+        if run is None:
+            print(f"{land['name']}: no completed run to attribute the derivation to")
+            return 2
+
+        before = conn.execute(
+            "SELECT count(*) AS n FROM attack_path WHERE landscape_id = %s "
+            "AND closed_at IS NULL", (land["id"],)).fetchone()["n"]
+        result = graph.store_paths(conn, land["id"], run["id"])
+        after = conn.execute(
+            "SELECT count(*) AS n FROM attack_path WHERE landscape_id = %s "
+            "AND closed_at IS NULL", (land["id"],)).fetchone()["n"]
+
+    print(f"{land['name']}: open paths {before} -> {after}  {result}")
+    return 0
 
 
 def cmd_init_db(args: argparse.Namespace) -> int:
     db.init_schema()
     print("schema applied")
+
+    # Data migrations run in the same command, because a deployment that applied
+    # the schema and skipped these would be structurally correct and holding
+    # findings whose identity no longer matches what the scanner computes -- which
+    # presents as every affected finding churning new+resolved on the next scan,
+    # with its age and assignee gone. See server/migrations.py.
+    from server import migrations
+    with db.pool().connection() as conn:
+        for result in migrations.run_all(conn):
+            if result.get("status") == "already applied":
+                continue
+            print(f"migration: {result['migrated']} finding(s) re-identified, "
+                  f"{result.get('stale_nodes_removed', 0)} stale graph node(s) removed")
+            for c in result.get("collisions", []):
+                print(f"  NOT migrated: finding {c['finding']} ({c['check_id']}) would "
+                      f"merge into {c['would_merge_into']}; left alone so neither "
+                      f"loses its history")
     return 0
 
 
@@ -469,6 +532,12 @@ def main(argv=None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("init-db", help="Create or migrate the database schema.").set_defaults(fn=cmd_init_db)
+
+    rp = sub.add_parser(
+        "rederive-paths",
+        help="Recompute risk paths from stored findings, without a rescan.")
+    rp.add_argument("landscape")
+    rp.set_defaults(fn=cmd_rederive_paths)
 
     cu = sub.add_parser("create-user", help="Create a console account with a role.")
     cu.add_argument("username")

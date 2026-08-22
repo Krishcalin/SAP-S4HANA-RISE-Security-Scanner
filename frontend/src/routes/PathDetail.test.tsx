@@ -60,7 +60,8 @@ function hop(over: Partial<PathHop> = {}): PathHop {
   }
 }
 
-function view(hops: PathHop[], ale: number | null = null): PathView {
+function view(hops: PathHop[], ale: number | null = null,
+              applied = true): PathView {
   return {
     path: {
       id: 1,
@@ -77,6 +78,7 @@ function view(hops: PathHop[], ale: number | null = null): PathView {
       closed_by_edge: null,
       ruleset_fingerprint: 'abc',
       scenario_ale: ale,
+      loss_model: { applied },
       detail: {
         name: 'Emergency access without accountability',
         summary: 'A firefighter ID grants unrestricted privilege on demand.',
@@ -93,8 +95,8 @@ function view(hops: PathHop[], ale: number | null = null): PathView {
   }
 }
 
-function draw(hops: PathHop[], ale: number | null = null) {
-  vi.mocked(fetchPath).mockResolvedValue(view(hops, ale))
+function draw(hops: PathHop[], ale: number | null = null, applied = true) {
+  vi.mocked(fetchPath).mockResolvedValue(view(hops, ale, applied))
   render(
     <MemoryRouter>
       <PathDetail />
@@ -341,5 +343,44 @@ describe('the route diagram geometry', () => {
     for (const m of markers) {
       expect(m.getAttribute('markerUnits')).toBe('userSpaceOnUse')
     }
+  })
+})
+
+
+/**
+ * The figure is the customer's, or it is not shown.
+ *
+ * `scenario_ale` is populated whether or not anyone told the model what an hour
+ * of SAP downtime costs them — unpriced, it is the shipped catalogue's
+ * illustrative $1bn manufacturer. The path payload carries `loss_model` for
+ * exactly this reason; a null check on the number cannot tell the two apart,
+ * and printing the second under a customer's name is the defect lib/pricing was
+ * written to end.
+ */
+describe('the terminus and provenance', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('shows the figure when the customer priced it', async () => {
+    draw([hop({})], 4_200_000, true)
+    await waitFor(() => {
+      expect(screen.getAllByText(/\$4\.20M/).length).toBeGreaterThan(0)
+    })
+  })
+
+  it('withholds the figure when nobody priced it', async () => {
+    // The same number, the same non-null scenario_ale. Only the provenance
+    // differs, and it is the only thing that should decide this.
+    draw([hop({})], 4_200_000, false)
+    await waitFor(() => expect(screen.getByText('ENDS AT')).toBeTruthy())
+    expect(screen.queryByText(/\$4\.20M/)).toBeNull()
+    expect(screen.getByText('not quantified')).toBeTruthy()
+  })
+
+  it('keeps the exposure out of the header line too', async () => {
+    // Two places print it. Gating one and not the other would leave the figure
+    // on screen while the diagram claimed it was unavailable.
+    draw([hop({})], 4_200_000, false)
+    await waitFor(() => expect(screen.getByText('ENDS AT')).toBeTruthy())
+    expect(screen.queryByText(/exposure/)).toBeNull()
   })
 })

@@ -214,7 +214,7 @@ class WebDispatcherAuditor(BaseAuditor):
         if _compliant(value, rule):
             return
         self._report(rule, [f"{name} = {value}"],
-                     [{"type": "parameter", "name": name}])
+                     [{"type": "parameter_name", "name": name}])
 
     def _family_each(self, rule: Dict[str, Any], params: Dict[str, str]):
         """Every parameter in a family, reported per offender.
@@ -229,7 +229,7 @@ class WebDispatcherAuditor(BaseAuditor):
         if not offenders:
             return
         self._report(rule, [f"{n} = {v}" for n, v in offenders],
-                     [{"type": "parameter", "name": n} for n, _ in offenders])
+                     [{"type": "parameter_name", "name": n} for n, _ in offenders])
 
     def _family_any(self, rule: Dict[str, Any], params: Dict[str, str]):
         """At least one member of the family must satisfy the predicate.
@@ -249,7 +249,7 @@ class WebDispatcherAuditor(BaseAuditor):
         listed = [f"{n} = {v}" for n, v in sorted(family.items())] or \
             [f"no {prefix}* parameter is set in this profile"]
         self._report(rule, listed,
-                     [{"type": "parameter", "name": n} for n in sorted(family)])
+                     [{"type": "parameter_name", "name": n} for n in sorted(family)])
 
     def _report(self, rule: Dict[str, Any], items: List[str],
                 objects: List[Dict[str, str]]):

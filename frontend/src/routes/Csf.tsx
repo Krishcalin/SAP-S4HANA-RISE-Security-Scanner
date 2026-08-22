@@ -21,8 +21,19 @@ import type { CsfFunctionView, CsfStatus, CsfView } from '../api/types'
 import { useTitle } from '../lib/title'
 import { Landmark } from 'lucide-react'
 import { CARD_TITLE as CARD_H3, KPI, KPI_NOTE } from '../lib/ui'
+import { Donut } from '../components/Donut'
 
 const CARD = 'rounded-lg border border-cardline bg-panel p-4'
+
+/* Six hues in a FIXED order, assigned by Function rather than by rank, so a
+   Function keeps its colour when the counts move. Identity is also carried by
+   the label in every legend row, so the wheel never depends on colour alone.
+   Deliberately not the severity palette: a Function is not a severity, and
+   status colours are reserved. */
+const CSF_COLOR = [
+  'var(--accent)', 'var(--ok)', 'var(--med)', 'var(--low)',
+  'var(--high)', 'var(--ink-dim)',
+]
 const G4 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]'
 const G3 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(268px,1fr))]'
 const H2 = 'text-[15px] font-semibold text-ink mt-7 mb-2.5'
@@ -126,7 +137,40 @@ function Body({ view }: { view: CsfView }) {
       </div>
 
       <h2 className={H2}>The six Functions</h2>
-      <div className={G3}>
+
+      {/* Six segments is exactly the ceiling for this form, and the Functions are
+          parts of one whole by construction: every mapped finding lands in
+          exactly one. What a reader wants here is the SHAPE — whether the estate
+          is lopsided towards Protect, or carrying more in Detect than expected —
+          not a comparison of two close numbers, which is the case this mark is
+          bad at.
+
+          UNMAPPED FINDINGS ARE NOT A SEVENTH SLICE. They are not a Function, and
+          drawing them as one would put a category on the wheel that CSF does not
+          have. The total in the hole is the mapped corpus, and the count of
+          unmapped is stated beside it in its own words. */}
+      <div className={CARD}>
+        <h3 className={CARD_H3}>Where the findings land</h3>
+        <Donut ariaLabel="Findings across the six CSF Functions"
+               caption="mapped"
+               total={t.mapped}
+               slices={view.functions.map((f, i) => ({
+                 key: f.id,
+                 label: `${f.id} · ${f.name}`,
+                 value: f.total,
+                 color: CSF_COLOR[i % CSF_COLOR.length],
+               }))} />
+        {t.unmapped > 0 && (
+          <p className="text-[12px] text-ink2 mt-3">
+            <strong className="font-[650]">{t.unmapped}</strong> finding
+            {t.unmapped === 1 ? ' is' : 's are'} not mapped to any Function and
+            are not drawn above — they are not a seventh Function, and showing
+            them as one would invent a category the framework does not have.
+          </p>
+        )}
+      </div>
+
+      <div className={`${G3} mt-3.5`}>
         {view.functions.map((f) => <FunctionTile key={f.id} fn={f} />)}
       </div>
 

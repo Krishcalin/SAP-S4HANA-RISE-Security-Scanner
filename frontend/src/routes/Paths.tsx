@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import { ApiError, paths } from '../api/client'
 import type { PathsOverview, RemediationOwner } from '../api/types'
 import { useTitle } from '../lib/title'
-import { UNPRICED_CELL } from '../lib/pricing'
+import { isPriced, UNPRICED_CELL } from '../lib/pricing'
 import { money } from './Risk'
 import { Waypoints } from 'lucide-react'
 import { CARD_TITLE as CARD_H3, KPI, KPI_NOTE } from '../lib/ui'
@@ -235,7 +235,11 @@ function Body({ view }: { view: PathsOverview }) {
                     priced has no exposure to show — which is not the same as an
                     exposure of nothing. */}
                 <td className={`${TD} text-right font-mono`}>
-                  {p.scenario_ale ? money(p.scenario_ale) : UNPRICED_CELL}
+                  {/* isPriced, not a null check. A figure the customer did not
+                      price is not theirs to be shown, and `scenario_ale` is
+                      populated either way. */}
+                  {isPriced({ loss_model: p.loss_model }) && p.scenario_ale
+                    ? money(p.scenario_ale) : UNPRICED_CELL}
                 </td>
                 <td className={`${TD} text-right font-mono text-[12px]`}>{p.finding_count}</td>
                 <td className={TD}><span className="pill st st-open">open</span></td>

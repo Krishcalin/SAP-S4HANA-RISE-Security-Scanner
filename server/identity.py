@@ -120,26 +120,6 @@ _UPPERCASE_TYPES = frozenset({
     # The fallback happened to be right, which is why it was never noticed — see
     # `test_every_emitted_object_type_is_registered`, which now closes that hole.
     "business_partner",
-    # `parameter` is a KNOWN DUPLICATE of `parameter_name` above, emitted only by
-    # webdisp_security. Both name a profile parameter and both take the same case
-    # rule, so identity is correct either way — but the GRAPH keys a node on
-    # `type:name@system`, so five parameters an estate has once (login/
-    # show_detailed_errors, is/HTTP/show_detailed_errors, is/HTTP/show_server_header,
-    # rdisp/TRACE_HIDE_SEC_DATA, service/protectedwebmethods) currently exist as two
-    # nodes, and a path hop declaring `parameter_name` sees half their evidence.
-    #
-    # It is registered rather than renamed because renaming is an IDENTITY change:
-    # the fingerprints of WDISP-001/002/004/005/007/008/011/012 would all move,
-    # and `_rebase` in server/ingest.py cannot carry that history — it rebases
-    # across a change of BASIS, and this change keeps the basis at `objects`.
-    # Widening `_rebase` to same-basis moves would be worse than the defect: under
-    # `objects` basis a moved fingerprint normally means a genuinely different
-    # object, so it would attach one defect's history to another.
-    #
-    # Unifying the two therefore needs a one-off, recorded identity migration and
-    # is a decision, not a cleanup. Until then the duplication is DECLARED here
-    # rather than silent, and the graph guard below accepts both.
-    "parameter",
 })
 
 #: Object types whose names are case-SENSITIVE and must never be upper-cased.

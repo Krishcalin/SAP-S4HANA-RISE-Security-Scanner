@@ -297,12 +297,17 @@ def list_paths(scope: Optional[Sequence[int]], landscape_id: Optional[int] = Non
         where.append("p.closed_at IS NULL")
     return db.query(
         f"""
-        SELECT p.*, c.ale_p90 AS scenario_ale,
+        SELECT p.*, c.ale_p90 AS scenario_ale, c.loss_model,
                (SELECT count(*) FROM attack_path_finding apf WHERE apf.path_id = p.id)
                    AS finding_count
         FROM attack_path p
         LEFT JOIN LATERAL (
-            SELECT cr.ale_p90 FROM crq_result cr
+            -- `loss_model` rides along with the figure it describes, from the same
+            -- row. Returning `ale_p90` without it is what left the risk-path
+            -- screens unable to ask lib/pricing whether the number is the
+            -- customer's own or the catalogue's illustrative $1bn manufacturer.
+            SELECT cr.ale_p90, cr.detail -> 'loss_model' AS loss_model
+            FROM crq_result cr
             JOIN scan_run r ON r.id = cr.scan_run_id
             WHERE cr.scenario_id = p.fair_scenario AND r.landscape_id = p.landscape_id
             ORDER BY r.started_at DESC LIMIT 1
@@ -318,10 +323,15 @@ def get_path(path_id: int, scope: Optional[Sequence[int]]) -> Optional[Dict[str,
     clause, params = _scoped(scope)
     return db.one(
         f"""
-        SELECT p.*, c.ale_p90 AS scenario_ale
+        SELECT p.*, c.ale_p90 AS scenario_ale, c.loss_model
         FROM attack_path p
         LEFT JOIN LATERAL (
-            SELECT cr.ale_p90 FROM crq_result cr
+            -- `loss_model` rides along with the figure it describes, from the same
+            -- row. Returning `ale_p90` without it is what left the risk-path
+            -- screens unable to ask lib/pricing whether the number is the
+            -- customer's own or the catalogue's illustrative $1bn manufacturer.
+            SELECT cr.ale_p90, cr.detail -> 'loss_model' AS loss_model
+            FROM crq_result cr
             JOIN scan_run r ON r.id = cr.scan_run_id
             WHERE cr.scenario_id = p.fair_scenario AND r.landscape_id = p.landscape_id
             ORDER BY r.started_at DESC LIMIT 1

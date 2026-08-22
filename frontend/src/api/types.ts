@@ -461,6 +461,12 @@ export interface AttackPath {
   /** ale_p90 of the FAIR scenario this path ends at — the path ends at a
    *  currency figure, which is what no incumbent's report can produce. */
   scenario_ale: number | null
+  /** Provenance of that figure, from the same crq_result row. Without it a path
+   *  screen can only null-check the number, not ask whether it is the customer's
+   *  own — which is the question lib/pricing exists to answer, and the reason
+   *  the catalogue's illustrative $1bn manufacturer once printed under five
+   *  customers' names. */
+  loss_model?: { applied?: boolean } | null
   /** list_paths only. */
   finding_count?: number
 }
