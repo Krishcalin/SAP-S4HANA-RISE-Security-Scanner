@@ -65,7 +65,15 @@ TEAM_BY_PREFIX: List[Tuple[str, str]] = [
     ("BTP-", "integration"),
     ("RISE-", "integration"),
     ("CAPX-", "development"),
-    ("CSA-", "configuration"),
+    # `basis`, NOT "configuration" — which is not one of the seven teams the
+    # schema allows and was rejected by check_definition_owning_team_check the
+    # first time a CSA finding reached the database. It never had, because
+    # cloudalm_verdicts produced nothing until its fixture arrived: an invalid
+    # value in a prefix table costs nothing until the prefix is used. CSA
+    # verdicts are SAP's Baseline results over ABAP and HANA configuration —
+    # profile parameters, audit settings, gateway ACLs — which is the same
+    # ground PARAM-, BASELINE- and HANADB- all route to basis for.
+    ("CSA-", "basis"),
     ("CODE-", "development"),
     ("FIORI-", "development"),
     ("DPP-", "data_protection"),

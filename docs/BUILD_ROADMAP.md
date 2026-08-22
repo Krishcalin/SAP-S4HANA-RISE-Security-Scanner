@@ -718,6 +718,46 @@ path. Required hops cite emittable checks; optional hops were never checked.
 | `rebuild-sap-catalogue` CLI command | `server/cli.py` | ✅ |
 | Static check-id collision guard | `tests/test_check_id_uniqueness.py` | ✅ |
 
+### CI had been red since the silent-modules commit, 2026-08-22
+
+**Five commits pushed green locally and red in CI**, starting at `d1bc881` —
+"Make every module reachable". The failing step was the `server (PostgreSQL 16)`
+job's seed, and the cause is a good one.
+
+`modules/rise_ownership.py` mapped the `CSA-` prefix to `"configuration"`, which
+is not one of the seven teams `check_definition_owning_team_check` allows. Every
+scan producing a CSA finding was rejected by PostgreSQL at insert. No scan ever
+produced one — `cloudalm_verdicts` was one of the five modules that fired on
+nothing, so **an invalid value in a prefix table cost exactly nothing until the
+prefix was used.** Giving that module a fixture is what used it.
+
+`CSA-` now maps to `basis`, the same team `PARAM-`, `BASELINE-` and `HANADB-`
+route to, because CSA verdicts are SAP's Baseline results over ABAP and HANA
+configuration.
+
+**Why the local suite could not see it.** The constraint lives in PostgreSQL, so
+only the DB job reaches it, and that job skips without a `DB_DSN` — the ordinary
+local state. The mapping and the constraint are two files that have to agree, in
+two languages, verified by a job most runs skip.
+
+```
+pytest without a database :  3938 passed, 235 skipped
+pytest with one           :  4142 passed,  36 skipped   <- 204 more tests
+```
+
+`tests/test_ownership_vocabulary.py` closes it **without needing a database**: it
+reads the allowed values out of `schema.sql` and compares them against the
+mapping, and walks every published check id through `team_for()`. A disagreement
+now fails any run of the suite rather than only the job that would have hit it in
+production.
+
+To run the DB suite locally:
+
+```
+docker run -d --name ci-pg -e POSTGRES_USER=sapsec -e POSTGRES_PASSWORD=x   -e POSTGRES_DB=sapsec -p 55432:5432 postgres:16
+DB_DSN=postgresql://sapsec:x@127.0.0.1:55432/sapsec SESSION_SECRET=<32+ chars>   python -m pytest tests/ -q
+```
+
 ### Edge provenance, and the backlog's last items, 2026-08-22
 
 **19 edges, one provenance value.** The cause was not the design — it was that
