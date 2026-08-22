@@ -395,6 +395,91 @@ class DataLoader:
             })
         return out
 
+    # ── source directories ──────────────────────────────────────────────────
+    #
+    # WHY THESE ARE DISCOVERED RATHER THAN NAMED. `abap_source_dir` and
+    # `cap_project_dir` are DIRECTORIES, not tabular exports, so they are absent
+    # from FILE_MAP and were set only by the CLI flags --abap-src and --cap-src.
+    # `server/ingest.py` calls `load_all()` and sets neither, so an uploaded
+    # bundle could not reach `abap_sast` or `cap_xsuaa` at all: 136 `ABAP-*` check
+    # ids and the CAP set were published in the catalogue and unreachable through
+    # the console. Discovering them here fixes both entry points at once, and the
+    # CLI still wins because it assigns after `load_all()` returns.
+    #
+    # NAME-PREFERRED, CONTENT-VERIFIED, WITH A CONTENT FALLBACK. A conventional
+    # directory name is what a customer can be told to use, so it is tried first —
+    # but it is only accepted if the directory actually holds the file type, since
+    # a bundle with an empty `src/` must not turn into "asked to look, could not"
+    # and arm the release gate. Where no conventional name matches, the shallowest
+    # directory that genuinely holds the sources is used, which is what an unpacked
+    # abapGit repository looks like when somebody drops it in whole.
+    #
+    # THE DATA ROOT IS NEVER THE ANSWER. Pointing a scanner at the bundle root
+    # would make it walk every CSV and count them in `unscanned_by_suffix`, turning
+    # a coverage figure into noise about files that were never source.
+
+    #: Directory names a customer may reasonably use, in preference order.
+    ABAP_SOURCE_DIRS = ("abap_src", "abap_source", "abap", "src")
+    CAP_PROJECT_DIRS = ("cap_project", "cap", "mta", "app")
+
+    #: What has to be inside for the name to be believed.
+    _ABAP_GLOBS = ("*.abap", "*.abp", "*.asddls", "*.acds")
+    _CAP_GLOBS = ("xs-security.json", "*.cds")
+
+    #: How deep to look. An unpacked abapGit export puts sources two levels below
+    #: its own root, and a bundle adds one; beyond that a match is more likely to
+    #: be an accident than an export.
+    _SOURCE_SCAN_DEPTH = 4
+
+    @staticmethod
+    def _holds(directory, globs) -> bool:
+        for pattern in globs:
+            for match in directory.rglob(pattern):
+                if match.is_file():
+                    return True
+        return False
+
+    def _discover_directory(self, names, globs):
+        """The directory holding this kind of source, or None."""
+        if not self.data_dir.is_dir():
+            return None
+
+        # 1. a conventional name, believed only if it holds the files.
+        for name in names:
+            candidate = self.data_dir / name
+            if candidate.is_dir() and self._holds(candidate, globs):
+                return candidate
+
+        # 2. otherwise the shallowest directory that genuinely holds them.
+        best, best_depth = None, None
+        for pattern in globs:
+            for match in self.data_dir.rglob(pattern):
+                if not match.is_file():
+                    continue
+                parent = match.parent
+                try:
+                    depth = len(parent.relative_to(self.data_dir).parts)
+                except ValueError:                       # pragma: no cover
+                    continue
+                # Never the bundle root: a scanner pointed there walks every CSV
+                # and counts them as unscanned, which is noise rather than
+                # coverage. A loose source file at the top level is not a project.
+                if depth == 0 or depth > self._SOURCE_SCAN_DEPTH:
+                    continue
+                if best_depth is None or depth < best_depth:
+                    best, best_depth = parent, depth
+        return best
+
+    def _load_source_directories(self) -> None:
+        abap = self._discover_directory(self.ABAP_SOURCE_DIRS, self._ABAP_GLOBS)
+        if abap is not None:
+            self._data["abap_source_dir"] = str(abap)
+            print(f"    ABAP source directory: {abap.name}/")
+        cap = self._discover_directory(self.CAP_PROJECT_DIRS, self._CAP_GLOBS)
+        if cap is not None:
+            self._data["cap_project_dir"] = str(cap)
+            print(f"    CAP project directory: {cap.name}/")
+
     def load_all(self) -> Dict[str, Any]:
         """Load all available data files and return unified data dict."""
         for logical_name, filenames in self.FILE_MAP.items():
@@ -411,6 +496,7 @@ class DataLoader:
             else:
                 self._data[logical_name] = None
 
+        self._load_source_directories()
         self._load_completeness()
 
 

@@ -1807,7 +1807,11 @@ SAP-S4HANA-RISE-Security-Scanner/
       for a Baseline family and the checks of ours that answer it
 - [x] Choke-point worklist (`/chokepoints`) — the findings that sit on a *cut*, ranked by how many
       paths each one severs, uncapped
-- [ ] Sample fixtures for `resilience`, `ecsconfig` and `cva` so they fire on the bundled `sample_data`
+- [x] Sample fixtures so every module fires on the bundled `sample_data` — it was **five**
+      modules producing nothing, not three, and two of them (`cva`/`abap_sast` and
+      `cap_xsuaa`) turned out to be unreachable from an upload at all rather than merely
+      unfixtured. `tests/test_no_silent_modules.py` now fails the build if any module
+      goes quiet again
 
 ---
 

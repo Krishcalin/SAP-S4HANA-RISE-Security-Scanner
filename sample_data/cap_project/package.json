@@ -1,0 +1,6 @@
+{
+  "name": "acme-orders",
+  "version": "1.4.0",
+  "dependencies": { "@sap/cds": "^7.9.0" },
+  "cds": { "requires": { "auth": { "kind": "mocked" } } }
+}

@@ -718,6 +718,59 @@ path. Required hops cite emittable checks; optional hops were never checked.
 | `rebuild-sap-catalogue` CLI command | `server/cli.py` | ✅ |
 | Static check-id collision guard | `tests/test_check_id_uniqueness.py` | ✅ |
 
+### The five modules that produced nothing, 2026-08-22
+
+The roadmap's last unchecked item said three modules never fire on `sample_data`.
+It was **five** — `abap_sast`, `cap_xsuaa`, `cloudalm_verdicts`, `ecs_config_items`
+and `resilience_posture` — and for two of them the cause was not a missing
+fixture.
+
+**`abap_sast` and `cap_xsuaa` could not be reached from an upload at all.** Both
+read a DIRECTORY — an unpacked abapGit export, a CAP project — supplied only
+through the CLI flags `--abap-src` and `--cap-src`. `server/ingest.py` calls
+`DataLoader(data_dir).load_all()` and set neither, so **136 `ABAP-*` check ids and
+the whole `CAPX-*` set were published in the catalogue and unreachable through the
+console**, which is the product's main flow. Not degraded, not reported as
+degraded: absent, and silently.
+
+`DataLoader` now discovers both. Name-preferred (`abap_src/`, `cap_project/`, and
+the obvious alternatives), content-verified, with a content fallback so an
+abapGit repository dropped in under its own name is still found. Two rules matter
+and both are tested:
+
+- **an empty `src/` is ignored, not treated as "asked to look, could not"** —
+  otherwise a bundle with no ABAP in it would arm the release gate's fail-closed
+  path;
+- **the bundle root is never the answer** — a scanner pointed there walks every
+  CSV and counts them in `unscanned_by_suffix`, turning a coverage figure into
+  noise about files that were never source.
+
+The CLI flags still win, so an existing pipeline needs no change.
+
+**Giving `cap_xsuaa` something to scan immediately failed
+`test_every_emitted_object_type_is_registered`.** `xsuaa_application` and
+`cap_service` were registered in neither case registry and in neither scope
+registry, so their identities took the unknown-type fallback undecided — and would
+have borrowed the ABAP SID of whichever system the bundle was uploaded beside.
+That is the exact defect `_CLOUD_SCOPED_TYPES` exists to prevent, for two more
+types, and it had stood for as long as the module was unreachable. No amount of
+unit testing would have found it: those tests construct the auditor directly and
+never go through ingest.
+
+The other three needed fixtures — `table_auth_groups.csv`, `backup_catalog.csv`
+and `recovery_tests.csv`, `csa_findings.csv` — and the backup catalogue is
+deliberately a realistically *degraded* chain rather than a healthy one, so
+`RES-BCK-*` is exercised and not only `RES-DR-*`.
+
+```
+silent modules: 5 -> 0
+distinct checks firing on the corpus: 365 -> 384
+```
+
+`tests/test_no_silent_modules.py` asserts only that each module produces
+SOMETHING, never a particular finding, so tuning a threshold does not break it.
+The thing being protected is that the code path runs.
+
 ### The documentation that was already written, 2026-08-22
 
 **352 of 714 published check ids had no narrative**, and `/checks/{id}` said so

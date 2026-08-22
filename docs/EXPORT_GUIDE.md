@@ -3140,6 +3140,67 @@ it could not run.
 
 ---
 
+## Source code — two directories, not files
+
+Two modules read **directories** rather than tabular exports, and they are the
+only inputs in this guide that are folders. Include them in the bundle and they
+are found automatically; there is nothing to convert and no schema to match.
+
+### ABAP source (`abap_src/`) — feeds the 136 `ABAP-*` checks
+
+**Source:** an unpacked [abapGit](https://abapgit.org) export of your custom code
+
+Put the export in a folder inside the bundle. Any of these names is recognised —
+`abap_src/`, `abap_source/`, `abap/`, `src/` — and if you drop a repository in
+under its own name, that works too: the folder is found by the `.abap` files
+inside it rather than by what it is called.
+
+```
+your-bundle/
+  users.csv
+  security_params.csv
+  abap_src/
+    src/
+      zcl_vendor_report.clas.abap
+      zrfc_run_command.fugr.abap
+```
+
+The scanner reads `.abap`, `.abp`, `.asddls` and `.acds`, plus `.js`/`.ts` for
+UI5 code, and reports what it did **not** open by extension — so a folder that
+turns out to hold build output rather than source says so rather than coming back
+clean.
+
+**A folder with no source in it is ignored, not reported as an empty scan.** An
+empty `src/` is a bundle with no ABAP in it, which is a different thing from a
+scan that was asked to look and could not, and only the second one should worry
+you (it is reported as `ABAP-COV-001`).
+
+### CAP project (`cap_project/`) — feeds the `CAPX-*` checks
+
+**Source:** the root of your CAP / MTA project — the folder holding `srv/`,
+`db/` and `xs-security.json` or `mta.yaml`
+
+Recognised names are `cap_project/`, `cap/`, `mta/` and `app/`, and as above the
+folder is really identified by holding an `xs-security.json` or any `.cds` file.
+
+```
+your-bundle/
+  cap_project/
+    xs-security.json
+    package.json
+    srv/orders-service.cds
+    db/schema.cds
+```
+
+Point at the **project root**, not at `srv/`: the descriptor and the CDS model are
+read together, and a service with no `@requires` only matters once the scanner can
+see what the role collections grant.
+
+### If you are running the CLI
+
+`--abap-src` and `--cap-src` still work and still win over whatever is discovered
+in the bundle, so a pipeline that already passes them needs no change.
+
 ## Connected mode — letting MonitorRisk produce part of the export for you
 
 Decision D2/D3/D4, `docs/DECISIONS.md`. Everything above assumes **you** produce

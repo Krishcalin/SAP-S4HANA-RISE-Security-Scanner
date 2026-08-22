@@ -555,6 +555,12 @@ CLOUD_SCOPED_BY_TYPE = {
     "ral_config": False, "ral_channel": False, "ilm_policy": False,
     "processing_purpose": False, "data_transfer": False, "dsar_request": False,
     "audit_filter": False,
+    # CAP / XSUAA. Both run on BTP and belong to a subaccount, never to an ABAP
+    # SID — the same project scanned beside two ABAP systems is one project.
+    # These reached this table only once `cap_xsuaa` could be reached at all: it
+    # reads a project DIRECTORY that no upload ever supplied, so neither type had
+    # been emitted through ingest and neither had ever been classified.
+    "xsuaa_application": True, "cap_service": True,
 }
 
 

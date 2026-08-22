@@ -151,6 +151,15 @@ _CASE_SENSITIVE_TYPES = frozenset({
     # ticketing system rather than by SAP, and is likewise case-bearing.
     "ral_config", "ral_channel", "ilm_policy", "processing_purpose",
     "data_transfer", "dsar_request",
+    # CAP / XSUAA application objects. `xsuaa_application` is the `xsappname` from
+    # an xs-security.json ("acme-orders") and `cap_service` is a CDS service name
+    # ("OrdersService") — both authored in the project source and both case-bearing,
+    # unlike an ABAP repository object that SAP upper-cases. FOUND BY GIVING THE
+    # MODULE SOMETHING TO SCAN: `cap_xsuaa` reads a project DIRECTORY supplied only
+    # by --cap-src, so no upload ever reached it and neither type had ever been
+    # emitted through ingest. They took the unknown-type fallback undecided for as
+    # long as the module was unreachable.
+    "xsuaa_application", "cap_service",
     # RISE / S/4HANA Cloud surface. A BTP trust configuration is keyed by its
     # originKey ("sap.default", "corp-aad-tenant") and a communication arrangement by
     # an admin-entered name — both are cloud-cockpit entities that keep the case they
@@ -218,6 +227,12 @@ _CLOUD_SCOPED_TYPES = frozenset({
     # Added by the D8 audit. See the note above.
     "btp_destination", "btp_service", "cc_backend", "cpi_credential",
     "event_queue", "ias_application",
+    # A CAP service and its XSUAA application run on BTP and belong to a
+    # subaccount, never to an ABAP SID. Stamping them with the SID of whichever
+    # ABAP system their bundle was uploaded beside would give one project two
+    # identities across two uploads, and would blur precisely the cloud-to-on-prem
+    # boundary the attack paths depend on being visible.
+    "xsuaa_application", "cap_service",
 })
 
 _WS = re.compile(r"\s+")

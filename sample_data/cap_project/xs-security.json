@@ -1,0 +1,38 @@
+{
+  "xsappname": "acme-orders",
+  "tenant-mode": "shared",
+  "scopes": [
+    { "name": "$XSAPPNAME.Read", "description": "Read orders" },
+    { "name": "$XSAPPNAME.Write", "description": "Maintain orders" },
+    { "name": "$XSAPPNAME.Admin", "description": "Administer the service" },
+    { "name": "uaa.user", "description": "Any authenticated user" }
+  ],
+  "role-templates": [
+    {
+      "name": "Viewer",
+      "description": "Read-only access",
+      "scope-references": [ "$XSAPPNAME.Read" ]
+    },
+    {
+      "name": "Everything",
+      "description": "All scopes",
+      "scope-references": [
+        "$XSAPPNAME.Read",
+        "$XSAPPNAME.Write",
+        "$XSAPPNAME.Admin"
+      ]
+    }
+  ],
+  "role-collections": [
+    {
+      "name": "OrdersEveryone",
+      "description": "Granted to all authenticated users",
+      "role-template-references": [ "$XSAPPNAME.Everything" ]
+    }
+  ],
+  "oauth2-configuration": {
+    "redirect-uris": [ "https://*.acme.example.com/**", "http://localhost:4004/**" ],
+    "token-validity": 43200,
+    "refresh-token-validity": 2592000
+  }
+}
