@@ -349,13 +349,34 @@ function EvidenceRow({ f }: { f: PathFinding }) {
  * quietly undercut the product's own claim that a path terminates in a currency
  * figure rather than a severity word. The terminal node is that figure.
  */
-
-const PITCH = 202
-const BOX_W = 166
-const BOX_H = 84
+/*
+ * GEOMETRY, AND WHY IT GREW.
+ *
+ * The first version of this diagram was hard to read at arm's length, for two
+ * reasons that look like one. Raising the font sizes alone would have fixed
+ * half of it.
+ *
+ *   1. The type was small in viewBox units: 10.5 for a step label, 8.5 for the
+ *      REQUIRED tag.
+ *   2. The svg was `width="100%"` with `maxWidth: {width}px`, so a six-hop path
+ *      -- about 1430 units wide -- was SCALED DOWN to whatever the container
+ *      gave it. In a 1000px column that is 0.7, and a 10.5px label lands on
+ *      screen at about 7px. The diagram got smaller the more it had to say,
+ *      which is precisely backwards.
+ *
+ * So the type roughly doubled AND the svg now renders at its natural size and
+ * scrolls horizontally instead of shrinking. The trade is real and deliberate:
+ * a six-hop path no longer fits a 1000px column in one screenful. Legibility
+ * wins, because a diagram nobody can read at a glance is not serving anyone,
+ * and the card was already an `overflow-x-auto` scroller.
+ */
+const PITCH = 284
+const BOX_W = 240
+const BOX_H = 128
 const BOX_Y = 34
 const MID = BOX_Y + BOX_H / 2
-const END_W = 158
+const END_W = 210
+const HEIGHT = 180
 
 /**
  * Word-aware wrapping for SVG `<text>`, which does not wrap on its own.
@@ -394,13 +415,38 @@ export function wrapWords(text: string, perLine: number, maxLines: number): stri
   return lines
 }
 
+/**
+ * The route, drawn.
+ *
+ * HAND-WRITTEN SVG, still. This is the only diagram in the product and it is a
+ * row of boxes and arrows; a graph library would be the largest thing in the
+ * bundle by an order of magnitude, and the dependency budget is a product
+ * argument here, not a preference.
+ *
+ * THE THREE VISUAL STATES CARRY MEANING, and each is said twice — once in
+ * colour and once in movement — because the first version said them once, in a
+ * dash pattern, and a dash pattern is easy to miss at a glance:
+ *
+ *   holds        solid stroke, filled box, connector FLOWS
+ *   not present  dashed stroke, hollow box, connector STILL
+ *   a cut        crit colour, pulsing ring, ribbon above the box
+ *
+ * A viewer who reads dashed as "less important" rather than "not currently true"
+ * would misread the whole diagram, which is why the legend states it in words as
+ * well. Motion is not load-bearing on its own: switch it off for reduced motion
+ * and the colour and the dash still carry every distinction.
+ *
+ * THE ROUTE ENDS SOMEWHERE. It used to stop at the last condition, which quietly
+ * undercut the product's own claim that a path terminates in a loss scenario
+ * rather than a severity word.
+ */
 function RouteDiagram({ hops, scenario, ale, selected, onSelect }: {
   hops: PathHop[]
   scenario: string | null
   ale: number | null
-  selected: number | null
   // Only ever called with a real index; clearing is the parent toggling it back.
   onSelect: (i: number) => void
+  selected: number | null
 }) {
   // Hover previews, selection persists. Hover wins while the cursor is on a node
   // so the diagram answers immediately, and falls back to the selection when it
@@ -414,8 +460,11 @@ function RouteDiagram({ hops, scenario, ale, selected, onSelect }: {
   return (
     <div className="rounded-lg border border-line bg-panel p-4">
       <div className="overflow-x-auto">
-        <svg viewBox={`0 0 ${width} 132`} width="100%"
-             style={{ maxWidth: `${width}px`, minWidth: '560px' }}
+        {/* Natural size, NOT width="100%". See the note on the constants above:
+            scaling to the container made a long path render small, so the
+            diagram got harder to read the more steps it had. */}
+        <svg viewBox={`0 0 ${width} ${HEIGHT}`} width={width} height={HEIGHT}
+             style={{ display: 'block' }}
              role="img" aria-label="Risk path diagram">
           <defs>
             <marker id="rp-ar" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto">
@@ -428,18 +477,18 @@ function RouteDiagram({ hops, scenario, ale, selected, onSelect }: {
 
           {/* Where the route starts. Without it the first box reads as though it
               followed something off-screen. */}
-          <circle cx={16} cy={MID} r={4.5} fill="var(--accent)" />
-          <line x1={20} y1={MID} x2={22} y2={MID} stroke="var(--accent)" strokeWidth={1.5} />
+          <circle cx={18} cy={MID} r={6} fill="var(--accent)" />
 
           {hops.map((h, i) => {
             const x = 30 + i * PITCH
             const cut = h.is_cut && h.present
             const dim = active !== null && active !== i
-            const lines = wrapWords(h.name, 24, 3)
+            const lines = wrapWords(h.name, 23, 3)
             // The connector INTO this step is live when this condition holds and
             // the one before it does. Movement therefore stops at the first step
             // that is not present, which is exactly where the route stops.
             const live = h.present && (i === 0 || hops[i - 1].present)
+            const from = i === 0 ? 26 : x - PITCH + BOX_W + 8
             return (
               <g key={`${i}-${h.name}`}
                  className={`rp-step rp-node${dim ? ' rp-dim' : ''}`}
@@ -462,72 +511,62 @@ function RouteDiagram({ hops, scenario, ale, selected, onSelect }: {
                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(i) }
                  }}>
 
-                {i > 0 && (
-                  <line x1={x - 36} y1={MID} x2={x - 8} y2={MID}
-                        className={live ? 'rp-flow' : undefined}
-                        stroke={live ? 'var(--accent)' : 'var(--ink-faint)'}
-                        strokeWidth={live ? 2 : 1.5}
-                        strokeDasharray={live ? undefined : '4 3'}
-                        markerEnd={`url(#${live ? 'rp-ar-live' : 'rp-ar'})`} />
-                )}
-                {i === 0 && (
-                  <line x1={22} y1={MID} x2={x - 8} y2={MID}
-                        className={live ? 'rp-flow' : undefined}
-                        stroke={live ? 'var(--accent)' : 'var(--ink-faint)'}
-                        strokeWidth={live ? 2 : 1.5}
-                        strokeDasharray={live ? undefined : '4 3'}
-                        markerEnd={`url(#${live ? 'rp-ar-live' : 'rp-ar'})`} />
-                )}
+                <line x1={from} y1={MID} x2={x - 11} y2={MID}
+                      className={live ? 'rp-flow' : undefined}
+                      stroke={live ? 'var(--accent)' : 'var(--ink-faint)'}
+                      strokeWidth={live ? 3 : 2}
+                      strokeDasharray={live ? undefined : '5 4'}
+                      markerEnd={`url(#${live ? 'rp-ar-live' : 'rp-ar'})`} />
 
                 {/* The pulse sits BEHIND the box and is the only thing on the
                     screen asking for attention, because it is the only thing a
                     reader can close to end the path. */}
                 {cut && (
-                  <rect className="rp-pulse" x={x - 3} y={BOX_Y - 3}
-                        width={BOX_W + 6} height={BOX_H + 6} rx={12}
-                        fill="none" stroke="var(--crit)" strokeWidth={2} />
+                  <rect className="rp-pulse" x={x - 4} y={BOX_Y - 4}
+                        width={BOX_W + 8} height={BOX_H + 8} rx={16}
+                        fill="none" stroke="var(--crit)" strokeWidth={2.5} />
                 )}
 
                 {/* Selection ring, distinct from the cut ring: accent, and it does
                     not pulse, because "you are looking at this" is not urgent. */}
                 {selected === i && (
-                  <rect className="rp-halo" x={x - 5} y={BOX_Y - 5}
-                        width={BOX_W + 10} height={BOX_H + 10} rx={14}
-                        fill="none" stroke="var(--accent)" strokeWidth={1.5} />
+                  <rect className="rp-halo" x={x - 8} y={BOX_Y - 8}
+                        width={BOX_W + 16} height={BOX_H + 16} rx={19}
+                        fill="none" stroke="var(--accent)" strokeWidth={2} />
                 )}
 
-                <rect x={x} y={BOX_Y} width={BOX_W} height={BOX_H} rx={10}
+                <rect x={x} y={BOX_Y} width={BOX_W} height={BOX_H} rx={13}
                       fill={cut ? 'rgba(244,63,94,.13)'
                                 : h.present ? 'var(--panel-2)' : 'transparent'}
                       stroke={cut ? 'var(--crit)' : h.present ? 'var(--line)' : 'var(--ink-faint)'}
-                      strokeWidth={cut ? 2 : 1}
-                      strokeDasharray={h.present ? undefined : '4 3'} />
+                      strokeWidth={cut ? 2.5 : 1.25}
+                      strokeDasharray={h.present ? undefined : '5 4'} />
 
-                <circle cx={x + 17} cy={BOX_Y + 17} r={9}
+                <circle cx={x + 24} cy={BOX_Y + 25} r={13}
                         fill={cut ? 'var(--crit)' : h.present ? 'var(--accent)' : 'transparent'}
-                        stroke={h.present || cut ? 'none' : 'var(--ink-faint)'} strokeWidth={1} />
-                <text x={x + 17} y={BOX_Y + 20.5} fontSize={9.5} fontWeight={700}
+                        stroke={h.present || cut ? 'none' : 'var(--ink-faint)'} strokeWidth={1.25} />
+                <text x={x + 24} y={BOX_Y + 30} fontSize={14} fontWeight={700}
                       textAnchor="middle"
                       fill={h.present || cut ? '#fff' : 'var(--ink-faint)'}>{i + 1}</text>
 
-                <text x={x + 32} y={BOX_Y + 21} fontSize={8.5} fontWeight={600}
-                      letterSpacing=".06em" fill="var(--ink-faint)">
+                <text x={x + 46} y={BOX_Y + 30} fontSize={11.5} fontWeight={700}
+                      letterSpacing=".07em" fill="var(--ink-faint)">
                   {h.required ? 'REQUIRED' : 'CONTRIBUTING'}
                 </text>
 
-                <text x={x + 13} fontSize={10.5} fill="var(--ink)">
+                <text x={x + 18} fontSize={15} fill="var(--ink)">
                   {lines.map((ln, k) => (
-                    <tspan key={k} x={x + 13} y={BOX_Y + 42 + k * 12.5}>{ln}</tspan>
+                    <tspan key={k} x={x + 18} y={BOX_Y + 58 + k * 18}>{ln}</tspan>
                   ))}
                 </text>
 
-                <text x={x + 13} y={BOX_Y + BOX_H - 9} fontSize={9}
+                <text x={x + 18} y={BOX_Y + BOX_H - 14} fontSize={12.5}
                       fill={h.present ? 'var(--ink-dim)' : 'var(--ink-faint)'}>
                   {h.present ? `${h.evidence_total} finding(s)` : 'not present'}
                 </text>
 
                 {cut && (
-                  <text x={x} y={24} fontSize={9} fontWeight={700} fill="var(--crit)">
+                  <text x={x} y={23} fontSize={12} fontWeight={700} fill="var(--crit)">
                     CUT &#8212; closing this severs the path
                   </text>
                 )}
@@ -546,9 +585,9 @@ function RouteDiagram({ hops, scenario, ale, selected, onSelect }: {
               illustrative $1bn manufacturer — and printing the latter under a
               customer's name is the exact defect pricing.ts was written to end.
               The header line has always shown it behind a null check, so showing
-              it at body weight is parity; setting it 15px bold as the visual
-              payoff of the whole diagram would have been an unverifiable number
-              wearing the most authoritative typography on the screen.
+              it at body weight is parity; setting it as the visual payoff of the
+              whole diagram would have been an unverifiable number wearing the
+              most authoritative typography on the screen.
 
               The fix is upstream: put `loss_model` on the path payload and gate
               this the way Risk.tsx and Dashboard.tsx already do. */}
@@ -557,25 +596,25 @@ function RouteDiagram({ hops, scenario, ale, selected, onSelect }: {
             const reached = hops.every((h) => !h.required || h.present)
             return (
               <g>
-                <line x1={xe - 36} y1={MID} x2={xe - 8} y2={MID}
+                <line x1={xe - PITCH + BOX_W + 8} y1={MID} x2={xe - 11} y2={MID}
                       className={reached ? 'rp-flow' : undefined}
                       stroke={reached ? 'var(--crit)' : 'var(--ink-faint)'}
-                      strokeWidth={reached ? 2 : 1.5}
-                      strokeDasharray={reached ? undefined : '4 3'}
-                      markerEnd={`url(#${reached ? 'rp-ar' : 'rp-ar'})`} />
-                <rect x={xe} y={BOX_Y} width={END_W} height={BOX_H} rx={10}
+                      strokeWidth={reached ? 3 : 2}
+                      strokeDasharray={reached ? undefined : '5 4'}
+                      markerEnd="url(#rp-ar)" />
+                <rect x={xe} y={BOX_Y} width={END_W} height={BOX_H} rx={13}
                       fill="rgba(244,63,94,.09)" stroke="var(--crit)"
-                      strokeWidth={1} strokeDasharray="5 4" />
-                <text x={xe + 14} y={BOX_Y + 20} fontSize={8.5} fontWeight={600}
-                      letterSpacing=".06em" fill="var(--crit)">ENDS AT</text>
-                <text x={xe + 14} y={BOX_Y + 41} fontSize={12.5} fontWeight={600}
+                      strokeWidth={1.5} strokeDasharray="6 5" />
+                <text x={xe + 20} y={BOX_Y + 30} fontSize={11.5} fontWeight={700}
+                      letterSpacing=".07em" fill="var(--crit)">ENDS AT</text>
+                <text x={xe + 20} y={BOX_Y + 62} fontSize={18} fontWeight={700}
                       fill="var(--ink)" fontFamily="var(--font-mono)">
                   {scenario ?? '—'}
                 </text>
-                <text x={xe + 14} y={BOX_Y + 59} fontSize={10.5} fill="var(--ink-dim)">
+                <text x={xe + 20} y={BOX_Y + 88} fontSize={14} fill="var(--ink-dim)">
                   {ale ? `exposure ${money(ale)}` : 'not quantified'}
                 </text>
-                <text x={xe + 14} y={BOX_Y + BOX_H - 9} fontSize={8.5} fill="var(--ink-faint)">
+                <text x={xe + 20} y={BOX_Y + BOX_H - 14} fontSize={11.5} fill="var(--ink-faint)">
                   {ale ? 'annualised, P90' : 'no figures supplied'}
                 </text>
               </g>
@@ -586,34 +625,34 @@ function RouteDiagram({ hops, scenario, ale, selected, onSelect }: {
 
       {/* The full label, which the boxes cannot hold. Fixed minimum height so
           moving between steps does not shift the page under the cursor. */}
-      <div className="mt-3 rounded-md border border-line bg-panel2 px-3.5 py-2.5 min-h-[72px]">
+      <div className="mt-3 rounded-md border border-line bg-panel2 px-4 py-3 min-h-[84px]">
         {detail === null ? (
-          <p className="text-[12px] text-ink3">
+          <p className="text-[13.5px] text-ink3">
             Hover a step to read it in full, or select one to keep it and highlight
             its row in the table below.
           </p>
         ) : (
           <>
-            <div className="flex items-baseline gap-2 flex-wrap">
-              <span className="font-mono text-[11px] text-ink3">
+            <div className="flex items-baseline gap-2.5 flex-wrap">
+              <span className="font-mono text-[12.5px] text-ink3">
                 Step {(active ?? 0) + 1}/{hops.length}
               </span>
-              <strong className="font-[650] text-[13px]">{detail.name}</strong>
+              <strong className="font-[650] text-[15px]">{detail.name}</strong>
               {detail.is_cut && detail.present && (
                 <span className="pill sev-CRITICAL">cut</span>
               )}
               {!detail.present && (
-                <span className="text-[11px] text-ink3">not present</span>
+                <span className="text-[12.5px] text-ink3">not present</span>
               )}
             </div>
             {detail.why_cut && (
-              <p className="text-[12px] text-ink2 mt-1">{detail.why_cut}</p>
+              <p className="text-[13.5px] text-ink2 mt-1.5">{detail.why_cut}</p>
             )}
             {detail.note && (
-              <p className="text-[12px] text-ink3 mt-1">{detail.note}</p>
+              <p className="text-[13.5px] text-ink3 mt-1.5">{detail.note}</p>
             )}
             {detail.checks.length > 0 && (
-              <p className="text-[11px] text-ink3 font-mono mt-1.5">
+              <p className="text-[12.5px] text-ink3 font-mono mt-2">
                 {detail.checks.join(' · ')}
               </p>
             )}
@@ -621,24 +660,24 @@ function RouteDiagram({ hops, scenario, ale, selected, onSelect }: {
         )}
       </div>
 
-      <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-ink3">
-        <span className="inline-flex items-center gap-1.5">
-          <svg width="22" height="8" aria-hidden="true">
-            <line x1="0" y1="4" x2="22" y2="4" stroke="var(--accent)" strokeWidth="2" />
+      <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[12.5px] text-ink3">
+        <span className="inline-flex items-center gap-2">
+          <svg width="26" height="10" aria-hidden="true">
+            <line x1="0" y1="5" x2="26" y2="5" stroke="var(--accent)" strokeWidth="3" />
           </svg>
           the condition holds, and the route runs through it
         </span>
-        <span className="inline-flex items-center gap-1.5">
-          <svg width="22" height="8" aria-hidden="true">
-            <line x1="0" y1="4" x2="22" y2="4" stroke="var(--ink-faint)"
-                  strokeWidth="1.5" strokeDasharray="4 3" />
+        <span className="inline-flex items-center gap-2">
+          <svg width="26" height="10" aria-hidden="true">
+            <line x1="0" y1="5" x2="26" y2="5" stroke="var(--ink-faint)"
+                  strokeWidth="2" strokeDasharray="5 4" />
           </svg>
           not present &#8212; not "less important"
         </span>
-        <span className="inline-flex items-center gap-1.5">
-          <svg width="14" height="10" aria-hidden="true">
-            <rect x="1" y="1" width="12" height="8" rx="2.5" fill="none"
-                  stroke="var(--crit)" strokeWidth="2" />
+        <span className="inline-flex items-center gap-2">
+          <svg width="17" height="12" aria-hidden="true">
+            <rect x="1.5" y="1.5" width="14" height="9" rx="3" fill="none"
+                  stroke="var(--crit)" strokeWidth="2.5" />
           </svg>
           a cut &#8212; closing it severs the path
         </span>
