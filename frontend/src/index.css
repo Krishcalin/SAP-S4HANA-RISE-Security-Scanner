@@ -20,16 +20,42 @@
    "no-preference". There is no theme toggle: the console follows the OS, exactly
    as the Jinja pages always have. */
 :root {
-  --bg:#0f1419; --panel:#161c24; --panel-2:#1c242e; --line:#26313d;
-  --ink:#e6edf3; --ink-dim:#8b98a5; --ink-faint:#5c6873;
+  /* Two of these moved when the light theme was softened, because writing the
+     contrast test found the dark theme failing the same two floors it did — this
+     was never a light-only problem, it was an unmeasured one.
+
+     `--bg` #0f1419 put a card at 1.08:1 against the page, so a panel was located
+     by its one-pixel border alone. `--ink-faint` #5c6873 was 2.75:1 on a nested
+     surface, under the 3:1 floor for incidental text. Neither was introduced by
+     a redesign; both shipped, and neither is visible as a bug until someone
+     reads a monospace hint on a hovered row on a cheap monitor. */
+  --bg:#0b0f13; --panel:#161c24; --panel-2:#1c242e; --line:#26313d;
+  --ink:#e6edf3; --ink-dim:#8b98a5; --ink-faint:#68737e;
   --accent:#3b82f6; --accent-dim:#1e3a5f;
   --crit:#f43f5e; --high:#fb923c; --med:#eab308; --low:#38bdf8; --ok:#22c55e;
   --radius:8px;
 }
 @media (prefers-color-scheme: light) {
+  /* THE LIGHT CARD IS NOT PURE WHITE, and the page moved with it.
+     `--panel` was #fff on a #f6f8fa page: 1.06:1, which is a card that barely
+     lifts off the background and a lot of glare on the big surfaces -- the
+     finding screen is mostly card. Softening the card alone would have flattened
+     it further, so the page went down as the card came off white, and the
+     separation IMPROVED to 1.13:1 while the glare went.
+
+     `--ink-faint` was darkened in the same pass and that is not cosmetic. At
+     #8c959f it sat at 2.85:1 on the page and 3.04:1 on the card -- already under
+     the 3:1 floor for incidental text, before any change here, and a softer card
+     would have taken it lower. #79828d puts every surface between 3.32 and
+     3.72:1. Still short of 4.5:1, which is the honest position: it is the
+     de-emphasis token and closing that gap entirely would collapse it into
+     `--ink-dim` (6.1:1) and leave the palette with no quiet tone at all.
+
+     tests/test_palette_contrast.py holds all of it, so the next person to pick a
+     nicer grey finds out from a test rather than from a customer. */
   :root {
-    --bg:#f6f8fa; --panel:#fff; --panel-2:#f0f3f6; --line:#d7dee6;
-    --ink:#1c2128; --ink-dim:#57606a; --ink-faint:#8c959f; --accent-dim:#dbeafe;
+    --bg:#e8ecf2; --panel:#f8fafc; --panel-2:#eaeef5; --line:#d3dbe5;
+    --ink:#1c2128; --ink-dim:#57606a; --ink-faint:#79828d; --accent-dim:#dbeafe;
   }
 }
 
