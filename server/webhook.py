@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Outbound delivery of queued notifications to an ITSM endpoint.
 
 WHAT WAS ALREADY THERE, AND WHAT WAS NOT. `ingest.queue_notifications` has

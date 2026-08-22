@@ -1,11 +1,3 @@
-/*
- * Copyright (c) 2026 Krishnendu De. All Rights Reserved.
- *
- * Author : Krishnendu De
- * Coding Assistance : Claude Code
- * Code Security Assistance : Code QL
- */
-
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import {

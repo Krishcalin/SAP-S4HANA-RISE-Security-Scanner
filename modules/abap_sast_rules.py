@@ -1,8 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
 #
 # GENERATED FILE — assembled by tools/build_abap_rules.py from the author's own
 # sibling project SAP-Code-Vulnerability-Analyzer (abap_scanner.py v1.9.0). Same

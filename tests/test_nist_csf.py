@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """The CSF 2.0 Core is reference data, so these tests are mostly about drift.
 
 The taxonomy is pinned to the PUBLISHED counts (6 / 22 / 106) rather than to

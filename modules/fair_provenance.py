@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """
 What produced this figure — the catalogue, the engine, and the model version.
 

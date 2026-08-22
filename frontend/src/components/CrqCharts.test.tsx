@@ -1,11 +1,3 @@
-/*
- * Copyright (c) 2026 Krishnendu De. All Rights Reserved.
- *
- * Author : Krishnendu De
- * Coding Assistance : Claude Code
- * Code Security Assistance : Code QL
- */
-
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 

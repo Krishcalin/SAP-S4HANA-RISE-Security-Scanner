@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """The BTP settings fields that were ingested and never read.
 
 `modules/btp_import.py` has normalised `accessTokenValidity`,

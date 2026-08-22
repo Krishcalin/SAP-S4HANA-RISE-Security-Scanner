@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """What the derivations CLAIM, against what a real run EMITS.
 
 WHY THIS FILE IS THE MOST IMPORTANT TEST IN THE SUITE

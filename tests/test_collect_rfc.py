@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """The RFC collector, tested on machines that have no SAP RFC SDK — i.e. all of CI.
 
 The SDK is S-user gated and cannot be redistributed, so nothing here opens a

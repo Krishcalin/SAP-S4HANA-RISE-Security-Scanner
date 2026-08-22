@@ -1,11 +1,3 @@
-/*
- * Copyright (c) 2026 Krishnendu De. All Rights Reserved.
- *
- * Author : Krishnendu De
- * Coding Assistance : Claude Code
- * Code Security Assistance : Code QL
- */
-
 import {
   Calculator, CircleAlert, CircleDollarSign, Landmark, LayoutDashboard, LayoutGrid, Scissors, ShieldCheck, TrendingUp, Upload, UserCog, Waypoints, type LucideIcon,
 } from 'lucide-react'

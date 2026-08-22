@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """The generated check reference, and the properties that make it worth trusting.
 
 The CI gate (`--check` in the purity job) catches drift. These catch the ways the

@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """The standards mapping, and the guards that keep it from becoming a guess.
 
 Mapping 673 checks to the OWASP Top 10 by reading their names would take an

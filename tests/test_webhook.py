@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Outbound ITSM delivery, and the four ways it could quietly lose a CRITICAL.
 
 WHAT WAS ALREADY THERE. `ingest.queue_notifications` has written rows for new

@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Three small ways the product failed to say what it had not done.
 
 Each is the same shape as the large ones this codebase has spent its effort on —

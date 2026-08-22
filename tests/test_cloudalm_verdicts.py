@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """SAP's CSA verdicts, and the discipline of reporting somebody else's findings.
 
 WHY THIS MODULE EXISTS AT ALL. The roadmap gated Cloud ALM ingestion on a

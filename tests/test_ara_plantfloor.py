@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """The plant-floor ARA rules (MFG / INV / QM / PM / PS / WM).
 
 These rules are built from a design-specification object catalogue rather

@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """The CVA engine's open questions, as they get settled against SAP's own docs.
 
 `docs/CVA_ENGINE_IMPROVEMENT_PLAN.md` section 7 lists twelve things the engine

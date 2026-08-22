@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Five reachability states, and the bucket each one sends an absent source to.
 
 WHAT WAS WRONG. The coverage manifest had two states — reachable and the five

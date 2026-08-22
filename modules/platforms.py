@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """What kind of thing a `sap_system` row is. Decision D8.
 
 A row in `sap_system` used to be an ABAP system and nothing else. It is now

@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Graph edges, and the refusals that keep them honest.
 
 WHAT WAS MISSING. `graph_node` has been populated since the schema landed.

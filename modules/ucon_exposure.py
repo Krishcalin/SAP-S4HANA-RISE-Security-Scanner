@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Unified Connectivity — which remote-callable functions are actually exposed.
 
 WHY THIS IS PRIORITY 1 AND NOT A NICE-TO-HAVE

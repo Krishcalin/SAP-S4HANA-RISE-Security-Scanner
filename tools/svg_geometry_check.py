@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Prove the architecture diagrams are clean instead of asserting it.
 
 Run:  python -m tools.svg_geometry_check docs/ARCHITECTURE.html

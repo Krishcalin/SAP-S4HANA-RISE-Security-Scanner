@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """What a check IS, and what a Baseline requirement ASKS FOR.
 
 Every screen in this console could already tell you that `LOG-AUD-001` fired.

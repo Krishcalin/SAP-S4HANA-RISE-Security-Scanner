@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Collect the ICF surface of an ABAP system over HTTP(S).
 
 WHAT THIS IS FOR, AND WHAT IT IS HONESTLY NOT

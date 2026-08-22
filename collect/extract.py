@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Write what a collector obtained, in the shape the offline loader already reads.
 
 THE ONE RULE OF THIS MODULE. Everything written here must be a file

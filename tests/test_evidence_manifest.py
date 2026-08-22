@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """The evidence manifest: every file the scan read, SHA-256 hashed at scan
 time, stamped into the report. The SRS requirement it answers is audit
 replay — "raw extract hash … supports defensible results" — so the tests

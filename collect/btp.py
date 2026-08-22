@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Collect SAP BTP configuration over the platform's own REST APIs.
 
     python -m collect btp --service-key ./destination-key.json --out ./extract

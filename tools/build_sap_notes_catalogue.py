@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Generate data/sap_notes_catalogue.json from SAP's own published CSA policies.
 
 Run:  python -m tools.build_sap_notes_catalogue --source <extract-of-the-sap-repo>

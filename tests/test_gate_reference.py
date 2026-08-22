@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """The release gate's coverage table, and why it is generated.
 
 THE DEFECT, TWICE. `docs/RELEASE_GATE.md` lists the findings that arm `--gate`'s

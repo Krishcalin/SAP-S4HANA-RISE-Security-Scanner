@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """What the parameter modules do when the export does not tell them something.
 
 PHASE 3 DID NOT BUILD WHAT THE PLAN ASKED FOR, AND THIS FILE RECORDS WHY.

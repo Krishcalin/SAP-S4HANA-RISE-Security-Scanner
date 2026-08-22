@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """UCON — the only view of remote-callable exposure a RISE customer still has.
 
 WHY THIS MODULE EXISTS. `secinfo` and `reginfo` are filesystem files on the

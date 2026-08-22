@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Tests for the CFO-input loss model and the engine's reproducibility contract.
 
 The reproducibility test runs SUBPROCESSES. That is the whole point of it: the

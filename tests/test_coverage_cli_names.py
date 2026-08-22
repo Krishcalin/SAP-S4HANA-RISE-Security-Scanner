@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """The CLI's module names and the coverage manifest's module names.
 
 THE DEFECT THIS FILE EXISTS FOR

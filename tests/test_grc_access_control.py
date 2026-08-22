@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Focused tests for the GRC Access Control module + the adversarial-review fixes:
 RISK_TYPE must not be read as criticality, ARM blank-risk gating, CLOSED requests
 are not provisioned, and expired mitigations leave a SoD violation open.

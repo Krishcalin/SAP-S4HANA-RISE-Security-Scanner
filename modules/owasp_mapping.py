@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """OWASP and ASVS mapping, by derivation where possible and by judgement where not.
 
 WHY THIS IS NOT ONE BIG TABLE OF GUESSES

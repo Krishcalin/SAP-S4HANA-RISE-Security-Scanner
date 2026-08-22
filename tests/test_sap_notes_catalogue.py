@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """SAP's own note record, and the two checks that rest on it.
 
 WHY THIS FILE EXISTS. The standing risk in the roadmap was "a fabricated SAP

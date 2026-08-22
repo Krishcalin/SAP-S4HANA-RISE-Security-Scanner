@@ -11,7 +11,7 @@
   <a href="https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner/actions/workflows/tests.yml"><img src="https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner/actions/workflows/tests.yml/badge.svg" alt="tests"/></a>
   <img src="https://img.shields.io/badge/python-3.8%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python 3.8+"/>
   <img src="https://img.shields.io/badge/CLI-stdlib%20only-brightgreen?style=flat-square" alt="CLI: stdlib only"/>
-  <img src="https://img.shields.io/badge/license-Proprietary-red?style=flat-square" alt="Proprietary — All Rights Reserved"/>
+  <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT licensed"/>
 </p>
 
 <p align="center">
@@ -24,26 +24,23 @@
 
 ---
 
-> ### 🔒 Source-available, not open source
+> ### 🔓 Open source, MIT licensed
 >
-> **Copyright © 2026 Krishnendu De. All rights reserved.**
+> Read it, run it, fork it, change it, self-host it, build it into your own
+> product, commercial or otherwise. No permission needed and none to ask for.
 >
-> This repository is public so that the work can be **read, reviewed and
-> evaluated**. That is the whole of the permission granted.
+> The only condition MIT sets is that the copyright and permission notice travel
+> with substantial portions of the software. That notice lives once, in
+> **[LICENSE](LICENSE)** — there are no per-file headers to preserve.
 >
-> **You may:** read the source, review the approach, cite it with attribution.
-> **You may not:** run, copy, fork, modify, redistribute, self-host, or use it or
-> any part of it in your own product or service — commercial or otherwise —
-> without prior written permission.
+> **One carve-out, and it is not ours to waive:**
+> `data/sap_baseline_requirements.json` is derived from SAP's own published CSA
+> policies under **Apache-2.0, Copyright (c) 2020 SAP SE**. That attribution is
+> required by SAP's licence and stays. See
+> **[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)**.
 >
-> Public visibility is **not** a licence. Neither is the absence of a technical
-> barrier. If you are unsure whether what you have in mind is permitted, assume it
-> is not and ask — permission is usually easy to obtain and always cheaper than
-> the alternative.
->
-> **Licensing, evaluation and commercial enquiries:** krishnendu.de@hotmail.com
-> · Full terms in **[LICENSE](LICENSE)** · Reporting a vulnerability?
-> **[SECURITY.md](SECURITY.md)**
+> **Contributions welcome** · **[CONTRIBUTING.md](CONTRIBUTING.md)** · Reporting a
+> vulnerability? **[SECURITY.md](SECURITY.md)**
 
 ---
 
@@ -1864,7 +1861,7 @@ the most current document in the project.)*
 
 ## Contributing
 
-**External code contributions are not accepted** — this is source-available, not open source, and merging outside work into a proprietary codebase makes the copyright jointly held. Bug reports, corrections to SAP facts, and false positive/negative reports are genuinely welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
+**Contributions are welcome** — the project is MIT and open to outside work. Bug reports, corrections to SAP facts, and false positive/negative reports are especially valuable, because a wrong SAP fact is worse here than a missing feature. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Found a vulnerability **in this tool**? Do not open an issue — see [SECURITY.md](SECURITY.md).
 
@@ -1887,12 +1884,20 @@ by omission. See `docs/DECISIONS.md` (D2, D3) for the reasoning and its limits.
 
 ## License
 
-**Proprietary. All rights reserved.** Copyright (c) 2026 Krishnendu De.
+**[MIT](LICENSE).** Use it, change it, ship it, sell it. The only condition is
+that the copyright notice and permission notice travel with substantial portions
+of the software, which is the whole of what MIT asks.
 
-No licence is granted to use, copy, modify or distribute this software, in whole
-or in part, without prior express written permission. The repository being
-publicly viewable is not a grant of any licence, and viewing it for evaluation
-confers no right to execute or deploy it. See [LICENSE](LICENSE) for the full
-terms and for the third-party components, which remain under their own licences.
+MIT is a copyright licence, so it names a holder: Copyright (c) 2026
+Krishnendu De. That notice lives once, in [LICENSE](LICENSE), rather than at the
+top of every file.
 
-Licensing enquiries: krishnendu.de@hotmail.com
+**Third-party terms are untouched by this**, and cannot be otherwise. Exactly one
+component is third-party: `data/sap_baseline_requirements.json`, derived from
+SAP-samples/frun-csa-policies-best-practices under **Apache-2.0, Copyright (c)
+2020 SAP SE or an SAP affiliate company**. Its notice is required by that licence
+and stays. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) — it is part of
+the release, not documentation, because the Dockerfile redistributes some of what
+it lists.
+
+Questions: krishnendu.de@hotmail.com

@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """A very small SOAP client, stdlib only.
 
 NOT A GENERAL SOAP LIBRARY, AND DELIBERATELY NOT. It speaks exactly the shape

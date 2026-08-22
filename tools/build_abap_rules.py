@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Assemble modules/abap_sast_rules.py from the standalone CVA repository.
 
 The rule tables and the taint analyzer are CONTENT: ~1,400 lines of regexes,
@@ -48,16 +42,14 @@ def seg(first, last):
 # regenerated from another repository on disk, and a reader who does not know that
 # will hand-edit it and lose their work. Recording where the content comes from is
 # what makes the DO-NOT-EDIT warning below actionable.
-_COPYRIGHT = '''# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-#
-# GENERATED FILE — assembled by tools/build_abap_rules.py from the author's own
-# sibling project SAP-Code-Vulnerability-Analyzer (abap_scanner.py v1.9.0). Same
-# copyright holder; see LICENSE and THIRD_PARTY_NOTICES.md. Do not hand-edit:
-# every edit here is discarded by the next regeneration.
+# No copyright header is stamped on the generated file. The project is MIT and the
+# notice lives once, in LICENSE, rather than on every artefact -- see the Licensing
+# section of CLAUDE.md. The provenance note stays, because it is the part a reader
+# of the generated file actually needs.
+_COPYRIGHT = '''# GENERATED FILE — assembled by tools/build_abap_rules.py from the
+# sibling project SAP-Code-Vulnerability-Analyzer (abap_scanner.py v1.9.0), which
+# is MIT and shares this project's authorship; see THIRD_PARTY_NOTICES.md. Do not
+# hand-edit: every edit here is discarded by the next regeneration.
 
 '''
 

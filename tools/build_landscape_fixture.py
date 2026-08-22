@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Generate a synthetic THREE-SYSTEM SAP landscape: D01 -> T01 -> P01.
 
     python -m tools.build_landscape_fixture

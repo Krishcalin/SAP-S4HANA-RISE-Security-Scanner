@@ -1,23 +1,24 @@
 # Contributing
 
-**This project does not accept external code contributions.**
+**Pull requests are welcome.**
 
-MonitorRisk is source-available, not open source. The repository is public so the
-work can be read, reviewed and evaluated; the copyright is held solely by
-Krishnendu De and the licence reserves all rights (see [LICENSE](LICENSE)).
+MonitorRisk is open source under the [MIT licence](LICENSE). The repository is
+public so the work can be read, reviewed, used, forked and built on, and code
+contributions are accepted like any other MIT project. By opening a pull request
+you agree that your contribution is licensed under the same terms.
 
-That is why pull requests are declined rather than reviewed, and it is not a
-judgement on the code in them. Merging outside contributions into a proprietary
-codebase makes the copyright jointly held, which quietly undermines the one thing
-the licence asserts — that the software is the exclusive property of its
-copyright holder. Sorting that out afterwards is far harder than declining
-politely up front.
+> This file said the opposite between 2026-08-11 and the return to MIT: that
+> pull requests were declined because merging outside work into a proprietary
+> codebase would make the copyright jointly held. That reasoning was sound while
+> the licence was proprietary and is simply void now. It is corrected here rather
+> than quietly deleted, because anyone who read the old wording and did not send
+> a patch deserves to see that the answer changed.
 
-> This file used to say *"Thanks for your interest in contributing!"* and
-> *"Submit a PR with a clear description."* That was written when the project was
-> open source and it survived the relicensing. It is corrected here rather than
-> quietly deleted, because anyone who acted on the old wording did so in good
-> faith and deserves to see why the answer changed.
+The most valuable contributions are corrections to **SAP facts** — a note number,
+an authorization object, a parameter name, a requirement id. A wrong SAP fact in
+this product is worse than a missing feature: it is a confident claim about
+someone's estate that does not hold, and it is the one class of defect a reader
+cannot check without leaving the tool.
 
 ---
 

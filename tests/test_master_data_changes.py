@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Focused tests for master_data_changes: the bank-change register masks
 account values and joins headers over CHANGENR, table-keyed matching filters
 non-bank rows, direct-maintenance detection keys on the TCODE set, and the

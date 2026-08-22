@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """The Web Dispatcher profile, against SAP's own WEBDISP_ALL baseline.
 
 WHAT WAS WRONG. Not "the Web Dispatcher is unsupported" — three modules already

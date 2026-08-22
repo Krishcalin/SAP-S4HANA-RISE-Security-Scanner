@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Regenerate the degraded-coverage table in docs/RELEASE_GATE.md.
 
 Run:  python -m tools.build_gate_reference

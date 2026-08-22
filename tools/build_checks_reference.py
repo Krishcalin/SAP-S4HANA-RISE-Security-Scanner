@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Generate docs/CHECKS_REFERENCE.md from the code, and fail CI when it drifts.
 
     python -m tools.build_checks_reference           # rewrite the document

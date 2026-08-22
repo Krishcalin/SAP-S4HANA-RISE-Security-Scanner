@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Add family-level knowledge-base entries for the code-scanning check families.
 
 `FindingKB.lookup` falls back by prefix — ABAP-SQLI-007 -> ABAP-SQLI -> ABAP — so

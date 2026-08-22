@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """A platform a tenant can be registered against, and what it will actually get.
 
 WHAT WAS WRONG. `PLATFORMS` says which platforms a `sap_system` row may DECLARE.

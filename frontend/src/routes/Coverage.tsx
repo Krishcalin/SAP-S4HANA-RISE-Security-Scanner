@@ -1,11 +1,3 @@
-/*
- * Copyright (c) 2026 Krishnendu De. All Rights Reserved.
- *
- * Author : Krishnendu De
- * Coding Assistance : Claude Code
- * Code Security Assistance : Code QL
- */
-
 import { useEffect, useState } from 'react'
 import { ApiError, coverage } from '../api/client'
 import type { Coverage as CoverageView, Severity } from '../api/types'

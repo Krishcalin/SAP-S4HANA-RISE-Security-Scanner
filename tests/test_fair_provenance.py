@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """What produced the figure: the catalogue, the engine, and the model version.
 
 The load-bearing test here edits a copy of the real catalogue and asserts the

@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Connected mode, exercised against a fake sapstartsrv.
 
 WHY A FAKE SERVER AND NOT MOCKS

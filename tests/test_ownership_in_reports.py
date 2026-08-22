@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """The "yours under RISE / SAP's under RISE" tag, in the artefact that needs it.
 
 WHAT WAS WRONG. Ownership was stamped onto every finding and the offline HTML

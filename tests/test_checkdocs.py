@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Every check id and requirement id the console renders is now a LINK.
 
 That is the point of the feature and it is also its whole risk. Before, an id

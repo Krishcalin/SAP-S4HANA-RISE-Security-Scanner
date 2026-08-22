@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """The platform vocabulary, and the shape rules that hang off it.
 
 THE SECOND GROWABLE VALUE LIST IN THIS SCHEMA, and it arrived immediately after

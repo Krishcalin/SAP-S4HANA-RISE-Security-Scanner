@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Tests for the Security Audit Log retrospective review (modules/log_review.py).
 
 Three things are being defended here, in order of how expensive they are to get wrong:

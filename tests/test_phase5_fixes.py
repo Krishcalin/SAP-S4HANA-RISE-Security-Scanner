@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Regression tests for the Phase-5 adversarial-review fixes.
 
 Each test pins a specific confirmed defect so it cannot silently regress:

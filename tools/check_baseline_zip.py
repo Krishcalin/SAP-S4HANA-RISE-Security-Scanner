@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Has SAP's Security Baseline Template moved since we last looked?
 
 WHAT THIS COMPLETES. The `sap-content` CI job already clones SAP's Apache-2.0

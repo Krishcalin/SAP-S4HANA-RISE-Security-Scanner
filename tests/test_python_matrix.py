@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Every test the `cli` job runs must actually run on the oldest Python it uses.
 
 WHY THIS FILE EXISTS: THE SAME BUG, TWICE, IN ONE DAY

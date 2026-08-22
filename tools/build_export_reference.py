@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Generate docs/EXPORT_SOURCES.md — every file the scanner can read.
 
 Run:  python -m tools.build_export_reference

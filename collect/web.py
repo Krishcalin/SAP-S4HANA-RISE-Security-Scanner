@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Shared HTTP for the connectors. Stdlib only, GET only.
 
 WHY `GET ONLY` IS IN THE MODULE DOCSTRING AND IN THE CODE

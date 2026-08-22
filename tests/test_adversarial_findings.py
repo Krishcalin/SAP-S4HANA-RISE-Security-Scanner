@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Three defects an adversarial sweep found, each pinned through the REAL path.
 
 WHY "THROUGH THE REAL PATH" IS THE POINT OF THIS FILE. The first of the three had

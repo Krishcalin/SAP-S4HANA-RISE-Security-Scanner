@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """"Compliant in the clients we saw" must never render as "compliant".
 
 WHAT WAS WRONG. `system_trust.check_default_passwords` read `standard_users`,

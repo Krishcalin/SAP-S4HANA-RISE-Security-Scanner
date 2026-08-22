@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """End-to-end and per-module tests for the SAP S/4HANA RISE Security Scanner.
 
 Strategy: every audit module is run against the bundled ``sample_data`` (crafted

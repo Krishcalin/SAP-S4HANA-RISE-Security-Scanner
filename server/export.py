@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """PDF and PPTX built from the store, not from one scan's in-memory list.
 
 WHAT THIS ADDS, AND WHAT IT DOES NOT FIX. The roadmap files this as "PDF/PPTX

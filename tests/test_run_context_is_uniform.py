@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Every auditor is handed the same run context.
 
 WHAT WAS WRONG, AND WHY IT WAS NOT YET A BUG.

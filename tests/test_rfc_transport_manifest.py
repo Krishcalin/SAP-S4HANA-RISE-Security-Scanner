@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """What the RFC collector's connection actually was, recorded rather than assumed.
 
 WHAT WAS WRONG, AND WHY IT WAS WORSE THAN A MISSING FIELD. Three of the four

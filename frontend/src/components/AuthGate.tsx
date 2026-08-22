@@ -1,11 +1,3 @@
-/*
- * Copyright (c) 2026 Krishnendu De. All Rights Reserved.
- *
- * Author : Krishnendu De
- * Coding Assistance : Claude Code
- * Code Security Assistance : Code QL
- */
-
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate, useLocation } from 'react-router'
 import { me } from '../api/client'

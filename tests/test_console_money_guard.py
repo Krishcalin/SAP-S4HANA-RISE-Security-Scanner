@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """No console screen may print a currency figure the customer did not price.
 
 The reports have obeyed this since the console/report split was closed. The

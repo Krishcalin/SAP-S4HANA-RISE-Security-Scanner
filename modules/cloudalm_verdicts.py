@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """SAP Cloud ALM CSA compliance results, imported as SAP's findings.
 
 THE QUESTION THIS EXISTS TO STOP GATING

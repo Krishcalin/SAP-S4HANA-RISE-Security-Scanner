@@ -1,11 +1,3 @@
-/*
- * Copyright (c) 2026 Krishnendu De. All Rights Reserved.
- *
- * Author : Krishnendu De
- * Coding Assistance : Claude Code
- * Code Security Assistance : Code QL
- */
-
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { ApiError, cancelRun, run as fetchRun, runDiff as fetchDiff } from '../api/client'

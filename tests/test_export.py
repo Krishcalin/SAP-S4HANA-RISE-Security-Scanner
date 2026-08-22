@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Exporting the estate as a document, from the store rather than from a scan.
 
 WHAT I EXPECTED TO FIND AND DID NOT. The roadmap files this as "PDF/PPTX export

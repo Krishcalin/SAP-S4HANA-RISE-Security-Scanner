@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """The twelve domains in the deck — and deliberately not in the HTML or PDF.
 
 WHERE THIS VIEW LIVES, AND WHY IT IS NOT EVERYWHERE

@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """A read-only MCP surface over the query layer.
 
 WHY THERE IS NO SDK HERE. `requirements.txt` states the discipline that replaced

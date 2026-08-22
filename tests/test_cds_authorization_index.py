@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Access control that was never written, as opposed to switched off.
 
 Every CDS/RAP rule before this one matched something a developer typed —

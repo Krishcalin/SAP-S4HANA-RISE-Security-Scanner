@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Detecting that SAP's Baseline Template moved, without downloading 99 MB.
 
 WHAT THIS COMPLETES. The `sap-content` CI job already re-derives both catalogues

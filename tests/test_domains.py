@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """The twelve buyer-facing domains, and the two things that make them safe.
 
 REACH and STATE are separate axes. Reach is what the product can ever see and is

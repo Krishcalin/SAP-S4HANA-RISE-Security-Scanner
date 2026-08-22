@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Focused tests for vendor_master: account identity survives formatting
 differences, account numbers never leave the module unmasked, the
 sole-maintenance register is scoped to partners that actually carry payment

@@ -1008,15 +1008,18 @@ quantification. And absence of a capability in a competitor's public material is
 - Remote: `https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner`.
 ## Licensing
 
-**Proprietary, all rights reserved, since 2026-08-11.** The repository was MIT until
-then; it is not any more, and the badge, the README section and `LICENSE` were changed
-together. Do not reintroduce an MIT badge or an OSI licence identifier for this code.
+**MIT.** The repository was MIT, went proprietary on 2026-08-11, and is MIT again —
+the badge, the README section and `LICENSE` were changed together each time, and they
+must stay in step. Anything asserting "all rights reserved", "source-available" or
+"not open source" is stale and should be corrected rather than worked around.
 
-The repository is **publicly viewable and that is not a grant** — `LICENSE` says so
-explicitly, because a public repo with no licence file is widely (and wrongly) read as
-permissive.
+**No per-file copyright headers.** 287 files carried one; they were removed when the
+project returned to MIT. The notice lives once, in `LICENSE`, which is what MIT asks
+for. Do not reintroduce a header block, and do not add one to a generated file —
+`tools/build_abap_rules.py` stamps provenance onto its output and deliberately no
+longer stamps a copyright.
 
-⚠️ **A proprietary licence on our code does not touch third-party terms, and cannot.**
+⚠️ **An MIT licence on our code does not touch third-party terms, and cannot.**
 Full notices are in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md); it is part of
 the release, not documentation trivia, because the `Dockerfile` redistributes some of
 what it lists and an attribution obligation is not discharged by a source comment

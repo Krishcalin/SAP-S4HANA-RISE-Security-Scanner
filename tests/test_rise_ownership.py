@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Who owns a finding under RISE, and the two products agreeing about it.
 
 WHAT WAS WRONG. The ownership oracle lived entirely in `server/enrich.py`, so only

@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """The BTP collector, exercised against a real socket.
 
 A real ``http.server`` on a real port, speaking the real protocol — no mocked

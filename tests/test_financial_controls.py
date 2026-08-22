@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Focused tests for financial_controls + the adversarial-review fixes:
 amount parsing is locale-tolerant, only FI accounting-document ranges (not master/SD/CO)
 are number-range-checked, all buffer codes (X/L/P/S) count, routine ZLSPR is not a

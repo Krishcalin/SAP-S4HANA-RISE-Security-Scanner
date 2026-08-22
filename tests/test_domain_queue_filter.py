@@ -1,9 +1,3 @@
-# Copyright (c) 2026 Krishnendu De. All Rights Reserved.
-#
-# Author : Krishnendu De
-# Coding Assistance : Claude Code
-# Code Security Assistance : Code QL
-
 """Filtering the triage queue by security domain.
 
 TWO READINGS OF ONE RULE, AND THE TEST THAT MAKES THEM ONE
