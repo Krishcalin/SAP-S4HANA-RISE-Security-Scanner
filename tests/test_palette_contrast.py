@@ -302,3 +302,53 @@ def test_the_note_under_a_number_uses_the_readable_ink():
     note = [l for l in UI.read_text(encoding="utf-8").splitlines()
             if l.startswith("export const KPI_NOTE =")]
     assert note and "text-ink2" in note[0], f"KPI_NOTE is not on --ink-dim: {note}"
+
+
+# ── the cascade ──────────────────────────────────────────────────────────────
+
+def test_component_classes_live_in_a_layer():
+    """UNLAYERED CSS BEATS EVERY @layer, wherever it sits in the file.
+
+    Tailwind puts its utilities in `@layer utilities`. A component class written
+    plainly in index.css is unlayered, so it outranks any utility on the same
+    element -- and does it silently, because the markup looks correct and the
+    stylesheet simply declines.
+
+    That is not hypothetical. `.field { width:100% }` was unlayered, so
+    `className="field w-auto"` had no effect and the findings screen rendered
+    seven filter controls as seven full-width rows stacked down the page. Nothing
+    was wrong with the JSX; the cascade was quietly overruling it.
+
+    This asserts the component block stays inside `@layer components`, where a
+    utility can override it, which is what any reader of that className expects.
+    """
+    css = CSS.read_text(encoding="utf-8")
+
+    # Anchored at the start of a line, so the RULE is found and not the comment
+    # above it that quotes the rule. The first version of this test matched its
+    # own prose and failed against a correct stylesheet -- the same code-versus-
+    # prose confusion `_code_only` exists for in test_console_money_guard.py.
+    rule = re.search(r"^\.field \{", css, re.M)
+    assert rule, "the .field rule is gone"
+    before = css[:rule.start()]
+
+    assert "@layer components {" in before, (
+        "`.field` is no longer inside @layer components; it is unlayered again "
+        "and will silently outrank every Tailwind utility placed beside it")
+
+    # And the layer must still be OPEN there: an opener followed by its closing
+    # brace leaves the rule unlayered just as surely as no opener at all.
+    segment = before.split("@layer components {")[-1]
+    assert segment.count("{") >= segment.count("}"), \
+        "@layer components closes before `.field`, so the rule is unlayered"
+
+
+def test_the_theme_and_tokens_stay_outside_the_layer():
+    """`:root` and `@theme` must NOT be wrapped. Custom properties resolve by
+    inheritance rather than by cascade layer, and `@theme` is Tailwind's own
+    directive -- moving either inside a component layer would change what the
+    utilities are generated from."""
+    css = CSS.read_text(encoding="utf-8")
+    layer_at = css.index("@layer components {")
+    assert css.index(":root {") < layer_at, ":root has been moved into the layer"
+    assert css.index("@theme inline {") < layer_at, "@theme has been moved into the layer"

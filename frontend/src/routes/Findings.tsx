@@ -134,7 +134,21 @@ export function Findings() {
         </div>
       )}
 
-      <div className="flex gap-2 flex-wrap items-center mb-3.5">
+      {/* A GRID, not a flex row of stretched controls.
+
+          With `.field` unlayered, `w-auto` on each select did nothing and every
+          one of them took `width:100%` -- so `flex-wrap` dutifully put one per
+          line and the seven filters became seven full-width rows. That is fixed
+          in index.css; this makes the result deliberate rather than merely
+          no-longer-broken.
+
+          auto-fit/minmax packs as many columns as fit and keeps them aligned,
+          which a wrapped flex row does not: content-sized selects wrap to a
+          ragged edge, and "Any domain" beside "All systems" beside "Any severity"
+          at three different widths reads as three unrelated controls. Equal
+          columns read as one bank of filters, which is what they are. */}
+      <div className="grid gap-2 mb-2.5
+                      [grid-template-columns:repeat(auto-fit,minmax(168px,1fr))]">
         {/* First, because it is the widest cut and the one a reader arriving from
             a domain tile is already thinking in. It is absent until the list
             loads rather than rendered empty: a select offering only "Any domain"
@@ -164,6 +178,12 @@ export function Findings() {
                 onChange={(v) => setFilter('owner', v)} blank="Any owner" options={OWNER_FILTER} />
         <Select label="Filter by owning team" value={params.get('team') ?? ''}
                 onChange={(v) => setFilter('team', v)} blank="Any team" options={TEAMS.map((t) => [t, t.replace(/_/g, ' ')])} />
+      </div>
+
+      {/* Out of the grid on purpose. A checkbox and a reset are not filters of
+          the same kind as the selects, and giving each a full column left a gap
+          at the end of the last row. */}
+      <div className="flex gap-3 flex-wrap items-center mb-3.5">
         <label className="text-[12px] text-ink2 flex items-center gap-1.5">
           <input type="checkbox" checked={params.get('overdue') === 'true'}
                  onChange={(e) => setFilter('overdue', e.target.checked ? 'true' : '')} />
@@ -613,7 +633,7 @@ function Select({ label, value, onChange, blank, options }: {
   options: [string, string][]
 }) {
   return (
-    <select className="field w-auto" aria-label={label} value={value}
+    <select className="field" aria-label={label} value={value}
             onChange={(e) => onChange(e.target.value)}>
       <option value="">{blank}</option>
       {options.map(([v, optionLabel]) => (

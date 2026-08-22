@@ -105,6 +105,22 @@ body {
    `tier-P1`) so a screen agent porting a template's markup keeps its appearance
    without re-deriving the palette. The rgba() literals are copied from base.html
    rather than expressed in tokens because they are the same in both themes. */
+/* ── Component classes, in a LAYER, and that is load-bearing ─────────────────
+   Everything below was UNLAYERED, and unlayered CSS beats every @layer in the
+   cascade no matter where it sits in the file. Tailwind's utilities live in
+   `@layer utilities`, so a plain `.field { width:100% }` silently outranked
+   `w-auto` on the same element -- `className="field w-auto"` had no effect, and
+   the findings screen rendered seven filters as seven full-width rows stacked
+   down the page. The markup already said what it wanted; the stylesheet was
+   quietly refusing.
+
+   Inside `@layer components`, utilities win, which is what any reader of that
+   className expects and what Tailwind is designed to do. The only rules this
+   changes are ones where a utility and a component class set the SAME property
+   -- checked across every pairing in the codebase, that is `field w-auto` and
+   nothing else. `field mb-3` and `btn w-full` set properties the component class
+   never touches, so they behaved correctly before and are untouched now. */
+@layer components {
 .pill { display:inline-block; padding:2px 8px; border-radius:99px; font-size:11px;
   font-weight:600; letter-spacing:.02em; white-space:nowrap; }
 .sev-CRITICAL { background:rgba(244,63,94,.15); color:var(--crit); }
@@ -350,4 +366,6 @@ body {
   .rp-flow, .rp-pulse, .rp-step { animation: none; }
   .rp-flow { stroke-dasharray: 5 7; }
   .rp-node, .rp-dim, .rp-halo { transition: none; }
+}
+
 }
