@@ -505,7 +505,7 @@ function DomainChip({ d }: { d: SecurityDomain }) {
       )}
     </>
   )
-  const cls = `rounded-lg border border-line bg-panel p-3 dom-rail dom-rail-${d.reach}`
+  const cls = `rounded-lg border border-cardline bg-panel p-3 dom-rail dom-rail-${d.reach}`
   // Not a link when there is nothing behind it: a dead-end click reads as a
   // broken screen rather than as an honest boundary.
   if (!covered) return <div className={cls}>{inner}</div>
@@ -539,7 +539,7 @@ const CSF_SLUG: Record<string, string> = {
   DE: 'detect', RS: 'respond', RC: 'recover',
 }
 
-const CARD = 'rounded-lg border border-line bg-panel p-4'
+const CARD = 'rounded-lg border border-cardline bg-panel p-4'
 const CARD_TITLE = 'mb-3 text-[12px] font-semibold uppercase tracking-[.06em] text-ink3'
 const KPI = 'text-[30px] font-semibold tracking-[-.02em] leading-[1.1]'
 const KPI_NOTE = 'mt-[5px] text-[12px] text-ink2'

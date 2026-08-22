@@ -30,6 +30,17 @@
      a redesign; both shipped, and neither is visible as a bug until someone
      reads a monospace hint on a hovered row on a cheap monitor. */
   --bg:#0b0f13; --panel:#161c24; --panel-2:#1c242e; --line:#26313d;
+  /* THE CARD EDGE, and deliberately NOT `--line`.
+     `--line` rules tables: 89 of its uses are row separators, cell edges and
+     banner outlines, and a saturated blue on those would draw a grid over every
+     table in the product. The card border is one job, so it is one token, and
+     changing how a card is outlined can never repaint a table by accident.
+
+     In DARK this is a mid blue rather than a deep one. A deep navy on a #161c24
+     panel is 1.49:1 -- invisible, which is the wrong way to render "add a
+     border". Same hue, lighter step: the intent survives the theme, the hex
+     cannot. */
+  --card-line:#2a5c94;
   --ink:#e6edf3; --ink-dim:#8b98a5; --ink-faint:#68737e;
   --accent:#3b82f6; --accent-dim:#1e3a5f;
   --crit:#f43f5e; --high:#fb923c; --med:#eab308; --low:#38bdf8; --ok:#22c55e;
@@ -55,6 +66,10 @@
      nicer grey finds out from a test rather than from a customer. */
   :root {
     --bg:#e8ecf2; --panel:#f8fafc; --panel-2:#eaeef5; --line:#d3dbe5;
+    /* The card edge went from 1.34:1 -- effectively a hairline nobody sees -- to
+       8.3:1. That is a real change in how assertive the console looks, and it is
+       one token: soften it here and all 36 cards follow. */
+    --card-line:#1e40af;
     --ink:#1c2128; --ink-dim:#57606a; --ink-faint:#79828d; --accent-dim:#dbeafe;
   }
 }
@@ -67,6 +82,7 @@
   --color-panel: var(--panel);
   --color-panel2: var(--panel-2);
   --color-line: var(--line);
+  --color-cardline: var(--card-line);
   --color-ink: var(--ink);
   --color-ink2: var(--ink-dim);
   --color-ink3: var(--ink-faint);

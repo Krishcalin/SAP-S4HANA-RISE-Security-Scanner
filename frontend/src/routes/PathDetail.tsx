@@ -64,13 +64,13 @@ function dayMonthYear(iso: string | null, month: 'short' | 'long' = 'short'): st
   return d.toLocaleDateString('en-GB', { day: '2-digit', month, year: 'numeric' })
 }
 
-const CARD = 'rounded-lg border border-line bg-panel p-4'
+const CARD = 'rounded-lg border border-cardline bg-panel p-4'
 const CARD_H3 = 'text-[12px] font-semibold uppercase tracking-[.06em] text-ink3 mb-3'
 const G2 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]'
 const H2 = 'text-[15px] font-semibold text-ink mt-7 mb-2.5'
 const TH = 'text-left text-[11px] font-semibold uppercase tracking-[.05em] text-ink3 px-2.5 py-2 border-b border-line'
 const TD = 'px-2.5 py-2.5 border-b border-line align-top'
-const TABLE_CARD = 'rounded-lg border border-line bg-panel overflow-x-auto'
+const TABLE_CARD = 'rounded-lg border border-cardline bg-panel overflow-x-auto'
 const LINK = 'text-accent hover:underline'
 
 export function PathDetail() {
@@ -466,7 +466,7 @@ function RouteDiagram({ hops, scenario, ale, selected, onSelect }: {
   const detail = active !== null ? hops[active] : null
 
   return (
-    <div className="rounded-lg border border-line bg-panel p-4">
+    <div className="rounded-lg border border-cardline bg-panel p-4">
       <div className="overflow-x-auto">
         {/* Natural size, NOT width="100%". See the note on the constants above:
             scaling to the container made a long path render small, so the
@@ -646,7 +646,7 @@ function RouteDiagram({ hops, scenario, ale, selected, onSelect }: {
 
       {/* The full label, which the boxes cannot hold. Fixed minimum height so
           moving between steps does not shift the page under the cursor. */}
-      <div className="mt-3 rounded-md border border-line bg-panel2 px-4 py-3 min-h-[84px]">
+      <div className="mt-3 rounded-md border border-cardline bg-panel2 px-4 py-3 min-h-[84px]">
         {detail === null ? (
           <p className="text-[13.5px] text-ink3">
             Hover a step to read it in full, or select one to keep it and highlight

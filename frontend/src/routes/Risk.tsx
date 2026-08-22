@@ -88,10 +88,10 @@ export function money(value: number | null | undefined): string {
 }
 
 
-const TABLE_CARD = 'rounded-lg border border-line bg-panel overflow-x-auto'
+const TABLE_CARD = 'rounded-lg border border-cardline bg-panel overflow-x-auto'
 const EMPTY = 'p-9 text-center text-ink2'
 const LINK = 'text-accent hover:underline'
-const CARD = 'rounded-lg border border-line bg-panel p-4'
+const CARD = 'rounded-lg border border-cardline bg-panel p-4'
 const CARD_H3 = 'text-[12px] font-semibold uppercase tracking-[.06em] text-ink3 mb-3'
 const KPI = 'text-[30px] font-semibold tracking-[-.02em] leading-[1.1]'
 const KPI_NOTE = 'text-ink2 text-[12px] mt-1.5'
@@ -277,7 +277,7 @@ function Body({ view }: { view: RiskView }) {
       </div>
 
       <h2 className={H2}>Loss scenarios</h2>
-      <div className="rounded-lg border border-line bg-panel overflow-x-auto">
+      <div className="rounded-lg border border-cardline bg-panel overflow-x-auto">
         <table className="w-full border-collapse">
           <thead>
             <tr>

@@ -227,7 +227,7 @@ export function Upload() {
 
       {error && <div className="banner banner-bad" role="alert">{error}</div>}
 
-      <form className="max-w-[620px] rounded-lg border border-line bg-panel p-4"
+      <form className="max-w-[620px] rounded-lg border border-cardline bg-panel p-4"
             onSubmit={submit}>
         <label className="block text-[12px] text-ink3" htmlFor="landscape">Landscape</label>
         <select id="landscape" className="field mt-1 mb-3.5" required

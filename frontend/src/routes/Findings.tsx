@@ -677,7 +677,7 @@ function describe(e: unknown): string {
   return 'The console could not reach the server.'
 }
 
-const CARD = 'rounded-lg border border-line bg-panel p-4'
+const CARD = 'rounded-lg border border-cardline bg-panel p-4'
 const TH = 'text-left px-2.5 py-2 text-[11px] font-semibold uppercase tracking-[.05em] text-ink3 border-b border-line'
 const TD = 'px-2.5 py-[9px] align-top border-b border-line'
 const LABEL = 'block text-[12px] text-ink3'

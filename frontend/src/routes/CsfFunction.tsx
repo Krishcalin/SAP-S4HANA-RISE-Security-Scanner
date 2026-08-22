@@ -19,7 +19,7 @@ import { useTitle } from '../lib/title'
 import { statusLabel } from './Csf'
 import { Landmark } from 'lucide-react'
 
-const CARD = 'rounded-lg border border-line bg-panel p-4'
+const CARD = 'rounded-lg border border-cardline bg-panel p-4'
 const CARD_H3 = 'text-[12px] font-semibold uppercase tracking-[.06em] text-ink3 mb-3'
 const KPI = 'text-[30px] font-semibold tracking-[-.02em] leading-[1.1]'
 const KPI_NOTE = 'text-ink2 text-[12px] mt-1.5'

@@ -29,13 +29,13 @@ import type { DomainReach, DomainsView, SecurityDomain } from '../api/types'
 import { useTitle } from '../lib/title'
 import { LayoutGrid } from 'lucide-react'
 
-const CARD = 'rounded-lg border border-line bg-panel p-4'
+const CARD = 'rounded-lg border border-cardline bg-panel p-4'
 const KPI = 'text-[30px] font-semibold tracking-[-.02em] leading-[1.1]'
 const G3 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(300px,1fr))]'
 const H2 = 'text-[15px] font-semibold text-ink mt-7 mb-2.5'
 const TH = 'text-left text-[11px] font-semibold uppercase tracking-[.05em] text-ink3 px-2.5 py-2 border-b border-line'
 const TD = 'px-2.5 py-2.5 border-b border-line align-top'
-const TABLE_CARD = 'rounded-lg border border-line bg-panel overflow-x-auto'
+const TABLE_CARD = 'rounded-lg border border-cardline bg-panel overflow-x-auto'
 const LINK = 'text-accent hover:underline'
 
 const REACH_WORD: Record<DomainReach, string> = {

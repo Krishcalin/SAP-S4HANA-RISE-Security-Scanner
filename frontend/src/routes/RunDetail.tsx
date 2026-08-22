@@ -166,7 +166,7 @@ function Kpi({ label, value, tone, note }: {
   label: string; value: number; tone?: string; note?: string
 }) {
   return (
-    <div className="rounded-lg border border-line bg-panel p-4">
+    <div className="rounded-lg border border-cardline bg-panel p-4">
       <h3 className="m-0 mb-3 text-[12px] font-semibold uppercase tracking-[.06em] text-ink3">
         {label}
       </h3>
@@ -436,7 +436,7 @@ export function RunDetail() {
 
       {/* ── in flight ─────────────────────────────────────────────────────── */}
       {inFlight ? (
-        <div className="rounded-lg border border-line bg-panel p-4">
+        <div className="rounded-lg border border-cardline bg-panel p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h3 className="m-0 mb-2 text-[12px] font-semibold uppercase tracking-[.06em] text-ink3">
@@ -537,7 +537,7 @@ export function RunDetail() {
       {diff && diff.regressed.length > 0 && (
         <>
           <h2 className="mt-6 mb-2.5 text-[15px] font-semibold text-ink">Regressions</h2>
-          <div className="overflow-x-auto rounded-lg border border-line bg-panel">
+          <div className="overflow-x-auto rounded-lg border border-cardline bg-panel">
             <table className="w-full border-collapse">
               <thead>
                 <tr>
@@ -570,7 +570,7 @@ export function RunDetail() {
       {diff && diff.new.length > 0 && (
         <>
           <h2 className="mt-6 mb-2.5 text-[15px] font-semibold text-ink">New in this run</h2>
-          <div className="overflow-x-auto rounded-lg border border-line bg-panel">
+          <div className="overflow-x-auto rounded-lg border border-cardline bg-panel">
             <table className="w-full border-collapse">
               <thead>
                 <tr>
@@ -604,7 +604,7 @@ export function RunDetail() {
       {covModules.length > 0 && (
         <>
           <h2 className="mt-6 mb-2.5 text-[15px] font-semibold text-ink">Module coverage</h2>
-          <div className="overflow-x-auto rounded-lg border border-line bg-panel">
+          <div className="overflow-x-auto rounded-lg border border-cardline bg-panel">
             <table className="w-full border-collapse">
               <thead>
                 <tr>
@@ -645,7 +645,7 @@ export function RunDetail() {
       {moduleErrors.length > 0 && (
         <>
           <h2 className="mt-6 mb-2.5 text-[15px] font-semibold text-ink">Module errors</h2>
-          <div className="rounded-lg border border-line bg-panel p-4">
+          <div className="rounded-lg border border-cardline bg-panel p-4">
             {moduleErrors.map(([name, m]) => (
               <div key={name} className="mb-3 last:mb-0">
                 <strong className="font-mono">{name}</strong>

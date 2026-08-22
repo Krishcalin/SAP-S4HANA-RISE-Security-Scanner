@@ -36,7 +36,7 @@ import { Landmark } from 'lucide-react'
  * printing a bare count without it would be the same claim, unqualified.
  */
 
-const CARD = 'rounded-lg border border-line bg-panel p-4'
+const CARD = 'rounded-lg border border-cardline bg-panel p-4'
 const CARD_H3 = 'text-[12px] font-semibold uppercase tracking-[.06em] text-ink3 mb-3'
 const H2 = 'text-[15px] font-semibold text-ink mt-7 mb-2.5'
 const LINK = 'text-accent hover:underline'

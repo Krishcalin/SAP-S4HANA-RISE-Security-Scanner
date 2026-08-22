@@ -37,7 +37,7 @@ import { ScanSearch } from 'lucide-react'
  * description while carrying no information.
  */
 
-const CARD = 'rounded-lg border border-line bg-panel p-4'
+const CARD = 'rounded-lg border border-cardline bg-panel p-4'
 const CARD_H3 = 'text-[12px] font-semibold uppercase tracking-[.06em] text-ink3 mb-3'
 const H2 = 'text-[15px] font-semibold text-ink mt-7 mb-2.5'
 const LINK = 'text-accent hover:underline'
@@ -192,7 +192,7 @@ function Body({ doc }: { doc: CheckDoc }) {
 
       <h2 className={H2}>Risk paths this check appears on</h2>
       {doc.paths.length > 0 ? (
-        <div className="rounded-lg border border-line bg-panel overflow-x-auto">
+        <div className="rounded-lg border border-cardline bg-panel overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
               <tr>

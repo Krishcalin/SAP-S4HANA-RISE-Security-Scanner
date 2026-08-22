@@ -753,7 +753,7 @@ function describe(e: unknown): string {
   return 'The console could not reach the server.'
 }
 
-const CARD = 'rounded-lg border border-line bg-panel p-4'
+const CARD = 'rounded-lg border border-cardline bg-panel p-4'
 const CARD_TITLE = 'mb-3 text-[12px] font-semibold uppercase tracking-[.06em] text-ink3'
 const G2 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]'
 const H2 = 'text-[15px] font-semibold mt-[26px] mb-2.5'

@@ -167,3 +167,79 @@ def test_the_light_card_is_not_pure_white():
     light = _palettes()["light"]
     assert light["panel"] not in ("#fff", "#ffffff"), \
         "the light card is pure white again"
+
+
+# ── the card edge ────────────────────────────────────────────────────────────
+
+ROUTES = ROOT / "frontend" / "src"
+
+#: A rounded box with a panel background. Anchored on the whole pattern so that
+#: table rules (`border-b border-line`) and form controls cannot match it.
+CARD_PATTERN = re.compile(r"rounded-(?:lg|md) border border-(\w+) bg-panel")
+
+
+@pytest.mark.parametrize("theme", ["dark", "light"])
+def test_the_card_border_is_visible_against_the_card(theme):
+    """A border nobody can see is not a border.
+
+    The old edge was `--line` at 1.34:1 in light and 1.30:1 in dark -- present in
+    the DOM and absent to the eye, which is why a card was located by its
+    background rather than its outline.
+    """
+    p = _palettes()[theme]
+    assert "card-line" in p, f"{theme}: --card-line is not declared"
+    r = contrast(p["card-line"], p["panel"])
+    assert r >= 1.8, (
+        f"{theme}: --card-line against --panel is {r:.2f}:1 — too faint to read "
+        "as an edge")
+
+
+@pytest.mark.parametrize("theme", ["dark", "light"])
+def test_the_card_border_is_a_blue(theme):
+    """The request was specifically a blue edge, and a later 'tidy the palette'
+    pass that greyed it would be reverting a decision rather than tidying.
+
+    Blue in the ordinary sense: more blue than red, and more blue than green."""
+    h = _palettes()[theme]["card-line"].lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    assert b > r and b > g, f"{theme}: --card-line #{h} is not a blue"
+
+
+def test_the_card_border_does_not_rule_the_tables():
+    """`--card-line` and `--line` must stay separate tokens.
+
+    89 uses of `--line` are row separators, cell edges and banner outlines. If the
+    two ever collapse into one value, a change to how a CARD is outlined draws a
+    saturated grid over every table in the product -- which is the reason this is
+    a second token rather than a new value for the first.
+    """
+    for theme, p in _palettes().items():
+        assert p["card-line"] != p["line"], (
+            f"{theme}: --card-line and --line are the same value; the card edge "
+            "and the table rules have collapsed into one")
+
+
+def test_every_card_uses_the_card_border_token():
+    """Structural, because the card class string is copy-pasted rather than
+    shared: 36 occurrences across 17 route files, each written out in full.
+
+    A new screen built by copying an existing one is the normal way this drifts,
+    and it drifts silently -- the card still has a border, just the invisible one.
+    """
+    offenders = []
+    for f in sorted(ROUTES.rglob("*.tsx")):
+        if f.name.endswith(".test.tsx"):
+            continue
+        for m in CARD_PATTERN.finditer(f.read_text(encoding="utf-8")):
+            if m.group(1) != "cardline":
+                offenders.append(f"{f.relative_to(ROUTES)}: border-{m.group(1)}")
+    assert not offenders, (
+        "these card containers still use the table-rule border: " + "; ".join(offenders))
+
+
+def test_there_are_still_cards_to_check():
+    """The guard above passes trivially if the pattern stops matching anything --
+    a class-name refactor would make it green and blind on the same day."""
+    found = sum(len(CARD_PATTERN.findall(f.read_text(encoding="utf-8")))
+                for f in ROUTES.rglob("*.tsx") if not f.name.endswith(".test.tsx"))
+    assert found >= 30, f"only {found} card containers matched; the pattern has drifted"
