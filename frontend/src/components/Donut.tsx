@@ -43,8 +43,15 @@ const STROKE = 22
 const BOX = 140
 const C = 2 * Math.PI * R
 
-export function Donut({ slices, total, caption, ariaLabel }: {
+export function Donut({ slices, total, caption, ariaLabel, format }: {
   slices: DonutSlice[]
+  /** How to render a value. Counts read fine as plain integers, which is the
+   *  default; MONEY DOES NOT. `toLocaleString()` on 114380643 produces an
+   *  eleven-character grouped integer in whatever grouping the reader's locale
+   *  uses -- and the exposure donut rendered exactly that, overflowing the hole
+   *  and printing dollars with the grouping of another currency. Callers holding
+   *  money pass `money`. */
+  format?: (n: number) => string
   /** The denominator. Passed rather than summed: on some screens the whole is a
    *  known figure that the slices do not add up to, and quietly re-basing to the
    *  sum would misstate every share on the card. */
@@ -79,6 +86,25 @@ export function Donut({ slices, total, caption, ariaLabel }: {
     return arc
   })
 
+  const fmt = format ?? ((n: number) => n.toLocaleString())
+
+  // The hole is 86 units across. Long strings step the type down rather than
+  // running past the ring: the centre figure is the one thing on this mark that
+  // cannot be allowed to collide with the mark itself, and a caller cannot know
+  // how wide its own formatted value will be.
+  // Shrink to fit, then TRUNCATE to fit, because shrinking alone has a floor:
+  // below about 11 units the figure is unreadable, so past that point the string
+  // has to give instead of the type. Every real value clears this comfortably --
+  // a grouped seven-digit count is 9 characters, `money` gives 8 -- so truncation
+  // is the pathological case degrading visibly rather than crossing the ring.
+  const HOLE = 2 * (R - STROKE / 2)      // 86 units of usable width
+  const MIN_SIZE = 11
+  const raw = fmt(whole)
+  const maxChars = Math.floor(HOLE / (MIN_SIZE * 0.58))
+  const centre = raw.length > maxChars ? `${raw.slice(0, maxChars - 1)}…` : raw
+  const centreSize = Math.max(
+    MIN_SIZE, Math.min(26, Math.floor(HOLE / (centre.length * 0.58))))
+
   const pct = (v: number) => {
     const p = (100 * v) / whole
     // Never round a present slice to "0%" — it reads as absent. Nor to 100%
@@ -102,14 +128,14 @@ export function Donut({ slices, total, caption, ariaLabel }: {
                     stroke={a.color} strokeWidth={STROKE}
                     strokeDasharray={`${a.len.toFixed(2)} ${a.gap.toFixed(2)}`}
                     strokeDashoffset={a.offset.toFixed(2)}>
-              <title>{`${a.label}: ${a.value.toLocaleString()} (${pct(a.value)})`}</title>
+              <title>{`${a.label}: ${fmt(a.value)} (${pct(a.value)})`}</title>
             </circle>
           ))}
         </g>
         {/* The hole earns its place: this is the stat tile as well as the split. */}
-        <text x={BOX / 2} y={BOX / 2 - 2} textAnchor="middle" fontSize="26"
+        <text x={BOX / 2} y={BOX / 2 - 2} textAnchor="middle" fontSize={centreSize}
               fontWeight="700" fill="var(--ink)">
-          {whole.toLocaleString()}
+          {centre}
         </text>
         {caption && (
           <text x={BOX / 2} y={BOX / 2 + 16} textAnchor="middle" fontSize="11"
@@ -126,7 +152,7 @@ export function Donut({ slices, total, caption, ariaLabel }: {
                style={{ background: a.color }} aria-hidden="true" />
             <span className="text-ink2 flex-1 truncate">{a.label}</span>
             <span className="font-mono text-ink tabular-nums">
-              {a.value.toLocaleString()}
+              {fmt(a.value)}
             </span>
             <span className="font-mono text-ink3 tabular-nums w-[46px] text-right">
               {pct(a.value)}

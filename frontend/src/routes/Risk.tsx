@@ -204,6 +204,7 @@ function Body({ view }: { view: RiskView }) {
           <h3 className={CARD_H3}>Share of the annualised exposure</h3>
           <Donut ariaLabel="Annualised loss exposure by scenario"
                  caption="P90"
+                 format={money}
                  slices={view.scenarios.map((sc, i) => ({
                    key: String(sc.id),
                    label: sc.scenario_id ?? String(sc.id),

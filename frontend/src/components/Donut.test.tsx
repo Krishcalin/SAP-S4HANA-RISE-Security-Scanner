@@ -131,3 +131,72 @@ describe('Donut', () => {
     expect(titles[0].textContent).toBe('CRITICAL: 30 (30%)')
   })
 })
+
+
+/**
+ * The centre figure, which overflowed its own hole.
+ *
+ * The exposure donut passed raw currency integers, so the total rendered through
+ * `toLocaleString()` as an eleven-character grouped number — in the reader's
+ * locale grouping, which on the reported screenshot was Indian digit grouping on
+ * a dollar figure. It ran straight across the ring.
+ *
+ * Two separate defects wearing one symptom: the wrong formatter, and a centre
+ * that assumed whatever it was handed would fit.
+ */
+describe('the centre figure', () => {
+  const big = [{ key: 'a', label: 'A', value: 114_380_643, color: 'red' }]
+
+  it('uses the caller format for the centre, the legend and the tooltip', () => {
+    render(<Donut ariaLabel="x" slices={big} format={(n) => `$${(n / 1e6).toFixed(2)}M`} />)
+    expect(screen.getAllByText('$114.38M').length).toBeGreaterThanOrEqual(2)
+    const title = screen.getByRole('img').querySelector('title')
+    expect(title!.textContent).toContain('$114.38M')
+  })
+
+  it('shrinks the centre type rather than letting it cross the ring', () => {
+    // The hole is 86 units across. A twelve-character string at 26px is about
+    // 180 units wide, which is what ran over the arcs.
+    render(<Donut ariaLabel="x" slices={big} />)
+    const centre = Array.from(screen.getByRole('img').querySelectorAll('text'))
+      .find((t) => (t.textContent || '').replace(/[^0-9]/g, '') === '114380643')
+    expect(centre).toBeTruthy()
+    const size = Number(centre!.getAttribute('font-size'))
+    const width = (centre!.textContent || '').length * size * 0.58
+    expect(width).toBeLessThan(86)
+  })
+
+  it('keeps full size for a short figure', () => {
+    // The shrink must be a response to length, not a blanket reduction — a
+    // three-digit count should still read as the headline it is.
+    render(<Donut ariaLabel="x" slices={[
+      { key: 'a', label: 'A', value: 71, color: 'red' },
+    ]} />)
+    const centre = Array.from(screen.getByRole('img').querySelectorAll('text'))
+      .find((t) => t.textContent === '71')
+    expect(Number(centre!.getAttribute('font-size'))).toBe(26)
+  })
+
+  it('truncates rather than crossing the ring when nothing else will fit', () => {
+    // Shrinking has a floor: below ~11 units the figure is unreadable, so past
+    // that the string gives instead of the type. No real value reaches here --
+    // this is the pathological case degrading visibly rather than colliding.
+    render(<Donut ariaLabel="x" slices={big}
+                  format={() => 'a very long formatted value indeed'} />)
+    const centre = Array.from(screen.getByRole('img').querySelectorAll('text'))
+      .find((t) => (t.textContent || '').startsWith('a very long'))
+    const size = Number(centre!.getAttribute('font-size'))
+    expect(size).toBeGreaterThanOrEqual(11)
+    expect(centre!.textContent!.endsWith('…')).toBe(true)
+    expect(centre!.textContent!.length * size * 0.58).toBeLessThanOrEqual(86)
+  })
+
+  it('does not truncate a value that fits', () => {
+    // The ellipsis must never appear on a real figure: a truncated NUMBER reads
+    // as a different number, which is worse than a small one.
+    render(<Donut ariaLabel="x" slices={big} format={(n) => `$${(n / 1e6).toFixed(2)}M`} />)
+    const centre = Array.from(screen.getByRole('img').querySelectorAll('text'))
+      .find((t) => (t.textContent || '').startsWith('$114'))
+    expect(centre!.textContent).toBe('$114.38M')
+  })
+})
