@@ -44,7 +44,7 @@ function fmtMoney(v: number): string {
 
 interface Pt { loss: number; probability: number }
 
-export function LossExceedance({ current, target, height = 230 }: {
+export function LossExceedance({ current, target, height = 260 }: {
   current: CrqPortfolioStats
   target?: CrqPortfolioStats
   height?: number
@@ -62,9 +62,17 @@ export function LossExceedance({ current, target, height = 230 }: {
     )
   }
 
-  const W = 560
+  // WIDTH IS THE HEIGHT CONTROL HERE. The svg has no height attribute -- it
+  // sizes from the viewBox ratio -- so rendered height is (card width x H / W).
+  // At 560x230 in a ~970px card that is 398px of chart, which is why these came
+  // back as "very big". Widening the box shortens the render without shrinking
+  // anything drawn in it.
+  const W = 880
   const H = height
-  const PAD = { l: 46, r: 14, t: 12, b: 30 }
+  // l and b carry the axis titles; t carries the endpoint callout, which used to
+  // be drawn at y-6 from a point that can sit exactly on PAD.t and was clipped by
+  // the top of the viewBox whenever the first probability was the highest.
+  const PAD = { l: 74, r: 20, t: 28, b: 54 }
   const all = [...cur, ...tgt]
   const minLoss = Math.min(...all.map((p) => p.loss))
   const maxLoss = Math.max(...all.map((p) => p.loss))
@@ -128,7 +136,10 @@ export function LossExceedance({ current, target, height = 230 }: {
             probability of any loss at all, and does not run up to 100%. */}
         <circle cx={x(head.loss)} cy={y(head.probability)} r="4"
                 fill="var(--panel)" stroke="var(--accent)" strokeWidth="2" />
-        <text x={x(head.loss) + 8} y={y(head.probability) - 6}
+        {/* Clamped into the plot. The head is the HIGHEST point by definition, so
+            "6 above it" is off the top of the box exactly when the curve starts
+            at its maximum -- which is the common case, not the edge case. */}
+        <text x={x(head.loss) + 8} y={Math.max(y(head.probability) - 8, PAD.t - 8)}
               fill="var(--ink-dim)" fontSize="12">
           {(head.probability * 100).toFixed(0)}% chance of any loss
         </text>
@@ -136,7 +147,8 @@ export function LossExceedance({ current, target, height = 230 }: {
           <>
             <circle cx={x(tgtHead.loss)} cy={y(tgtHead.probability)} r="4"
                     fill="var(--panel)" stroke="var(--ok)" strokeWidth="2" />
-            <text x={x(tgtHead.loss) + 8} y={y(tgtHead.probability) + 13}
+            <text x={x(tgtHead.loss) + 8}
+                  y={Math.min(y(tgtHead.probability) + 15, H - PAD.b - 6)}
                   fill="var(--ink-dim)" fontSize="12">
               {(tgtHead.probability * 100).toFixed(0)}% fully hardened
             </text>
@@ -147,6 +159,18 @@ export function LossExceedance({ current, target, height = 230 }: {
               stroke={AXIS} strokeWidth="1" />
         <line x1={PAD.l} y1={PAD.t} x2={PAD.l} y2={H - PAD.b}
               stroke={AXIS} strokeWidth="1" />
+
+        {/* AXIS TITLES. The tick labels said "1.0m" and "45%" and nothing said
+            what either was measuring -- readable numbers on unnamed axes. */}
+        <text x={(PAD.l + W - PAD.r) / 2} y={H - 14} textAnchor="middle"
+              fill={AXIS} fontSize="13" fontWeight="600">
+          Annual loss, at least &mdash; log scale
+        </text>
+        <text transform={`rotate(-90 20 ${(PAD.t + H - PAD.b) / 2})`}
+              x={20} y={(PAD.t + H - PAD.b) / 2} textAnchor="middle"
+              fill={AXIS} fontSize="13" fontWeight="600">
+          Chance in a year
+        </text>
       </svg>
       <p className="text-[12px] text-ink3 mt-1.5">
         Read it as: there is a <strong>y%</strong> chance of losing{' '}
@@ -161,7 +185,7 @@ export function LossExceedance({ current, target, height = 230 }: {
 
 // ── Risk reduction trend ────────────────────────────────────────────────────
 
-export function RiskTrend({ points, height = 210 }: {
+export function RiskTrend({ points, height = 270 }: {
   points: CrqTrendPoint[]
   height?: number
 }) {
@@ -174,10 +198,16 @@ export function RiskTrend({ points, height = 210 }: {
     )
   }
 
-  const W = 760
+  // See the note in LossExceedance: rendered height is (card width x H / W), so
+  // the box is widened rather than the drawing shrunk. 760x330 rendered 421px
+  // tall in a ~970px card; 900x270 renders 291px and gains horizontal room for
+  // the run labels at the same time.
+  const W = 900
   const H = height
-  // Top padding carries three rows of break labels now, not one line of 9px text.
-  const PAD = { l: 64, r: 16, t: 58, b: 30 }
+  // t is 20 rather than 58 because the top band used to hold three rows of
+  // "inputs changed" and now holds nothing. b carries the run labels and the
+  // axis title.
+  const PAD = { l: 78, r: 20, t: 20, b: 58 }
   const values = points.flatMap((p) => [
     Number(p.ale_p90) || 0, Number(p.ale_mean) || 0, Number(p.residual_p90) || 0,
   ])
@@ -200,22 +230,26 @@ export function RiskTrend({ points, height = 210 }: {
     groups[groups.length - 1].push(i)
   })
 
-  // Break-label placement. Measured in viewBox units against an average glyph
-  // width for the font size, which is close enough for a fixed string and needs
-  // no DOM measurement — this is the same estimate wrapWords makes on the risk
-  // path diagram, and for the same reason.
-  const LABEL_FS = 12
-  const LABEL_W = 'inputs changed'.length * LABEL_FS * 0.53
-  const ROW_Y = [16, 32, 48]
-  const rowEnds = ROW_Y.map(() => -Infinity)
-  const breaks = groups.slice(1).map((idx, gi) => {
-    const prev = groups[gi][groups[gi].length - 1]
-    const mid = (x(prev) + x(idx[0])) / 2
-    const row = rowEnds.findIndex((end) => mid > end)
-    if (row >= 0) rowEnds[row] = mid + LABEL_W + 6
-    return { gi, mid, row: row >= 0 ? row : null, y: row >= 0 ? ROW_Y[row] : 0 }
-  })
-  const unlabelled = breaks.filter((b) => b.row === null).length
+  // A break is the GAP between two incomparable groups, so it is drawn as the
+  // gap rather than as a line at the middle of one. Shading the interval from the
+  // last comparable point to the first point of the next series says "the series
+  // stops here and starts again there", which is the actual claim; a hairline at
+  // the midpoint said it more quietly and needed a word beside it to be read at
+  // all.
+  const breaks = groups.slice(1).map((idx, gi) => ({
+    gi,
+    from: x(groups[gi][groups[gi].length - 1]),
+    to: x(idx[0]),
+  }))
+
+  // Up to four evenly spaced runs, always including the first and the last --
+  // the two a reader looks for. Fewer points than ticks means every point is
+  // labelled, which is correct rather than a special case.
+  const TICKS = 4
+  const ticks = points.length <= TICKS
+    ? points.map((_, i) => i)
+    : Array.from({ length: TICKS }, (_, k) =>
+        Math.round((k / (TICKS - 1)) * (points.length - 1)))
 
   const line = (idx: number[], key: 'ale_p90' | 'ale_mean' | 'residual_p90') =>
     idx.map((i, n) => {
@@ -234,6 +268,32 @@ export function RiskTrend({ points, height = 210 }: {
       <svg viewBox={`0 0 ${W} ${H}`} width="100%"
            style={{ height: 'auto', display: 'block' }} role="img"
            aria-label="Annual loss exposure per scan, with the line broken wherever the model inputs changed">
+        <defs>
+          {/* The fill is the headline series and nothing else. An area under every
+              line would be three translucent sheets stacked on each other, which
+              is the "busy" complaint made worse; under one line it reads as
+              magnitude, which is what the reader is judging. */}
+          <linearGradient id="rt-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.30" />
+            <stop offset="100%" stopColor="var(--accent)" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+
+        {/* The incomparable intervals, drawn as intervals. Behind the grid so the
+            gridlines stay readable across them. */}
+        {breaks.map((b) => (
+          <rect key={`bk${b.gi}`} x={b.from} y={PAD.t} width={Math.max(b.to - b.from, 2)}
+                height={H - PAD.t - PAD.b} fill="var(--ink-faint)" fillOpacity="0.07" />
+        ))}
+        {breaks.map((b) => (
+          <g key={`bl${b.gi}`}>
+            <line x1={b.from} y1={PAD.t} x2={b.from} y2={H - PAD.b}
+                  stroke={AXIS} strokeWidth="1" strokeDasharray="2 3" />
+            <line x1={b.to} y1={PAD.t} x2={b.to} y2={H - PAD.b}
+                  stroke={AXIS} strokeWidth="1" strokeDasharray="2 3" />
+          </g>
+        ))}
+
         {[0, 0.5, 1].map((f) => (
           <g key={f}>
             <line x1={PAD.l} y1={y(maxV * f)} x2={W - PAD.r} y2={y(maxV * f)}
@@ -247,59 +307,75 @@ export function RiskTrend({ points, height = 210 }: {
           <g key={gi}>
             {idx.length > 1 && (
               <>
+                <path d={`${line(idx, 'ale_p90')} L${x(idx[idx.length - 1]).toFixed(1)},`
+                         + `${y(0).toFixed(1)} L${x(idx[0]).toFixed(1)},${y(0).toFixed(1)} Z`}
+                      fill="url(#rt-fill)" stroke="none" />
                 <path d={line(idx, 'residual_p90')} fill="none" stroke="var(--ok)"
-                      strokeWidth="1.5" strokeDasharray="4 3" />
+                      strokeWidth="2" strokeDasharray="5 4" strokeLinecap="round" />
                 <path d={line(idx, 'ale_mean')} fill="none" stroke="var(--ink-dim)"
-                      strokeWidth="1.5" />
+                      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 <path d={line(idx, 'ale_p90')} fill="none" stroke="var(--accent)"
-                      strokeWidth="2" />
+                      strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
               </>
             )}
+            {/* A 2px surface ring, so a marker landing on the line or on another
+                marker still reads as one mark rather than as a blob. */}
             {idx.map((i) => (
-              <circle key={i} cx={x(i)} cy={y(Number(points[i].ale_p90) || 0)} r="4"
-                      fill="var(--accent)" />
+              <circle key={i} cx={x(i)} cy={y(Number(points[i].ale_p90) || 0)} r="5"
+                      fill="var(--accent)" stroke="var(--panel)" strokeWidth="2">
+                <title>
+                  {`${new Date(points[i].started_at).toLocaleDateString('en-GB', {
+                    day: '2-digit', month: 'short', year: 'numeric',
+                  })} — ${fmtMoney(Number(points[i].ale_p90) || 0)} annual loss, P90`}
+                </title>
+              </circle>
             ))}
           </g>
         ))}
 
-        {/* The break itself, drawn. A gap nobody explains looks like missing data.
+        {/* REMOVED: a per-break "inputs changed" label.
 
-            THE LABELS USED TO OVERLAP, and on a screen whose entire job is
-            "has the exposure actually fallen?" an unreadable annotation is worse
-            than none: it is the thing that tells you two segments are NOT
-            comparable. Every break was labelled at the same y, so a run of
-            single-point groups printed "inputs changed" four times in the space
-            of one.
+            It was printed once per break -- six times on the reported estate --
+            and that repetition WAS the "busy" complaint. Staggering it across
+            three rows stopped it colliding and did nothing about there being six
+            copies of one sentence sitting over the plot.
 
-            Placement is a stack of rows, filled left to right: a label takes the
-            highest row whose last label ends before this one starts. Rows rather
-            than rotation because horizontal text at 12px is read at a glance and
-            rotated text is not, and this label is read while scanning a line for
-            a step change.
+            The rule it broke is the ordinary one for direct labels: label
+            selectively, and put anything true of EVERY mark in the legend.
+            "These dashed intervals are where the inputs changed" is true of every
+            break, so it is said once, beside a swatch that looks like the thing
+            it describes.
 
-            A label that fits in NO row is dropped and counted rather than drawn
-            over its neighbour. The divider still appears — the break is the fact,
-            the words are the explanation — and the caption below says how many
-            went unlabelled, because silently dropping annotations is how a chart
-            comes to under-report the very thing it exists to flag. */}
-        {breaks.map((b) => (
-          <g key={`b${b.gi}`}>
-            <line x1={b.mid} y1={PAD.t} x2={b.mid} y2={H - PAD.b}
-                  stroke={AXIS} strokeWidth="1" strokeDasharray="2 3" />
-            {b.row !== null && (
-              <>
-                <line x1={b.mid} y1={b.y + 3} x2={b.mid} y2={PAD.t}
-                      stroke={AXIS} strokeWidth="1" strokeDasharray="2 3" />
-                <text x={b.mid + 4} y={b.y} fill={AXIS} fontSize="12">
-                  inputs changed
-                </text>
-              </>
-            )}
-          </g>
-        ))}
+            The FACT is still drawn -- shaded interval, dashed edges -- and the
+            caption still explains the consequence. What went is the repetition.
+            The original argument for the label was that a gap nobody explains
+            looks like missing data; that still holds, and the legend answers it. */}
 
         <line x1={PAD.l} y1={H - PAD.b} x2={W - PAD.r} y2={H - PAD.b}
               stroke={AXIS} strokeWidth="1" />
+
+        {/* X HAD NO LABELS AT ALL -- a bare rule, so the horizontal axis was
+            unreadable in the strict sense: nothing said it was time, or which end
+            was recent. At most four dated ticks, evenly spaced: enough to orient,
+            few enough that they cannot collide at this width and cannot become
+            the next "busy" complaint. */}
+        {ticks.map((i) => (
+          <text key={`t${i}`} x={x(i)} y={H - PAD.b + 18} textAnchor="middle"
+                fill={AXIS} fontSize="12">
+            {new Date(points[i].started_at).toLocaleDateString('en-GB', {
+              day: '2-digit', month: 'short',
+            })}
+          </text>
+        ))}
+        <text x={(PAD.l + W - PAD.r) / 2} y={H - 12} textAnchor="middle"
+              fill={AXIS} fontSize="13" fontWeight="600">
+          Scan run, oldest first
+        </text>
+        <text transform={`rotate(-90 22 ${(PAD.t + H - PAD.b) / 2})`}
+              x={22} y={(PAD.t + H - PAD.b) / 2} textAnchor="middle"
+              fill={AXIS} fontSize="13" fontWeight="600">
+          Annual loss
+        </text>
       </svg>
 
       <div className="flex flex-wrap gap-4 text-[13px] text-ink2 mt-2">
@@ -309,6 +385,17 @@ export function RiskTrend({ points, height = 210 }: {
                  style={{ background: 'var(--ink-dim)' }} /> Average year</span>
         <span><i className="inline-block w-4 h-0.5 align-middle mr-1"
                  style={{ background: 'var(--ok)' }} /> Fully hardened floor</span>
+        {/* The swatch looks like the mark: a shaded interval with dashed edges.
+            Identity is never carried by a colour alone, and here it is not
+            carried by a colour at all — it is a texture. */}
+        {breaks.length > 0 && (
+          <span className="inline-flex items-center">
+            <i className="inline-block w-4 h-3 align-middle mr-1.5 border-x border-dashed"
+               style={{ background: 'color-mix(in srgb, var(--ink-faint) 12%, transparent)',
+                        borderColor: 'var(--ink-faint)' }} />
+            inputs changed &mdash; the series breaks here
+          </span>
+        )}
       </div>
       <p className="text-[13.5px] text-ink3 mt-2 leading-relaxed">
         The line <strong>breaks wherever the model inputs changed</strong> — a
@@ -318,19 +405,6 @@ export function RiskTrend({ points, height = 210 }: {
         change would claim the two sides are comparable. The residual floor is
         the second guard: it does not depend on your findings, so if it moves,
         something other than remediation did.
-        {/* Said out loud rather than silently dropped. A chart that quietly
-            omits annotations under-reports the exact thing it exists to flag. */}
-        {unlabelled > 0 && (
-          <>
-            {' '}
-            <strong>
-              {unlabelled} more break{unlabelled === 1 ? ' is' : 's are'} drawn
-              without a label
-            </strong>{' '}
-            — they fall too close together to print the words legibly. Every
-            dashed divider is a break, labelled or not.
-          </>
-        )}
       </p>
     </div>
   )
