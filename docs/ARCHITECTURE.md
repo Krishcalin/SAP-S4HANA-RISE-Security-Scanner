@@ -503,7 +503,7 @@ So the web application does not re-implement a single check. It calls the same e
 | **Accepted risks** | Recording a decision to live with something — with an expiry date, so it returns for review rather than disappearing. |
 | **Disputes** | Marking something as a false alarm, with a written reason, so the argument is recorded once rather than repeated each quarter. |
 | **Handed to SAP** | A distinct state for work raised with SAP under RISE and waiting on them — neither open nor fixed. |
-| **Object map** | Turning the named accounts, roles and connections into a linked map, the groundwork for showing attack paths through the estate. |
+| **Object map and risk paths** | Turning the named accounts, roles and connections into a linked map, and reading routes through it: a forgotten account on a development system, a trusted connection, production at the end of it. Three individually moderate findings can be one critical path, and in the briefcase they are read separately. |
 
 > **Take-away from this chapter**
 >
@@ -1797,13 +1797,13 @@ The list above is a good proxy for maintainability. Adding a subject area touche
 
 ### The organising idea
 
-The product is moving from answering “what is wrong” to answering “what would an attacker do, and what is that worth”. The building blocks for that already exist: findings that name concrete objects (chapter [16](#contents)), fingerprints that make those objects durable (chapter [27](#contents)), and a map of relationships between them (chapter [26](#contents)).
+The product has moved from answering “what is wrong” to answering “what would an attacker do, and what is that worth”. The building blocks are findings that name concrete objects (chapter [16](#contents)), fingerprints that make those objects durable (chapter [27](#contents)), and a map of relationships between them (chapter [26](#contents)) — and the thing they were building towards is now shipped rather than pending.
 
 ### Four directions
 
 | Direction | What it would add |
 |---|---|
-| **Attack paths** | Showing chains rather than isolated findings: a forgotten account on a development system, a trusted connection, and production at the end of it. Three individually moderate findings can be one critical path, and today they are read separately. |
+| **Deeper risk paths** | **The paths themselves are built** — thirteen templates, each hop evidenced by checks that already exist, each ending at a priced loss scenario, and a choke-point worklist that says how many paths one fix severs. Adding a path is a data change. What is still open is DEPTH: more templates, and edge provenance stronger than “these conditions co-exist”. |
 | **Comparing two scans directly** | Available in the control room today; a straightforward difference between two scans in the briefcase mode is a natural addition for teams not ready to deploy a server. |
 | **Broader coverage of SAP’s cloud portfolio** | The tenant model already accommodates the HR, travel and identity products. Depth there will follow the same pattern as the existing modules. |
 | **Narrowing the coverage gap** | Every source listed as “not obtainable” is a standing question about whether a legitimate route exists. The export guide improves faster than the code does. |

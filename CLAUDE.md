@@ -132,13 +132,17 @@ that cannot run under redirection is not a control.
 ```bash
 cp .env.example .env          # then set SESSION_SECRET (>=32 chars) and POSTGRES_PASSWORD
 docker compose up -d --build
-docker compose exec app python -m server.cli init-db
+docker compose exec app python -m server.cli init-db      # schema + data migrations
 docker compose exec app python -m server.cli create-user admin admin --generate
 docker compose exec app python -m server.cli add-landscape "Acme Prod" --mode rise_pce
 
 # scan without a browser (air-gapped path)
 python -m server.cli scan "Acme Prod" ./sample_data --sid PRD --client 100
 python -m server.cli runs
+# Recompute risk paths from stored findings, with no rescan. Needed when the
+# ruleset moves: uploads are consumed after a scan, so a landscape whose
+# exports are gone otherwise carries the staleness banner indefinitely.
+python -m server.cli rederive-paths "Acme Prod"
 
 # the way back in when nobody can sign in
 docker compose exec app python -m server.cli set-password admin --generate
@@ -907,7 +911,7 @@ nothing gets exit 2, which is the honest reading of "we have no idea how much wa
 - **CSV header normalization:** the loader upper-cases headers and replaces spaces with `_`,
   so match `row.get("USER_NAME")` etc. Values are stripped but keep their case.
 - **Tests + CI exist** (`tests/`, `.github/workflows/tests.yml`, `requirements-dev.txt`). About
-  **3,253** tests; no SAP system needed. ⚠️ **`requirements-dev.txt` alone is not enough to run
+  **4,015** tests; no SAP system needed. ⚠️ **`requirements-dev.txt` alone is not enough to run
   the whole suite** — it is only `pytest`, and the server-tier suites import psycopg/starlette
   at module level, which aborts collection rather than skipping. Install both:
   ```bash
@@ -1006,6 +1010,55 @@ quantification. And absence of a capability in a competitor's public material is
 ## Git / commits
 
 - Remote: `https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner`.
+
+## Console screens
+
+Twenty-two routes. The ones added most recently, and why each exists:
+
+- **`/checks/:id`** — what a check IS. The console could always say `LOG-AUD-001`
+  fired and never what it is; 709 ids were explained only in a markdown file no
+  console reader can open. `server/checkdocs.py` ASSEMBLES this from the sources
+  already authoritative for each field — it authors nothing.
+- **`/requirements/:id`** — one SAP Baseline requirement family, SAP's own wording
+  for every check item in it, and the checks of ours that answer it.
+- **`/chokepoints`** — the choke-point worklist on its own, uncapped. The paths
+  screen shows the same data capped at 15, which is right for a summary and wrong
+  for a worklist: on the bundled corpus the real number is 71.
+
+TWO KINDS OF CHECK ID appear in this console and they are NOT interchangeable. A
+FINDING links to `/findings/{id}` — that reader wants the defect. A REFERENCE
+links to `/checks/{id}`. `components/Refs.tsx` exists so the distinction is made
+once, and a finding reaches its definition from its own page rather than from
+every row that names the check.
+
+## Charts
+
+`Donut` for part-to-whole, and only where the form is correct: parts of one
+meaningful whole, six segments or fewer, and the reader wants the SHAPE rather
+than a comparison of close values. A ratio against a limit is a `Meter` instead —
+the limit is the point, and a two-slice donut turns the denominator into a slice.
+Anything past ~7 classes is a table.
+
+Every failure mode of a distribution mark is a number problem wearing a picture,
+so the tests are arithmetic: shares against the PASSED total rather than the sum
+of the slices, no present slice rounding to 0%, no ring drawn out of a total of
+nothing.
+
+Chart geometry is testable — it is plain SVG attributes in jsdom — and is tested.
+Label collisions, arrow direction and text that overflows its own container have
+all shipped here; each is now a numeric assertion rather than something a reader
+notices.
+
+## CSS layering — never write a component class unlayered
+
+Tailwind's utilities live in `@layer utilities`, and UNLAYERED CSS BEATS EVERY
+LAYER regardless of file order. A component class written plainly in `index.css`
+therefore outranks any utility placed beside it, silently: `.field { width:100% }`
+made `className="field w-auto"` a no-op and rendered the findings filter bar as
+seven full-width rows stacked down the page. Component classes belong inside
+`@layer components`; `:root` and `@theme` stay outside it, because custom
+properties resolve by inheritance and `@theme` is what the utilities are
+generated from.
 ## Licensing
 
 **MIT.** The repository was MIT, went proprietary on 2026-08-11, and is MIT again —

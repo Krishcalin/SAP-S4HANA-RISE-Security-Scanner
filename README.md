@@ -1645,12 +1645,16 @@ SAP-S4HANA-RISE-Security-Scanner/
 │   ├── api_auth.py                 # /api/auth/* + /api/account/* — the only sign-in surface
 │   ├── sapcontent.py               # SAP's published Security Baseline policies → our control vocabulary
 │   ├── prose.py                    # steps()/paragraphs() — the reference the TypeScript port matches
+│   ├── checkdocs.py                # What a check IS: assembles catalogue + KB + Baseline + paths
+│   ├── migrations.py               # Data migrations SQL cannot express (a fingerprint is a hash)
 │   ├── static/                     # Brand assets, mounted at /static, deliberately unauthenticated
 │   └── spa/                        # Compiled console (build output, gitignored)
 ├── frontend/                       # React + TypeScript console — built by Vite into server/spa/
-│   ├── src/routes/                 # One file per screen (dashboard, findings, paths, risk, …)
+│   ├── src/routes/                 # One screen per file — 22 routes incl. checks, requirements, chokepoints
 │   ├── src/api/client.ts           # Typed API client — the only place fetch() is called
+│   ├── src/lib/ui.ts               # The stat tile, in one place (it had drifted into four)
 │   ├── src/components/             # AppShell, Sidebar, TopBar, AuthGate, Login
+│   │                               # + Donut, Meter, Refs (check/requirement links), CrqCharts
 │   └── package.json                # react, react-dom, react-router, lucide-react (+ vite/ts/tailwind)
 ├── assets/                         # MonitorRisk + SAP logos (embedded in reports as data URIs)
 ├── sample_data/                    # 107 crafted demo exports
@@ -1662,7 +1666,7 @@ SAP-S4HANA-RISE-Security-Scanner/
 │   ├── attack_paths.json           # 13 SAP attack-path templates (content, not code)
 │   ├── ecs_hardening_3250501.json  # SAP Note 3250501: 92 parameters + 18 config items, facts only
 │   └── sap_baseline_requirements.json  # Derived from SAP's published CSA policies; CI fails on drift
-├── tests/                          # 3,253 tests across 96 files
+├── tests/                          # 4,015 tests across 123 files
 │   ├── conftest.py                 # pytest fixtures (DataLoader over sample_data)
 │   ├── test_scanner.py             # per-module + full-pipeline + CLI tests
 │   ├── test_identity.py            # fingerprint semantics, against the REAL sample_data
@@ -1800,7 +1804,7 @@ If you check the repo out and start the server **without building the console**,
 
 ## Testing
 
-About **3,253 tests** across 96 files. The suite runs every audit module against the bundled
+About **4,015 tests** across 123 files, plus 83 vitest tests over the console. The suite runs every audit module against the bundled
 `sample_data` (crafted to trigger each check) and validates the full pipeline —
 no SAP system needed. It checks that each module fires, handles empty input
 without crashing, honours the finding contract (field types / severities — this

@@ -458,7 +458,7 @@ Rule 1 of this roadmap: no phase is done until its exit criterion passes against
 PostgreSQL, not a mock. It does.
 
 ```
-3,942 pytest passed, 4 skipped (PostgreSQL 16.15)    27 vitest passed    tsc --noEmit clean
+4,015 pytest collected, 2 skipped (PostgreSQL 16.15)   83 vitest    tsc --noEmit clean
 ```
 
 `sample_data` ingested through `server.cli scan` — 375 findings, 906 graph nodes — and **all
@@ -585,6 +585,57 @@ monitoring destinations are not flagged as customer misconfigurations.
 paths to the payment run"* — and, after a fix, `closed_by_edge` produces a sentence no
 incumbent's PDF can. **A short list is the feature**; Microsoft explicitly blesses an empty
 attack-path page.
+
+---
+
+## Phase 4 (console) — the graph made legible, and the ids made openable
+
+Everything here came from someone looking at a screen and saying what was wrong
+with it. Worth recording as a group, because in every case the reported symptom
+had a cause one layer down, and fixing only the symptom would have left the
+defect.
+
+| Reported | Actual cause |
+|---|---|
+| Labels overlap on the route diagram | `name.slice(0, 24)` — fixed character offsets, so words broke wherever the 24th character fell |
+| Text too small to read | `width="100%"` with a fixed `height` letterboxed the SVG to ~0.7×; the type was small AND scaled down |
+| The blue arrow points the wrong way | The entry connector ran 26 → 19, right to left, and `orient="auto"` faithfully reversed the head |
+| The chart is clumsy and busy | Six copies of one label. Staggering them stopped the collision and left six copies |
+| The exposure number overlaps the donut | Money rendered through `toLocaleString()` — 11 characters, in the reader's locale grouping, in an 86-unit hole |
+| The filter options waste space | `.field` was unlayered, so `w-auto` was silently outranked and every select took 100% width |
+
+### What was added
+
+- **`/checks/:id` and `/requirements/:id`.** 709 check ids and 38 Baseline
+  requirements were dead strings; on the coverage screen they were not even
+  links. `server/checkdocs.py` assembles from what was already authoritative and
+  authors nothing. The knowledge base covers 357 of 709, and the rest say so
+  rather than rendering an empty panel.
+- **`/chokepoints`.** The worklist uncapped — 71 on the bundled corpus against the
+  15 the paths screen showed.
+- **Donut, Meter.** Part-to-whole where the form is correct; a meter where the
+  thing is a ratio against a limit.
+- **`rederive-paths`.** Recomputes paths from stored findings. It can exist
+  because `instantiate` reads findings rather than the export bundle, and it is
+  needed because uploads are consumed after a scan — a landscape whose ruleset
+  moved had no route to a fresh derivation at all.
+- **`server/migrations.py`.** The `parameter` → `parameter_name` unification.
+  `_rebase` could not carry it: that crosses a change of BASIS and this keeps the
+  basis at `objects`. Measured: 9 findings re-identified, 10 stale nodes removed,
+  and the rescan afterwards reported `new 0 · persisting 375 · resolved 0`.
+
+### Three defects in content, found by guards written for something else
+
+`SAP-DATA-04` was priced by the FAIR model and reached by no path. `SAPPATH-04`'s
+entry hop cited the missing-deny-all gateway checks but not the permit-all ones,
+so the two CRITICAL findings naming the 10KBLAZE condition cut nothing and
+appeared on no worklist. `SAPPATH-06` cited three check ids — `FIN-DUAL-001`,
+`FIN-CHG-001`, `GRC-MIT-002` — that exist nowhere in the codebase; the first two
+now have their real equivalents, and the third had none to find.
+
+All three survived because the guards that existed asked the reverse question.
+Every path targets a real scenario; no test asked whether every scenario has a
+path. Required hops cite emittable checks; optional hops were never checked.
 
 ---
 
@@ -796,7 +847,7 @@ catalogue refreshes from SAP in CI rather than by hand.
 | Export guidance for all three | `docs/EXPORT_GUIDE.md` | ✅ |
 
 **2,365 tests collected** (401 unit, 64 against real PostgreSQL 16) — *measured when this
-phase closed; the suite stands at 3,253 today.*
+phase closed; the suite stands at 4,015 today.*
 
 ### Deliberately NOT built: live API clients *inside the product*
 
