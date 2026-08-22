@@ -1,17 +1,17 @@
-# Competitive Analysis — Onapsis, SecurityBridge, and the SAP Security Market
+# Competitive Analysis — the platform incumbent, the embedded incumbent, and the SAP Security Market
 
 **Status:** research output, 2026-08-05. Produced by two multi-agent research passes plus **two**
 adversarial verification passes, which between them downgraded or corrected sixteen claims.
 
 **Companion documents:** [`RISE_SECURITY_MODEL.md`](RISE_SECURITY_MODEL.md) ·
-[`COMPETITOR_SECURITYBRIDGE.md`](COMPETITOR_SECURITYBRIDGE.md) — a fuller dossier that supersedes
+[`COMPETITOR_EMBEDDED_INCUMBENT.md`](COMPETITOR_EMBEDDED_INCUMBENT.md) — a fuller dossier that supersedes
 §3 below wherever the two differ · [`PIVOT_PLAN.md`](PIVOT_PLAN.md)
 
 **Rules observed throughout.** No vendor text, code or images are reproduced — capabilities are
 described by what they *do*. Claims are labelled `verified` (read from a primary source),
 `asserted` (vendor marketing, no published catalogue) or `inferred` (absence of evidence across
 named sources). **Absence of a capability in a competitor's public material is never stated as
-proof of absence** — both Onapsis's and SecurityBridge's product documentation is
+proof of absence** — both the platform incumbent's and the embedded incumbent's product documentation is
 login-gated.
 
 ---
@@ -22,44 +22,44 @@ Three conclusions drive the product plan.
 
 **1. Our headline pivot feature is table stakes, not a differentiator.** "Track the mitigation
 journey across repeat uploads" is already shipped by both incumbents and claimed by the free
-tool in our exact niche. Onapsis Security Advisor ships posture-over-time, trended response
-metrics, average remediation speed and backlog trajectory; SecurityBridge's Security Roadmap
+tool in our exact niche. The platform incumbent's guided-remediation feature ships posture-over-time, trended response
+metrics, average remediation speed and backlog trajectory; the embedded incumbent's mitigation-tracking feature
 ranks by risk *and* resolution complexity, routes work by responsibility area, integrates
 Jira/ServiceNow, guards against regression and supports documented risk acceptance; and
-offlinesec.com — free — explicitly markets tracking "how quickly notes are implemented and how
+A free offline scanner — free — explicitly markets tracking "how quickly notes are implemented and how
 configuration issues evolve month to month". **We must build it to be credible. We cannot sell
 on it.**
 
 **2. Two lanes are genuinely open, and one of them is closing.** No public evidence of a
-config-derived attack-path graph at Onapsis (their integrator-published data model has **no
+config-derived attack-path graph at the platform incumbent (their integrator-published data model has **no
 edge or relationship entity at all** — a vulnerability points at exactly one asset), and none of
 financial risk quantification at either vendor. **FAIR/monetary quantification is the cleanest
-open lane and we already have the engine.** The graph lane is contested: SecurityBridge's
-research director released **SAPMAP** in 2026, framed as "SAP's BloodHound moment", and an OWASP
+open lane and we already have the engine.** The graph lane is contested: the embedded incumbent's
+research director released **its estate-graph feature** in 2026, framed as "SAP's BloodHound moment", and an OWASP
 project already renders an SAP inter-system connection graph. We are entering a category, not
 inventing one.
 
 **3. The offline-export architecture is validated by SAP's own contract — and it is a narrower
-wedge than it looks.** Every documented Onapsis deployment requires live connectivity plus
-customer-hosted infrastructure; SecurityBridge is an ABAP add-on, which in RISE is an Excluded
-Task requiring an additional SKU and multi-week evaluation. But Onapsis already sells the "I
+wedge than it looks.** Every documented the platform incumbent deployment requires live connectivity plus
+customer-hosted infrastructure; the embedded incumbent is an ABAP add-on, which in RISE is an Excluded
+Task requiring an additional SKU and multi-week evaluation. But the platform incumbent already sells the "I
 can't give you access" objection-handler (Business Risk Illustration — no install, no
-production access, no customer credentials), and offlinesec is free on the same export model.
+production access, no customer credentials), and a free offline scanner is free on the same export model.
 **Our defensible claim is narrow and must be stated precisely: credentialed-grade depth with
 zero connectivity, zero installed infrastructure, zero credentials handed over, and zero vendor
 egress.**
 
 ---
 
-## 2. Onapsis
+## 2. The platform incumbent
 
 ### 2.1 Portfolio
 
-Four platform modules — **Assess** (vulnerability management), **Defend** (threat detection),
-**Control / Control Central** (code + transport security), **Security Advisor** (AI posture
-guidance) — plus **Comply** as a paid add-on requiring an Assess licence, two premium add-ons
-(Threat Intel Center, Network Detection Rule Pack), and stack-specific SKUs (Assess Baseline,
-Assess for BTP, Assess for SuccessFactors, Onapsis for Oracle EBS). Newest: **Agentic Gateway**
+Four platform modules — **a vulnerability-management module**, **a threat-detection module**,
+**Control / Control Central** (code + transport security), **its guided-remediation feature** (AI posture
+guidance) — plus **a compliance module** as a paid add-on requiring a vulnerability-management licence, two premium add-ons
+(a threat-intelligence add-on, a network-rules add-on), and stack-specific SKUs (a baseline SKU,
+Assess for BTP, Assess for SuccessFactors, the platform incumbent for Oracle EBS). Newest: **Agentic Gateway**
 (17 Mar 2026), an MCP server exposing SAP risk data to Copilot/Claude/Gemini/ChatGPT —
 explicitly in **preview with no GA date**.
 
@@ -88,7 +88,7 @@ GTS, GRC) "necessitating transport configurations".
 
 ### 2.3 The data model — the closest thing to a published spec for what we are building
 
-Onapsis publishes no product documentation. Its **integrator** does. Brinqa's connector docs
+The platform incumbent publishes no product documentation. Its **integrator** does. Its integrator's connector docs
 enumerate the GraphQL field names (`verified`, and the best technical artifact in the entire
 research):
 
@@ -136,14 +136,14 @@ CVSS does not apply to many SAP findings at all — their example is disabled lo
 
 ### 2.5 The single strongest quote we have
 
-Onapsis's own documented method for tracking remediation over time (`verified`, verbatim):
+The platform incumbent's own documented method for tracking remediation over time (`verified`, verbatim):
 
 > *"One way to use the CVSS as a progress indicator is to periodically export the Assess PDF
 > Report and monitor the Lowest, Average and Highest CVSS score decreasing to 0 as the issue
 > occurrences are remediated."*
 
 Real longitudinal analytics only reached GA at the **end of Q2 2026**, and they live in
-**Security Advisor — a different product surface from Assess**, which is precisely the
+**its guided-remediation feature — a different product surface from Assess**, which is precisely the
 fragmentation their own customers complain about.
 
 > **Two lessons.** The metric vocabulary buyers now expect is fixed: *average remediation speed,
@@ -160,13 +160,13 @@ fragmentation their own customers complain about.
 | **Control** — custom code | *"over 600 industry-leading test cases across six primary categories"* (Security, Compliance, Performance, Robustness, Maintainability, DLP); inline in Eclipse/VS Code/BAS; Transport Guard blocks risky transports in TMS/cTMS | **Do not compete on ABAP SAST.** We have 22 metadata checks and an offline tool can never block a transport. |
 | **Defend** — runtime detection | 2,000+ rules (their own pages also say 2,500+), 24 pre-configured alarms | No analogue. Never imply one. |
 | **SAP Notes Command Center** | Centralises patching; *validates patches including manual configuration steps and workarounds* | Our weakest area meets their newest investment. See §5. |
-| **Security Advisor** | Peer benchmarking "against hundreds of other organizations in the Onapsis community"; coverage-gap view; trended response metrics | Peer benchmarking is structurally closed to us until we have a customer base — **do not promise it.** Benchmark the customer against themselves over time and against the SAP baseline. |
+| **its guided-remediation feature** | Peer benchmarking "against hundreds of other organizations in the the platform incumbent community"; coverage-gap view; trended response metrics | Peer benchmarking is structurally closed to us until we have a customer base — **do not promise it.** Benchmark the customer against themselves over time and against the SAP baseline. |
 
 ### 2.7 What is genuinely absent (`inferred` — phrase carefully)
 
-- **No attack-path / blast-radius graph.** Independently checked across the Security Advisor
+- **No attack-path / blast-radius graph.** Independently checked across the its guided-remediation feature
   product page, the Q1 2026 release, the Q2 2026 release, the Assess datasheet, every release
-  note Sept 2025 → Q2 2026, and the Brinqa schema — **which exposes no relationship or edge
+  note Sept 2025 → Q2 2026, and the its integrator schema — **which exposes no relationship or edge
   entity at all.** Their P4CHAINS work is *published threat research*, not a customer-landscape
   view. Because their schema has no edge concept, this is not something they can add as a widget.
 - **No financial risk quantification of any kind.** No ALE, SLE, loss scenario, Monte Carlo or
@@ -210,9 +210,9 @@ attributes against strong compliance (4.6) and accuracy (4.1).
 
 ---
 
-## 3. SecurityBridge
+## 3. The embedded incumbent
 
-### 3.1 Architecture — the mirror image of Onapsis
+### 3.1 Architecture — the mirror image of the platform incumbent
 
 An **SAP-certified ABAP add-on whose entire UI lives inside SAP** as a SAPUI5/Fiori-style
 application, not a standalone console. That one fact explains both its strengths (fast deploy,
@@ -227,7 +227,7 @@ objection our architecture will face** and it needs a prepared answer, not an im
 
 | Claim | Kind |
 |---|---|
-| "SecurityBridge Standard Baseline" of **550+ configuration checks**, "twice as much as the SAP Security Baseline" | `asserted` — **no itemised control list exists publicly in any format** |
+| "the embedded incumbent Standard Baseline" of **550+ configuration checks**, "twice as much as the SAP Security Baseline" | `asserted` — **no itemised control list exists publicly in any format** |
 | **900+** out-of-the-box use cases; "hundreds" of threat-detection patterns; "100+ listeners, identification patterns and signatures" | `asserted`, no catalogue |
 | ~~Seven core components~~ → **13 modules** on the current platform overview | ⚠️ **the "seven components" solution brief is SUPERSEDED — see §3.2a** |
 | **CRIS** (Mar 2026) — scores 8 Areas of Responsibility 0–100%, with in-product anonymised peer benchmarking across thousands of production systems, refreshed 6-monthly. Published bands: <50% risky, 51–60% acceptable, 61–80% good, >80% great; "most new customers start at 30–40%" | `verified` (methodology not published) |
@@ -253,7 +253,7 @@ objection our architecture will face** and it needs a prepared answer, not an im
 superseded solution brief. **The current platform overview names 13 modules.** Not previously
 counted: **Privileged Access Management**, **Identity Protection**, **Data Loss Prevention**,
 **Forensic Analysis (HyperLogging)**, **TrustBroker**, and **Vulnerability Management** as a
-distinct module (plus Security Dashboard and Security Roadmap).
+distinct module (plus Security Dashboard and its mitigation-tracking feature).
 
 This materially changes the competitive picture:
 
@@ -261,7 +261,7 @@ This materially changes the competitive picture:
   admins act under named accounts, **auto-activates HyperLogging for the privileged session** and
   auto-decommissions privileges on session close or expiry, recording activity before, during and
   after. A runtime in-system capability an offline scanner structurally cannot match — and it
-  **materially weakens** the rival allegation that SecurityBridge does no critical-access analysis,
+  **materially weakens** the rival allegation that the embedded incumbent does no critical-access analysis,
   which the first pass had flagged as a testable hypothesis.
 - **Data Loss Prevention**: application-native DLP inside SAP — who is downloading what data —
   combining detection with preventative enforcement. Another structural impossibility for an
@@ -309,11 +309,11 @@ sample path `/usr/sap/tmp/sb_events/*.cef`) and a SIEM agent tails them.
 > offline-doable, and it is what makes the retrospective story credible: we can tell a client
 > their audit log was not capturing what they thought it was.
 
-### 3.5 SAPMAP — the graph lane is contested
+### 3.5 its estate-graph feature — the graph lane is contested
 
 `marketing` (the tool itself is invitation-only; I could not obtain it).
 
-SecurityBridge's Director of Security Research (Joris van de Vis) released **SAPMAP** on
+The embedded incumbent's Director of Security Research (Joris van de Vis) released **its estate-graph feature** on
 **15 July 2026**, explicitly framed as **"SAP's BloodHound moment"** — mapping attack paths across
 a landscape's trust relationships in **both directions across the on-prem/BTP boundary**, tied to
 **16 business-impact scenarios** (named examples: salary theft, vendor bank fraud, production
@@ -338,13 +338,13 @@ stored passwords**.
 > 2. **Neither claims longitudinal tracking of path closure across repeat assessments.** That is
 >    our mitigation-journey feature expressed in its strongest possible unit.
 >
-> Also note the framing convergence: SAPMAP uses **16 business-impact scenarios**, not "critical
+> Also note the framing convergence: its estate-graph feature uses **16 business-impact scenarios**, not "critical
 > severity". Our FAIR adapter already makes exactly that move with 5 scoped SAP loss scenarios.
 > **Merge them — path targets should *be* the FAIR scenarios.**
 
-### 3.6 Where SecurityBridge is ahead, and where it is not
+### 3.6 Where the embedded incumbent is ahead, and where it is not
 
-**Ahead:** Security Roadmap (mature remediation tracking with regression guards and documented
+**Ahead:** its mitigation-tracking feature (mature remediation tracking with regression guards and documented
 risk acceptance), CRIS scoring + peer benchmarking, real-time detection, in-system code scanning
 wired to Code Inspector / ATC, broad SIEM/ITSM integrations (Fetch Events API — JSON/XML,
 time-filtered, basic auth, port 8000), and a research operation that is their strongest genuine
@@ -354,11 +354,11 @@ window.
 
 **Not ahead:** **no financial risk quantification** — their only money-facing artifact is a
 Business Case Calculator computing the ROI of *buying the tool*. No public developer portal or
-API reference. And a rival's comparison alleges both they and Onapsis leave gaps in SoD /
+API reference. And a rival's comparison alleges both they and the platform incumbent leave gaps in SoD /
 access-risk analysis for S/4HANA business users — vendor-biased, but a testable hypothesis that
-matches what we found independently about Onapsis.
+matches what we found independently about the platform incumbent.
 
-**RISE-specific wedge they hand us:** SecurityBridge itself argues that RISE's default security
+**RISE-specific wedge they hand us:** the embedded incumbent itself argues that RISE's default security
 monitoring *"primarily covers client 000"* while productive clients remain the customer's
 responsibility. SAP's own deck says the same thing (see `RISE_SECURITY_MODEL.md` §2.2). When a
 competitor and the vendor agree, the point is safe to make.
@@ -369,24 +369,24 @@ competitor and the vendor agree, the point is safe to make.
 
 | Vendor | Model | Relevance |
 |---|---|---|
-| **offlinesec.com** | **Free.** Manual table export **and** an automated Connector doing RFC extraction with SSO/SNC or user/password. Explicitly markets the mitigation journey: *"Run the tool regularly to monitor your security posture over time — track how quickly notes are implemented and how configuration issues evolve month to month."* | **A bigger threat than first assessed.** The free incumbent in our exact niche already claims offline collection **and** progress tracking. Our remaining ground is narrower and must be stated precisely: **fully self-hosted with zero vendor egress** (offlinesec uploads pseudonymised data to their servers and returns an Excel file), multi-system landscape lifecycle as a system of record, the config-derived graph, and FAIR. |
+| **a free offline scanner** | **Free.** Manual table export **and** an automated Connector doing RFC extraction with SSO/SNC or user/password. Explicitly markets the mitigation journey: *"Run the tool regularly to monitor your security posture over time — track how quickly notes are implemented and how configuration issues evolve month to month."* | **A bigger threat than first assessed.** The free incumbent in our exact niche already claims offline collection **and** progress tracking. Our remaining ground is narrower and must be stated precisely: **fully self-hosted with zero vendor egress** (a free offline scanner uploads pseudonymised data to their servers and returns an Excel file), multi-system landscape lifecycle as a system of record, the config-derived graph, and FAIR. |
 | **Layer Seven** | ABAP add-on installed via SAINT, positioned for RISE/ECS | Claims "5,000+ vulnerability checks / 1,200+ threat patterns / 300+ code checks" — `asserted`, no catalogue |
-| **Pathlock / SAST, Saviynt, SailPoint, One Identity, SAP GRC** | Access-governance incumbents | See §4.1 — this is the comparison set if we lead with ARA |
+| **an access-governance vendor / SAST, Saviynt, SailPoint, One Identity, SAP GRC** | Access-governance incumbents | See §4.1 — this is the comparison set if we lead with ARA |
 | **Protect4S** | ~2,000 checks `asserted`; Connection Map | Connection-centric, not identity-and-privilege |
 | **MTC Skopos** | Offline Rust SoD engine, flat-rate pricing | Direct competitor to our ARA module |
-| **ERPScan** | Named in KuppingerCole vendors-to-watch | Appeared as a prior evaluation in the one readable Onapsis deployment account |
+| **ERPScan** | Named in KuppingerCole vendors-to-watch | Appeared as a prior evaluation in the one readable the platform incumbent deployment account |
 
 ### 4.1 The analyst frame changes the comparison set
 
 **KuppingerCole Leadership Compass "SAP Access Control and Security"**, Martin Kuppinger,
 25 March 2026 (report ID LC81035; body is gated):
 
-- **Overall Leaders:** Pathlock, SAP, Saviynt, SailPoint, One Identity
-- **Rated:** CERPASS, Nagarro, Nexis, Pointsharp, ROIABLE, **SecurityBridge**, Werth IT
-- **Vendors to Watch (not rated):** **Onapsis**, Layer Seven, Protect4S, ERPScan
+- **Overall Leaders:** an access-governance vendor, SAP, Saviynt, SailPoint, One Identity
+- **Rated:** CERPASS, Nagarro, Nexis, Pointsharp, ROIABLE, **the embedded incumbent**, Werth IT
+- **Vendors to Watch (not rated):** **the platform incumbent**, Layer Seven, Protect4S, ERPScan
 
-> **If we lead with ARA/SoD — our strongest asset — our comparison set is Pathlock and SAP GRC,
-> not Onapsis.** That is a materially different pitch with a different objection set. Choose
+> **If we lead with ARA/SoD — our strongest asset — our comparison set is an access-governance vendor and SAP GRC,
+> not the platform incumbent.** That is a materially different pitch with a different objection set. Choose
 > deliberately which frame each deal is fought in.
 
 ---
@@ -402,7 +402,7 @@ competitor and the vendor agree, the point is safe to make.
   values), which is what suppresses display-only false positives. Honours mitigating controls
   **with expiry dates**. Accepts a custom ruleset JSON.
 
-  > **Onapsis explicitly cedes this ground.** They position GRC/IAG as owning SoD and themselves
+  > **the platform incumbent explicitly cedes this ground.** They position GRC/IAG as owning SoD and themselves
   > as *"the underlying technical layer"* those tools have a blind spot in. No shipped SoD
   > ruleset, no permission-level matching claim, no mitigating-controls-with-expiry claim
   > anywhere public. **This is the sharpest differentiator we own.**
@@ -443,7 +443,7 @@ competitor and the vendor agree, the point is safe to make.
 
 | Gap | Measured | Consequence |
 |---|---|---|
-| **SAP Notes / patch coverage** | `modules/sap_hotnews.py` ships a curated catalogue of **11 notes** and can emit **at most 5 findings**. No note-to-version applicability, no support-package reasoning, no CVE/KEV/EPSS feed. | **Most buyer-visible weakness.** A documented Onapsis audit example returned 144 missing notes on one ABAP system. **Reframe around *verification that the note took effect*, not catalogue volume** — note identification is already free from SAP. The free `NotesPolicies/ABAP` folder (133 policies by patch day) in SAP's Apache-2.0 repo is ready-made content. |
+| **SAP Notes / patch coverage** | `modules/sap_hotnews.py` ships a curated catalogue of **11 notes** and can emit **at most 5 findings**. No note-to-version applicability, no support-package reasoning, no CVE/KEV/EPSS feed. | **Most buyer-visible weakness.** A documented the platform incumbent audit example returned 144 missing notes on one ABAP system. **Reframe around *verification that the note took effect*, not catalogue volume** — note identification is already free from SAP. The free `NotesPolicies/ABAP` folder (133 policies by patch day) in SAP's Apache-2.0 repo is ready-made content. |
 | **No persistence or identity model** | No database, no `scan_run`, no SAP system entity. `scan_meta` = `{scan_time, data_directory, modules_run, severity_filter}`. SID, client, tier, release, kernel level, BTP subaccount, tenant captured **nowhere**. | Two uploads from different systems are indistinguishable. **Blocks everything else.** |
 | **No stable finding identity** | `check_id` is **not unique within a run** — verified collisions on `sample_data`: `USR-001` ×4, `CODE-STMT-001` ×4, `RISE-002` ×2. `affected_items` is free text (`"MM_CLERK_01 -> SAP_ALL"`); `details` populated on only 82 of 296 findings and is schema-free. | **The mitigation journey is currently impossible** — no finding can be matched across runs. Also blocks the graph: every node would be a string. |
 | **Parameter baseline depth** | `security_params.BASELINE` = 22 entries + `PARAM-MISSING` = 23. The mandatory ECS ABAP note is reported by third parties at ~81 parameters + 17 settings (contradicted by other sources). | The concrete coverage gap on the one checklist a RISE auditor asks about. |
@@ -574,7 +574,7 @@ and **CVE-2025-31324** (SAP NetWeaver Visual Composer unauthenticated RCE, CVSS 
 CISA KEV 15 May 2025). A CISA advisory is the most buyer-proof citation available for an SAP entry
 point.
 
-> ⚠️ `CVE-2026-31431` surfaced in one fetch of the SAPMAP page and **could not be verified**.
+> ⚠️ `CVE-2026-31431` surfaced in one fetch of the its estate-graph feature page and **could not be verified**.
 > **Do not use it** until confirmed against cve.org or SAP directly.
 
 ### 6.5 Path 4 exposes a modelling gap we must close
@@ -587,9 +587,9 @@ zones per system at upload time**. A small input that upgrades every path in thi
 
 ## 7. What this means for positioning, in one page
 
-**Do not say:** "we're easier to deploy" (Assess Baseline claims scan-within-hours zero-footprint
+**Do not say:** "we're easier to deploy" (a baseline SKU claims scan-within-hours zero-footprint
 SaaS) · "we track remediation over time" (both incumbents ship it; the free tool claims it) ·
-"we have 323 checks" (nobody publishes a catalogue; volume wars are unwinnable) · "Onapsis doesn't
+"we have 323 checks" (nobody publishes a catalogue; volume wars are unwinnable) · "the platform incumbent doesn't
 have X" (their docs are gated; state absence of evidence) · any false-positive percentage
 (unfalsifiable, and reviewers will contradict whatever we claim).
 
@@ -599,8 +599,8 @@ have X" (their docs are gated; state absence of evidence) · any false-positive 
    Tasks requiring an additional SKU and a multi-week evaluation. Every agent competitor must clear
    that. We need a file upload.
 2. **"No connection, no credentials, no open port, no vendor egress."** Fully self-hosted —
-   distinguishing us from offlinesec, which returns an Excel file from *their* servers.
-3. **"Credentialed-grade depth without credentials."** Onapsis's own no-access offering (BRI) is
+   distinguishing us from a free offline scanner, which returns an Excel file from *their* servers.
+3. **"Credentialed-grade depth without credentials."** the platform incumbent's own no-access offering (BRI) is
    unauthenticated black-box reconnaissance — it structurally cannot read `AGR_1251` role content,
    `RSPARAM` values, SoD conflicts or HANA privilege grants.
 4. **"SAP monitors client 000. Your business clients are yours."** SAP's own words.
@@ -615,7 +615,7 @@ have X" (their docs are gated; state absence of evidence) · any false-positive 
 9. **"This path was severed on 12 Sep when the `S_RFCACL` wildcard was removed from
    ZBASIS_SUPPORT."** A sentence no incumbent's PDF can produce.
 
-**Mirror their land motion:** Onapsis's only self-serve entry is a sales-led engagement, and there
+**Mirror their land motion:** the platform incumbent's only self-serve entry is a sales-led engagement, and there
 is no trial or free tier anywhere in this market. A tool a prospect can run against their own
 exports **with no vendor contact at all** is a genuinely differentiated top of funnel.
 
@@ -623,38 +623,38 @@ exports **with no vendor contact at all** is a genuinely differentiated top of f
 
 ## 8. Confidence and blind spots
 
-**Verified against primary sources:** the Assess hardware spec, the Brinqa data model, the CVSS
+**Verified against primary sources:** the Assess hardware spec, the its integrator data model, the CVSS
 base-score-only policy, the PDF-export remediation-tracking quote, the SAP R&R contract rows, the
 SAP Security Baseline 214 control points, Microsoft's and AWS's attack-path UX, the KuppingerCole
 positioning, SAP's Apache-2.0 policy repository, and SAP's "monitoring is limited to client 000".
 
 **Could not be reached — and this bounds every negative claim:**
 
-- Onapsis Defenders Community and Customer Portal (MFA/Salesforce-gated) — **the real module and
+- The platform incumbent Defenders Community and Customer Portal (MFA/Salesforce-gated) — **the real module and
   check catalogue, admin guides and full release notes live there.** Biggest single blind spot.
-- All `go.onapsis.com` gated PDFs — architecture diagrams, port/protocol tables, capability-table
+- All `go.the platform incumbent's site` gated PDFs — architecture diagrams, port/protocol tables, capability-table
   footnotes unseen.
 - G2, Gartner Peer Insights, TrustRadius — all HTTP 403. **Reviewer sentiment rests on one
   readable reviewer.**
 - `docs.wiz.io` — 403. Every Wiz graph detail here is from blogs and partner pages, never product
   docs.
-- SAPMAP itself — invitation-only. UI, node/edge model and the 16 scenario definitions unseen; the
+- Its estate-graph feature itself — invitation-only. UI, node/edge model and the 16 scenario definitions unseen; the
   72-CVE / 1,817-test / 7-exploit figures are vendor-stated.
 - SAP Notes 3480723 (HANA) / 3381209 (Java) and the Security Baseline Template body — S-user gated.
 - ~~3250501~~ **obtained 2026-08-07** from a customer's S-user; recorded as facts in
   `data/ecs_hardening_3250501.json`. ABAP parameter coverage is 92 of 92.
   **Only notes 2253549 and 3137004 were verified first-hand.**
-- Onapsis pricing, editions, licensing metric, SaaS data residency for scanned SAP data, console
+- The platform incumbent pricing, editions, licensing metric, SaaS data residency for scanned SAP data, console
   RBAC/SSO details, and the SAP authorizations their scan account requires — none public.
-- **Whether an unadvertised Onapsis offline/air-gapped ingest mode exists.** Phrase our claim
-  positively: *"every documented Onapsis deployment requires live connectivity plus
+- **Whether an unadvertised the platform incumbent offline/air-gapped ingest mode exists.** Phrase our claim
+  positively: *"every documented the platform incumbent deployment requires live connectivity plus
   customer-hosted infrastructure."*
 
 **Explicitly flagged as unverified or corrected by the verification passes:** the Business Risk
 Illustration "under two hours / complimentary" figures (not supported by the cited URL) · the "Age
-of Issues" tracker (press-release claim, absent from the current product page) · Comply "14
-policies" (2023 source, may be stale) · Onapsis Assess "requires no transport" (**do not assert**)
-· all vendor check counts on all sides · SecurityBridge's "seven core components" (superseded;
+of Issues" tracker (press-release claim, absent from the current product page) · a compliance module "14
+policies" (2023 source, may be stale) · the platform incumbent Assess "requires no transport" (**do not assert**)
+· all vendor check counts on all sides · the embedded incumbent's "seven core components" (superseded;
 13 modules now) · the Fortinet FortiSOAR connector (community-authored and non-certified, **not**
 vendor API documentation — though the conclusion that their public API surface is events-only is
 strengthened by that) · the Interface Traffic Monitor capability specifics (a feature-bullet
@@ -662,9 +662,9 @@ marketing page, no datasheet).
 
 **Identifiers that must not ship without checking:**
 
-- **`CVE-2026-31431`** — surfaced in one fetch of the SAPMAP page, appears nowhere in the
+- **`CVE-2026-31431`** — surfaced in one fetch of the its estate-graph feature page, appears nowhere in the
   research. **Do not use.**
-- **The SecurityBridge Q1 2026 zero-day set** — `CVE-2026-0491`, `-0498`, `-24322`, `-0486`,
+- **The the embedded incumbent Q1 2026 zero-day set** — `CVE-2026-0491`, `-0498`, `-24322`, `-0486`,
   `-24313`, `-23681`, `-24326` and SAP Notes `3697979`, `3694242`, `3705882`, `3691645`,
   `3707930`, `3680416`, `3678009`. **None were verified.** They come from a vendor blog. Check
   every one against SAP or NVD before it appears anywhere.

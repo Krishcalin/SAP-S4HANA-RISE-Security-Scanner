@@ -1,8 +1,8 @@
-# Competitor Dossier — SecurityBridge
+# Competitor Dossier — the embedded incumbent
 
 **Status:** research synthesis, 2026-08-05, after an adversarial verification pass.
 
-**How to read this.** SecurityBridge publishes numbers and never a catalogue. Almost every
+**How to read this.** the embedded incumbent publishes numbers and never a catalogue. Almost every
 capability claim about them traces to a marketing page, a solution brief, or a press release —
 there is **no public documentation portal, no admin manual and no API reference anywhere**. That is
 itself a finding (§6). Labels used below:
@@ -15,7 +15,7 @@ itself a finding (§6). Labels used below:
 
 **Standing prohibitions for anything customer-facing:**
 
-- **Do not repeat SecurityBridge's Q1 2026 zero-day CVE or SAP Note identifiers.** They come from a
+- **Do not repeat the embedded incumbent's Q1 2026 zero-day CVE or SAP Note identifiers.** They come from a
   vendor blog and **none were verified against SAP or NVD.** Wrong SAP identifiers have burned this
   project before.
 - **Do not describe them as having "seven core components."** That framing comes from an older
@@ -25,7 +25,7 @@ itself a finding (§6). Labels used below:
 
 ---
 
-## 1. What SecurityBridge is
+## 1. What the embedded incumbent is
 
 An SAP-certified **ABAP add-on** that runs security analysis inside the SAP system, with a
 SAPUI5/Fiori-style interface rendered by the SAP system itself. It supports ABAP NetWeaver,
@@ -37,7 +37,7 @@ Company context: CEO Jesper Zerlang since 1 January 2026 (previously chairman), 
 evangelism and customer-facing strategy; backed by funds advised by Bregal Unternehmerkapital;
 public statements put it at **8,000+ SAP systems protected**, up from a 5,000+ milestone in 2024.
 **[claim — press]** This is a funded, scaling incumbent with a growth mandate, not a stagnant
-target. SAPMAP and CRIS shipped within five months of each other — expect continued roadmap pace.
+target. Its estate-graph feature and CRIS shipped within five months of each other — expect continued roadmap pace.
 
 ### 1.1 Module portfolio
 
@@ -58,11 +58,11 @@ The current platform overview names **13 modules**. Evidenced modules, grouped b
 | **Forensic Analysis (HyperLogging)** | Deep session recording of activity before, during and after privileged access | **No — structurally** |
 | **Identity Protection** | Identity-layer controls | **Unknown — thin public detail** |
 | **TrustBroker** | SSO / trust brokering | **Out of our category** |
-| **Security Dashboard** / **Security Roadmap** | Presentation and remediation-sequencing layers | **Yes — see §4** |
+| **Security Dashboard** / **its mitigation-tracking feature** | Presentation and remediation-sequencing layers | **Yes — see §4** |
 
 PAM, DLP, Forensic Analysis, Identity Protection and TrustBroker are **whole categories we are not
 competing in**. Concede them explicitly rather than being surprised in an evaluation. Note also
-that PAM materially weakens a rival vendor's public allegation that SecurityBridge does no critical
+that PAM materially weakens a rival vendor's public allegation that the embedded incumbent does no critical
 access analysis.
 
 ### 1.2 The numbers, and why they are not capability
@@ -89,7 +89,7 @@ access analysis.
 
 This single architectural fact explains most of their strengths and most of their complaints.
 
-| | **SecurityBridge — in-system ABAP add-on** | **Us — offline export ingestion** |
+| | **the embedded incumbent — in-system ABAP add-on** | **Us — offline export ingestion** |
 |---|---|---|
 | Where it runs | Inside the SAP system, analysis executed in-system | Outside entirely; reads exported CSV/JSON |
 | UI | SAPUI5/Fiori inside SAP, under SAP's authorization model | Browser console with its own database and identity layer |
@@ -146,10 +146,10 @@ This single architectural fact explains most of their strengths and most of thei
 | **Configuration & compliance assessment** | **PARITY (contested)** | Same category, same data. They claim 2× our check count and cannot show it; we can show ours. |
 | **Compliance framework mapping** | **PARITY** | They name GDPR, NIS2, SOX, FDA, NIST, PCI DSS, ISO 27000, CIS, SWIFT CSCF, MITRE ATT&CK and ISACA. **[claim]** Table stakes: its absence loses deals, its presence wins none. Build it as a mapping layer over the catalogue so adding a framework is a data exercise. |
 | **Patch/note applicability** | **PARITY** | Their method is not disclosed; component and support-package comparison is computable offline. Their "does the note touch objects in use" refinement needs usage data we do not have. |
-| **Repeat-scan remediation tracking** | **BEHIND** | Their Security Roadmap is mature: ranks findings by risk **and resolution complexity**, sequences lowest-hanging fruit first, distributes work by responsibility area, integrates Jira and ServiceNow, guards against reopening closed gaps, supports documented risk acceptance, and trends compliance rating over time per area. **[claim, but detailed and consistent]** **This is table stakes, not one of our differentiators.** |
+| **Repeat-scan remediation tracking** | **BEHIND** | Their its mitigation-tracking feature is mature: ranks findings by risk **and resolution complexity**, sequences lowest-hanging fruit first, distributes work by responsibility area, integrates Jira and ServiceNow, guards against reopening closed gaps, supports documented risk acceptance, and trends compliance rating over time per area. **[claim, but detailed and consistent]** **This is table stakes, not one of our differentiators.** |
 | **Per-domain scoring + peer benchmarking (CRIS)** | **BEHIND** | Eight Areas of Responsibility scored 0–100% with published bands (<50% risky, 51–60% acceptable, 61–80% good, >80% great; "most new customers start at 30–40%"), plus anonymised cross-customer benchmarking refreshed periodically. **[claim + press]** The per-domain % is reproducible offline today; **peer benchmarking needs an installed base we do not have.** |
 | **Landscape interface/topology map** | **BEHIND** | Interface Traffic Monitor draws nodes and edges and already names tier-up lateral movement. **[claim — the page is marketing with no configuration, architecture or performance detail]** |
-| **Attack-path graph** | **BEHIND (narrative), contested (product)** | Their research director released **SAPMAP** in July 2026 — press-reported as 72 CVEs, 1,817 automated tests, 7 weaponised exploits and 16 business-impact scenarios, mapping on-prem SAP and BTP across the trust boundary. **[evidence — press release, not documentation]** It is an invitation-only OWASP CBAS research tool, **not the commercial product**: no console, no repeat-scan tracking, no reporting. **They have claimed the narrative; the productised graph is still open.** |
+| **Attack-path graph** | **BEHIND (narrative), contested (product)** | Their research director released **its estate-graph feature** in July 2026 — press-reported as 72 CVEs, 1,817 automated tests, 7 weaponised exploits and 16 business-impact scenarios, mapping on-prem SAP and BTP across the trust boundary. **[evidence — press release, not documentation]** It is an invitation-only OWASP CBAS research tool, **not the commercial product**: no console, no repeat-scan tracking, no reporting. **They have claimed the narrative; the productised graph is still open.** |
 | **SAP vulnerability research** | **BEHIND — structurally, and we should not try** | Their lab has SAP-acknowledged standing as a top-3 reporting source and a track record of 0-day discovery. **[claim — SAP's own credits page returned 403, so the ranking rests on their press release]** Original research needs a lab, an SAP disclosure relationship and years. |
 | **SIEM integration** | **BEHIND** | Named integrations across Splunk, Sentinel, QRadar, ArcSight, FortiSIEM, Elastic, LogRhythm, Exabeam, Sumo Logic, Google SecOps, Rapid7, plus ServiceNow and Jira. **[claim]** Depends on live log streaming, which we do not do. |
 | **Real-time threat detection** | **STRUCTURALLY BEHIND** | Requires a persistent in-system agent and event-time execution. |
@@ -166,7 +166,7 @@ Their threat-detection substrate is **exportable**. Microsoft's (now deprecated 
 Sentinel connector documentation shows the architecture: the ABAP add-on writes normalised CEF
 event files to the SAP application server filesystem — documented sample path `/usr/sap/tmp/sb_events/*.cef`,
 filenames like `AED_20211129164544.cef` — and a Sentinel agent tails that directory into a
-`SecurityBridgeLogs_CL` custom table. Developed against SecurityBridge Application Platform 7.4.0.
+`its own log table` custom table. Developed against the embedded incumbent's platform.
 **[evidence — Microsoft Learn, verified verbatim]**
 
 The intelligence lives in the pattern library, not in privileged access to the SAP kernel. So:
@@ -221,8 +221,8 @@ PeerSpot or TrustRadius profile found).
 | Billing shows inconsistencies | **Transparent, simple, published pricing** — unusually easy for a challenger and disproportionately effective. |
 | Users want better testing before newer versions ship | Boring reliability is a differentiator against a fast-moving incumbent. |
 
-Market framing to be aware of: third-party comparison data rates SecurityBridge **easier to use and
-stronger on roadmap** than Onapsis, while Onapsis is preferred on "meets business needs" and
+Market framing to be aware of: third-party comparison data rates the embedded incumbent **easier to use and
+stronger on roadmap** than the platform incumbent, while the platform incumbent is preferred on "meets business needs" and
 "easier to do business with". **[second-hand]** So **entering on usability alone collides head-on
 with their strongest claim.** The stronger wedge is the pairing the market is not offering —
 business-language risk output plus an independent console — rather than "easier to use", which is
@@ -267,10 +267,10 @@ market story. SAP's own Apache-2.0 policy repository makes it cheap (see `RISE_S
 
 ### 5.3 Two things to stop believing
 
-- **The attack-path graph is not the moat.** SecurityBridge's research director has claimed the
-  narrative publicly, and if SAPMAP goes public with a documented taxonomy, adopting it is cheaper
+- **The attack-path graph is not the moat.** the embedded incumbent's research director has claimed the
+  narrative publicly, and if its estate-graph feature goes public with a documented taxonomy, adopting it is cheaper
   and more credible than inventing our own. **The moat is offline-export ingestion plus repeat-scan
-  mitigation tracking** — which SAPMAP does not do. What is still defensible in the graph is
+  mitigation tracking** — which its estate-graph feature does not do. What is still defensible in the graph is
   **chaining** (entry point → escalation → business impact) and terminating a path in a currency
   figure, not "we visualise the landscape", which they already do.
 - **Repeat-scan tracking is not a differentiator.** It is parity work. To reach parity we need, at
@@ -304,7 +304,7 @@ alignment.
 | **Screen-level UX** — dashboard layout, drill-down from system → finding → fix, assignment and status workflow | The weakest-evidenced part of this dossier; described from text sources only | Watch their demo videos and webinar recordings (not done); a live demo |
 | **Independent practitioner assessment** — deployment effort, false-positive rates, real limitations | All reviewer evidence here is **second-hand search snippets**; G2 and Gartner Peer Insights both 403'd, no PeerSpot or TrustRadius profile exists | Direct access to the review platforms; reference calls |
 | **Pricing and licensing** | We cannot position on price | Nothing public. They publish a business-case calculator, not a price list. |
-| **SAPMAP's ingestion method** (live connection vs export) and whether it will be productised | Determines whether it competes with an offline tool at all | Invitation-only; watch the OWASP CBAS project for a public release |
+| **its estate-graph feature's ingestion method** (live connection vs export) and whether it will be productised | Determines whether it competes with an offline tool at all | Invitation-only; watch the OWASP CBAS project for a public release |
 | **The eighth CRIS Area of Responsibility** | Minor, but the full taxonomy would be useful to mirror | The full CRIS report is demo-gated; seven of eight leaked into blogs and press. An independent German trade write-up gives a partly conflicting category framing we could not reconcile. |
 | **Detection content update cadence** | Would tell us how fast their pattern library moves | No published SLA or frequency; sources say only "continually added" and shipped alongside patch-day releases |
 | **MITRE ATT&CK technique-level coverage** | They name ATT&CK as a supported framework; no coverage matrix is published | Nothing public |
@@ -312,7 +312,7 @@ alignment.
 
 ### 6.1 Sources that could not be reached at all
 
-- **No SecurityBridge documentation portal, admin guide or API reference exists** — unusually, there
+- **No the embedded incumbent documentation portal, admin guide or API reference exists** — unusually, there
   is no `docs.<vendor>` equivalent indexed. Everything technical comes from solution briefs,
   marketing pages, blogs or third-party integration docs.
 - **G2 and Gartner Peer Insights** — HTTP 403 on every product and comparison URL tried. All review
@@ -323,15 +323,15 @@ alignment.
   certification wording, supported versions, licensing, or the 900-use-cases claim at its primary
   source.
 - **SAP.com partner product pages** and **SAP's official Credits for Security Researchers page** —
-  HTTP 403. The top-3 research-lab ranking therefore rests on SecurityBridge's own press release.
+  HTTP 403. The top-3 research-lab ranking therefore rests on the embedded incumbent's own press release.
 - **The full CRIS report** — demo-request gated.
 - **Their CEF Configuration Guide and NIST CSF alignment whitepaper** — downloaded but image-encoded;
   no text extractable.
-- **A competitor's SecurityBridge transition guide** — 404. No adversarial technical teardown of
-  SecurityBridge obtained from any source. (Their Onapsis-transition equivalent does exist as a
+- **A competitor's the embedded incumbent transition guide** — 404. No adversarial technical teardown of
+  the embedded incumbent obtained from any source. (Their the platform incumbent-transition equivalent does exist as a
   published series and is worth reading for the evaluation criteria it uses, even though it is
   competitor-authored.)
-- **A rival vendor's 20-criterion comparison table** alleging both SecurityBridge and Onapsis lack
+- **A rival vendor's 20-criterion comparison table** alleging both the embedded incumbent and the platform incumbent lack
   SoD/access-risk analysis for S/4HANA business users and neither covers database and OS layer
   monitoring: the source is a direct competitor to both and structures the table so only its own
   product passes. **Treat every cell as a hypothesis.** Its real value is the 20-criterion list

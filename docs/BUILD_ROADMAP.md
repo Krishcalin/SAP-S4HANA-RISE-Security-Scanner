@@ -796,7 +796,7 @@ for SAP's content would be exactly the fabrication this project forbids.
       the report footer.
 - [x] **Publish the check catalogue** — **SHIPPED, and this entry had misread its own
       source.** "323 auditable vs 550 asserted" is not a split within OUR checks. All
-      three sources — `COMPETITIVE_ANALYSIS.md` §3.2, `COMPETITOR_SECURITYBRIDGE.md`,
+      three sources — `COMPETITIVE_ANALYSIS.md` §3.2, `COMPETITOR_EMBEDDED_INCUMBENT.md`,
       `PIVOT_PLAN.md` — say 323 is OUR count (published-and-auditable, because we publish
       the catalogue) and 550 is a COMPETITOR's (asserted-and-unverifiable, because no
       itemised list exists publicly). It is a comparison between two products. Read as an
@@ -1020,8 +1020,8 @@ Being crisp buys credibility for what we do claim.
 | Schema migrated twice | Phase 1 landed the contract before any UI work ✅ |
 | Converting a module orphans history | `_rebase`, with a deliberate refusal to guess ✅ |
 | "SAP Cloud ALM already does this" | SAP's own words: CSA *"is not meant to be an audit-proof tool by itself"*. Never compete on collection |
-| "SecurityBridge has SAPMAP" | True, and it connects to systems. Our angle is offline + **path closure over time**, which neither SAPMAP nor the OWASP tool claims |
-| "offlinesec is free" | It uploads pseudonymised data to *their* servers. Ours is fully self-hosted, zero vendor egress |
+| "the embedded incumbent has its estate-graph feature" | True, and it connects to systems. Our angle is offline + **path closure over time**, which neither its estate-graph feature nor the OWASP tool claims |
+| "a free offline scanner is free" | It uploads pseudonymised data to *their* servers. Ours is fully self-hosted, zero vendor egress |
 | "No data leaves SAP with an add-on" | Self-hosted; nothing egresses to us either. Prepare this answer, do not improvise it |
 | A fabricated SAP identifier ships | Phase 5's SAP-sourced importer is the structural fix. Until then every note number carries "as cited by [source]" |
 | Deployment grows past one compose file | That *is* the advantage. Treat a third service as a design failure |

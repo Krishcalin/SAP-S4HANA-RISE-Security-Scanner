@@ -982,8 +982,8 @@ passes corrected sixteen of them.
 |---|---|
 | [`PIVOT_PLAN.md`](docs/PIVOT_PLAN.md) | Architecture and the six phases, with rationale |
 | [`BUILD_ROADMAP.md`](docs/BUILD_ROADMAP.md) | Execution view: status, dependencies, exit criteria, non-goals |
-| [`COMPETITIVE_ANALYSIS.md`](docs/COMPETITIVE_ANALYSIS.md) | Onapsis, the market, and the attack-path design spec |
-| [`COMPETITOR_SECURITYBRIDGE.md`](docs/COMPETITOR_SECURITYBRIDGE.md) | SecurityBridge dossier |
+| [`COMPETITIVE_ANALYSIS.md`](docs/COMPETITIVE_ANALYSIS.md) | The platform incumbent, the market, and the attack-path design spec |
+| [`COMPETITOR_EMBEDDED_INCUMBENT.md`](docs/COMPETITOR_EMBEDDED_INCUMBENT.md) | The embedded incumbent dossier |
 | [`RISE_SECURITY_MODEL.md`](docs/RISE_SECURITY_MODEL.md) | Where SAP's contractual line sits; what a RISE customer can actually export |
 
 **Things that would be a mistake to build** (each is argued in the docs): real-time threat

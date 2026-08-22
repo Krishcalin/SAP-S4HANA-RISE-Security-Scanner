@@ -28,7 +28,7 @@
 
 Companion documents: [`COMPETITIVE_ANALYSIS.md`](COMPETITIVE_ANALYSIS.md) ·
 [`RISE_SECURITY_MODEL.md`](RISE_SECURITY_MODEL.md) ·
-[`COMPETITOR_SECURITYBRIDGE.md`](COMPETITOR_SECURITYBRIDGE.md)
+[`COMPETITOR_EMBEDDED_INCUMBENT.md`](COMPETITOR_EMBEDDED_INCUMBENT.md)
 
 ---
 
@@ -171,7 +171,7 @@ tenant
 |---|---|
 | `check_id` (PK), title, category, default severity, module, owning **team**, SAP Baseline requirement ID, framework mappings, references, risk narrative + remediation (from `finding_details.json`), CVE/CVSS where applicable | `fingerprint`, `check_id` (FK), `scan_run_id`, `system_id`, `client`, `affected_objects` (jsonb), computed severity + P-tier + `factors[]`, **lifecycle** |
 
-**Lifecycle columns** — Onapsis's occupancy of this space is the minimum credible set, plus one
+**Lifecycle columns** — the platform incumbent's occupancy of this space is the minimum credible set, plus one
 addition RISE forces:
 
 ```
@@ -402,9 +402,9 @@ Being crisp about these buys credibility for what we do claim:
 |---|---|
 | **Schema migrated twice** because the graph was treated as a later phase | Phase 1 lands the `affected_objects` contract before any UI work |
 | **"SAP Cloud ALM already does this"** | SAP's own docs: CSA *"is not meant to be an audit-proof tool by itself"*. Never compete on collection; make CSA an input |
-| **"SecurityBridge already has SAPMAP"** | True, and it connects to systems. Our angle is offline + **path closure over time**, which neither SAPMAP nor the OWASP tool claims |
-| **"offlinesec is free and does this"** | It uploads pseudonymised data to *their* servers. Ours is fully self-hosted, zero vendor egress, with landscape lifecycle, the graph and FAIR |
-| **"No data leaves SAP with an add-on"** (SecurityBridge's marketed virtue) | Self-hosted deployment; nothing egresses to us either. Prepare this answer, do not improvise it |
+| **"the embedded incumbent already has its estate-graph feature"** | True, and it connects to systems. Our angle is offline + **path closure over time**, which neither its estate-graph feature nor the OWASP tool claims |
+| **"a free offline scanner is free and does this"** | It uploads pseudonymised data to *their* servers. Ours is fully self-hosted, zero vendor egress, with landscape lifecycle, the graph and FAIR |
+| **"No data leaves SAP with an add-on"** (the embedded incumbent's marketed virtue) | Self-hosted deployment; nothing egresses to us either. Prepare this answer, do not improvise it |
 | **An inflated number is caught** | Fix the README `25+` claim in Phase 1. Docs are otherwise conservative vs code — keep them that way |
 | **A fabricated SAP identifier ships** | Phase 5's SAP-sourced content importer is the structural fix. Until then, every note number carries "as cited by [source]". **`CVE-2026-31431` is unverified — do not use it.** |
 | Ending the stdlib-only charter | One-way decision, recorded here. Single-digit dependency count as the discipline that replaces it |

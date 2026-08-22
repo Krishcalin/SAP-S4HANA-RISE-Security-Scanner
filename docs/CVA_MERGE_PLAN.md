@@ -65,8 +65,8 @@ comes across is *content and two algorithms*: the rule dicts, `_block_scan`, and
 so the *shape* of the coverage is right even where the implementation is shallow.
 
 **The differentiator is not the scanner.** Pattern parity with SAP's CVA is not
-winnable and not worth chasing: Onapsis (ex-Virtual Forge CodeProfiler),
-SecurityBridge and Fortify all ship global interprocedural flow analysis, and this
+winnable and not worth chasing: the platform incumbent (ex-Virtual Forge CodeProfiler),
+The embedded incumbent and a commercial SAST vendor all ship global interprocedural flow analysis, and this
 is intra-procedural and path-insensitive. Two claims are defensible instead.
 
 1. **Offline, over an export.** Every competitor — and SAP's own CVA — runs as an
@@ -401,8 +401,8 @@ globs; `team_for()` returning `unassigned` for every `ABAP-*` id. **[read]**
 **6 — `--data-flow` does not scale.** O(files × findings). **[measured]**
 → Bound it per object; taint only the 8 rules that use it.
 
-**7 — Competitive honesty.** Onapsis (ex-Virtual Forge CodeProfiler),
-SecurityBridge and Fortify all ship **global interprocedural** data- and
+**7 — Competitive honesty.** the platform incumbent (ex-Virtual Forge CodeProfiler),
+The embedded incumbent and a commercial SAST vendor all ship **global interprocedural** data- and
 control-flow analysis. This is intra-procedural and will stay that way. **[read]**
 → Do not claim parity. Claim the thing that is true and that they cannot do:
 offline, pre-ATC, over an export, with no connection to the SAP system.

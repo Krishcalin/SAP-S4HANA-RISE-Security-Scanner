@@ -104,7 +104,7 @@
 | [`docs/RELEASE_GATE.md`](docs/RELEASE_GATE.md) | Using the scanner as a CI gate — adoption order and policy |
 | [`docs/RISE_SECURITY_MODEL.md`](docs/RISE_SECURITY_MODEL.md) | Who can actually fix what in RISE, and why it decides the finding text |
 | [`docs/CVA_ENGINE_IMPROVEMENT_PLAN.md`](docs/CVA_ENGINE_IMPROVEMENT_PLAN.md) | The ABAP scanner's engine: what shipped, what was declined, what is unverified |
-| [`docs/COMPETITIVE_ANALYSIS.md`](docs/COMPETITIVE_ANALYSIS.md) | Where this sits against Onapsis, SecurityBridge and SAP's own tooling |
+| [`docs/COMPETITIVE_ANALYSIS.md`](docs/COMPETITIVE_ANALYSIS.md) | Where this sits against the platform incumbent, the embedded incumbent and SAP's own tooling |
 | [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md) · [`docs/BUILD_ROADMAP.md`](docs/BUILD_ROADMAP.md) | Product direction and build history |
 
 ---
@@ -1680,8 +1680,8 @@ SAP-S4HANA-RISE-Security-Scanner/
 │   ├── CVA_ENGINE_IMPROVEMENT_PLAN.md  # the ABAP engine: shipped / declined / unverified
 │   ├── PIVOT_PLAN.md               # Architecture + 6 phases, with rationale
 │   ├── BUILD_ROADMAP.md            # Execution view: status, dependencies, exit criteria
-│   ├── COMPETITIVE_ANALYSIS.md     # Onapsis, market, attack-path design spec
-│   ├── COMPETITOR_SECURITYBRIDGE.md
+│   ├── COMPETITIVE_ANALYSIS.md     # the platform incumbent, market, attack-path design spec
+│   ├── COMPETITOR_EMBEDDED_INCUMBENT.md
 │   └── RISE_SECURITY_MODEL.md      # SAP's contractual line; what a RISE customer can export
 ├── Dockerfile                      # Two stages: node:22-alpine builds the SPA → python:3.12-slim
 ├── docker-compose.yml              # app + PostgreSQL 16 — the entire deployment
