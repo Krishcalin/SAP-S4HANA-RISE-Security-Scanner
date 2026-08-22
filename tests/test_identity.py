@@ -652,3 +652,56 @@ def test_a_malformed_object_does_not_abort_node_extraction():
         {"type": "user", "name": "GOOD"},
     ]}], default_system="PRD")
     assert [n["key"] for n in nodes] == ["user:GOOD@PRD"]
+
+
+@pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")
+def test_every_emitted_object_type_is_registered():
+    """Completeness in the direction nothing was checking: from the MODULES inward.
+
+    `norm_name` has always said that "a new case-bearing type must be registered in
+    _CASE_SENSITIVE_TYPES — see test_identity.py, which asserts ... that every type
+    used by a shipped module is registered." No such test existed. The two
+    completeness tests above start from the REGISTRIES and ask whether each entry is
+    classified; neither starts from the modules and asks whether each type they emit
+    arrived deliberately.
+
+    Two had not. `business_partner` (master_data_changes, vendor_master) took the
+    unknown-type fallback for its whole life — harmlessly, because the fallback
+    upper-cases and a partner id is upper-case, which is exactly why nobody noticed.
+    `parameter` (webdisp_security) is worse: it duplicates `parameter_name`, so five
+    profile parameters an estate has once exist in the graph twice, and a path hop
+    declaring `parameter_name` sees half their evidence. See the comment on
+    `parameter` in server/identity.py for why it is registered rather than renamed.
+
+    A type reaching the fallback is not automatically wrong. Reaching it WITHOUT
+    anyone deciding is, because the dangerous direction is silent: the next
+    case-bearing type added would be upper-cased, merging two objects into one, and
+    no report would say so.
+    """
+    import contextlib
+    import importlib
+    import io
+
+    from modules.data_loader import DataLoader
+    from server.ingest import AUDITORS, RUN_CONTEXT
+
+    emitted: dict[str, set[str]] = {}
+    with contextlib.redirect_stdout(io.StringIO()):
+        data = DataLoader(SAMPLE).load_all()
+        for mod, cls in AUDITORS:
+            auditor = getattr(importlib.import_module(f"modules.{mod}"), cls)
+            for f in (auditor(data, None, RUN_CONTEXT).run_all_checks() or []):
+                for obj in (f.get("affected_objects") or []):
+                    t = obj.get("type") if isinstance(obj, dict) else getattr(obj, "type", None)
+                    if t:
+                        emitted.setdefault(str(t).strip().lower(), set()).add(f["check_id"])
+
+    assert emitted, "no module emitted a single structured object — the scan did not run"
+
+    registered = _UPPERCASE_TYPES | _CASE_SENSITIVE_TYPES
+    unregistered = {t: sorted(c)[:4] for t, c in emitted.items() if t not in registered}
+    assert not unregistered, (
+        "these object types are emitted by shipped modules but registered in neither "
+        f"case registry, so they take the unknown-type fallback undecided: {unregistered}. "
+        "Add each to _UPPERCASE_TYPES or _CASE_SENSITIVE_TYPES — the fallback may well "
+        "be the right rule, but it has to be chosen.")

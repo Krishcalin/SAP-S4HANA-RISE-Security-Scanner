@@ -282,7 +282,7 @@ console* reached main. Exactly one skip is expected and accounted for; more fail
 
 | Component | File | Status |
 |---|---|---|
-| Path templates as **content, not code** | `data/attack_paths.json` (7 paths) | ✅ |
+| Path templates as **content, not code** | `data/attack_paths.json` (13 paths) | ✅ |
 | Instantiation, cuts, chokepoints, closure | `server/graph.py` | ✅ |
 | `/paths` ranked list + choke-point table | `frontend/src/routes/Paths.tsx` | ✅ |
 | Per-path detail, SVG, mitigate-vs-additional | `frontend/src/routes/PathDetail.tsx` | ✅ |
@@ -348,6 +348,150 @@ customer integrations on SAP-branded SaaS — Ariba, SuccessFactors — stay the
 classification is labelled a **naming heuristic to confirm once per landscape**, not a fact SAP
 publishes. A wrong "SAP's problem" hides a real finding, which is worse than an extra one to
 dismiss.
+
+---
+
+## Phase 4 (depth) — the domains the graph could not see
+
+The seven templates reached **95 of the 241 checks** that fire on `sample_data`. A short list
+is the feature and 95 is not a shortfall in itself — but the 146 it did not reach were not
+scattered, they were whole risk domains, and the report did not say so.
+
+### The orphan that made this measurable
+
+`SAP-DATA-04` — *HANA data exfiltration → GDPR-regulated breach* — was **priced by the FAIR
+model and targeted by no path**. The seven ended at privilege (×3), interface (×2), RCE and
+fraud. The product put a currency figure on data exfiltration and the graph never showed a
+route to it, which reads as *exfiltration is not modelled* to anyone who looks.
+
+The existing test asserted the other direction — every path targets a real scenario — and
+passed happily on that state, because a dangling scenario id is visible and a missing path is
+not. `test_every_loss_scenario_is_reachable_by_some_path` closes it.
+
+### Six templates, SAPPATH-08 to SAPPATH-13
+
+| Path | Ends at | The domain it made visible |
+|---|---|---|
+| **08** Database-layer read beneath the ABAP authorization model | `SAP-DATA-04` | HANA data plane: `HANADB-PRIV-005` `_SYS_BI_CP_ALL`, `CRYPTO-HANA-*`, `DPP-MASK-*`, `DPP-RAL-002` |
+| **09** Emergency access without accountability | `SAP-PRIV-03` | Firefighter: `GRC-FF-*` ×7, `IAM-FF-*` ×5, `GRC-ARM-*`, `GRC-RS-*` |
+| **10** Integration edge to backend function | `SAP-INTF-05` | `INTG-APIM-*`, `INTG-WS-*`, `INTG-OAUTH-*`, `INTG-WH-*`, `INTG-IDOC-*`, `BTP-EM-*` |
+| **11** Stored credential over an unprotected channel | `SAP-INTF-05` | `CRYPTO-TLS/CERT/PSE/KEY/LIB`, `NET-003`, `INTG-TOPO-001` |
+| **12** Payee bank redirection | `SAP-FRAUD-02` | `MDC-BANK-001`, `MDC-DIRECT-001`, `VBM-BANK/SOLE`, `FIN-SF-001`, `FIN-DOC-001` |
+| **13** Gateway ACL to program execution on the host | `SAP-RCE-01` | `INTG-GW-001/003/004` — the 10KBLAZE pair, emitted and cited nowhere |
+
+Two of these are deliberately close to an existing path and are not variants of it:
+
+- **12 vs 06.** SAPPATH-06 asks whether one person holds conflicting duties. SAPPATH-12 asks
+  whether the field that decides where money goes is under dual control. They fail
+  independently — an estate can pass SoD analysis and still hold SAPPATH-12 — and their cuts
+  are different: 06 is cut by withdrawing an authorization, 12 by a T055F sensitive-field
+  setting that touches nobody's roles.
+- **13 vs 04.** SAPPATH-04 reaches the OS through an ABAP bridge and is cut by withdrawing
+  `S_LOG_COM`. SAPPATH-13 cannot be, because **no ABAP authority is checked at any step** — a
+  program the gateway starts or accepts a registration from runs with the rights of the SAP
+  system user on the host. They share a fix at the gateway and share nothing else.
+
+### A defect in SAPPATH-04, found by writing SAPPATH-13
+
+Its entry hop models the gateway condition and cited `INTG-GW-002`/`005` — *missing deny-all
+default* — but **not** `INTG-GW-001`, `003` or `004`, which are the checks that name the
+permit-all rule and unrestricted RFC-server registration. Two of the three are CRITICAL. The
+hop understated its own evidence, and because choke-point ranking groups over cut hops, the
+CRITICAL findings for the 10KBLAZE condition **never appeared in choke-point ranking at all**.
+All three are now cited on that hop.
+
+### Three guards, because two of these defects were content rot
+
+Both the orphaned scenario and the mis-cited hop are the same failure: content that drifted
+while every test kept passing. Each guard below was run against the state that shipped and
+**fails on it** — a guard verified only in the direction that passes is the defect it is
+supposed to catch.
+
+| Guard | Catches |
+|---|---|
+| `test_every_loss_scenario_is_reachable_by_some_path` | A priced scenario with no path — fails on the seven-template state, naming `SAP-DATA-04` |
+| `test_every_hop_node_type_is_a_registered_object_type` | A hop naming an object type no node can have. `node_types` was carried into `attack_path.detail`, rendered, and validated nowhere |
+| `test_every_emitted_object_type_is_registered` | An object type a shipped module emits that no registry classifies — fails on the shipped state, naming two |
+
+The third one starts from the **modules** and works inward. The two completeness tests that
+already existed start from the registries and ask whether each entry is classified; neither
+asked whether every type the modules emit arrived deliberately. `norm_name`'s own docstring
+had claimed such a test existed since the registries were written.
+
+### Two unregistered object types, one of them a live graph defect
+
+- **`business_partner`** (`master_data_changes`, `vendor_master`) took the unknown-type
+  fallback for its whole life. Harmlessly — the fallback upper-cases and a partner id is
+  upper-case — which is exactly why nobody noticed.
+- **`parameter`** (`webdisp_security`) **duplicates `parameter_name`.** Both name a profile
+  parameter, so identity is right either way, but the graph keys a node on `type:name@system`
+  and **five parameters an estate has once exist as two nodes**: `login/show_detailed_errors`,
+  `is/HTTP/show_detailed_errors`, `is/HTTP/show_server_header`, `rdisp/TRACE_HIDE_SEC_DATA`,
+  `service/protectedwebmethods`. A hop declaring `parameter_name` sees half their evidence and
+  choke-point ranking counts one estate object as two.
+
+Both are now **registered rather than renamed**, and the reason is recorded in
+`server/identity.py`: renaming `parameter` is an identity change. The fingerprints of
+`WDISP-001/002/004/005/007/008/011/012` would all move, and **`_rebase` cannot carry that
+history** — it rebases across a change of *basis*, and this change keeps the basis at
+`objects`. Widening `_rebase` to same-basis moves would be worse than the defect, because
+under `objects` basis a moved fingerprint normally means a genuinely different object, so it
+would attach one defect's history to another.
+
+> **OPEN — needs a decision.** Unifying `parameter` into `parameter_name` requires a one-off,
+> recorded identity migration mapping the eight WDISP fingerprints forward. Until then the
+> duplication is declared in the registry rather than silent, and both types are accepted.
+
+### `note` reached no reader
+
+`note` had been in the template schema since SAPPATH-04 shipped and stopped at
+`instantiate()`. Nothing failed, because an unrendered field type-checks exactly as well as a
+rendered one. It is the half of mitigate-vs-additional `why_cut` cannot carry: `why_cut` says
+what closing a step achieves, `note` most often says why closing it achieves nothing or why
+nobody would agree to it — *"withdrawing emergency access is not a remediation anyone will
+accept"*. Now carried through `instantiate` → `_detail` → `PathDetail.tsx`, guarded by
+`frontend/src/routes/PathDetail.test.tsx` including the absence case.
+
+### Measured, against a real PostgreSQL 16
+
+Rule 1 of this roadmap: no phase is done until its exit criterion passes against a real
+PostgreSQL, not a mock. It does.
+
+```
+3,942 pytest passed, 4 skipped (PostgreSQL 16.15)    27 vitest passed    tsc --noEmit clean
+```
+
+`sample_data` ingested through `server.cli scan` — 375 findings, 906 graph nodes — and **all
+13 templates instantiate, with every hop holding**:
+
+```
+SAPPATH-01..07   open   the seven that already shipped, unchanged
+SAPPATH-08  CRITICAL  SAP-DATA-04   6 hops, 6 holding    <- the scenario that had no path
+SAPPATH-09  HIGH      SAP-PRIV-03   5 hops, 5 holding
+SAPPATH-10  CRITICAL  SAP-INTF-05   5 hops, 5 holding
+SAPPATH-11  HIGH      SAP-INTF-05   4 hops, 4 holding
+SAPPATH-12  HIGH      SAP-FRAUD-02  5 hops, 5 holding
+SAPPATH-13  CRITICAL  SAP-RCE-01    5 hops, 5 holding
+```
+
+**The SAPPATH-04 repair is visible in the ranking**, which is the point of it. Choke-points on
+the same corpus now open:
+
+```
+check              cuts  severity   scenarios
+JOBCMD-CMD-001        2  CRITICAL   SAP-PRIV-03, SAP-RCE-01
+INTG-GW-004           2  CRITICAL   SAP-RCE-01      <- cut 0 paths before; absent from the list
+INTG-GW-001           2  CRITICAL   SAP-RCE-01      <- cut 0 paths before; absent from the list
+NET-005               2  CRITICAL   SAP-INTF-05, SAP-RCE-01
+```
+
+The two CRITICAL checks that name the 10KBLAZE condition were cited by no path at all, so they
+cut nothing and never reached the worklist a Basis reviewer actually works from. They now rank
+joint-top. `NET-005` earns its place across two scenarios because SAPPATH-10 cites it as well.
+
+`note` is confirmed carried into stored `detail`: 4 notes on SAPPATH-08, 3 on 09, 3 on 10,
+2 on 11, 3 on 12, 2 on 13 — and 1 on SAPPATH-04, the one that had been written into the
+content file and dropped on the floor since Phase 4.
 
 ---
 

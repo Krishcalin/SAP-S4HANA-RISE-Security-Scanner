@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "SAP attack-path templates. CONTENT, not code: a new path is a new entry here, never a code change. Each template names the checks that evidence each hop, so every hop is grounded in a check that already exists and a path can never claim more than the scanner actually detected.",
     "how_a_path_instantiates": "Every REQUIRED hop must have at least one OPEN finding in the landscape. Optional hops enrich a path but do not gate it. A path is therefore a statement that these conditions CO-EXIST, derived from exported configuration — never a claim that anything was traversed or validated. The console must say so.",
     "cut_semantics": "A hop marked cut=true appears on every variant of the path, so closing it disconnects the path. Non-cut hops reduce exploitability without severing it. This is the mitigate-vs-additional split: it needs no clever algorithm, only that each hop knows whether removing it disconnects.",
@@ -10,7 +10,12 @@
       "CVE-2025-31324 — SAP NetWeaver Visual Composer unauthenticated RCE (CISA KEV, 15 May 2025)",
       "SAP Help — Trusted system RFC and authorization object S_RFCACL",
       "SAP Help — Protecting standard users (SAP*, DDIC, EARLYWATCH)",
-      "SAP BTP connectivity documentation — principal propagation via Cloud Connector"
+      "SAP BTP connectivity documentation — principal propagation via Cloud Connector",
+      "SAP Help — HANA analytic privileges and the _SYS_BI_CP_ALL bypass",
+      "SAP Help — Sensitive fields and dual control for payee bank details (T055F)",
+      "SAP Help — Gateway access control lists reginfo/secinfo and gw/acl_mode",
+      "SAP Help — Message server ACL (ms/acl_info) and rogue application servers",
+      "SAP Secure Operations Map — transport protection as a control in its own right"
     ]
   },
   "paths": [
@@ -245,6 +250,9 @@
           "required": true,
           "cut": true,
           "checks": [
+            "INTG-GW-001",
+            "INTG-GW-004",
+            "INTG-GW-003",
             "INTG-GW-002",
             "INTG-GW-005",
             "TRUST-005",
@@ -261,7 +269,7 @@
             "icf_path",
             "parameter_name"
           ],
-          "why_cut": "A deny-all default in reginfo/secinfo severs the entire gateway branch in one change; deactivating one ICF node severs the web branch."
+          "why_cut": "A deny-all default in reginfo/secinfo severs the entire gateway branch in one change; deactivating one ICF node severs the web branch. The permit-all and unrestricted-registration checks are cited here too: they name the condition this hop models, and citing only the missing-deny-all checks understated the hop's evidence and kept its CRITICAL findings out of choke-point ranking entirely."
         },
         {
           "name": "OS command execution reachable",
@@ -521,6 +529,545 @@
             "user",
             "profile"
           ]
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-08",
+      "name": "Database-layer read beneath the ABAP authorization model",
+      "summary": "A principal holding privileges in the HANA database reads business data directly, below the layer where every S/4HANA access control is enforced.",
+      "narrative": "S/4HANA's authorization model lives in the ABAP layer. A database principal is not subject to it: no S_TABU_DIS check applies, no analytic privilege narrows the rows, and no Read Access Log records the read. The estate can be flawless at the application layer and this path still holds. It is also the route to the one loss scenario the model prices and the graph previously never reached — a path list that ends only in privilege and fraud implies data exfiltration is not modelled, which is the wrong thing for a report to imply.",
+      "fair_scenario": "SAP-DATA-04",
+      "severity": "CRITICAL",
+      "crosses_tier": false,
+      "hops": [
+        {
+          "name": "A database principal exists outside the ABAP layer",
+          "required": true,
+          "cut": false,
+          "checks": [
+            "HANADB-USER-001",
+            "HANADB-USER-002",
+            "HANADB-ROLE-001"
+          ],
+          "node_types": [
+            "hana_user",
+            "hana_role"
+          ],
+          "note": "Not a cut. Deactivating SYSTEM and DBADMIN is worth doing and does not disconnect anything: the path needs SOME database principal, and an estate always has several."
+        },
+        {
+          "name": "Its privileges reach business data directly",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "HANADB-PRIV-005",
+            "HANADB-PRIV-001",
+            "HANADB-PRIV-002",
+            "HANADB-PRIV-003",
+            "HANADB-PRIV-004",
+            "HANADB-PRIV-006"
+          ],
+          "node_types": [
+            "hana_user",
+            "hana_role",
+            "hana_privilege"
+          ],
+          "why_cut": "Revoking the data-reaching grants leaves the principal without a route to the rows. _SYS_BI_CP_ALL is the one to revoke first and the reason this hop is a cut at all: it defeats analytic privileges outright, so a user restricted to one company code in every calculation view reads all of them. DEBUG / ATTACH DEBUGGER belongs here for the same reason — attaching to a session reads the data that session holds, whatever the grants say."
+        },
+        {
+          "name": "A second, unmasked copy of the same data exists",
+          "required": false,
+          "cut": true,
+          "checks": [
+            "DPP-MASK-001",
+            "DPP-MASK-002"
+          ],
+          "node_types": [
+            "system"
+          ],
+          "why_cut": "Masking the non-production copy removes the data from that system, severing the branch that reaches production content through a system with non-production controls — without touching production. DPP-MASK-002 is the sharper of the two: it names systems identified as production COPIES, where the data is not merely similar but the same."
+        },
+        {
+          "name": "The data is readable where it rests",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "CRYPTO-HANA-001",
+            "CRYPTO-HANA-002",
+            "CRYPTO-HANA-004"
+          ],
+          "note": "Backup encryption is the one that most often decides the loss magnitude rather than the likelihood: a backup is the copy that leaves the estate by design, on media the SAP controls do not follow. These checks name no object because they are properties of the system, so this hop contributes no nodes to the graph."
+        },
+        {
+          "name": "The channel to the database is unprotected",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "HANADB-PARAM-003",
+            "HANADB-PARAM-005",
+            "CRYPTO-HANA-005"
+          ],
+          "node_types": [
+            "parameter_name"
+          ],
+          "note": "Cross-database (MDC) access matters here specifically: it turns a tenant boundary into a reachable one, so a principal in a non-production tenant is adjacent to the production tenant's data."
+        },
+        {
+          "name": "The read would not be recorded",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "HANADB-AUDIT-001",
+            "HANADB-AUDIT-002",
+            "HANADB-AUDIT-004",
+            "DPP-RAL-002",
+            "LOG-TBL-001"
+          ],
+          "node_types": [
+            "parameter_name",
+            "table"
+          ],
+          "note": "A read leaves no trace by default. Table change logging records writes, not reads, which is why Read Access Logging is named separately — for exfiltration it is the only control on this list that would have produced evidence."
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-09",
+      "name": "Emergency access without accountability",
+      "summary": "A firefighter ID grants unrestricted privilege on demand, and the review that makes that acceptable is performed by nobody, or by the person who used it.",
+      "narrative": "Emergency access is not a misconfiguration — it is a designed control, and the privilege is meant to be available. It stays a control only while an independent controller reviews what was done with it. Where the reviewer is the user, the design has inverted: the account with the highest privilege in the estate carries the least oversight, and it does so with an approved process wrapped around it. This is the path an auditor recognises fastest, because every finding on it is a control failure rather than a vulnerability, and it is the reason a path model cannot be built out of CVEs.",
+      "fair_scenario": "SAP-PRIV-03",
+      "severity": "HIGH",
+      "crosses_tier": false,
+      "hops": [
+        {
+          "name": "Emergency access is granted and used",
+          "required": true,
+          "cut": false,
+          "checks": [
+            "GRC-FF-001",
+            "GRC-FF-002",
+            "GRC-FF-003",
+            "IAM-FF-001",
+            "IAM-FF-002",
+            "IAM-FF-005"
+          ],
+          "node_types": [
+            "user"
+          ],
+          "note": "Deliberately not a cut. Withdrawing emergency access is not a remediation anyone will accept, and proposing it is how a report loses the reader."
+        },
+        {
+          "name": "Nobody independent reviews what it did",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "IAM-FF-003",
+            "IAM-FF-004",
+            "GRC-FF-001B",
+            "GRC-FF-002B",
+            "GRC-FF-002C",
+            "GRC-FF-004"
+          ],
+          "node_types": [
+            "user"
+          ],
+          "why_cut": "Restoring an independent controller and an enforced log review returns emergency access to being a control, which severs the path without withdrawing anyone's access or changing a single authorization. This is the cheapest cut in the whole path list and the one most likely to be actioned."
+        },
+        {
+          "name": "The grant itself bypassed approval",
+          "required": false,
+          "cut": true,
+          "checks": [
+            "GRC-ARM-001",
+            "GRC-ARM-001B",
+            "GRC-ARM-002"
+          ],
+          "node_types": [
+            "user"
+          ],
+          "why_cut": "Requiring an approver other than the requester stops the assignment being made at all, which is higher up the path than reviewing it afterwards. Self-approval is the specific case: the workflow ran, and it ran with one person in every role."
+        },
+        {
+          "name": "The risk it carries was never computed",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "GRC-RS-001",
+            "GRC-RS-002",
+            "GRC-RS-003",
+            "GRC-ARA-001",
+            "IAM-REV-002"
+          ],
+          "node_types": [
+            "user",
+            "sod_risk",
+            "review_campaign"
+          ],
+          "note": "A disabled critical risk in the rule set is the quiet one: the analysis runs, reports clean, and the conflict it was built to catch was switched off upstream. An empty result and a suppressed result read identically in every report that does not check for this."
+        },
+        {
+          "name": "The activity would not appear in the audit log",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "LOG-AUD-010",
+            "LOG-AUD-011",
+            "NET-008",
+            "LOG-RET-001"
+          ],
+          "node_types": [
+            "parameter_name"
+          ],
+          "note": "rsau/enable off, or enabled with no active filter, are different failures with the same effect. Integrity protection matters more here than elsewhere: the privilege on this path is sufficient to edit the log it would appear in."
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-10",
+      "name": "Integration edge to backend function",
+      "summary": "An endpoint that authenticates nobody reaches an RFC-enabled function in the backend, over a destination that authenticates as a stored technical user.",
+      "narrative": "The integration layer is where the authorization model is most often traded for throughput. A proxy in pass-through mode applies no policy by definition, and the destination behind it logs on as a technical account, so an anonymous request arrives in the backend already privileged. Neither end is misconfigured on its own terms — the proxy is doing what a proxy does and the destination is doing what a destination does — which is why this is invisible to any review that looks at one system at a time.",
+      "fair_scenario": "SAP-INTF-05",
+      "severity": "CRITICAL",
+      "crosses_tier": true,
+      "hops": [
+        {
+          "name": "An endpoint accepts requests without authenticating them",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "INTG-APIM-002",
+            "INTG-APIM-005",
+            "INTG-APIM-001",
+            "INTG-WS-003",
+            "NET-005"
+          ],
+          "node_types": [
+            "endpoint",
+            "url",
+            "function_module",
+            "icf_path"
+          ],
+          "why_cut": "Attaching an authentication policy at the proxy, or an auth handler to the service binding, ends the anonymous branch outright. It is a change on the edge and needs no backend change, which is what makes it the cut rather than the authorization work behind it."
+        },
+        {
+          "name": "It reaches a callable backend function",
+          "required": true,
+          "cut": false,
+          "checks": [
+            "INTG-WS-001",
+            "INTG-OAUTH-001",
+            "INTG-OAUTH-002"
+          ],
+          "node_types": [
+            "endpoint",
+            "function_module",
+            "oauth_client"
+          ],
+          "note": "A wildcard OAuth scope and a deprecated grant type belong on the same hop for different reasons: the first decides how much the token is worth, the second how easily one is obtained. The resource-owner-password grant in particular turns any harvested user credential into an API token."
+        },
+        {
+          "name": "The call carries a stored, shared credential",
+          "required": false,
+          "cut": true,
+          "checks": [
+            "NET-001",
+            "BTP-DST-001",
+            "INTG-CPI-DS-001"
+          ],
+          "node_types": [
+            "destination",
+            "btp_destination",
+            "cpi_datastore"
+          ],
+          "why_cut": "Principal propagation makes the backend see the real caller, so an anonymous request at the edge no longer arrives as a privileged technical user. It severs the path at the point where the caller's identity is currently discarded — which is also the point that makes the activity attributable afterwards."
+        },
+        {
+          "name": "Events fan out beyond the intended consumer",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "BTP-EM-001",
+            "BTP-EM-002",
+            "INTG-WH-002",
+            "INTG-WH-003",
+            "INTG-IDOC-003"
+          ],
+          "node_types": [
+            "event_queue",
+            "endpoint",
+            "url",
+            "idoc_partner"
+          ],
+          "note": "A wildcard topic subscription and a wildcard IDOC message type are the same defect in two technologies twenty years apart: the consumer decides what it receives, rather than the producer deciding what it releases. Unsigned webhooks add the inbound direction — without HMAC verification the endpoint cannot tell our own event from anyone else's."
+        },
+        {
+          "name": "The traffic is not monitored",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "INTG-MON-001",
+            "INTG-MON-002",
+            "LOG-SIEM-002"
+          ],
+          "note": "These checks name no object — they are properties of the monitoring configuration, not of an integration — so this hop adds no nodes."
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-11",
+      "name": "Stored credential over an unprotected channel",
+      "summary": "A technical user's credential is stored for a destination that offers no transport protection, between two systems whose trust relationship is exactly what the credential unlocks.",
+      "narrative": "This path states a precondition the others do not, and states it rather than assuming it: an adversary must already hold a position on the network between the two systems. No configuration export can show that, and we do not claim it — what the export shows is the cryptographic condition and the trust the credential would yield, and the exposure zone recorded against each system is what tells a reader whether the precondition is plausible in their estate. It is modelled at all because SAP's own Secure Operations Map treats transport protection as a control in its own right rather than as defence in depth, and because the credential on this path is typically a technical user with wide authorization and no interactive logon to notice.",
+      "fair_scenario": "SAP-INTF-05",
+      "severity": "HIGH",
+      "crosses_tier": true,
+      "hops": [
+        {
+          "name": "A credential is stored for an unprotected channel",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "NET-003",
+            "NET-001",
+            "BTP-DST-002"
+          ],
+          "node_types": [
+            "destination",
+            "btp_destination",
+            "url"
+          ],
+          "why_cut": "SNC on the RFC destination, or TLS verification on the BTP destination, protects the credential in flight. The credential can stay exactly where it is, which is what makes this actionable in a landscape where removing stored logons breaks interfaces nobody owns any more."
+        },
+        {
+          "name": "Transport protection is weak where it is enabled",
+          "required": true,
+          "cut": false,
+          "checks": [
+            "CRYPTO-TLS-001",
+            "CRYPTO-TLS-002",
+            "CRYPTO-TLS-003",
+            "CRYPTO-LIB-001",
+            "CRYPTO-PSE-001",
+            "HANADB-PARAM-003",
+            "CRYPTO-HANA-005",
+            "INTG-IDOC-001",
+            "INTG-APIM-003",
+            "INTG-APIM-004",
+            "INTG-TOPO-001"
+          ],
+          "node_types": [
+            "endpoint",
+            "crypto_library",
+            "file",
+            "parameter_name",
+            "idoc_port",
+            "system"
+          ],
+          "note": "Deliberately excludes CRYPTO-SNCECS-000. That finding says the SNC posture COULD NOT BE ASSESSED from the export supplied, and a hop that holds because we cannot see would let a path instantiate on our own blind spot. Missing evidence is reported as coverage, never as evidence."
+        },
+        {
+          "name": "The trust anchors cannot be relied on",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "CRYPTO-CERT-001",
+            "CRYPTO-CERT-003",
+            "CRYPTO-KEY-001",
+            "BTP-CC-005",
+            "BTP-CC-006"
+          ],
+          "node_types": [
+            "certificate",
+            "cc_backend"
+          ],
+          "note": "An expired certificate usually presents as an outage rather than a breach — its risk here is the workaround it provokes, because verification switched off to restore an interface is rarely switched back on."
+        },
+        {
+          "name": "The credential unlocks a trust relationship",
+          "required": false,
+          "cut": true,
+          "checks": [
+            "TRUST-001",
+            "TRUST-002",
+            "TRUST-003",
+            "TRUST-004"
+          ],
+          "node_types": [
+            "trusted_system",
+            "destination",
+            "parameter_name",
+            "user"
+          ],
+          "why_cut": "Migrating the trust relationship to the current security method, and removing the fixed logon user from the trusted destination, means a captured credential no longer yields a logon in the target. Self-trust is the case worth naming: a system that trusts itself turns any callback into an authenticated session."
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-12",
+      "name": "Payee bank redirection",
+      "summary": "A payee's bank account is changed, the field that decides where money goes is not under dual control, and the change leaves little trail.",
+      "narrative": "The oldest SAP fraud there is. It needs no vulnerability, no privilege escalation and no code, and every step is a legitimate business transaction performed by an account entitled to perform it — which is why it is invisible to any tool reasoning about CVEs and roles alone. It is deliberately distinct from the segregation-of-duties path: that one asks whether one person holds conflicting duties, this one asks whether the specific field that decides the destination of a payment is protected, and those fail independently. An estate can pass SoD analysis and still hold this path.",
+      "fair_scenario": "SAP-FRAUD-02",
+      "severity": "HIGH",
+      "crosses_tier": false,
+      "hops": [
+        {
+          "name": "Payee bank details are being changed",
+          "required": true,
+          "cut": false,
+          "checks": [
+            "MDC-BANK-001",
+            "VBM-SOLE-001"
+          ],
+          "node_types": [
+            "business_partner",
+            "user"
+          ],
+          "note": "Not a cut, and not by itself a finding of fraud. Bank details change for ordinary reasons; the path is what surrounds the change, not the change."
+        },
+        {
+          "name": "The field is not under dual control",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "FIN-SF-001",
+            "FIN-DOC-001"
+          ],
+          "node_types": [
+            "document_field"
+          ],
+          "why_cut": "Sensitive-field control (T055F) requires a second person to confirm a bank-detail change before it is effective for payment. It severs the path precisely at the step that decides where the money goes, and it does so without changing anyone's roles — which is why it succeeds where the SoD remediation on SAPPATH-06 stalls."
+        },
+        {
+          "name": "The change bypassed the application layer",
+          "required": false,
+          "cut": true,
+          "checks": [
+            "MDC-DIRECT-001"
+          ],
+          "node_types": [
+            "user"
+          ],
+          "why_cut": "Withdrawing direct table maintenance on the bank-detail tables forces every change through the transaction that enforces dual control. A control in the application layer is not a control if the table underneath it can be edited directly, so this cut is what makes the dual-control cut above hold."
+        },
+        {
+          "name": "One account is shared by several payees",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "VBM-BANK-001"
+          ],
+          "node_types": [
+            "business_partner"
+          ],
+          "note": "Legitimate for a factoring arrangement or a shared service centre, and a classic redirection signature otherwise. It is on the path as corroboration, never as the finding on its own."
+        },
+        {
+          "name": "The trail is thin",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "LOG-TBL-001",
+            "LOG-TBL-010",
+            "FIN-EVD-001",
+            "FIN-EVD-003",
+            "IAM-REV-002"
+          ],
+          "node_types": [
+            "table",
+            "parameter_name",
+            "user",
+            "review_campaign"
+          ],
+          "note": "rec/client unset is the master switch: with it off, table change logging is inactive regardless of what each table's own setting says, so a table that looks logged is not."
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-13",
+      "name": "Gateway ACL to program execution on the host",
+      "summary": "An unauthenticated gateway accepts a rogue RFC server registration, or starts an external program, and the program runs on the application-server host.",
+      "narrative": "This is the condition CISA AA19-122A describes as 10KBLAZE, and it is the one path in this list that never touches the ABAP authorization model — the gateway is a network service, and a program it starts or accepts a registration from runs with the rights of the SAP system user on the host. That is what makes it distinct from the exposed-surface path rather than a variant of it: that path reaches the operating system through an ABAP bridge and can be cut by withdrawing S_LOG_COM, and this one cannot, because no ABAP authority is checked at any step. The two share a fix at the gateway and share nothing else.",
+      "fair_scenario": "SAP-RCE-01",
+      "severity": "CRITICAL",
+      "crosses_tier": false,
+      "hops": [
+        {
+          "name": "The gateway accepts what it should refuse",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "INTG-GW-001",
+            "INTG-GW-004",
+            "INTG-GW-003",
+            "INTG-GW-002",
+            "INTG-GW-005"
+          ],
+          "node_types": [
+            "gateway",
+            "program"
+          ],
+          "why_cut": "reginfo and secinfo with a deny-all default and specific permits are the whole control. It is a file change on the gateway host, needs no ABAP transport and no downtime beyond a gateway restart, which makes it the cheapest cut on any CRITICAL path here. A permit-all rule (P TP=* HOST=* USER=*) is the exact 10KBLAZE condition rather than an approximation of it."
+        },
+        {
+          "name": "The ACL is not enforced at all",
+          "required": false,
+          "cut": true,
+          "checks": [
+            "BASELINE-007",
+            "TRUST-008"
+          ],
+          "node_types": [
+            "parameter_name"
+          ],
+          "why_cut": "gw/acl_mode makes the gateway apply reginfo and secinfo even when a rule file is absent. Without it a correct ACL is only as durable as the file, and the failure mode is silent: remove the file and the control is gone with no error anywhere."
+        },
+        {
+          "name": "A rogue application server can join the instance",
+          "required": false,
+          "cut": true,
+          "checks": [
+            "TRUST-010",
+            "TRUST-006",
+            "TRUST-005"
+          ],
+          "node_types": [
+            "parameter_name"
+          ],
+          "why_cut": "ms/acl_info restricting registration to known hosts stops a rogue application server joining, which is the variant of this path that survives a correct gateway ACL — a server inside the instance is past the gateway rather than in front of it."
+        },
+        {
+          "name": "The host reaches the database",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "HANADB-USER-001",
+            "HANADB-PRIV-002",
+            "HANADB-PARAM-003"
+          ],
+          "node_types": [
+            "hana_user",
+            "hana_privilege",
+            "parameter_name"
+          ],
+          "note": "Where this path meets SAPPATH-08: execution on the host is adjacent to the database, and what it yields there is decided by the grants on that path rather than by anything on this one."
+        },
+        {
+          "name": "Nothing would record it",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "NET-008",
+            "LOG-AUD-010",
+            "HANADB-AUDIT-001"
+          ],
+          "node_types": [
+            "parameter_name"
+          ],
+          "note": "The Security Audit Log records ABAP events. A registered program that never logs on to ABAP produces none, which is why gateway logging (gw/logging) is the control that would actually have seen this — and no export we read today carries it."
         }
       ]
     }

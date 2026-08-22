@@ -129,6 +129,12 @@ def instantiate(conn, landscape_id: int,
                 "why_cut": hop.get("why_cut"),
                 "checks": hop.get("checks", []),
                 "node_types": hop.get("node_types", []),
+                # Authored commentary on the hop. Usually the reason a hop is NOT a
+                # cut — "withdrawing emergency access is not a remediation anyone
+                # will accept" — which is the half of mitigate-vs-additional that
+                # `why_cut` cannot carry, because it is about the hops that do not
+                # sever anything.
+                "note": hop.get("note"),
                 "present": present,
                 "findings": evidence,
             })
@@ -248,7 +254,8 @@ def _detail(p: Dict[str, Any]) -> Dict[str, Any]:
         "system_ids": p["system_ids"],
         "hops": [{
             "name": h["name"], "required": h["required"], "is_cut": h["is_cut"],
-            "why_cut": h["why_cut"], "present": h["present"],
+            "why_cut": h["why_cut"], "note": h.get("note"),
+            "present": h["present"],
             "checks": h["checks"],
             "finding_ids": [f["id"] for f in h["findings"]],
             "evidence": [{"id": f["id"], "check_id": f["check_id"],

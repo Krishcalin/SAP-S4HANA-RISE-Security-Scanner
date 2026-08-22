@@ -654,7 +654,9 @@ wrong in that way.
 - *Attack paths are templates in `data/attack_paths.json`, i.e. CONTENT.* Adding a path is a
   data change, never a code change, and every hop must cite checks that already exist. A
   required hop citing a check no module emits produces a path that silently never
-  instantiates — `tests/test_graph_paths.py` fails on it.
+  instantiates — `tests/test_graph_paths.py` fails on it. So does a hop naming an object type
+  no registry knows, and so does a FAIR scenario that no path reaches: a priced loss with no
+  route to it reads as "not modelled", and the reverse test passes happily on that state.
 - *Never claim a path was traversed.* We hold no connection and never will. Paths carry
   `derived_from_config` and the UI repeats it.
 - *A saved view stores FILTERS, never rows*, and the filter keys are an allowlist. Opening a

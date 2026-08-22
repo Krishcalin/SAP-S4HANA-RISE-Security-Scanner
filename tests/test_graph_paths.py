@@ -112,6 +112,57 @@ def test_required_hops_cite_checks_the_scanner_can_actually_emit():
         f"instantiate:\n  " + "\n  ".join(problems))
 
 
+def test_every_hop_node_type_is_a_registered_object_type():
+    """`node_types` is carried into `attack_path.detail` and rendered, and was
+    validated nowhere. A hop naming a type no object ever has renders a filter that
+    matches nothing, and nothing fails — the same shape as a test that cannot fail.
+
+    Checked against the case registries rather than against the types the sample
+    fixture happens to emit. Those are different questions: an optional hop may cite
+    a check no export in this repository triggers, and its type is still correct.
+    Asserting against the fixture would make coverage of the sample data look like
+    correctness of the content, which is the confusion the `used`-edge counts exist
+    to avoid elsewhere.
+    """
+    from server.identity import _CASE_SENSITIVE_TYPES, _UPPERCASE_TYPES
+
+    registered = _UPPERCASE_TYPES | _CASE_SENSITIVE_TYPES
+    unknown = []
+    for p in load_templates()["paths"]:
+        for h in p["hops"]:
+            for t in h.get("node_types") or []:
+                if t not in registered:
+                    unknown.append(f"{p['id']} / {h['name']}: {t}")
+    assert not unknown, (
+        "hops declare object types that no registry knows, so they can never "
+        "match a node: " + "; ".join(unknown))
+
+
+def test_every_loss_scenario_is_reachable_by_some_path():
+    """The orphan this was written for: SAP-DATA-04 — HANA data exfiltration to a
+    GDPR-regulated breach — was priced by the FAIR model and targeted by none of the
+    seven templates. The product put a currency figure on data exfiltration and the
+    graph never showed a route to it.
+
+    The reverse test (every path targets a real scenario) already existed and passes
+    happily on that state, because a dangling scenario id is visible and a missing
+    path is not. A reader seeing paths that end only in privilege, fraud, RCE and
+    interface compromise would reasonably conclude exfiltration is not modelled.
+
+    Deliberately strict. If a scenario is genuinely unreachable by configuration
+    alone, the honest response is to say so in data/fair_scenarios.json and retire
+    the scenario — not to leave it priced and unreachable.
+    """
+    scenarios = {s["id"]: s.get("name", "") for s in json.loads(
+        (ROOT / "data" / "fair_scenarios.json").read_text(encoding="utf-8"))["scenarios"]}
+    targeted = {p["fair_scenario"] for p in load_templates()["paths"]}
+    orphaned = sorted(set(scenarios) - targeted)
+    assert not orphaned, (
+        "these loss scenarios are priced but no path reaches them: "
+        + ", ".join(f"{s} ({scenarios[s]})" for s in orphaned)
+        + " — the report would quantify a loss it never shows a route to.")
+
+
 def test_the_ruleset_fingerprint_moves_only_when_the_rules_do():
     a = ruleset_fingerprint()
     assert a == ruleset_fingerprint(), "fingerprint is not stable"

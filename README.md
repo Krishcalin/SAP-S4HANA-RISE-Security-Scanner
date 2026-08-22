@@ -1662,7 +1662,7 @@ SAP-S4HANA-RISE-Security-Scanner/
 ├── data/
 │   ├── finding_details.json        # Knowledge base: 380 entries — detailed risk + remediation per check
 │   ├── fair_scenarios.json         # FAIR catalog: 5 SAP loss scenarios + factor/loss ranges (--crq)
-│   ├── attack_paths.json           # 7 SAP attack-path templates (content, not code)
+│   ├── attack_paths.json           # 13 SAP attack-path templates (content, not code)
 │   ├── ecs_hardening_3250501.json  # SAP Note 3250501: 92 parameters + 18 config items, facts only
 │   └── sap_baseline_requirements.json  # Derived from SAP's published CSA policies; CI fails on drift
 ├── tests/                          # 3,253 tests across 96 files
