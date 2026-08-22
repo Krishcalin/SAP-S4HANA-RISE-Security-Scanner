@@ -752,9 +752,31 @@ jobs:
           ingest.scan_directory(Path("sample_data"), land, sysid, run,
                                 deployment_mode="rise_pce",
                                 default_sid="SED", default_client="100")
+          # A SECOND SYSTEM AND A SECOND LANDSCAPE, both otherwise empty.
+          #
+          # Two suites skipped for want of them and the job stayed green, which is
+          # the precise failure the guard below exists to catch -- it just could not
+          # see these two, because they skip on DATA rather than on a missing
+          # DB_DSN. A row-scoping test needs some system that is NOT the one
+          # holding the finding, to scope a viewer to; the coverage-narrowing test
+          # needs two landscapes to tell a union from a narrowing. With one of
+          # each, a scoping test that never exercised scoping reported success.
+          #
+          # Neither needs findings of its own: the assertions are about what the
+          # narrowing EXCLUDES.
+          db.execute("INSERT INTO sap_system (landscape_id, sid, client, tier) "
+                     "VALUES (%s,'SE2','200','dev')", (land,))
+          db.execute("INSERT INTO landscape (name, deployment_mode) "
+                     "VALUES ('seed-second','rise_pce')")
+
           n = db.one("SELECT count(*) AS n FROM finding")["n"]
           assert n > 0, "the seed produced no findings — the data-dependent suites would still skip"
-          print(f"seeded {n} findings")
+          systems = db.one("SELECT count(*) AS n FROM sap_system")["n"]
+          landscapes = db.one("SELECT count(*) AS n FROM landscape")["n"]
+          assert systems >= 2 and landscapes >= 2, (
+              "the scoping and narrowing suites need a second system and a second "
+              "landscape or they skip, and the job goes green having tested neither")
+          print(f"seeded {n} findings, {systems} systems, {landscapes} landscapes")
           PY
 
       - name: Run the full test suite
@@ -774,9 +796,13 @@ jobs:
           done
           if grep -qE '[0-9]+ skipped' /tmp/pytest.out; then
             skipped=$(grep -oE '[0-9]+ skipped' /tmp/pytest.out | head -1)
-            # One skip is expected and accounted for (a scanner test that needs
-            # an optional sibling engine). More than that means the DB-backed
-            # suites are silently not running.
+            # The seed above now creates a second system and a second landscape,
+            # so the scoping and narrowing suites RUN rather than skip: the
+            # expected number here is zero. One is tolerated for a scanner test
+            # that needs an optional sibling engine, which is absent on some
+            # runners. More than that means a DB-backed suite is silently not
+            # running -- and a suite that skips is worse than one that does not
+            # exist, because it LOOKS verified.
             count=${skipped%% *}
             if [ "$count" -gt 1 ]; then
               echo "::error::$skipped — the DB-backed suites are not executing. A suite that silently skips is worse than one that does not exist, because it LOOKS verified."

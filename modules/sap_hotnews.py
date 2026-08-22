@@ -1255,7 +1255,10 @@ class SapHotNewsAuditor(BaseAuditor):
                 continue
             if not record.get("checked_by_sap_policy"):
                 continue
-            missing.append(record | {"note": note})
+            # `{**a, **b}` rather than `a | b`: the dict-merge operator is
+            # PEP 584, Python 3.9+, and the stdlib-only CI job runs a 3.8
+            # matrix entry. This raised TypeError there and nowhere else.
+            missing.append({**record, "note": note})
         if not missing:
             return
         items = [

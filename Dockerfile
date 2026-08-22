@@ -20,6 +20,22 @@ RUN npm run build
 
 FROM python:3.12-slim
 
+# SECURITY UPDATES FROM THE BASE DISTRIBUTION, applied at build time.
+#
+# `python:3.12-slim` is rebuilt on its own cadence, so between rebuilds it
+# carries whatever Debian has since fixed. Trivy is run over this image in CI
+# with `ignore-unfixed: true` -- meaning it reports ONLY vulnerabilities with a
+# published fix -- and it was failing on 36 findings across nine util-linux
+# packages, every one of them fixed upstream and none of them reachable through
+# anything this image runs. Shipping a security product on a base with known,
+# fixable CVEs is indefensible regardless of reachability, because the customer
+# scanning our image cannot tell the difference and should not have to.
+#
+# `upgrade`, not `dist-upgrade`: this takes security fixes within the release and
+# will not pull in a new one. No package is installed, so the runtime dependency
+# count -- the property the single-container design rests on -- does not move.
+RUN apt-get update  && apt-get upgrade -y --no-install-recommends  && apt-get clean  && rm -rf /var/lib/apt/lists/*
+
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 
 WORKDIR /app

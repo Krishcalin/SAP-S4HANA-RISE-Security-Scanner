@@ -105,6 +105,26 @@ def _literal_kwarg(call: ast.Call, name: str):
     return None
 
 
+def _subscript_key(sub: ast.Subscript):
+    """The key of `d["x"]`, on every interpreter in the matrix.
+
+    PYTHON 3.8 WRAPS IT IN `ast.Index`; 3.9 removed the wrapper with the new
+    parser, so `sub.slice` IS the Constant from 3.9 onward. Testing
+    `isinstance(sub.slice, ast.Constant)` therefore answers False on 3.8 and True
+    everywhere else -- and this generator walks source to decide which coverage
+    checks arm the release gate, so on 3.8 it silently found seven fewer helpers
+    and produced a SHORTER table. The committed document matched 3.9+, the
+    `--check` guard compared them, and only the 3.8 matrix entry ever failed.
+
+    A tool that reads source has to read it the same way on every interpreter it
+    is run on, or its output becomes a property of the runner.
+    """
+    node = sub.slice
+    if node.__class__.__name__ == "Index":      # 3.8 only
+        node = node.value                        # type: ignore[attr-defined]
+    return node
+
+
 def _is_finding_call(call: ast.Call) -> bool:
     fn = call.func
     return (fn.attr if isinstance(fn, ast.Attribute)
@@ -147,8 +167,8 @@ def collect(module: Path):
             assigns_flag = any(
                 isinstance(sub, ast.Assign)
                 and any(isinstance(tgt, ast.Subscript)
-                        and isinstance(tgt.slice, ast.Constant)
-                        and tgt.slice.value == "degrades_coverage"
+                        and isinstance(_subscript_key(tgt), ast.Constant)
+                        and _subscript_key(tgt).value == "degrades_coverage"
                         for tgt in sub.targets)
                 for sub in ast.walk(node))
             if assigns_flag:
