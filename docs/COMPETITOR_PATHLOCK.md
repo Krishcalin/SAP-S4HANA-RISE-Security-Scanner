@@ -469,8 +469,33 @@ Their sharpest true argument, which we should expect to meet:
 2. **Delete any RISE-forbids-add-ons argument.** Replace with the four
    operational frictions in §1.3, which are true and checkable.
 3. **Stop treating permission-level SoD as a differentiator.** It is table
-   stakes. Our 36 risks against their 207 is the gap to close or to scope
-   deliberately — the honest line is depth-per-risk and provenance, not breadth.
+   stakes. But do **not** answer 36-against-207 by racing on breadth — see
+   [`SOD_REFERENCE.md`](SOD_REFERENCE.md) §1, which found the better answer:
+
+   * **SAP's own documented bias is to OVER-report.** `verified`, AC 12.0
+     §8.2.1.1: *"From a control perspective, it is much better to over-report
+     (causing false positives) rather than under-report (causing false
+     negatives)."* Pathlock's stated differentiator is reducing false
+     positives. **They are competing on the axis SAP explicitly warns against
+     optimising.** The defensible claim is precision *with* recall — suppress a
+     conflict only when the engine can name the org field and value that makes
+     execution impossible, and print that reason on the row.
+   * **Ruleset COVERAGE is measurable and nobody publishes it.** SAP ships
+     three reports that measure what a ruleset cannot see — actions in roles
+     but not in rules, permissions in roles but not in rules, and embedded
+     transaction calls in custom programs. A conflict report is only as
+     trustworthy as the fraction of the estate its ruleset can see. Computing
+     that fraction from data we already parse (`AGR_1251`, `role_auth_values`,
+     `custom_code_scan`) and printing it beside every result is available to us
+     now, and **no vendor publishes a coverage number, including Pathlock**
+     (§5: no public evidence on ruleset quality or false-positive rates across
+     14 named sources).
+   * **Ruleset validation is a gap in published guidance.** AS 1105.10 obliges
+     testing the query logic; PCAOB SAPA 11 names failure to test it as an
+     inspection finding; AS 2201 ¶.B30 forbids benchmarking it away. The SoD
+     ruleset *is* that query logic — and no source describes how anyone
+     validates one. A rulebook that carries its own evidence is a product
+     nobody else is selling.
 4. **The offline-export model remains genuinely differentiated**, but on
    operational grounds: no transport, no add-on, no upgrade gating, no support
    triangle. Not on "they cannot do it".
