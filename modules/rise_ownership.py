@@ -95,6 +95,13 @@ TEAM_BY_PREFIX: List[Tuple[str, str]] = [
     ("WDISP-", "basis"),   # instance profile maintenance
     ("UCON-", "integration"),   # remote-callable exposure is interface work
     ("RES-", "basis"),
+    # SoD ruleset coverage. `authorizations`, alongside ARA- and RG-, because
+    # every action it produces is "put this transaction in a rule" or "decide
+    # this custom transaction's risk" — role and ruleset work, not Basis work.
+    # Registered here BEFORE the first finding could reach a database: an
+    # invalid value in this table costs nothing until the prefix is used, which
+    # is exactly how CSA- stayed wrong through five red CI runs.
+    ("SODCOV-", "authorizations"),
 ]
 
 #: Check families the CUSTOMER cannot change in a RISE tenant, because SAP operates

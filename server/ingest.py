@@ -76,6 +76,9 @@ AUDITORS: List[Tuple[str, str]] = [
     ("baseline_params", "BaselineParamAuditor"),
     ("s4_business_authz", "S4BusinessAuthzAuditor"),
     ("access_risk_analysis", "AccessRiskAnalysisAuditor"),
+    # Immediately after, because it measures the ruleset that one just
+    # used and the two numbers are one statement.
+    ("ruleset_coverage", "RulesetCoverageAuditor"),
     ("basis_job_command", "BasisJobCommandAuditor"),
     ("grc_access_control", "GrcAccessControlAuditor"),
     ("role_governance", "RoleGovernanceAuditor"),

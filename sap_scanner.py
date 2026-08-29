@@ -56,6 +56,7 @@ from modules.webdisp_security import WebDispatcherAuditor
 from modules.baseline_params import BaselineParamAuditor
 from modules.s4_business_authz import S4BusinessAuthzAuditor
 from modules.access_risk_analysis import AccessRiskAnalysisAuditor
+from modules.ruleset_coverage import RulesetCoverageAuditor
 from modules.basis_job_command import BasisJobCommandAuditor
 from modules.report_generator import ReportGenerator
 from modules.pdf_report import PDFReportGenerator
@@ -532,6 +533,19 @@ def main():
     if "ara" in run_modules:
         print("[*] Running Access Risk Analysis (permission-level SoD, critical access, mitigations)...")
         auditor = AccessRiskAnalysisAuditor(data, baseline_overrides, run_ctx)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- SoD Ruleset Coverage ---
+    #
+    # Runs AFTER ara, deliberately. It measures the ruleset ara just used, and
+    # the number is only meaningful beside the conflicts it qualifies: "no
+    # conflicts found" and "the ruleset sees 86% of your transactions" are one
+    # statement, not two.
+    if "sodcov" in run_modules:
+        print("[*] Running SoD Ruleset Coverage (what fraction of this estate the ruleset can see)...")
+        auditor = RulesetCoverageAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")

@@ -51,6 +51,17 @@ from typing import Dict
 SAMPLE_DATA = "sample_data"
 
 #: The scan the data-dependent suites read.
+#:
+#: SUFFIXED PER RUN, because `landscape.name` carries a UNIQUE constraint and a
+#: fixed name makes the second invocation against the same database fail with
+#: `duplicate key value violates unique constraint "landscape_name_key"`. CI
+#: never saw it — its database is new every time — so this surfaced only on the
+#: local workflow this tool exists to enable, on the second run.
+#:
+#: Suffixing rather than deleting: a developer's test database may hold work
+#: they care about, and a fixture that quietly truncates is a worse failure
+#: than one that errors. Every assertion below is a FLOOR (>= 2 systems, >= 2
+#: landscapes), so accumulating seeds across runs is harmless.
 SEED_LANDSCAPE = "seed"
 SEED_SID = "SED"
 SEED_CLIENT = "100"
@@ -64,12 +75,19 @@ SECOND_CLIENT = "200"
 SECOND_LANDSCAPE = "seed-second"
 
 
+def _unique(name: str) -> str:
+    """A name no previous run can already hold."""
+    import time
+    return "%s-%d" % (name, int(time.time() * 1000) % 100000000)
+
+
 def seed(root: Path | None = None) -> Dict[str, int]:
     """Create the fixture. Returns the counts, and raises if any is short.
 
-    Idempotent only in the sense that running it twice yields a second seed
-    landscape rather than an error — which is harmless, since every assertion
-    below is a floor rather than an equality.
+    Safe to run repeatedly against the same database: the landscape names are
+    suffixed per run, so a second invocation adds a second fixture rather than
+    colliding on `landscape_name_key`. Every assertion is a floor, so the extra
+    rows change nothing the suites depend on.
     """
     root = root or Path.cwd()
     if str(root) not in sys.path:
@@ -81,7 +99,8 @@ def seed(root: Path | None = None) -> Dict[str, int]:
 
     landscape = db.one(
         "INSERT INTO landscape (name, deployment_mode) "
-        "VALUES (%s,%s) RETURNING id", (SEED_LANDSCAPE, SEED_MODE))["id"]
+        "VALUES (%s,%s) RETURNING id",
+        (_unique(SEED_LANDSCAPE), SEED_MODE))["id"]
     system = db.one(
         "INSERT INTO sap_system (landscape_id, sid, client, tier) "
         "VALUES (%s,%s,%s,'prod') RETURNING id",
@@ -98,7 +117,7 @@ def seed(root: Path | None = None) -> Dict[str, int]:
                "VALUES (%s,%s,%s,'dev')",
                (landscape, SECOND_SID, SECOND_CLIENT))
     db.execute("INSERT INTO landscape (name, deployment_mode) VALUES (%s,%s)",
-               (SECOND_LANDSCAPE, SEED_MODE))
+               (_unique(SECOND_LANDSCAPE), SEED_MODE))
 
     counts = {
         "findings": db.one("SELECT count(*) AS n FROM finding")["n"],

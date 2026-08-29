@@ -133,6 +133,10 @@ class ComplianceMapper:
         "Password Policy": ["authentication"],
         "Fiori & UI Layer": ["app-runtime", "access-control"],
         "Access Risk Analysis (SoD)": ["sod", "access-control"],
+        # The measurement of that ruleset answers the same controls it
+        # does: an auditor asking "is SoD covered" is asking about both
+        # the conflicts found and the fraction of the estate searched.
+        "SoD Ruleset Coverage": ["sod", "access-control"],
         "Financial Controls (SOX)": ["sod", "change-management", "access-control"],
     "Master Data Change Audit": ["change-management", "sod"],
     "Vendor & Bank Master Integrity": ["sod", "change-management"],

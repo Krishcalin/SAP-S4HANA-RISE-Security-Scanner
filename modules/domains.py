@@ -174,7 +174,8 @@ DOMAINS: List[Dict[str, Any]] = [
         "scope": None,
         "blurb": "Segregation-of-duties conflicts and critical access, at "
                  "permission level rather than transaction level.",
-        "categories": ["Access Risk Analysis (SoD)", "GRC Access Control"],
+        "categories": ["Access Risk Analysis (SoD)", "GRC Access Control",
+                       "SoD Ruleset Coverage"],
     },
     {
         "id": "transport",

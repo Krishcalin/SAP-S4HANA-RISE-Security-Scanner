@@ -43,7 +43,7 @@ def measured():
 #  The published claim                                                        #
 # --------------------------------------------------------------------------- #
 
-def test_fourteen_auditors_are_identical_on_ecc(measured):
+def test_fifteen_auditors_are_identical_on_ecc(measured):
     """THE NUMBER docs/ECC_COVERAGE.md PUBLISHES.
 
     "Identical to the full sample" is the operational meaning of the plan's
@@ -62,19 +62,19 @@ def test_fourteen_auditors_are_identical_on_ecc(measured):
     ecc, full = measured
     identical = [m for m, r in ecc.items()
                  if r["findings"] > 0 and r["findings"] == full[m]["findings"]]
-    assert len(identical) == 14, (
+    assert len(identical) == 15, (
         f"ECC parity moved to {len(identical)} of 33. If that is an improvement, "
         f"say so and update docs/ECC_COVERAGE.md in this commit — a published "
         f"number nothing checks stops being true quietly.\n"
         f"identical: {sorted(identical)}")
 
 
-def test_twentytwo_auditors_produce_something_on_ecc(measured):
+def test_twentyfive_auditors_produce_something_on_ecc(measured):
     """The other honest number. Seven modules run degraded and are still worth
     running, which the parity count alone hides."""
     ecc, _ = measured
     producing = [m for m, r in ecc.items() if r["findings"] > 0]
-    assert len(producing) == 24, \
+    assert len(producing) == 25, \
         f"moved to {len(producing)} of 32: {sorted(producing)}"
 
 
@@ -123,7 +123,7 @@ def test_every_auditor_is_visible_to_the_coverage_manifest():
     # beside the existing store importer. The number is asserted rather than
     # derived on purpose: a new auditor should be a deliberate act, and this is
     # the line that makes somebody say so.
-    assert len(auditors) == 36, f"auditor count moved to {len(auditors)}"
+    assert len(auditors) == 37, f"auditor count moved to {len(auditors)}"
 
 
 def test_a_required_source_is_always_one_the_loader_knows():
@@ -212,6 +212,6 @@ def test_the_published_document_states_the_number_it_measured():
     """The document and the test must agree. If one is edited without the other,
     the repository publishes a claim its own suite contradicts."""
     doc = (ROOT / "docs" / "ECC_COVERAGE.md").read_text(encoding="utf-8")
-    assert "| **14** |" in doc, \
-        "docs/ECC_COVERAGE.md no longer states 14; update it and the test together"
-    assert "**24**" in doc
+    assert "| **15** |" in doc, \
+        "docs/ECC_COVERAGE.md no longer states 15; update it and the test together"
+    assert "**25**" in doc

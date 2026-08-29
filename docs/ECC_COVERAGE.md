@@ -36,7 +36,7 @@ A fourth change moved it the other way, and downward was the improvement.
 the product: `sample_data_ecc` carries no UCON export, so the module returns its
 coverage finding there and its full check set on the S/4 sample. Adding UCON files to the
 ECC fixture would assert that ECC estates generally have UCON configured, which was
-not verified against SAP-primary material — so the number stays at 14 and this
+not verified against SAP-primary material — so that estimate stands and this
 paragraph records why rather than the fixture implying an answer.
 
 `sap_hotnews` left the identical set when its exposure checks began comparing the
@@ -49,9 +49,9 @@ the least interesting reason available.
 
 The estimate was conservative, not mistaken.
 
-| | of 33 |
+| | of 34 |
 |---|---:|
-| identical to the full sample — *"runs with no code change"* | **14** |
+| identical to the full sample — *"runs with no code change"* | **15** |
 | produce findings, but fewer than with full data | 7 |
 | **produce findings at all** | **22** |
 | cannot exist on ECC (no HANA, Fiori, BTP, CDS, S/4 business roles) | 6 |
@@ -59,8 +59,8 @@ The estimate was conservative, not mistaken.
 | no file inputs (`abap_sast` reads `--abap-src`) | 1 |
 | silent even with full data | 2 |
 
-The number is not the whole story, so two more are published beside it. **24** of
-33** produce something useful — the seven "partial" modules are degraded and
+The number is not the whole story, so two more are published beside it. **25** of
+34** produce something useful — the seven "partial" modules are degraded and
 still worth running. Which number is right depends on what "runs" is taken to
 mean, and this table exists so that nobody has to guess. The per-module table
 below is regenerated from the measurement rather than maintained by hand, because
@@ -165,3 +165,16 @@ about whether 6 is all of them.
 | `resilience_posture` | degraded | 0 | 0 | silent on both |
 | `rise_btp_checks` | skipped | 0 | 8 | **cannot exist on ECC** |
 | `s4_business_authz` | skipped | 0 | 8 | **cannot exist on ECC** |
+
+
+## 2026-08-29 — `ruleset_coverage` added, parity moved 14 → 15
+
+`modules/ruleset_coverage.py` measures what fraction of an estate's granted
+transactions and authorization objects the SoD ruleset can name. It reads
+`role_auth_values` (AGR_1251) and nothing else, and AGR_1251 is identical on ECC
+and S/4HANA — so the module is **ECC-identical by construction**, not by
+coincidence, and needed no ECC-specific handling.
+
+Parity is therefore **15 of 34** identical and **25 of 34** producing something.
+Recorded here rather than left to move quietly, per the guard in
+`tests/test_ecc_coverage.py`.

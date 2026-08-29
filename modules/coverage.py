@@ -161,6 +161,10 @@ CLI_MODULE_ALIASES: Dict[str, str] = {
     "baseline": "baseline_params",
     "s4authz": "s4_business_authz",
     "ara": "access_risk_analysis",
+    # Measures the ara ruleset against the estate it was run on. Its own
+    # key rather than part of `ara`, because a customer running a
+    # replaced ruleset still wants the coverage number for theirs.
+    "sodcov": "ruleset_coverage",
     "jobcmd": "basis_job_command",
     "grcac": "grc_access_control",
     "rolegov": "role_governance",
