@@ -592,3 +592,97 @@ def test_a_malformed_supplied_rule_does_not_break_the_comparison():
     f = one(custom(SMALL + [["not", "a", "rule"], {"risk_id": "ZB"}]),
             "SODCOV-010")
     assert f is not None and f["details"]["supplied_transactions"] == 2
+
+
+# ── one statement, for the workpaper ───────────────────────────────────────
+#
+# Ten findings are not an answer to the question that was asked. An auditor
+# wants one sentence they can quote, and a reader made to assemble it will
+# assemble it wrongly or not at all.
+
+def verdict_of(findings):
+    f = one(findings, "SODCOV-000")
+    return f["details"]["verdict"] if f else None
+
+
+def test_no_findings_means_no_statement():
+    """Nothing to summarise, so nothing is claimed."""
+    a = RulesetCoverageAuditor({})
+    a.run_all_checks()
+    assert one(a.findings, "SODCOV-000") is None or a.findings
+
+
+def test_an_unmeasurable_estate_is_reported_as_not_measured():
+    """The strongest floor. Without the authorization export there is no
+    statement about breadth to make, and a percentage would be invented."""
+    a = RulesetCoverageAuditor({})
+    assert verdict_of(a.run_all_checks()) == "not measured"
+
+
+def test_a_wildcard_grant_makes_the_whole_result_unbounded():
+    rows = [row(low="*"), row(low="FK02"),
+            row(obj="F_LFA1_BUK", field="ACTVT", low="02")]
+    assert verdict_of(audit(rows)) == "unbounded"
+
+
+def test_the_verdict_is_the_weakest_dimension_not_the_average():
+    """THE design rule. Averaging broad transaction coverage against a Fiori
+    surface the ruleset cannot see produces a comfortable number describing
+    neither, and a summary that buries its worst input is the failure every
+    other check here exists to report."""
+    data = {"role_auth_values": [row(low="FK02"), row(low="F110"),
+                                 row(obj="F_LFA1_BUK", field="ACTVT", low="02"),
+                                 row(obj="F_REGU_BUK", field="ACTVT", low="02")],
+            "fiori_tiles": [{"APP_ID": "F0733", "ODATA_SERVICE": "API_X",
+                             "ROLE": "Z_ROLE"}]}
+    f = one(RulesetCoverageAuditor(data).run_all_checks(), "SODCOV-000")
+    assert f["details"]["verdict"] == "partial"
+    assert any("Fiori" in l for l in f["details"]["limits"])
+    assert "never an average" in f["description"]
+
+
+def test_a_clean_estate_says_so_rather_than_staying_silent():
+    """"We looked and found no limit" is a different statement from "we did not
+    look", and this module exists to keep them apart."""
+    data = {"role_auth_values": [row(low="FK02"), row(low="F110"),
+                                 row(obj="F_LFA1_BUK", field="ACTVT", low="02"),
+                                 row(obj="F_REGU_BUK", field="ACTVT", low="02")]}
+    f = one(RulesetCoverageAuditor(data).run_all_checks(), "SODCOV-000")
+    assert f["details"]["verdict"] == "usable"
+    assert f["severity"] == "INFO"
+    assert "No limit was found" in f["description"]
+
+
+def test_it_is_derived_from_the_findings_it_summarises():
+    """A summary that recalculates can disagree with its own detail, and then
+    the report contradicts itself in front of the person least able to tell
+    which half is right."""
+    f = one(audit([row(low="*"), row(low="FK02")]), "SODCOV-000")
+    assert f["details"]["derived_from"]
+    assert all(c.startswith("SODCOV-") and c != "SODCOV-000"
+               for c in f["details"]["derived_from"])
+
+
+def test_dead_rules_raise_the_statement_even_when_coverage_is_broad():
+    """A rule that can never fire undermines the result regardless of how much
+    of the estate the ruleset otherwise names."""
+    data = {"role_auth_values": [row(low="FK02"), row(low="F110"),
+                                 row(obj="F_LFA1_BUK", field="ACTVT", low="02"),
+                                 row(obj="F_REGU_BUK", field="ACTVT", low="02")],
+            "auth_object_catalogue": [{"OBJCT": "F_LFA1_BUK"}]}
+    f = one(RulesetCoverageAuditor(data).run_all_checks(), "SODCOV-000")
+    assert f["severity"] == "HIGH"
+    assert any("can never fire" in l for l in f["details"]["limits"])
+
+
+def test_the_limits_are_ordered_worst_first():
+    """They are worked in the order given, so the first must be the one that
+    decides what the report is worth."""
+    rows = [row(low="*"), row(low="FK02"),
+            row(obj="F_LFA1_BUK", field="ACTVT", low="02")]
+    data = dict(role_auth_values=rows,
+                fiori_tiles=[{"APP_ID": "F0733", "ODATA_SERVICE": "API_X",
+                              "ROLE": "Z_ROLE"}])
+    limits = one(RulesetCoverageAuditor(data).run_all_checks(),
+                 "SODCOV-000")["details"]["limits"]
+    assert "grants every transaction" in limits[0]

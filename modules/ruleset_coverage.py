@@ -54,6 +54,28 @@ there was no data to measure at all. What must never happen is a bare
 percentage presented as the estate's coverage while a wildcard role sits behind
 it — which is the failure the earlier revision over-corrected for.
 
+TEN FINDINGS ARE NOT AN ANSWER TO THE QUESTION THAT WAS ASKED
+─────────────────────────────────────────────────────────────
+This module now emits up to ten separate findings about how far a segregation
+result can be believed - coverage on two surfaces, whether a wildcard makes it
+unbounded, rules that cannot fire, a supplied ruleset that is broken or silently
+overriding ours. An auditor does not want ten. They want one sentence they can
+put in a workpaper, and a reader who has to assemble that sentence themselves
+will assemble it wrongly or not at all.
+
+SODCOV-000 is that sentence. Two rules govern it, and the first is the reason
+the check is worth having rather than dangerous:
+
+  IT LEADS WITH THE WEAKEST DIMENSION, NEVER AN AVERAGE. Averaging 93% of
+  transactions against 0% of Fiori produces a comfortable 47% that describes
+  nothing, and a summary that buries its worst input is the exact failure the
+  rest of this module exists to report. The verdict is the floor, not the mean.
+
+  IT IS DERIVED FROM THE FINDINGS ALREADY EMITTED, not recomputed. A summary
+  that recalculates can disagree with the detail it summarises, and then the
+  report contradicts itself in front of the person least able to tell which
+  half is right.
+
 TWO RULESETS, AND THE COMPARISON NOBODY MAKES
 ─────────────────────────────────────────────
 An organisation that already owns a GRC ruleset is not going to replace it with
@@ -259,6 +281,7 @@ class RulesetCoverageAuditor(BaseAuditor):
             self._emit_unknown_objects()
             self._emit_custom_ruleset_defects()
             self._emit_ruleset_comparison()
+            self._emit_trust_statement()
             return self.findings
 
         granted = self._granted(rows)
@@ -276,6 +299,7 @@ class RulesetCoverageAuditor(BaseAuditor):
         self._emit_unknown_objects()
         self._emit_custom_ruleset_defects()
         self._emit_ruleset_comparison()
+        self._emit_trust_statement()
         return self.findings
 
     # ------------------------------------------------------------------ #
@@ -549,6 +573,127 @@ class RulesetCoverageAuditor(BaseAuditor):
             return ("a critical-access rule with %d functions: only the first is "
                     "evaluated, so the rest are ignored" % len(funcs))
         return None
+
+    def _emit_trust_statement(self) -> None:
+        """One sentence for the workpaper, built from what was already found."""
+        seen = {f["check_id"]: f for f in self.findings}
+        if not seen:
+            return
+
+        def detail(cid, key, default=None):
+            return ((seen.get(cid) or {}).get("details") or {}).get(key, default)
+
+        limits, verdict, severity = [], "usable", self.SEVERITY_INFO
+
+        # The floor, in order of how badly each one undermines the result.
+        if "SODCOV-004" in seen:
+            verdict = "not measured"
+            severity = self.SEVERITY_HIGH
+            limits.append(
+                "the authorization export needed to measure coverage was not "
+                "supplied, so no statement about breadth is possible at all")
+        else:
+            tx = detail("SODCOV-001", "coverage_fraction")
+            fiori = detail("SODCOV-006", "coverage_fraction")
+            if "SODCOV-005" in seen:
+                verdict = "unbounded"
+                severity = self.SEVERITY_HIGH
+                limits.append(
+                    "at least one role grants every transaction, so the estate "
+                    "reaches more than was measured and the percentages below "
+                    "are a floor rather than a figure")
+            if fiori is not None and fiori < 0.5:
+                verdict = "partial" if verdict == "usable" else verdict
+                severity = max(severity, self.SEVERITY_HIGH, key=self._rank)
+                limits.append(
+                    "the ruleset names %.0f%% of this estate's Fiori surface, so "
+                    "a conflict reachable only through an app is outside what "
+                    "any result here can find" % (fiori * 100))
+            if tx is not None and tx < 0.8:
+                verdict = "partial" if verdict == "usable" else verdict
+                severity = max(severity, self.SEVERITY_MEDIUM, key=self._rank)
+                limits.append(
+                    "the ruleset names %.0f%% of the transactions this estate "
+                    "grants" % (tx * 100))
+
+        dead = detail("SODCOV-007", "rules_unfirable") or []
+        if dead:
+            severity = max(severity, self.SEVERITY_HIGH, key=self._rank)
+            limits.append(
+                "%d rule(s) name authorization objects this release does not "
+                "define and can never fire" % len(dead))
+        broken = ((detail("SODCOV-008", "fires_for_every_user") or 0)
+                  + (detail("SODCOV-008", "can_never_fire") or 0))
+        if broken:
+            severity = max(severity, self.SEVERITY_HIGH, key=self._rank)
+            limits.append(
+                "%d rule(s) in the supplied ruleset cannot work as written"
+                % broken)
+        if "SODCOV-009" in seen:
+            limits.append(
+                "%d shipped rule(s) were replaced by the supplied ruleset"
+                % len(detail("SODCOV-009", "replaced") or []))
+
+        headline = {
+            "not measured": "This segregation-of-duties result is NOT MEASURED",
+            "unbounded": "This segregation-of-duties result is UNBOUNDED",
+            "partial": "This segregation-of-duties result is PARTIAL",
+            "usable": "This segregation-of-duties result is USABLE as scoped",
+        }[verdict]
+
+        self.finding(
+            check_id="SODCOV-000",
+            title="%s%s" % (headline,
+                            "" if not limits else " - %d stated limit(s)"
+                            % len(limits)),
+            severity=severity,
+            category=self.CATEGORY,
+            description=(
+                "%s. Read this before the conflict results, because it says "
+                "what those results can and cannot mean.%s%s The verdict is the "
+                "WEAKEST of the measures below, never an average: averaging "
+                "broad transaction coverage against narrow Fiori coverage "
+                "produces a comfortable number describing neither, and a "
+                "summary that buries its worst input is the failure the checks "
+                "below exist to report. Every figure here is taken from those "
+                "checks rather than recalculated, so this statement and the "
+                "detail cannot disagree."
+                % (headline,
+                   "" if not limits else " Stated limits: " + "; ".join(limits) + ".",
+                   "" if limits else
+                   " No limit was found that would qualify it: coverage was "
+                   "measurable, bounded, and broad on every surface examined.")),
+            affected_items=["limit: " + l for l in limits],
+            remediation=(
+                "1. Quote the verdict, not the conflict count, when recording "
+                "what this analysis covered. A conflict count without it "
+                "describes the ruleset rather than the estate.\n"
+                "2. Work the stated limits in the order given. They are ordered "
+                "by how much each one undermines the result, and the first is "
+                "the one that decides what the report is worth.\n"
+                "3. Where a limit cannot be closed before the deadline, record "
+                "it as scope rather than treating the clean areas as assessed. "
+                "An unasked question and a good answer look identical on a "
+                "page that does not distinguish them.\n"
+                "4. Re-run after closing any limit; the verdict is derived, so "
+                "it moves on its own once the underlying check does."),
+            references=["docs/SOD_REFERENCE.md section 1.2 — coverage beats count",
+                        "PCAOB AS 2201 .68 — the scope of testing performed"],
+            details={
+                "verdict": verdict,
+                "limits": limits,
+                "derived_from": sorted(c for c in seen if c.startswith("SODCOV-")
+                                       and c != "SODCOV-000"),
+                "coverage_state": "complete",
+            },
+            scope="aggregate",
+        )
+
+    @staticmethod
+    def _rank(severity: str) -> int:
+        """Order severities so the weakest dimension can win."""
+        return {"INFO": 0, "LOW": 1, "MEDIUM": 2,
+                "HIGH": 3, "CRITICAL": 4}.get(str(severity).upper(), 0)
 
     @staticmethod
     def _vocabulary_of(ruleset) -> Tuple[Set[str], Set[str]]:
