@@ -783,6 +783,23 @@ jobs:
             fi
           fi
 
+      # docs/CHECK_FIRING.md publishes how many of the product's checks are
+      # PROVEN to produce a finding somewhere in this suite. Nothing regenerated
+      # it, so the figure would have drifted the first time anybody added a
+      # check -- a published number nobody re-derives is a claim, not a
+      # measurement, which is exactly what this repository reports on in
+      # customers' systems.
+      #
+      # It runs HERE, in the only job that executes the full suite: the
+      # stdlib-only job runs a subset, and conftest deliberately refuses to
+      # write a recording from a partial run rather than publish "these checks
+      # are unproven" on the strength of tests that never ran.
+      #
+      # Any difference fails, in both directions. A figure that rose matters as
+      # much as one that fell.
+      - name: docs/CHECK_FIRING.md matches what the suite proves
+        run: python -m tools.build_firing_reference --check
+
       - name: Prove the console actually answers end to end
         run: |
           python - <<'PY'

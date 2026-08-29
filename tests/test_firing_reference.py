@@ -86,3 +86,43 @@ def test_the_builder_refuses_without_a_recording(tmp_path, monkeypatch):
     with pytest.raises(SystemExit) as e:
         B.load_recording()
     assert "Run the full suite" in str(e.value)
+
+
+# ── the ratchet ────────────────────────────────────────────────────────────
+#
+# `--check` catches the document going stale, but only when somebody runs it.
+# These read the COMMITTED document, so they run in any session and fail if the
+# published figure moves the wrong way.
+
+#: The floor, at the time it was set. Raise it when the number rises; never
+#: lower it to make a build pass. A check that stops being proven is either a
+#: test that stopped running or a check that stopped working, and both want
+#: looking at rather than accommodating.
+PROVEN_FLOOR = 700
+
+
+def test_the_proven_figure_has_not_fallen():
+    proven, total, _c, _u = numbers()
+    assert proven >= PROVEN_FLOOR, (
+        "%d checks are proven, below the floor of %d. Something stopped being "
+        "exercised - find out what before lowering this." % (proven, PROVEN_FLOOR))
+
+
+def test_the_floor_is_not_set_above_the_published_figure():
+    """A floor above the real number would pass vacuously the day the document
+    is regenerated lower, which is the moment it most needs to fail."""
+    proven, _t, _c, _u = numbers()
+    assert PROVEN_FLOOR <= proven
+
+
+def test_the_builder_has_a_check_mode_ci_can_call():
+    """CI gates this document the way it gates the others. Without --check the
+    step in .github/workflows/tests.yml would be silently unenforceable."""
+    import inspect
+    assert "--check" in inspect.getsource(B.main)
+
+
+def test_ci_actually_calls_it():
+    """A --check mode nothing runs is not a guard."""
+    wf = (ROOT / ".github" / "workflows" / "tests.yml").read_text(encoding="utf-8")
+    assert "tools.build_firing_reference --check" in wf
