@@ -132,7 +132,13 @@ def test_every_auditor_is_visible_to_the_coverage_manifest():
     # beside the existing store importer. The number is asserted rather than
     # derived on purpose: a new auditor should be a deliberate act, and this is
     # the line that makes somebody say so.
-    assert len(auditors) == 37, f"auditor count moved to {len(auditors)}"
+    #
+    # 38 since `export_integrity`, which reports exports that were supplied and
+    # could not be decoded. Saying so here is the deliberate act: it is the
+    # first auditor whose subject is the EVIDENCE rather than the SAP estate,
+    # and it exists because an undecodable export used to load as an empty list
+    # and read downstream as an export that held nothing.
+    assert len(auditors) == 38, f"auditor count moved to {len(auditors)}"
 
 
 def test_a_required_source_is_always_one_the_loader_knows():

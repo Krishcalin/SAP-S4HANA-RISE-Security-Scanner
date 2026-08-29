@@ -57,6 +57,7 @@ from modules.baseline_params import BaselineParamAuditor
 from modules.s4_business_authz import S4BusinessAuthzAuditor
 from modules.access_risk_analysis import AccessRiskAnalysisAuditor
 from modules.ruleset_coverage import RulesetCoverageAuditor
+from modules.export_integrity import ExportIntegrityAuditor
 from modules.basis_job_command import BasisJobCommandAuditor
 from modules.report_generator import ReportGenerator
 from modules.pdf_report import PDFReportGenerator
@@ -543,6 +544,18 @@ def main():
     # the number is only meaningful beside the conflicts it qualifies: "no
     # conflicts found" and "the ruleset sees 86% of your transactions" are one
     # statement, not two.
+    # --- Export integrity ---
+    # Runs first among the meta checks: if a supplied export could not be read,
+    # every result below it is drawn from less than the customer sent, and they
+    # should learn that before they read any of it.
+    if "exportint" in run_modules:
+        auditor = ExportIntegrityAuditor(data, baseline_overrides, run_ctx)
+        findings = auditor.run_all_checks()
+        if findings:
+            print("[*] Export Integrity: %d supplied export(s) did not load as "
+                  "intended..." % len(findings))
+            all_findings.extend(findings)
+
     if "sodcov" in run_modules:
         print("[*] Running SoD Ruleset Coverage (what fraction of this estate the ruleset can see)...")
         auditor = RulesetCoverageAuditor(data, baseline_overrides, run_ctx)

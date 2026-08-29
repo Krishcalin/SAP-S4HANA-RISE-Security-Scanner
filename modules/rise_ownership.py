@@ -43,6 +43,10 @@ from modules.deployment_modes import is_rise
 #: check_id prefix -> owning team. Longest prefix wins, so a specific family can
 #: override its module's default.
 TEAM_BY_PREFIX: List[Tuple[str, str]] = [
+    # Not a defect in the SAP system: an export the customer supplied did not
+    # decode. It routes to basis because they are the people who produce the
+    # extracts and would re-run them, not because the system is at fault.
+    ("EXPORT-", "basis"),
     ("ATC-", "development"),
     ("ABAP-", "development"),
     ("AUTH-", "authorizations"),

@@ -165,6 +165,10 @@ CLI_MODULE_ALIASES: Dict[str, str] = {
     # key rather than part of `ara`, because a customer running a
     # replaced ruleset still wants the coverage number for theirs.
     "sodcov": "ruleset_coverage",
+    # Reports exports that were supplied and could not be read. Its own key so
+    # it can be run alone against a fresh upload, before anybody reads a result
+    # drawn from less data than they sent.
+    "exportint": "export_integrity",
     "jobcmd": "basis_job_command",
     "grcac": "grc_access_control",
     "rolegov": "role_governance",

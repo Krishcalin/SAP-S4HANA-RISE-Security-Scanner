@@ -79,6 +79,7 @@ AUDITORS: List[Tuple[str, str]] = [
     # Immediately after, because it measures the ruleset that one just
     # used and the two numbers are one statement.
     ("ruleset_coverage", "RulesetCoverageAuditor"),
+    ("export_integrity", "ExportIntegrityAuditor"),
     ("basis_job_command", "BasisJobCommandAuditor"),
     ("grc_access_control", "GrcAccessControlAuditor"),
     ("role_governance", "RoleGovernanceAuditor"),

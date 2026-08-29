@@ -60,6 +60,7 @@ for the exact commands.
 """
 
 import csv
+import io
 import json
 import os
 from pathlib import Path
@@ -336,6 +337,19 @@ class DataLoader:
         #: by load_all; a caller that wants to put them in front of a reader
         #: (the coverage manifest does) reads them from here.
         self.unrecognised_files: list = []
+        #: filename -> the decode error. A file the customer SUPPLIED and we
+        #: could not read, which is a third state: not "absent", not "empty".
+        #: Reported as a finding rather than only counted as missing, because
+        #: the customer believes they sent it.
+        self.unreadable_sources: Dict[str, str] = {}
+        #: The logical source names behind those files, so a reader can say
+        #: which checks lost their input rather than which file was malformed.
+        self.unreadable_logical_names: set = set()
+        #: filename -> the encoding that finally decoded it, when it was not the
+        #: first choice. cp1252 never raises, so reaching it may mean the text
+        #: decoded into mojibake rather than correctly - worth surfacing, and
+        #: not the same class of problem as a file that failed outright.
+        self.fallback_encodings: Dict[str, str] = {}
         #: Names the CALLER knows about and we should not call unrecognised —
         #: the --config baseline and the --output report both live wherever the
         #: operator put them, which is often beside the exports. The loader
@@ -489,9 +503,19 @@ class DataLoader:
                     print(f"    Loading {fpath.name}...")
                     self._consumed_files.add(fpath.name)
                     if fname.endswith(".csv"):
-                        self._data[logical_name] = self._load_csv(fpath)
+                        loaded = self._load_csv(fpath)
+                        # None (not []) when the file could not be decoded, so
+                        # every "was this supplied?" test in the codebase gets
+                        # the honest answer without needing to know about
+                        # encodings.
+                        self._data[logical_name] = loaded
+                        if loaded is None:
+                            self.unreadable_logical_names.add(logical_name)
                     elif fname.endswith(".json"):
                         self._data[logical_name] = self._load_json(fpath)
+                        if self._data[logical_name] is None and \
+                                fpath.name in self.unreadable_sources:
+                            self.unreadable_logical_names.add(logical_name)
                     break  # Use first matching file
             else:
                 self._data[logical_name] = None
@@ -545,9 +569,26 @@ class DataLoader:
             and name not in self._consumed_files
             and name.lower() not in self._disregard)
 
+        # Handed to the auditors so the report can name a supplied-but-unreadable
+        # export. Set before the summary below so `loaded`/`missing` see it.
+        self._data[self.UNREADABLE_KEY] = {
+            "files": dict(self.unreadable_sources),
+            "sources": sorted(self.unreadable_logical_names),
+            "fallback_encodings": dict(self.fallback_encodings),
+        } if (self.unreadable_sources or self.fallback_encodings) else None
+
         loaded = [k for k, v in self._data.items() if v is not None]
         missing = [k for k, v in self._data.items() if v is None]
         print(f"    Loaded: {', '.join(loaded) if loaded else 'none'}")
+        if self.unreadable_sources:
+            print(f"    [WARN] {len(self.unreadable_sources)} supplied file(s) "
+                  f"could not be decoded and are counted as NOT supplied: "
+                  + ", ".join(sorted(self.unreadable_sources)))
+        if self.fallback_encodings:
+            print(f"    [NOTE] {len(self.fallback_encodings)} file(s) decoded "
+                  f"only via a fallback encoding; check them for mojibake: "
+                  + ", ".join("%s (%s)" % kv
+                              for kv in sorted(self.fallback_encodings.items())))
         if missing:
             print(f"    Not found (skipping): {', '.join(missing)}")
         for name, flag in self.unapplied_files:
@@ -571,6 +612,8 @@ class DataLoader:
     #: the customer forgot to send.
     COMPLETENESS_FILE = "export_completeness.json"
     COMPLETENESS_KEY = "_export_completeness"
+    #: Where the supplied-but-unreadable record is handed to the auditors.
+    UNREADABLE_KEY = "_unreadable_sources"
 
     #: The customer's own financial figures, for the FAIR quantification. Same
     #: convention as the completeness declaration above and for the same reason:
@@ -786,12 +829,68 @@ class DataLoader:
                       f"untranslated: "
                       + ", ".join(sorted(set(entry["unrecognised_values"]))[:8]))
 
+    #: Encodings tried in order when there is no byte-order mark, and what each
+    #: one is here for. UTF-8 first because it is what a modern export and every
+    #: fixture in this repository uses. cp1252 last because it decodes ANY byte
+    #: sequence without raising - it is the fallback of last resort and never a
+    #: detection, which is why using it is recorded rather than passed over.
+    FALLBACK_ENCODINGS = ("utf-8", "cp1252")
+
+    #: Byte-order marks, longest first: the UTF-8 BOM does not collide with the
+    #: UTF-16 ones, but UTF-32's begins with the UTF-16LE mark, so order matters.
+    BOMS = ((b"\x00\x00\xfe\xff", "utf-32"), (b"\xff\xfe\x00\x00", "utf-32"),
+            (b"\xef\xbb\xbf", "utf-8-sig"),
+            (b"\xfe\xff", "utf-16"), (b"\xff\xfe", "utf-16"))
+
+    def _read_text(self, path: Path) -> str:
+        """Decode a file the way SAP actually writes them.
+
+        WHY THIS IS NOT JUST `encoding="utf-8-sig"`
+        -------------------------------------------
+        It was, and two of the most ordinary real-world exports failed on it,
+        silently:
+
+          UTF-16LE with a BOM   what SAP GUI writes for a list download or a
+                                spreadsheet export on Windows
+          latin-1 / cp1252      what a German-language system produces the
+                                moment a name carries an umlaut
+
+        Both raised UnicodeDecodeError, which was caught, printed as one WARN
+        line among a hundred and thirty sources, and turned into an EMPTY list.
+        An empty list is indistinguishable from an export with nothing in it, so
+        the scan carried on and reported over a fraction of the estate. That is
+        the same "we could not look, rendered as we looked and saw nothing"
+        failure this codebase exists to prevent, sitting at the front door.
+
+        A byte-order mark is a fact, so it is honoured first. After that the
+        order is a preference, not a detection: cp1252 decodes any byte sequence
+        at all and will never raise, so reaching it means the text may be
+        mojibake rather than correct. That is recorded in `fallback_encodings`
+        and reported, because a silently wrong decode is worse than a loud one.
+        """
+        raw = path.read_bytes()
+        for mark, encoding in self.BOMS:
+            if raw.startswith(mark):
+                return raw.decode(encoding)
+        for encoding in self.FALLBACK_ENCODINGS:
+            try:
+                text = raw.decode(encoding)
+            except (UnicodeDecodeError, LookupError):
+                continue
+            if encoding != self.FALLBACK_ENCODINGS[0]:
+                self.fallback_encodings[path.name] = encoding
+            return text
+        raise UnicodeDecodeError(
+            "unknown", raw, 0, 1,
+            "no supported encoding decoded this file (tried a byte-order mark, "
+            + ", ".join(self.FALLBACK_ENCODINGS) + ")")
+
     def _load_csv(self, path: Path) -> List[Dict[str, str]]:
         """Load a CSV file into a list of dicts with normalized headers."""
         rows = []
         try:
             # Try to detect delimiter
-            with open(path, "r", encoding="utf-8-sig") as f:
+            with io.StringIO(self._read_text(path)) as f:
                 sample = f.read(4096)
                 f.seek(0)
 
@@ -861,13 +960,20 @@ class DataLoader:
                     rows.append(normalized)
         except Exception as e:
             print(f"    [WARN] Failed to load {path}: {e}")
+            # RECORDED, and the caller turns this into `None` rather than an
+            # empty list. An empty list means "supplied, and it held nothing";
+            # None means "not supplied". Neither is true here - the customer DID
+            # supply it and we could not read it - which is why it is also named
+            # in a finding rather than only counted as absent.
+            self.unreadable_sources[path.name] = str(e)
+            return None
         return rows
 
     def _load_json(self, path: Path) -> Any:
         """Load a JSON file."""
         try:
-            with open(path, "r", encoding="utf-8-sig") as f:
-                return json.load(f)
+            return json.loads(self._read_text(path))
         except Exception as e:
             print(f"    [WARN] Failed to load {path}: {e}")
+            self.unreadable_sources[path.name] = str(e)
             return None

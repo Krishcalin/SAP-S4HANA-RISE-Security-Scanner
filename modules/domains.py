@@ -243,6 +243,15 @@ DOMAINS: List[Dict[str, Any]] = [
 #: findings this product produces, and a taxonomy that silently dropped them
 #: would understate the product while claiming to summarise it.
 UNPLACED_CATEGORIES: Dict[str, str] = {
+    "Export Integrity":
+        "Not a property of the SAP estate at all. Every one of the twelve "
+        "domains summarises something measured ABOUT the system; this category "
+        "reports that an export the customer supplied could not be decoded, "
+        "which is a statement about the evidence rather than about SAP. Filing "
+        "it under a domain would put it into that domain's count and imply the "
+        "system has a weakness there, when what it actually says is that the "
+        "domain's own count cannot be trusted. It has to sit outside the "
+        "twelve and be read before them, because it qualifies all of them.",
     "SAP Cloud ALM CSA Results":
         "Somebody else's assessment. These are SAP's own compliance verdicts, "
         "imported and reported as SAP's, and every one of the twelve domains "

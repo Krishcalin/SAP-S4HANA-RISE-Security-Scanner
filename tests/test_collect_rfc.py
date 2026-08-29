@@ -7,6 +7,7 @@ the SDK expects rather than the way the platform prefers, and that every extract
 writes a file the offline loader already reads.
 """
 import ctypes
+import io
 import sys
 from pathlib import Path
 
@@ -159,8 +160,13 @@ def test_every_extract_header_matches_the_shipped_fixture():
         fixture = ROOT / "sample_data" / e["file"]
         if not fixture.exists():
             continue
-        with fixture.open(encoding="utf-8") as fh:
-            expected = next(csv.reader(fh))
+        # Read through the product's own decoder, not as UTF-8. A hand-made
+        # export is exactly the case that arrives in whatever encoding the
+        # analyst's tooling produced - sample_data/vendor_master.csv is latin-1
+        # on purpose - and a test that assumed UTF-8 here would be asserting a
+        # contract the loader deliberately does not impose.
+        text = DataLoader(fixture.parent)._read_text(fixture)
+        expected = next(csv.reader(io.StringIO(text)))
         assert list(e["columns"]) == expected, e["file"]
 
 

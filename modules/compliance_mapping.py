@@ -137,6 +137,14 @@ class ComplianceMapper:
         # does: an auditor asking "is SoD covered" is asking about both
         # the conflicts found and the fraction of the estate searched.
         "SoD Ruleset Coverage": ["sod", "access-control"],
+        # Whether the evidence the report rests on could be read at all.
+        # Mapped to logging-monitoring because the control it speaks to
+        # is the completeness and reliability of records relied upon --
+        # the same family an auditor invokes when testing information
+        # produced by the entity. It is a meta-control rather than a
+        # domain, so it is mapped narrowly rather than to everything it
+        # could arguably touch.
+        "Export Integrity": ["logging-monitoring"],
         "Financial Controls (SOX)": ["sod", "change-management", "access-control"],
     "Master Data Change Audit": ["change-management", "sod"],
     "Vendor & Bank Master Integrity": ["sod", "change-management"],
