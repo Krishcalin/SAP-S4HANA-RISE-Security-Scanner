@@ -403,3 +403,105 @@ def test_the_shipped_ruleset_resolves_against_its_own_object_list():
         "SODCOV-007")
     assert f["severity"] == "INFO", f["details"]["absent_objects"]
     assert f["details"]["objects_referenced"] == len(objects)
+
+
+# ── the customer's own ruleset ─────────────────────────────────────────────
+#
+# ara_ruleset.json is the path any enterprise with an existing GRC ruleset
+# takes, and it was accepted without a single validation. Each shape below was
+# run through the engine before the check was written, so these are its actual
+# behaviours rather than a reading of the source.
+
+def custom(rules, rows=None):
+    data = {"role_auth_values": rows if rows is not None else [row(low="FK02")],
+            "ara_ruleset": rules}
+    return RulesetCoverageAuditor(data).run_all_checks()
+
+
+def two_sided(rid="ZOK"):
+    return {"risk_id": rid, "risk_type": "SOD", "functions": [
+        {"name": "a", "actions": ["FK02"], "permissions": [
+            {"object": "F_LFA1_BUK", "field": "ACTVT", "values": ["02"]}]},
+        {"name": "b", "actions": ["F110"], "permissions": [
+            {"object": "F_REGU_BUK", "field": "ACTVT", "values": ["02"]}]}]}
+
+
+def test_no_custom_ruleset_means_no_verdict():
+    assert one(audit([row(low="FK02")]), "SODCOV-008") is None
+
+
+def test_a_well_formed_custom_ruleset_is_silent():
+    """A check that fires on correct input is a check nobody reads."""
+    assert one(custom([two_sided()]), "SODCOV-008") is None
+    assert one(custom([two_sided()]), "SODCOV-009") is None
+
+
+def test_a_function_with_no_gate_at_all_is_reported_as_firing_for_everyone():
+    """THE serious one. The action gate is skipped when a function names no
+    actions and the permission gate returns True when it declares none, so the
+    rule is held by every user in the estate — a false-positive engine."""
+    f = one(custom([{"risk_id": "ZBAD", "risk_type": "SOD",
+                     "functions": [{"name": "a"}, {"name": "b"}]}]), "SODCOV-008")
+    assert f["severity"] == "CRITICAL"
+    assert f["details"]["fires_for_every_user"] == 1
+    assert "held by EVERY user" in " ".join(f["affected_items"])
+
+
+def test_a_misspelled_functions_key_is_reported_rather_than_ignored():
+    f = one(custom([{"risk_id": "ZTYPO", "risk_type": "SOD",
+                     "function": [{"name": "a", "actions": ["FK02"]}]}]),
+            "SODCOV-008")
+    assert f["details"]["can_never_fire"] == 1
+    assert "misspelled key" in " ".join(f["affected_items"])
+
+
+def test_a_segregation_rule_with_one_function_can_never_fire():
+    f = one(custom([{"risk_id": "ZONE", "risk_type": "SOD", "functions": [
+        {"name": "a", "actions": ["FK02"], "permissions": []}]}]), "SODCOV-008")
+    assert "requires two sides" in " ".join(f["affected_items"])
+    assert f["severity"] == "HIGH"          # dead, but not noisy
+
+
+def test_permissions_naming_no_object_can_never_be_held():
+    f = one(custom([{"risk_id": "ZNOOBJ", "risk_type": "SOD", "functions": [
+        {"name": "a", "actions": ["FK02"],
+         "permissions": [{"field": "ACTVT", "values": ["02"]}]},
+        {"name": "b", "actions": ["F110"], "permissions": []}]}]), "SODCOV-008")
+    assert "none names an object" in " ".join(f["affected_items"])
+
+
+def test_firing_for_everyone_outranks_merely_being_dead():
+    """Noise buries real findings; silence only hides one rule. When both are
+    present the severity must follow the worse of the two."""
+    f = one(custom([{"risk_id": "ZDEAD", "risk_type": "SOD", "functions": [
+                        {"name": "a", "actions": ["FK02"], "permissions": []}]},
+                    {"risk_id": "ZLOUD", "risk_type": "SOD",
+                     "functions": [{"name": "a"}, {"name": "b"}]}]), "SODCOV-008")
+    assert f["severity"] == "CRITICAL"
+    assert f["details"]["can_never_fire"] == 1
+    assert f["details"]["fires_for_every_user"] == 1
+
+
+def test_replacing_a_shipped_rule_is_reported_separately():
+    """Overriding is a legitimate feature. Doing it unknowingly is not, and the
+    ruleset count does not change, so nothing else would show it."""
+    f = one(custom([two_sided(rid="P2P-01")]), "SODCOV-009")
+    assert f is not None and f["severity"] == "MEDIUM"
+    assert f["details"]["replaced"] == ["P2P-01"]
+    assert "Maintain Vendor Master" in " ".join(f["affected_items"])
+
+
+def test_a_custom_rule_with_a_fresh_id_replaces_nothing():
+    assert one(custom([two_sided(rid="Z_FRESH_01")]), "SODCOV-009") is None
+
+
+def test_an_override_is_not_itself_treated_as_a_defect():
+    """SODCOV-009 is a disclosure, not an error. A well-formed override must
+    not also raise SODCOV-008."""
+    assert one(custom([two_sided(rid="P2P-01")]), "SODCOV-008") is None
+
+
+def test_a_non_object_entry_does_not_crash_the_check():
+    """Hand-edited JSON contains anything at all."""
+    f = one(custom([["not", "a", "rule"], two_sided()]), "SODCOV-008")
+    assert f["details"]["can_never_fire"] == 1

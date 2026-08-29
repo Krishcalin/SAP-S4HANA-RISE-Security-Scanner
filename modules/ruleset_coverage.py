@@ -54,6 +54,34 @@ there was no data to measure at all. What must never happen is a bare
 percentage presented as the estate's coverage while a wildcard role sits behind
 it — which is the failure the earlier revision over-corrected for.
 
+THE CUSTOMER'S OWN RULESET IS THE ONE NOBODY CHECKS
+───────────────────────────────────────────────────
+`ara_ruleset.json` lets a customer extend or replace what we ship, and it is the
+path any enterprise with an existing GRC ruleset will take. It was accepted
+without a single validation, and the failure modes are not theoretical - each of
+these was run against the engine:
+
+  two functions declaring neither actions nor permissions
+      FIRES FOR EVERY USER IN THE ESTATE. The action gate is skipped when a
+      function names no actions and the permission gate returns True when it
+      declares none, so the rule is held by everybody. A false-positive engine
+      that reports the whole user base as conflicted.
+
+  "function" written instead of "functions"
+  a segregation rule carrying only one function
+  permissions that name a field and value but no object
+      SILENTLY DEAD. Fail-closed means each of these never fires for anybody,
+      and never firing is indistinguishable from finding nothing.
+
+  a custom risk_id matching one of ours
+      SILENTLY REPLACES the shipped rule. Overriding is a legitimate feature -
+      doing it without knowing is not, and nothing reported it.
+
+SODCOV-008 reports rules that cannot work as written; SODCOV-009 reports which
+shipped rules a custom file displaced. They are separate because the remediation
+is: one is a defect in the customer's file, the other may be exactly what they
+intended and only needs to be visible.
+
 A RULE CAN NAME AN OBJECT THAT DOES NOT EXIST, AND NOTHING WOULD SAY SO
 ──────────────────────────────────────────────────────────────────────
 The matcher is fail-closed: a permission predicate naming an authorization
@@ -122,6 +150,9 @@ CUSTOM_PREFIXES = ("Z", "Y")
 #: Values that mean "every transaction". `*` is the SAP wildcard; a range with a
 #: blank or `*` LOW is the same thing spelled differently.
 WILDCARDS = ("*", "")
+
+#: The customer's own rules, extending or overriding what we ship.
+CUSTOM_RULESET_EXPORT = "ara_ruleset"
 
 #: TOBJ - the authorization objects this release defines. Optional: object
 #: definitions are static SAP content rather than a customer setting, so most
@@ -198,6 +229,7 @@ class RulesetCoverageAuditor(BaseAuditor):
             # The catalogue is about the RULESET, not the estate's grants, so it
             # is measurable with no AGR_1251 at all.
             self._emit_unknown_objects()
+            self._emit_custom_ruleset_defects()
             return self.findings
 
         granted = self._granted(rows)
@@ -213,6 +245,7 @@ class RulesetCoverageAuditor(BaseAuditor):
         self._emit_custom_gap(granted)
         self._emit_fiori_coverage(known_actions, known_objects)
         self._emit_unknown_objects()
+        self._emit_custom_ruleset_defects()
         return self.findings
 
     # ------------------------------------------------------------------ #
@@ -450,6 +483,165 @@ class RulesetCoverageAuditor(BaseAuditor):
                 "roles_granting_them": sorted(granted.custom_by_role)[:20],
             },
         )
+
+    @staticmethod
+    def _rule_defect(risk: Dict[str, Any]) -> Optional[str]:
+        """Why this rule cannot work as written, or None if it can.
+
+        The verdicts are the engine's actual behaviour, confirmed by running
+        each shape through it rather than read off the source.
+        """
+        if not isinstance(risk, dict):
+            return "not an object"
+        funcs = risk.get("functions")
+        rtype = str(risk.get("risk_type", "SOD")).upper()
+        if not isinstance(funcs, list) or not funcs:
+            return ("declares no 'functions' list, so it can never fire "
+                    "(a misspelled key such as 'function' lands here)")
+        for func in funcs:
+            if not isinstance(func, dict):
+                return "a function is not an object"
+            acts = [a for a in (func.get("actions") or []) if str(a).strip()]
+            perms = func.get("permissions") or []
+            if not acts and not perms:
+                return ("function %r declares neither actions nor permissions, "
+                        "so it is held by EVERY user and this rule fires for the "
+                        "whole estate" % func.get("name", "?"))
+            if perms and not any(str(p.get("object", "")).strip()
+                                 for p in perms if isinstance(p, dict)):
+                return ("function %r declares permissions but none names an "
+                        "object, so the function can never be held and the rule "
+                        "can never fire" % func.get("name", "?"))
+        if rtype == "SOD" and len(funcs) < 2:
+            return ("a segregation rule with %d function(s): the engine requires "
+                    "two sides, so it can never fire" % len(funcs))
+        if rtype != "SOD" and len(funcs) != 1:
+            return ("a critical-access rule with %d functions: only the first is "
+                    "evaluated, so the rest are ignored" % len(funcs))
+        return None
+
+    def _custom_rules(self) -> List[Dict[str, Any]]:
+        custom = self.data.get(CUSTOM_RULESET_EXPORT)
+        return custom if isinstance(custom, list) else []
+
+    def _emit_custom_ruleset_defects(self) -> None:
+        """Custom rules that cannot work, and shipped rules they displaced."""
+        custom = self._custom_rules()
+        if not custom:
+            return
+
+        fires_for_everyone, never_fires = [], []
+        for i, risk in enumerate(custom):
+            defect = self._rule_defect(risk)
+            if not defect:
+                continue
+            rid = (str(risk.get("risk_id", "")).strip()
+                   if isinstance(risk, dict) else "") or "entry %d" % (i + 1)
+            (fires_for_everyone if "whole estate" in defect
+             else never_fires).append("%s — %s" % (rid, defect))
+
+        if fires_for_everyone or never_fires:
+            self.finding(
+                check_id="SODCOV-008",
+                title=("%d rule(s) in the supplied ruleset cannot work as written"
+                       % (len(fires_for_everyone) + len(never_fires))),
+                severity=(self.SEVERITY_CRITICAL if fires_for_everyone
+                          else self.SEVERITY_HIGH),
+                category=self.CATEGORY,
+                description=(
+                    "This scan used a customer-supplied ruleset "
+                    "(ara_ruleset), and %d of its %d rules are broken in a way "
+                    "the engine does not report on its own.%s%s Neither failure "
+                    "announces itself: the matcher is fail-closed, so a rule "
+                    "that can never fire looks exactly like a rule that ran and "
+                    "found nothing, and a rule with no gate at all looks like a "
+                    "genuine estate-wide conflict."
+                    % (len(fires_for_everyone) + len(never_fires), len(custom),
+                       "" if not fires_for_everyone else
+                       " %d of them FIRE FOR EVERY USER: a function that "
+                       "declares neither actions nor permissions is held by "
+                       "everybody, so the rule reports the entire user base as "
+                       "conflicted."
+                       % len(fires_for_everyone),
+                       "" if not never_fires else
+                       " %d can never fire for anybody, so whatever they were "
+                       "written to catch is not being checked and the report is "
+                       "silent about it." % len(never_fires))),
+                affected_items=(fires_for_everyone + never_fires)[:40],
+                remediation=(
+                    "1. Fix the rules that fire for every user first. They are "
+                    "not a coverage gap, they are noise that will bury the real "
+                    "findings, and a report naming the whole user base as "
+                    "conflicted destroys trust in the rest of it.\n"
+                    "2. For each rule that can never fire, check the JSON keys "
+                    "against a shipped rule: 'functions' (not 'function'), each "
+                    "with 'actions' and 'permissions', and every permission "
+                    "carrying an 'object'.\n"
+                    "3. A segregation rule needs two functions. One function "
+                    "describes a capability, not a conflict - if that is what "
+                    "was meant, set risk_type to CRITICAL_ACTION or "
+                    "CRITICAL_PERMISSION instead.\n"
+                    "4. Re-run and confirm each corrected rule now appears in "
+                    "the results, or is deliberately silent because the estate "
+                    "does not hold it.\n"
+                    "5. Treat previous clean results for these rules as "
+                    "unmeasured rather than passed."),
+                references=["docs/SOD_REFERENCE.md section 2 — the rule model",
+                            "ara_ruleset.json — custom rule format"],
+                details={
+                    "custom_rules": len(custom),
+                    "fires_for_every_user": len(fires_for_everyone),
+                    "can_never_fire": len(never_fires),
+                    "defects": (fires_for_everyone + never_fires)[:60],
+                    "coverage_state": "complete",
+                },
+            )
+
+        shipped = {str(r.get("risk_id", "")).upper(): r.get("name", "")
+                   for r in self._shipped_ruleset()}
+        replaced = [(rid, shipped[rid]) for rid in
+                    (str(r.get("risk_id", "")).strip().upper()
+                     for r in custom if isinstance(r, dict))
+                    if rid and rid in shipped]
+        if not replaced:
+            return
+        self.finding(
+            check_id="SODCOV-009",
+            title="%d shipped rule(s) were replaced by the supplied ruleset"
+                  % len(replaced),
+            severity=self.SEVERITY_MEDIUM,
+            category=self.CATEGORY,
+            description=(
+                "A custom rule whose risk_id matches a shipped one REPLACES it "
+                "rather than being added alongside. That is a legitimate way to "
+                "retune a rule for an estate, and it is reported because doing "
+                "it unknowingly is not: an id chosen for a new rule that happens "
+                "to collide with ours silently removes the shipped rule and its "
+                "reasoning, and the ruleset count stays the same, so nothing "
+                "looks different. Check that each replacement below was "
+                "intended, and that the replacement covers at least what the "
+                "shipped rule did."),
+            affected_items=["%s — replaced shipped rule: %s" % (rid, name or "?")
+                            for rid, name in sorted(replaced)][:40],
+            remediation=(
+                "1. Confirm each id below was meant to override the shipped "
+                "rule of the same name, rather than colliding with it by "
+                "accident.\n"
+                "2. Where the collision was accidental, renumber the custom "
+                "rule - a Z prefix keeps customer rules clear of ours.\n"
+                "3. Where the override was intended, compare the two: the "
+                "shipped rule's actions and permissions are the floor the "
+                "replacement should meet or exceed, or coverage has been "
+                "narrowed without anyone deciding to."),
+            references=["ara_ruleset.json — custom rules override by risk_id"],
+            details={"replaced": [rid for rid, _ in sorted(replaced)],
+                     "coverage_state": "complete"},
+        )
+
+    def _shipped_ruleset(self) -> List[Dict[str, Any]]:
+        """What we ship, regardless of what was injected or supplied."""
+        from modules.access_risk_analysis import AccessRiskAnalysisAuditor
+        return AccessRiskAnalysisAuditor.RULESET or []
 
     def _unverified_objects_note(self) -> str:
         """Say when object EXISTENCE was not checked.
