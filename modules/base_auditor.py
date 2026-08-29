@@ -504,6 +504,20 @@ class BaseAuditor:
         # an unmapped finding travels with the REASON it is unmapped rather than
         # silently having no standards fields.
         f["owasp"] = map_finding(check_id, (details or {}).get("cwe"))
+        # WHETHER THE DATA BEHIND THIS FINDING WAS COMPLETE, attached here for
+        # the same reason as the standards mapping above: one place, every
+        # check, no module having to remember.
+        #
+        # The report already says in aggregate that some modules ran with
+        # incomplete input. An individual finding said nothing, so a conclusion
+        # drawn from a fraction of a module\'s evidence was indistinguishable
+        # from one drawn from all of it. That is the same "confident answer over
+        # an unasked question" this product reports on elsewhere, appearing in
+        # its own output.
+        #
+        # It is always present, never conditional. A finding that silently
+        # lacked the field would be back to being unqualified.
+        f["evidence"] = self._evidence_state()
         if affected_objects:
             f["affected_objects"] = affected_objects
         if subject:
@@ -521,6 +535,57 @@ class BaseAuditor:
             f["client"] = client
         self.findings.append(f)
         return f
+
+    #: Inputs whose absence must NOT mark a finding incomplete.
+    #:
+    #: The bar is deliberately narrow: a source belongs here only when the
+    #: module ALREADY tells the reader, in its own findings, that it was not
+    #: supplied. `ara_ruleset` qualifies because SODCOV-008/009/010 simply do
+    #: not fire without it; `auth_object_catalogue` qualifies because SODCOV-007
+    #: is silent without it and SODCOV-002 says so in words.
+    #:
+    #: Everything else stays required by default, and that direction is chosen
+    #: on purpose. A source wrongly marked optional makes the marker lie by
+    #: staying quiet; a source wrongly left required makes it noisy. Noise is
+    #: visible and gets fixed - a silent all-clear is the failure this field
+    #: exists to prevent.
+    OPTIONAL_SOURCES: frozenset = frozenset()
+
+    #: Computed once per auditor instance by `_evidence_state`.
+    _evidence_cache = None
+
+    def _evidence_state(self) -> Dict[str, Any]:
+        """Which of this module\'s declared inputs were actually present.
+
+        Derived from the SAME mapping the coverage manifest uses, so a
+        finding\'s marker and the manifest cannot disagree — a hand-maintained
+        second list would drift the first time somebody added an input.
+
+        ABSENT MEANS `None`, NOT EMPTY. The loader distinguishes them and so
+        does this: an export that was supplied and held no rows is a real
+        answer, and calling it missing would understate the evidence exactly as
+        badly as the reverse. A source that failed to decode is recorded as
+        None by the loader, so it lands here as missing, which is correct — the
+        customer sent it and we could not read it.
+        """
+        if self._evidence_cache is None:
+            # Imported here rather than at module scope: `coverage` reads every
+            # module in this package, and importing it at load time would make
+            # the dependency circular.
+            from modules import coverage
+            name = type(self).__module__.rsplit(".", 1)[-1]
+            declared = sorted(coverage.module_sources().get(name, []) or [])
+            data = self.data or {}
+            missing = [src for src in declared
+                       if not src.startswith("_")
+                       and src not in self.OPTIONAL_SOURCES
+                       and data.get(src) is None]
+            self._evidence_cache = {
+                "complete": not missing,
+                "declared_sources": len(declared),
+                "missing_sources": missing,
+            }
+        return dict(self._evidence_cache)
 
     def run_all_checks(self) -> List[Dict[str, Any]]:
         """Override in subclass — run all checks and return findings."""

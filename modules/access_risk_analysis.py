@@ -178,6 +178,10 @@ def _load_shipped_ruleset(path: Optional[Path] = None) -> List[Dict[str, Any]]:
 
 
 class AccessRiskAnalysisAuditor(BaseAuditor):
+    #: Optional inputs (see BaseAuditor.OPTIONAL_SOURCES): a customer's own ruleset. Its absence is the ordinary case and changes
+    #: nothing about the analysis; SODCOV-008/009/010 simply do not fire.
+    OPTIONAL_SOURCES = frozenset({"ara_ruleset"})
+
 
     CATEGORY = "Access Risk Analysis (SoD)"
 

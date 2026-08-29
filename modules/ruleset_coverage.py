@@ -221,6 +221,12 @@ def _expand_range(low: str, high: str) -> Optional[Set[str]]:
 
 
 class RulesetCoverageAuditor(BaseAuditor):
+    #: Optional inputs (see BaseAuditor.OPTIONAL_SOURCES): every one of these has a check that reports its own absence in words -
+    #: SODCOV-006 for the Fiori exports, SODCOV-007 and the note on SODCOV-002
+    #: for the object catalogue, SODCOV-008/009/010 for a supplied ruleset.
+    OPTIONAL_SOURCES = frozenset({"ara_ruleset", "auth_object_catalogue", "fiori_tiles",
+                                   "fiori_catalogs", "odata_auth"})
+
     """Measures what fraction of the granted estate the SoD ruleset can see."""
 
     CATEGORY = "SoD Ruleset Coverage"
