@@ -151,6 +151,21 @@ class PDFReportGenerator:
             # on partial input.
             self.risk_scope = posture_score.scope_note(assessed)
 
+
+    #: The one finding that says how far the SoD result can be believed.
+    TRUST_CHECK_ID = "SODCOV-000"
+
+    def _trust_statement(self):
+        """(verdict, title, limits) or None. Read from the finding rather than
+        recomputed, so every format says exactly what the HTML says."""
+        f = next((x for x in self.findings
+                  if x.get("check_id") == self.TRUST_CHECK_ID), None)
+        if f is None:
+            return None
+        d = f.get("details") or {}
+        return (str(d.get("verdict", "")).upper(), f.get("title", ""),
+                list(d.get("limits") or []))
+
     def _tier_of(self, f):
         return self._prio_by_id.get(id(f))
 
@@ -336,6 +351,21 @@ class PDFReportGenerator:
         partial_findings = sum(
             1 for f in self.findings
             if not (f.get("evidence") or {}).get("complete", True))
+        # The segregation verdict, BEFORE the coverage arithmetic. Its own
+        # text tells the reader to read it before the conflict results, and in
+        # a linear document that means printing it above them rather than
+        # trusting a reader to find it.
+        trust = self._trust_statement()
+        if trust:
+            verdict, title, limits = trust
+            self._para("SEGREGATION OF DUTIES: %s" % verdict,
+                       size=10.5, leading=14, gap_after=2)
+            self._para(title, size=9, color=MUTED, leading=12, gap_after=2)
+            for limit in limits:
+                self._para("  -  %s" % limit, size=8.5, color=MUTED,
+                           leading=11, gap_after=1)
+            self._para("", size=6, leading=6, gap_after=4)
+
         self._para(
             "%s of %s logical sources supplied  -  %s module(s) ran on partial input  -  "
             "%s had no input supplied  -  %s were not executed  -  "

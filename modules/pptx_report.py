@@ -165,6 +165,21 @@ class PPTXReportGenerator:
             self.tier_meta = {}
         self.compliance = ComplianceMapper(self.full_findings).assess()
 
+
+    #: The one finding that says how far the SoD result can be believed.
+    TRUST_CHECK_ID = "SODCOV-000"
+
+    def _trust_statement(self):
+        """(verdict, title, limits) or None. Read from the finding rather than
+        recomputed, so every format says exactly what the HTML says."""
+        f = next((x for x in self.findings
+                  if x.get("check_id") == self.TRUST_CHECK_ID), None)
+        if f is None:
+            return None
+        d = f.get("details") or {}
+        return (str(d.get("verdict", "")).upper(), f.get("title", ""),
+                list(d.get("limits") or []))
+
     def _tier_of(self, f):
         return self._prio.get(id(f))
 
@@ -571,6 +586,15 @@ class PPTXReportGenerator:
         partial_findings = sum(
             1 for f in self.findings
             if not (f.get("evidence") or {}).get("complete", True))
+        # The segregation verdict gets its own line above the cards. A deck
+        # is skimmed, and a verdict that only exists as one card among six is
+        # a verdict nobody reads.
+        trust = self._trust_statement()
+        if trust:
+            s.text(Inches(0.6), Inches(1.9), W - Inches(1.2), Inches(0.5),
+                   [_p("Segregation of duties: %s" % trust[0], 14, b=True,
+                       color=INK)])
+
         cards = [
             (str(counts.get("sources_supplied", 0)) + " / " + str(counts.get("sources_known", 0)),
              "logical sources supplied"),

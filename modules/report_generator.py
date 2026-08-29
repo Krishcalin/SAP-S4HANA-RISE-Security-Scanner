@@ -257,6 +257,7 @@ class ReportGenerator:
         findings_html = self._render_findings()
         filter_html = self._render_filter_notice()
         coverage_html = self._render_coverage()
+        trust_html = self._render_trust_statement()
         ownership_html = self._render_ownership_split()
         compliance_html = self._render_compliance()
         fair_html = self._render_fair()
@@ -1110,6 +1111,12 @@ class ReportGenerator:
        severity cards, the P1-P4 queue and the category bars, which is every
        number a reader anchors on. -->
   {coverage_html}
+  <!-- HOW FAR THE SEGREGATION RESULT CAN BE BELIEVED, BEFORE THE CONFLICTS.
+       SODCOV-000's own description tells the reader to read it before the
+       conflict results. It was rendering as card 151 of 419, sorted in among
+       them by severity, which is the same mistake the coverage block above was
+       moved to fix: a qualification nobody reaches is not a qualification. -->
+  {trust_html}
   {self._evidence_manifest_html()}
   {filter_html}
 
@@ -1398,7 +1405,12 @@ window.addEventListener('beforeprint', () => {{
             trank = self._TIER_RANK.get(getattr(pr, "tier", None), 9) if pr is not None else 9
             score = -getattr(pr, "score", 0) if pr is not None else 0
             return (trank, order.get(f.get("severity"), 4), score)
-        sorted_findings = sorted(self.findings, key=_sortkey)
+        # SODCOV-000 is rendered above, in full. Leaving it here too would
+        # show the same statement twice and put the copy a reader reaches
+        # second 150 cards below the one that matters.
+        sorted_findings = sorted(
+            (f for f in self.findings
+             if f.get("check_id") != self.TRUST_CHECK_ID), key=_sortkey)
 
         parts = []
         for f in sorted_findings:
@@ -1846,6 +1858,37 @@ window.addEventListener('beforeprint', () => {{
     </div>
 """
 
+    #: The one finding that summarises how far the SoD result can be trusted.
+    TRUST_CHECK_ID = "SODCOV-000"
+
+    def _render_trust_statement(self) -> str:
+        """SODCOV-000, above the findings rather than buried among them."""
+        f = next((x for x in self.findings
+                  if x.get("check_id") == self.TRUST_CHECK_ID), None)
+        if f is None:
+            return ""
+        limits = (f.get("details") or {}).get("limits") or []
+        verdict = str((f.get("details") or {}).get("verdict", "")).upper()
+        items = "".join("<li>%s</li>" % html.escape(str(l)) for l in limits)
+        return """
+    <div class="trust-block trust-{sev}">
+      <div class="trust-head">
+        <span class="trust-verdict">{verdict}</span>
+        <span class="trust-title">{title}</span>
+        <span class="finding-id trust-id">{cid}</span>
+      </div>
+      <div class="trust-body">{desc}</div>
+      {limits_html}
+    </div>
+""".format(sev=html.escape(f["severity"]),
+           verdict=html.escape(verdict or f["severity"]),
+           title=html.escape(f["title"]),
+           cid=html.escape(f["check_id"]),
+           desc=html.escape(f["description"]),
+           limits_html=("" if not items else
+                        '<div class="trust-limits-title">Stated limits, worst '
+                        'first</div><ul class="trust-limits">%s</ul>' % items))
+
     def _render_coverage(self) -> str:
         """What the scan could not look at.
 
@@ -1934,6 +1977,24 @@ window.addEventListener('beforeprint', () => {{
       .cov-complete {{ color:#15803d; background:rgba(34,197,94,.13); }}
       .cov-degraded {{ color:var(--medium); background:var(--medium-bg); }}
       .cov-skipped {{ color:var(--text-muted); border:1px dashed var(--border); }}
+      .trust-block {{ margin:1.2rem 0; padding:1rem 1.2rem; border-radius:8px;
+                     border:1px solid var(--border); background:var(--card);
+                     border-left:5px solid var(--text-muted); }}
+      .trust-block.trust-CRITICAL {{ border-left-color:var(--critical); }}
+      .trust-block.trust-HIGH {{ border-left-color:var(--high); }}
+      .trust-block.trust-MEDIUM {{ border-left-color:var(--medium); }}
+      .trust-block.trust-INFO {{ border-left-color:#15803d; }}
+      .trust-head {{ display:flex; align-items:center; gap:.6rem;
+                    flex-wrap:wrap; margin-bottom:.5rem; }}
+      .trust-verdict {{ font-size:.72rem; font-weight:800; letter-spacing:.06em;
+                       padding:.18rem .5rem; border-radius:4px;
+                       background:var(--medium-bg); color:var(--medium); }}
+      .trust-title {{ font-weight:700; }}
+      .trust-body {{ font-size:.88rem; line-height:1.55; color:var(--text-muted); }}
+      .trust-limits-title {{ margin-top:.7rem; font-size:.72rem; font-weight:700;
+                            text-transform:uppercase; letter-spacing:.05em;
+                            color:var(--text-muted); }}
+      .trust-limits {{ margin:.3rem 0 0 1.1rem; font-size:.85rem; line-height:1.5; }}
       .ev-badge {{ font-size:.62rem; font-weight:700; padding:.12rem .4rem;
                   border-radius:4px; white-space:nowrap; color:var(--medium);
                   background:var(--medium-bg); border:1px solid rgba(234,179,8,.25); }}

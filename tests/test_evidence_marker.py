@@ -278,3 +278,65 @@ def test_the_real_scan_marks_only_the_checks_that_lost_an_input():
     lost = [f for f in notes if not f["evidence"]["complete"]]
     assert lost and all("sap_security_notes" in f["evidence"]["missing_sources"]
                         for f in lost)
+
+
+# ── the trust statement has to be where it says to read it ─────────────────
+#
+# SODCOV-000's own description tells the reader to read it before the conflict
+# results. It rendered as card 151 of 419, sorted in among them by severity —
+# the same mistake the coverage block above it was moved to fix. A
+# qualification nobody reaches is not a qualification.
+
+def _trust_finding(verdict="unbounded", limits=("a role grants every tcode",)):
+    return {"check_id": "SODCOV-000", "title": "This result is %s" % verdict.upper(),
+            "severity": "HIGH", "category": "SoD Ruleset Coverage",
+            "description": "Read this before the conflict results.",
+            "affected_items": [], "affected_count": 0, "remediation": "",
+            "references": [], "timestamp": "2026-08-29T00:00:00",
+            "evidence": {"complete": True, "declared_sources": 1,
+                         "missing_sources": []},
+            "details": {"verdict": verdict, "limits": list(limits)}}
+
+
+def test_the_trust_statement_renders_above_the_findings():
+    html = _report_html([_finding(True, check_id="ZZZ-1"), _trust_finding()])
+    assert 'class="trust-block' in html
+    assert html.index('class="trust-block') < html.index('class="finding-card')
+
+
+def test_it_is_not_also_shown_as_a_finding_card():
+    """Rendering it twice puts the copy a reader reaches second 150 cards below
+    the one that matters. Checked against the CARDS specifically: the block
+    above carries the same id badge, which is not a duplicate."""
+    import re
+    html = _report_html([_finding(True, check_id="ZZZ-1"), _trust_finding()])
+    cards = re.findall(r'class="finding-card".*?class="finding-id">([^<]+)<',
+                       html, re.S)
+    assert "ZZZ-1" in cards and "SODCOV-000" not in cards
+
+
+def test_the_verdict_and_its_limits_are_both_shown():
+    html = _report_html([_trust_finding(
+        "partial", ("names 0% of the Fiori surface", "2 rules cannot fire"))])
+    assert "PARTIAL" in html
+    assert "names 0% of the Fiori surface" in html
+    assert "2 rules cannot fire" in html
+
+
+def test_a_report_without_the_statement_renders_normally():
+    """Every other module runs without ruleset coverage, and the page must not
+    depend on a finding that may not exist."""
+    html = _report_html([_finding(True, check_id="ZZZ-1")])
+    assert 'class="trust-block' not in html
+    assert 'class="finding-card' in html
+
+
+def test_the_other_formats_read_the_same_finding():
+    """Recomputing the verdict per format is how three documents come to
+    disagree about one estate."""
+    import inspect
+    from modules import pdf_report, pptx_report
+    for mod in (pdf_report, pptx_report):
+        src = inspect.getsource(mod)
+        assert "_trust_statement" in src
+        assert 'TRUST_CHECK_ID = "SODCOV-000"' in src
