@@ -505,3 +505,90 @@ def test_a_non_object_entry_does_not_crash_the_check():
     """Hand-edited JSON contains anything at all."""
     f = one(custom([["not", "a", "rule"], two_sided()]), "SODCOV-008")
     assert f["details"]["can_never_fire"] == 1
+
+
+# ── comparing two rulesets ─────────────────────────────────────────────────
+#
+# An organisation that already owns a GRC ruleset will not replace it with ours.
+# What they want is the delta, and the framing has to be exact: this engine
+# MERGES a supplied ruleset with the shipped one, so within a scan both ran.
+# Their own GRC system runs theirs alone, and that is the comparison worth
+# making.
+
+from modules.access_risk_analysis import AccessRiskAnalysisAuditor as _ARA  # noqa: E402
+
+
+def z_rule(rid, a_tcodes, a_obj, b_tcodes, b_obj):
+    return {"risk_id": rid, "risk_type": "SOD", "functions": [
+        {"name": "a", "actions": a_tcodes,
+         "permissions": [{"object": a_obj, "field": "ACTVT", "values": ["02"]}]},
+        {"name": "b", "actions": b_tcodes,
+         "permissions": [{"object": b_obj, "field": "ACTVT", "values": ["02"]}]}]}
+
+
+SMALL = [z_rule("Z01", ["FK01"], "F_LFA1_BUK", ["F110"], "F_REGU_BUK")]
+
+
+def test_no_supplied_ruleset_means_no_comparison():
+    assert one(audit([row(low="FK02")]), "SODCOV-010") is None
+
+
+def test_a_ruleset_identical_to_ours_produces_no_comparison():
+    """Nothing to say, so say nothing."""
+    assert one(custom(_ARA.RULESET), "SODCOV-010") is None
+
+
+def test_it_leads_with_processes_rather_than_a_transaction_count():
+    """A raw count of unnamed transactions is dominated by how many rules were
+    supplied, so on a small extension it reads as alarming when it is merely
+    arithmetic. A whole business process left untouched is a decision."""
+    f = one(custom(SMALL), "SODCOV-010")
+    assert "business processes at all" in f["title"]
+    assert "H2R" in f["details"]["shipped_processes_untouched_by_supplied"]
+
+
+def test_the_comparison_states_that_this_scan_merged_the_two():
+    """Otherwise the delta reads as a description of what just ran, which it
+    is not."""
+    assert "MERGED them" in one(custom(SMALL), "SODCOV-010")["description"]
+
+
+def test_capabilities_only_the_supplied_ruleset_reaches_are_reported():
+    """The reverse direction is a gap in THIS product. A comparison that only
+    ever flattered us would not be worth running."""
+    f = one(custom(SMALL + [z_rule("Z02", ["ZCUST1"], "Z_MINE",
+                                   ["ZCUST2"], "Z_MINE2")]), "SODCOV-010")
+    assert f["details"]["only_in_supplied"] == ["ZCUST1", "ZCUST2"]
+    assert f["details"]["objects_only_in_supplied"] == ["Z_MINE", "Z_MINE2"]
+    assert "a gap in THIS product" in f["description"]
+
+
+def test_a_superset_of_ours_is_reported_at_info_not_medium():
+    """They are ahead of us on those capabilities. That is not their finding."""
+    f = one(custom(_ARA.RULESET + [z_rule("ZX", ["ZNEW1"], "Z_NEW1",
+                                          ["ZNEW2"], "Z_NEW2")]), "SODCOV-010")
+    assert f["severity"] == "INFO"
+    assert "this one does not" in f["title"]
+
+
+def test_no_attempt_is_made_to_match_risk_to_risk():
+    """Identifiers and groupings will not correspond between two rulesets, and
+    a fuzzy correspondence would read as precision it does not have."""
+    d = one(custom(SMALL), "SODCOV-010")["details"]
+    assert "not_named_by_supplied" in d and "risks_matched" not in d
+    assert "match individual risks" in one(custom(SMALL), "SODCOV-010")["description"]
+
+
+def test_the_counts_describe_each_ruleset_alone():
+    f = one(custom(SMALL), "SODCOV-010")
+    d = f["details"]
+    assert d["supplied_transactions"] == 2          # FK01 + F110
+    assert d["shipped_transactions"] == len(
+        {a for r in _ARA.RULESET for fn in r["functions"] for a in fn["actions"]})
+
+
+def test_a_malformed_supplied_rule_does_not_break_the_comparison():
+    """SODCOV-008 reports it; this check must still produce its numbers."""
+    f = one(custom(SMALL + [["not", "a", "rule"], {"risk_id": "ZB"}]),
+            "SODCOV-010")
+    assert f is not None and f["details"]["supplied_transactions"] == 2

@@ -54,6 +54,28 @@ there was no data to measure at all. What must never happen is a bare
 percentage presented as the estate's coverage while a wildcard role sits behind
 it — which is the failure the earlier revision over-corrected for.
 
+TWO RULESETS, AND THE COMPARISON NOBODY MAKES
+─────────────────────────────────────────────
+An organisation that already owns a GRC ruleset is not going to replace it with
+ours, and should not be asked to. What they want is the delta, and nothing
+produced it: SODCOV-009 notices when a custom rule collides with a shipped id,
+which is a very small part of the question.
+
+The framing has to be exact or the number is misleading. This engine MERGES a
+supplied ruleset with the shipped one, so within this scan both ran. Their own
+GRC system runs theirs ALONE, and that is the comparison worth making: run by
+itself, which transactions and authorization objects would the supplied ruleset
+never name?
+
+It is reported in BOTH directions on purpose. The forward direction is the one a
+buyer cares about and is therefore the one to be most careful with; the reverse
+direction — capabilities their ruleset names and ours does not — is a gap in
+THIS product, and a comparison that only ever flattered us would not be worth
+running. No attempt is made to match risk to risk: their ids and groupings will
+not correspond to ours, and a fuzzy correspondence would produce confident
+nonsense. Transactions and objects are compared exactly, because "your ruleset
+never mentions F110" is a fact and needs no interpretation.
+
 THE CUSTOMER'S OWN RULESET IS THE ONE NOBODY CHECKS
 ───────────────────────────────────────────────────
 `ara_ruleset.json` lets a customer extend or replace what we ship, and it is the
@@ -230,6 +252,7 @@ class RulesetCoverageAuditor(BaseAuditor):
             # is measurable with no AGR_1251 at all.
             self._emit_unknown_objects()
             self._emit_custom_ruleset_defects()
+            self._emit_ruleset_comparison()
             return self.findings
 
         granted = self._granted(rows)
@@ -246,6 +269,7 @@ class RulesetCoverageAuditor(BaseAuditor):
         self._emit_fiori_coverage(known_actions, known_objects)
         self._emit_unknown_objects()
         self._emit_custom_ruleset_defects()
+        self._emit_ruleset_comparison()
         return self.findings
 
     # ------------------------------------------------------------------ #
@@ -519,6 +543,131 @@ class RulesetCoverageAuditor(BaseAuditor):
             return ("a critical-access rule with %d functions: only the first is "
                     "evaluated, so the rest are ignored" % len(funcs))
         return None
+
+    @staticmethod
+    def _vocabulary_of(ruleset) -> Tuple[Set[str], Set[str]]:
+        """(actions, objects) a ruleset can name. Exact, never fuzzy."""
+        actions, objects = set(), set()
+        for risk in ruleset or []:
+            if not isinstance(risk, dict):
+                continue
+            for func in (risk.get("functions") or []):
+                if not isinstance(func, dict):
+                    continue
+                for act in (func.get("actions") or []):
+                    if str(act).strip():
+                        actions.add(str(act).strip().upper())
+                for perm in (func.get("permissions") or []):
+                    if isinstance(perm, dict) and str(perm.get("object", "")).strip():
+                        objects.add(str(perm["object"]).strip().upper())
+        return actions, objects
+
+    def _emit_ruleset_comparison(self) -> None:
+        """What each of the two rulesets reaches that the other does not.
+
+        Only meaningful when a ruleset was actually supplied; silent otherwise.
+        """
+        supplied = self._custom_rules()
+        if not supplied:
+            return
+        shipped = self._shipped_ruleset()
+        s_act, s_obj = self._vocabulary_of(supplied)
+        p_act, p_obj = self._vocabulary_of(shipped)
+
+        missing_act, missing_obj = sorted(p_act - s_act), sorted(p_obj - s_obj)
+        extra_act, extra_obj = sorted(s_act - p_act), sorted(s_obj - p_obj)
+        processes = sorted({str(r.get("process", "")).strip()
+                            for r in shipped if isinstance(r, dict)} - {""})
+        untouched = sorted(pr for pr in processes
+                           if not (self._vocabulary_of(
+                               [r for r in shipped
+                                if isinstance(r, dict) and r.get("process") == pr]
+                           )[0] & s_act))
+
+        if not missing_act and not missing_obj and not extra_act and not extra_obj:
+            return
+
+        self.finding(
+            check_id="SODCOV-010",
+            # Lead with PROCESSES where whole ones are untouched. A raw count
+            # of unnamed transactions is dominated by how many rules were
+            # supplied, so on a small extension it reads as alarming when it is
+            # merely arithmetic. "This ruleset does not touch payroll" is a
+            # decision somebody owns; "366 transactions" is not.
+            title=("Run alone, the supplied ruleset would not cover %d of this "
+                   "ruleset's %d business processes at all"
+                   % (len(untouched), len(processes)))
+            if untouched else
+            ("Run alone, the supplied ruleset would not name %d "
+             "transaction(s) and %d authorization object(s) this one covers"
+             % (len(missing_act), len(missing_obj)))
+            if (missing_act or missing_obj) else
+            ("The supplied ruleset reaches %d transaction(s) this one does not"
+             % len(extra_act)),
+            severity=(self.SEVERITY_MEDIUM if missing_act or missing_obj
+                      else self.SEVERITY_INFO),
+            category=self.CATEGORY,
+            description=(
+                "A ruleset was supplied alongside the shipped one, and this scan "
+                "MERGED them — so the conflict results above were produced by "
+                "both together. The comparison below is a different question, "
+                "and the one that matters if the supplied ruleset is the one "
+                "your GRC system runs on its own: by itself it names %d "
+                "transactions and %d authorization objects, against %d and %d "
+                "here.%s%s No attempt is made to match individual risks: "
+                "identifiers and groupings will not correspond between two "
+                "rulesets, and a fuzzy correspondence would read as precision it "
+                "does not have. Transactions and objects are compared exactly."
+                % (len(s_act), len(s_obj), len(p_act), len(p_obj),
+                   "" if not (missing_act or missing_obj) else
+                   " Running alone it would never name %d of the transactions "
+                   "and %d of the objects covered here, so any conflict "
+                   "reachable only through those is outside what it can find."
+                   % (len(missing_act), len(missing_obj)),
+                   "" if not (extra_act or extra_obj) else
+                   " It also reaches %d transaction(s) and %d object(s) that the "
+                   "shipped ruleset does not — a gap in THIS product rather than "
+                   "in yours, and worth reporting for that reason."
+                   % (len(extra_act), len(extra_obj)))),
+            affected_items=(
+                ["not named by the supplied ruleset: %s" % t
+                 for t in missing_act[:30]]
+                + ["object not discriminated by the supplied ruleset: %s" % o
+                   for o in missing_obj[:20]]
+                + ["reached only by the supplied ruleset: %s" % t
+                   for t in extra_act[:20]]),
+            remediation=(
+                "1. Decide first whether the supplied file EXTENDS this ruleset "
+                "or REPLACES it. If it was meant as an extension, a large gap "
+                "below is expected and says nothing about your file; the figures "
+                "still describe what your own GRC system reports, because that "
+                "runs your ruleset alone.\n"
+                "2. Work through the unnamed transactions by process rather than "
+                "individually. A whole business process absent from a ruleset is "
+                "a decision somebody should own; a handful of transactions "
+                "usually is not.\n"
+                "3. For each gap you decide matters, add the transaction to the "
+                "function it belongs to rather than creating a new risk — the "
+                "conflict is usually already described, just not with that "
+                "entry point.\n"
+                "4. Send us the capabilities your ruleset covers and ours does "
+                "not. Those are gaps in this product, and the list above names "
+                "them precisely."),
+            references=["docs/SOD_REFERENCE.md section 1.2 — coverage beats count",
+                        "data/sod_ruleset.json — the shipped rules"],
+            details={
+                "supplied_transactions": len(s_act),
+                "supplied_objects": len(s_obj),
+                "shipped_transactions": len(p_act),
+                "shipped_objects": len(p_obj),
+                "not_named_by_supplied": missing_act[:80],
+                "objects_not_in_supplied": missing_obj[:60],
+                "only_in_supplied": extra_act[:60],
+                "objects_only_in_supplied": extra_obj[:40],
+                "shipped_processes_untouched_by_supplied": untouched,
+                "coverage_state": "complete",
+            },
+        )
 
     def _custom_rules(self) -> List[Dict[str, Any]]:
         custom = self.data.get(CUSTOM_RULESET_EXPORT)
