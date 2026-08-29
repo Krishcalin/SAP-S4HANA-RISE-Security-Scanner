@@ -501,14 +501,20 @@ def store_run(conn: psycopg.Connection, run_id: int, landscape_id: int,
             """
             INSERT INTO finding_observation
                 (finding_id, scan_run_id, severity, title, description,
-                 affected_items, affected_objects, affected_count, details)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                 affected_items, affected_objects, affected_count, details,
+                 evidence)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (finding_id, scan_run_id) DO NOTHING
             """,
             (finding_id, run_id, f.get("severity"), f.get("title", ""),
              f.get("description", ""), Jsonb(f.get("affected_items") or []),
              Jsonb(subject), f.get("affected_count") or 0,
-             Jsonb(f.get("details") or {})))
+             Jsonb(f.get("details") or {}),
+             # A finding from a scanner that predates the marker carries no
+             # `evidence`. It is stored as {} rather than as "complete": not
+             # knowing is a third state, and recording it as the good one is
+             # exactly what the marker exists to prevent.
+             Jsonb(f.get("evidence") or {})))
 
         # Per-occurrence facts about code findings, refreshed on EVERY run rather
         # than only at insert. Both genuinely change without the finding changing

@@ -380,7 +380,14 @@ def get_finding(finding_id: int, scope: Optional[Sequence[int]]) -> Optional[Dic
         # from `finding`. Read here so the detail page stays one round trip.
         f"(SELECT o.details FROM finding_observation o "
         f"  WHERE o.finding_id = f.id ORDER BY o.scan_run_id DESC LIMIT 1) "
-        f"  AS latest_details "
+        f"  AS latest_details, "
+        # Whether the data behind the NEWEST observation was complete. From the
+        # same run as the snippet above, and for the same reason: a finding
+        # drawn from a partial export last month may be fully evidenced today,
+        # and the page should say which run it is describing.
+        f"(SELECT o.evidence FROM finding_observation o "
+        f"  WHERE o.finding_id = f.id ORDER BY o.scan_run_id DESC LIMIT 1) "
+        f"  AS latest_evidence "
         f"FROM finding f JOIN check_definition cd ON cd.check_id = f.check_id "
         f"LEFT JOIN sap_system s ON s.id = f.system_id "
         f"JOIN landscape l ON l.id = f.landscape_id "

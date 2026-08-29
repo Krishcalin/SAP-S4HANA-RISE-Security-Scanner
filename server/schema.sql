@@ -597,6 +597,21 @@ CREATE INDEX IF NOT EXISTS finding_tier_idx ON finding (landscape_id, priority_t
 -- page can never disagree with the row that carries the path's history.
 ALTER TABLE attack_path ADD COLUMN IF NOT EXISTS detail jsonb NOT NULL DEFAULT '{}'::jsonb;
 
+-- Whether the data behind a finding was complete, for THIS run.
+--
+-- On the observation and not on `finding`, because it is a fact about the
+-- upload rather than about the finding's identity: the same conflict can be
+-- fully evidenced this month and drawn from a partial export the next, and a
+-- customer who supplies the missing file should see the qualification
+-- disappear without the finding being treated as new.
+--
+-- Default '{}' rather than a "complete" default. A row written before this
+-- column existed does not know whether its evidence was complete, and
+-- inventing a reassuring answer for it is the failure the column exists to
+-- report.
+ALTER TABLE finding_observation
+    ADD COLUMN IF NOT EXISTS evidence jsonb NOT NULL DEFAULT '{}'::jsonb;
+
 -- What the run CONCLUDED, as distinct from what the finding rows imply.
 --
 -- `queries.run_diff` derives new/persisting/resolved/regressed from stored

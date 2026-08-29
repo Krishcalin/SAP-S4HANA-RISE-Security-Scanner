@@ -102,6 +102,29 @@ export function FindingDetail() {
         )}
       </p>
 
+      {/* WHETHER THE DATA BEHIND THIS FINDING WAS COMPLETE.
+          The offline report has said this since the evidence marker was added;
+          the console could not, because the database did not carry it. A
+          conclusion drawn from a fraction of a module's inputs looked exactly
+          like one drawn from all of them.
+          Only the incomplete case is shown: marking every finding "complete"
+          is noise, and its absence already carries that meaning. */}
+      {finding.latest_evidence?.complete === false && (
+        <div className="banner banner-warn">
+          <strong className="font-semibold">This rests on partial data.</strong>{' '}
+          The check ran without{' '}
+          {(finding.latest_evidence.missing_sources ?? []).length} of the{' '}
+          {finding.latest_evidence.declared_sources ?? 0} exports its module reads
+          {(finding.latest_evidence.missing_sources ?? []).length > 0 && (
+            <>: <span className="font-mono">
+              {(finding.latest_evidence.missing_sources ?? []).join(', ')}
+            </span></>
+          )}. What is reported here is drawn from the exports that were supplied.
+          A clean result in the areas the missing ones feed means the question
+          was not asked, not that the answer was good.
+        </div>
+      )}
+
       {finding.remediation_owner === 'ticket_to_sap' && (
         <div className="banner banner-info">
           <strong className="font-semibold">This is SAP&rsquo;s to change.</strong> Under{' '}

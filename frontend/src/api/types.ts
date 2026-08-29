@@ -240,6 +240,14 @@ export interface FindingDetail extends Omit<FindingRow,
    *  describe a PARTICULAR run, so they come from the observation, not the
    *  finding. */
   latest_details: Record<string, unknown> | null
+  /** Whether the data behind the NEWEST observation was complete. Empty for a
+   *  finding stored before the marker existed: not knowing is a third state,
+   *  and rendering it as "complete" is what the marker exists to prevent. */
+  latest_evidence: {
+    complete?: boolean
+    declared_sources?: number
+    missing_sources?: string[]
+  } | null
 }
 
 /** server/queries.py `finding_history` — finding_transition.*. */
