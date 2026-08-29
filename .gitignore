@@ -80,3 +80,4 @@ production/
 
 # Jupyter
 .ipynb_checkpoints/
+reports/check_firing.json

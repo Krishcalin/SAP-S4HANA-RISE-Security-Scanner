@@ -1,0 +1,88 @@
+"""The published firing figure has to be internally honest.
+
+`docs/CHECK_FIRING.md` says how many of the product's checks are proven to
+produce a finding somewhere in this suite. It cannot be regenerated inside a
+test — it needs a full run to exist — so what is guarded here is everything
+else: that the numbers add up, that the families named are real, and that no
+family is excluded without a stated reason.
+
+The failure this protects against is specific. A "proven by construction"
+exclusion with no reason attached is indistinguishable from a family quietly
+dropped to make the number look better, and a total that does not reconcile
+means the document is describing a catalogue it did not measure.
+"""
+import re
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from modules import coverage                                   # noqa: E402
+from tools import build_firing_reference as B                  # noqa: E402
+
+DOC = ROOT / "docs" / "CHECK_FIRING.md"
+pytestmark = pytest.mark.skipif(
+    not DOC.exists(),
+    reason="docs/CHECK_FIRING.md not generated yet (needs a full suite run)")
+
+
+def numbers():
+    text = DOC.read_text(encoding="utf-8")
+    m = re.search(r"\*\*(\d+) of (\d+)\*\* literal check ids are proven", text)
+    n = re.search(r"further \*\*(\d+)\*\* are proven by construction", text)
+    u = re.search(r"\*\*(\d+)\*\* are unproven", text)
+    assert m and n and u, "the document's headline figures could not be parsed"
+    return (int(m.group(1)), int(m.group(2)), int(n.group(1)), int(u.group(1)))
+
+
+def test_the_three_figures_reconcile_against_the_catalogue():
+    """proven + by construction + unproven must equal the catalogue. A total
+    that does not add up means the document describes something it did not
+    measure."""
+    proven, total, construction, unproven = numbers()
+    assert proven + construction + unproven == total
+    assert total == len(coverage.check_catalogue())
+
+
+def test_the_document_does_not_claim_more_than_the_catalogue_holds():
+    proven, total, _c, _u = numbers()
+    assert 0 < proven <= total
+
+
+def test_every_construction_exclusion_states_its_reason():
+    """A family excluded without a reason is indistinguishable from one quietly
+    dropped to improve the number."""
+    assert B.PROVEN_BY_CONSTRUCTION
+    for family, reason in B.PROVEN_BY_CONSTRUCTION.items():
+        assert len(reason) > 40, family
+        assert family in DOC.read_text(encoding="utf-8")
+
+
+def test_every_family_named_in_the_table_exists_in_the_catalogue():
+    catalogue = set(coverage.check_catalogue())
+    families = {c.rsplit("-", 1)[0] for c in catalogue}
+    named = re.findall(r"^\| `([A-Z0-9-]+)` \| \d+ \| \d+ \|$",
+                       DOC.read_text(encoding="utf-8"), re.M)
+    assert named, "no family rows found in the document"
+    assert not [f for f in named if f not in families]
+
+
+def test_the_document_says_what_unproven_does_not_mean():
+    """Left unqualified, the number reads as 'N broken checks', which is false
+    and would be the same overstatement this repository keeps finding."""
+    text = DOC.read_text(encoding="utf-8")
+    assert "does **not** mean the check is broken" in text
+    assert "correctly stay silent" in text
+
+
+def test_the_builder_refuses_without_a_recording(tmp_path, monkeypatch):
+    """A stale or absent recording must stop the build rather than publish a
+    figure measured from nothing."""
+    monkeypatch.setattr(B, "RECORDING", tmp_path / "absent.json")
+    with pytest.raises(SystemExit) as e:
+        B.load_recording()
+    assert "Run the full suite" in str(e.value)
