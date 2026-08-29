@@ -517,7 +517,7 @@ class BaseAuditor:
         #
         # It is always present, never conditional. A finding that silently
         # lacked the field would be back to being unqualified.
-        f["evidence"] = self._evidence_state()
+        f["evidence"] = self._evidence_state(check_id)
         if affected_objects:
             f["affected_objects"] = affected_objects
         if subject:
@@ -554,7 +554,7 @@ class BaseAuditor:
     #: Computed once per auditor instance by `_evidence_state`.
     _evidence_cache = None
 
-    def _evidence_state(self) -> Dict[str, Any]:
+    def _evidence_state(self, check_id: str = None) -> Dict[str, Any]:
         """Which of this module\'s declared inputs were actually present.
 
         Derived from the SAME mapping the coverage manifest uses, so a
@@ -569,23 +569,41 @@ class BaseAuditor:
         customer sent it and we could not read it.
         """
         if self._evidence_cache is None:
-            # Imported here rather than at module scope: `coverage` reads every
-            # module in this package, and importing it at load time would make
-            # the dependency circular.
-            from modules import coverage
-            name = type(self).__module__.rsplit(".", 1)[-1]
-            declared = sorted(coverage.module_sources().get(name, []) or [])
-            data = self.data or {}
-            missing = [src for src in declared
-                       if not src.startswith("_")
-                       and src not in self.OPTIONAL_SOURCES
-                       and data.get(src) is None]
-            self._evidence_cache = {
-                "complete": not missing,
-                "declared_sources": len(declared),
-                "missing_sources": missing,
-            }
-        return dict(self._evidence_cache)
+            self._evidence_cache = {}
+        if check_id in self._evidence_cache:
+            return dict(self._evidence_cache[check_id])
+
+        # Imported here rather than at module scope: `coverage` reads every
+        # module in this package, and importing it at load time would make the
+        # dependency circular.
+        from modules import coverage
+        name = type(self).__module__.rsplit(".", 1)[-1]
+        # PER CHECK where the emitting code path could be resolved, per module
+        # otherwise. The fallback is deliberate: an id built at run time cannot
+        # be attributed statically, and dropping the warning for it would hide
+        # a real gap. Unknown attribution keeps the warning.
+        declared = coverage.check_sources().get(check_id)
+        # AN EMPTY RESOLUTION IS NOT A RESOLUTION. A check whose inputs are read
+        # in run_all_checks and passed down resolves to [] here, because the
+        # walk follows a method into its helpers and not back out to its
+        # caller. Treating [] as "reads nothing" would mark such a check
+        # complete on an estate that supplied none of its data - a silent
+        # all-clear, which is the one outcome this field exists to prevent. So
+        # empty falls back to the module's declared sources alongside unknown.
+        if not declared:
+            declared = coverage.module_sources().get(name, []) or []
+        declared = sorted(declared)
+        data = self.data or {}
+        missing = [src for src in declared
+                   if not src.startswith("_")
+                   and src not in self.OPTIONAL_SOURCES
+                   and data.get(src) is None]
+        self._evidence_cache[check_id] = {
+            "complete": not missing,
+            "declared_sources": len(declared),
+            "missing_sources": missing,
+        }
+        return dict(self._evidence_cache[check_id])
 
     def run_all_checks(self) -> List[Dict[str, Any]]:
         """Override in subclass — run all checks and return findings."""

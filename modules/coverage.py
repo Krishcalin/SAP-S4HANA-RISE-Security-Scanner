@@ -455,6 +455,139 @@ def _declared_categories(tree: ast.AST) -> Set[str]:
     return found
 
 
+
+@lru_cache(maxsize=1)
+def check_sources() -> Dict[str, List[str]]:
+    """{check id: the logical sources the code path emitting it actually reads}.
+
+    WHY THIS EXISTS. The first version of the per-finding evidence marker used
+    the MODULE's declared sources, and over-marked badly: `code_transport`
+    declares `auth_objects` and `dev_access_prod`, so all 22 of its findings
+    were badged "partial data" when those were absent - including
+    "SQL injection patterns detected in custom code", which reads
+    `custom_code_scan` and could not care less about either.
+
+    That is the failure mode that makes a warning worthless. A badge appearing
+    where it plainly does not apply teaches a reader to ignore it, including on
+    the findings where it does.
+
+    HOW. For each auditor method: the sources it reads directly, plus those read
+    by the same class's helpers it calls (followed transitively, cycles guarded).
+    A check id written as a literal inside that method is attributed to it.
+
+    WHAT IT DELIBERATELY DOES NOT DO. Ids built at run time from rule tables
+    cannot be attributed statically and are simply absent from this map. The
+    caller falls back to the module's declared sources for those, which keeps
+    the marker conservative: unknown attribution means the warning STAYS, and
+    the direction of that error is chosen for the same reason as elsewhere -
+    noise is visible and gets fixed, a silent all-clear does not.
+    """
+    out: Dict[str, List[str]] = {}
+    for path in sorted(MODULES_DIR.glob("*.py")):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (SyntaxError, OSError):
+            continue
+        for cls in [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]:
+            if not any(getattr(b, "id", getattr(b, "attr", "")) == "BaseAuditor"
+                       for b in cls.bases):
+                continue
+            # Accessors, computed to a fixed point exactly as
+            # `_sources_via_helper` does: a method reading `self.data.get(<own
+            # parameter>)` is one, and so is a method forwarding its parameter
+            # to another accessor. Without this, four modules -- user_auth_audit
+            # among them -- read every input through a helper and resolve to
+            # nothing, then fall back to the whole module and over-mark again.
+            accessors: set = set()
+            while True:
+                grew = False
+                for node in ast.walk(cls):
+                    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))                             or node.name in accessors:
+                        continue
+                    params = {a.arg for a in node.args.args[1:]}
+                    if not params:
+                        continue
+                    for inner in ast.walk(node):
+                        if (isinstance(inner, ast.Call)
+                                and isinstance(inner.func, ast.Attribute)
+                                and inner.args
+                                and isinstance(inner.args[0], ast.Name)
+                                and inner.args[0].id in params
+                                and (inner.func.attr == "get"
+                                     or inner.func.attr in accessors)):
+                            accessors.add(node.name)
+                            grew = True
+                            break
+                if not grew:
+                    break
+
+            direct: Dict[str, set] = {}
+            calls: Dict[str, set] = {}
+            emits: Dict[str, set] = {}
+            for fn in [n for n in cls.body
+                       if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]:
+                d, c, e = set(), set(), set()
+                for node in ast.walk(fn):
+                    if not isinstance(node, ast.Call):
+                        continue
+                    src = _data_get_literal(node)
+                    if src:
+                        d.add(src)
+                    # `self._rows("users")` reads `users` just as surely as a
+                    # literal `self.data.get("users")` does.
+                    if (isinstance(node.func, ast.Attribute)
+                            and node.func.attr in accessors
+                            and node.args
+                            and isinstance(node.args[0], ast.Constant)
+                            and isinstance(node.args[0].value, str)):
+                        d.add(node.args[0].value)
+                    if (isinstance(node.func, ast.Attribute)
+                            and isinstance(node.func.value, ast.Name)
+                            and node.func.value.id == "self"):
+                        c.add(node.func.attr)
+                    for kw in node.keywords or []:
+                        if (kw.arg == "check_id"
+                                and isinstance(kw.value, ast.Constant)
+                                and isinstance(kw.value.value, str)):
+                            e.add(kw.value.value)
+                direct[fn.name], calls[fn.name], emits[fn.name] = d, c, e
+
+            def resolve(name, seen=None):
+                seen = seen or set()
+                if name in seen or name not in direct:
+                    return set()
+                seen.add(name)
+                found = set(direct[name])
+                for callee in calls.get(name, ()):  # helpers of the same class
+                    found |= resolve(callee, seen)
+                return found
+
+            for name, ids in emits.items():
+                if not ids:
+                    continue
+                srcs = sorted(s for s in resolve(name) if not s.startswith("_"))
+                for cid in ids:
+                    out.setdefault(cid, [])
+                    out[cid] = sorted(set(out[cid]) | set(srcs))
+    return out
+
+
+def _data_get_literal(node: ast.Call):
+    """The literal in `self.data.get("x")` or `(self.data or {}).get("x")`."""
+    if not (isinstance(node.func, ast.Attribute) and node.func.attr == "get"):
+        return None
+    base = node.func.value
+    if isinstance(base, ast.BoolOp) and base.values:
+        base = base.values[0]
+    if not (isinstance(base, ast.Attribute) and base.attr == "data"
+            and isinstance(base.value, ast.Name) and base.value.id == "self"):
+        return None
+    if node.args and isinstance(node.args[0], ast.Constant) \
+            and isinstance(node.args[0].value, str):
+        return node.args[0].value
+    return None
+
+
 @lru_cache(maxsize=1)
 def check_catalogue() -> Dict[str, str]:
     """{check id: finding category}, for every check written as a literal.
