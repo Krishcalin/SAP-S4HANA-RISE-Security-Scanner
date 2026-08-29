@@ -51,7 +51,7 @@ The estimate was conservative, not mistaken.
 
 | | of 34 |
 |---|---:|
-| identical to the full sample — *"runs with no code change"* | **14** |
+| identical to the full sample — *"runs with no code change"* | **13** |
 | produce findings, but fewer than with full data | 7 |
 | **produce findings at all** | **22** |
 | cannot exist on ECC (no HANA, Fiori, BTP, CDS, S/4 business roles) | 6 |
@@ -199,3 +199,19 @@ available — it was not looking at the surface that distinguishes them.
 Measured parity is **14 of 37** identical and **25 of 37** producing something.
 (The `of 34` in the summary table above predates three later modules; the
 counts in the *identical* and *producing* rows are the ones under test.)
+
+
+## 2026-08-29 — `access_risk_analysis` reports its suppressions, parity moved 14 → 13
+
+A conflict every one of whose holders carried a mitigating-control row used to
+`return` early and emit nothing: it left the report entirely on the strength of
+a line in a CSV. `MITIG-001` now reports every suppression and `MITIG-002`
+reports rows that cannot support an audit conclusion — a blanket `*`, a missing
+approver, a missing expiry that means nothing will ever make the row lapse.
+
+The ECC fixture and the S/4 sample carry different mitigation rows, so the two
+systems now receive different — correct — answers about what was hidden from
+their reports, and `access_risk_analysis` left the identical set. It did so by
+saying more, which is the same trade recorded twice above.
+
+Measured parity is **13 of 38** identical and **25 of 38** producing something.

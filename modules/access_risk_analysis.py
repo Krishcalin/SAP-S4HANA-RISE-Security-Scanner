@@ -49,6 +49,27 @@ lot, for instance). SAP's own model calls that a transaction-based rule and
 notes it is coarser than an authorization-based one; each such rationale says
 which kind it is rather than implying object-level precision it does not have.
 
+A MITIGATING CONTROL IS A ROW; A COMPENSATING CONTROL IS A CONCLUSION
+Nothing makes the former produce the latter, and this module used to behave as
+though it did. A conflict every one of whose holders carried a mitigation row
+returned early and emitted NOTHING - it disappeared from the report entirely, on
+the strength of a line in a CSV.
+
+PCAOB AS 2201 par..68 is explicit that a compensating control must "operate at a
+level of precision that would prevent or detect a misstatement that could be
+material". A row asserts nothing about precision. It does not say the control
+exists, that anybody performs it, or that its evidence would survive being
+looked at - and SAP ships the rubber stamp as configuration (`Approve Despite
+Risk`) while defaulting the Invalid Mitigation Monitors checkbox OFF, so a shop
+sees green control ids over monitors that are expired, deleted or locked.
+
+Suppression is still honoured, because customers legitimately rely on it. What
+changed is that it can no longer be silent: MITIG-001 reports every conflict a
+row removed from this report, and MITIG-002 reports rows that cannot support an
+audit conclusion at all - a blanket `*` that suppresses every risk for a user, a
+missing control id, a missing approver, an absent expiry that means nobody has
+ever revalidated it.
+
 A CAPABILITY HAS TWO DOORS AND THIS CHECK USED TO WATCH ONE
 An S/4HANA user reaches a business capability through a transaction code OR
 through a Fiori app, and only the first passes through S_TCODE. A Fiori app is
@@ -216,6 +237,7 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
               "CRITICAL": "CRITICAL"}
 
     def run_all_checks(self) -> List[Dict[str, Any]]:
+        self._suppressions = []
         role_index = self._build_role_index()
         if not role_index:
             return self.findings  # no AGR_1251 export → module self-skips
@@ -230,6 +252,7 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
 
         self._emit_user_risk_profile(user_risk)
         self._emit_unexplained_execution()
+        self._emit_suppressions()
         return self.findings
 
     # ------------------------------------------------------------------ parsing
@@ -237,6 +260,9 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
     _fiori_pub = None
     #: Lazily built by `_execution_index`; None until first use.
     _exec_idx = None
+    #: Every suppression this run applied, for MITIG-001. An instance
+    #: attribute is set in run_all_checks; this is the safe class default.
+    _suppressions = ()
 
     def _build_role_index(self) -> Optional[Dict[str, Dict[str, Any]]]:
         rows = self.data.get("role_auth_values")
@@ -491,6 +517,12 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
             return []
         return sorted(uid for uid in offenders
                       if len(self._exercised_functions(uid, risk)) == len(funcs))
+
+    def _mitigation_rows(self) -> List[Dict[str, Any]]:
+        """The raw rows. `_load_mitigations` reduces them to risk ids, which is
+        all the matcher needs and not enough to report what was suppressed."""
+        return [r for r in (self.data.get("mitigating_controls") or [])
+                if isinstance(r, dict)]
 
     def _load_mitigations(self) -> Dict[str, set]:
         """user (upper) -> set of mitigated risk_ids (upper); '*' mitigates all.
@@ -764,8 +796,17 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
                 mitigated += 1
             else:
                 residual.append(uid)
+        if mitigated:
+            # RECORDED, always - including when some holders remain. A row that
+            # removes a name from a report is a decision somebody made, and it
+            # is reported as one rather than applied invisibly.
+            self._suppressions.append(
+                {"risk_id": rid, "name": str(risk.get("name", rid)),
+                 "severity": str(risk.get("severity", "HIGH")).upper(),
+                 "suppressed": mitigated,
+                 "fully_suppressed": not residual})
         if not residual:
-            return  # every occurrence is covered by a documented mitigating control
+            return  # reported by MITIG-001 rather than silently dropped
 
         sev_str = str(risk.get("severity", "HIGH")).upper()
         severity = self._SEV.get(sev_str, self.SEVERITY_HIGH)
@@ -848,6 +889,128 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
             # would otherwise retire this finding and raise a fresh one, resetting the
             # risk's age on every run. check_id already carries the risk id (ARA-<rid>),
             # which is the correct, stable subject here.
+            scope="aggregate",
+        )
+
+    def _emit_suppressions(self) -> None:
+        """What the mitigation rows removed, and what those rows are worth."""
+        rows = self._mitigation_rows()
+        if self._suppressions:
+            hidden = sum(1 for x in self._suppressions if x["fully_suppressed"])
+            total = sum(x["suppressed"] for x in self._suppressions)
+            self.finding(
+                check_id="MITIG-001",
+                title=("%d segregation conflict(s) were suppressed by a "
+                       "mitigating control" % len(self._suppressions)),
+                severity=(self.SEVERITY_MEDIUM if hidden else self.SEVERITY_LOW),
+                category=self.CATEGORY,
+                description=(
+                    "A mitigating control row removed %d occurrence(s) across "
+                    "%d risk(s) from the results above%s. The suppression is "
+                    "honoured because customers rely on it, and it is reported "
+                    "because a conflict that leaves a report on the strength of "
+                    "a row should not leave it silently. A SAP mitigating "
+                    "control is a row in a table; a compensating control is an "
+                    "audit conclusion, and nothing makes the first produce the "
+                    "second. PCAOB AS 2201 .68 requires a compensating control "
+                    "to operate at a level of precision that would prevent or "
+                    "detect a material misstatement - a row asserts nothing "
+                    "about precision, about whether anyone performs the "
+                    "control, or about whether its evidence would survive being "
+                    "looked at."
+                    % (total, len(self._suppressions),
+                       "" if not hidden else
+                       ", and %d risk(s) disappeared from this report entirely "
+                       "because every holder carried one" % hidden)),
+                affected_items=["%s (%s) - %d holder(s) suppressed%s"
+                                % (x["risk_id"], x["severity"], x["suppressed"],
+                                   ", entire risk hidden"
+                                   if x["fully_suppressed"] else "")
+                                for x in self._suppressions[:40]],
+                remediation=(
+                    "1. For each suppressed risk, confirm the control actually "
+                    "operates and that somebody performs it. A row in "
+                    "mitigating_controls.csv is a claim, not evidence.\n"
+                    "2. Test precision, which is what AS 2201 .68 asks for: "
+                    "would the control prevent or DETECT the specific misuse "
+                    "the conflict permits, at an amount that matters?\n"
+                    "3. Check the monitor as well as the control id. SAP's "
+                    "Invalid Mitigation Monitors option is off by default, so "
+                    "the standard reports show a green control while its "
+                    "monitor is expired, deleted or locked.\n"
+                    "4. Where the control's only evidence is an SAP report, "
+                    "note that it inherits that report's own reliability - a "
+                    "control evidenced by the system it is compensating for is "
+                    "not independent of it.\n"
+                    "5. Where a control cannot be evidenced, remove the "
+                    "mitigation rather than leaving the conflict hidden. An "
+                    "unmitigated conflict on the report is worth more than a "
+                    "mitigated one that nobody can support."),
+                references=["PCAOB AS 2201 .68 - compensating controls and precision",
+                            "docs/SOD_REFERENCE.md section 6"],
+                details={"risks_suppressed": len(self._suppressions),
+                         "occurrences_suppressed": total,
+                         "risks_hidden_entirely": hidden,
+                         "detail": self._suppressions[:60],
+                         "coverage_state": "complete"},
+                scope="aggregate",
+            )
+
+        weak = []
+        for row in rows:
+            rid = str(row.get("RISK_ID", row.get("RISK", ""))).strip() or "*"
+            who = str(row.get("USER", row.get("USERNAME",
+                              row.get("BNAME", row.get("UNAME", ""))))).strip()
+            control = str(row.get("CONTROL_ID", row.get("CONTROL", ""))).strip()
+            approver = str(row.get("MITIGATED_BY",
+                                   row.get("APPROVER", ""))).strip()
+            valid_to = str(row.get("VALID_TO", row.get("VALIDTO", ""))).strip()
+            faults = []
+            if rid == "*":
+                faults.append("blanket: suppresses EVERY risk for this user")
+            if not control:
+                faults.append("no control id")
+            if not approver:
+                faults.append("no approver")
+            if not valid_to:
+                faults.append("no expiry, so nobody has ever revalidated it")
+            if faults:
+                weak.append("%s / %s - %s" % (who or "?", rid,
+                                              "; ".join(faults)))
+        if not weak:
+            return
+        self.finding(
+            check_id="MITIG-002",
+            title="%d mitigating control row(s) cannot support an audit "
+                  "conclusion" % len(weak),
+            severity=self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=(
+                "These rows suppress segregation conflicts while missing what "
+                "an auditor would need to credit them. A blanket entry is the "
+                "sharpest case: one row naming no specific risk removes EVERY "
+                "conflict for that user, which is the rubber stamp SAP ships as "
+                "configuration (`Approve Despite Risk`) reproduced in data. A "
+                "row with no approver records no decision; a row with no expiry "
+                "has never been revalidated and never will be, because nothing "
+                "will ever make it lapse."),
+            affected_items=weak[:60],
+            remediation=(
+                "1. Replace every blanket entry with per-risk rows. If a user "
+                "genuinely needs several mitigations, that is several rows and "
+                "several decisions, each of which somebody owns.\n"
+                "2. Give every row an approver and an expiry. A mitigation "
+                "without an expiry is not a control, it is a permanent "
+                "exemption nobody will revisit.\n"
+                "3. Set expiries to the review cycle you actually run, so the "
+                "row lapses and returns to the report if the review stops "
+                "happening.\n"
+                "4. Remove rows you cannot evidence rather than renewing them. "
+                "The conflict reappearing is the correct outcome."),
+            references=["PCAOB AS 2201 .68", "docs/SOD_REFERENCE.md section 6",
+                        "SAP GRC MSMP `Approve Despite Risk`"],
+            details={"rows": len(rows), "unsupportable": len(weak),
+                     "coverage_state": "complete"},
             scope="aggregate",
         )
 

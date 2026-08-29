@@ -46,6 +46,10 @@ TEAM_BY_PREFIX: List[Tuple[str, str]] = [
     # Not a defect in the SAP system: an export the customer supplied did not
     # decode. It routes to basis because they are the people who produce the
     # extracts and would re-run them, not because the system is at fault.
+    # Whether a mitigating control can support an audit conclusion is an
+    # authorizations question: the same people who own the SoD ruleset own
+    # the rows that suppress its output.
+    ("MITIG-", "authorizations"),
     ("EXPORT-", "basis"),
     ("ATC-", "development"),
     ("ABAP-", "development"),

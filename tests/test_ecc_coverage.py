@@ -59,7 +59,14 @@ def test_fourteen_auditors_are_identical_on_ecc(measured):
     A module that returns the same findings whatever release it is pointed at is
     identical for the least interesting reason there is.
 
-    IT MOVED 15 -> 14 AGAIN, FOR THE SAME SHAPE OF REASON. `ruleset_coverage`
+    IT MOVED 14 -> 13 when access_risk_analysis began reporting what its
+    mitigating-control rows SUPPRESS. The ECC fixture carries different
+    mitigations from the S/4 sample, so the two systems now get different -
+    correct - answers about what was hidden from their reports. A module that
+    reported the same suppressions whatever rows it was given would be identical
+    for the least interesting reason there is.
+
+    IT MOVED 15 -> 14 BEFORE THAT, FOR THE SAME SHAPE OF REASON. `ruleset_coverage`
     was ECC-identical by construction while it read AGR_1251 and nothing else.
     It now also measures the Fiori surface, and the ECC fixture has no Fiori or
     OData export because ECC has no launchpad to publish one — so the S/4 sample
@@ -70,7 +77,7 @@ def test_fourteen_auditors_are_identical_on_ecc(measured):
     ecc, full = measured
     identical = [m for m, r in ecc.items()
                  if r["findings"] > 0 and r["findings"] == full[m]["findings"]]
-    assert len(identical) == 14, (
+    assert len(identical) == 13, (
         f"ECC parity moved to {len(identical)} of {len(ecc)}. If that is an "
         f"improvement, "
         f"say so and update docs/ECC_COVERAGE.md in this commit — a published "
@@ -227,6 +234,6 @@ def test_the_published_document_states_the_number_it_measured():
     """The document and the test must agree. If one is edited without the other,
     the repository publishes a claim its own suite contradicts."""
     doc = (ROOT / "docs" / "ECC_COVERAGE.md").read_text(encoding="utf-8")
-    assert "| **14** |" in doc, \
-        "docs/ECC_COVERAGE.md no longer states 14; update it and the test together"
+    assert "| **13** |" in doc, \
+        "docs/ECC_COVERAGE.md no longer states 13; update it and the test together"
     assert "**25**" in doc
