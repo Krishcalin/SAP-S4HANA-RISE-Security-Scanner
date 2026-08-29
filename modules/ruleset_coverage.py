@@ -54,6 +54,26 @@ there was no data to measure at all. What must never happen is a bare
 percentage presented as the estate's coverage while a wildcard role sits behind
 it — which is the failure the earlier revision over-corrected for.
 
+A RULE CAN NAME AN OBJECT THAT DOES NOT EXIST, AND NOTHING WOULD SAY SO
+──────────────────────────────────────────────────────────────────────
+The matcher is fail-closed: a permission predicate naming an authorization
+object nobody holds simply is not satisfied. That is the correct behaviour for
+an object that exists and is ungranted, and it is a silent catastrophe for an
+object that does not exist at all. A typo, or an object from a different
+release, produces a rule that can never fire for anybody, ever - and it looks
+exactly like a rule that fires correctly and found nothing.
+
+Our own ruleset carries that risk explicitly. Most of it was written from
+general SAP knowledge rather than object-by-object verification, and every such
+rule says so in `provenance`. That is honest, and it is prose. TOBJ turns it
+into a measurement: an object absent from the catalogue this system publishes is
+not merely unverified, it is wrong here.
+
+The consequence worth reporting is not the object, it is the RULE. A function
+whose permissions are ALL missing can never be held, so a segregation rule with
+such a function can never fire - the risk is in the library, is counted in the
+ruleset size, and is dead. That is what SODCOV-007 names.
+
 THERE ARE TWO SURFACES, AND THE FIRST VERSION MEASURED ONE
 ────────────────────────────────────────────────────────────
 An S/4HANA user reaches a capability through a transaction code OR through a
@@ -102,6 +122,12 @@ CUSTOM_PREFIXES = ("Z", "Y")
 #: Values that mean "every transaction". `*` is the SAP wildcard; a range with a
 #: blank or `*` LOW is the same thing spelled differently.
 WILDCARDS = ("*", "")
+
+#: TOBJ - the authorization objects this release defines. Optional: object
+#: definitions are static SAP content rather than a customer setting, so most
+#: uploads will not carry it and the check reports itself unmeasured instead of
+#: guessing.
+OBJECT_CATALOGUE_EXPORT = "auth_object_catalogue"
 
 #: Exports that describe the Fiori surface. An app reaches a back-end
 #: capability through the OData service behind its tile, so the tile export is
@@ -169,6 +195,9 @@ class RulesetCoverageAuditor(BaseAuditor):
             # present when AGR_1251 is not.
             known_actions, known_objects = self._ruleset_vocabulary()
             self._emit_fiori_coverage(known_actions, known_objects)
+            # The catalogue is about the RULESET, not the estate's grants, so it
+            # is measurable with no AGR_1251 at all.
+            self._emit_unknown_objects()
             return self.findings
 
         granted = self._granted(rows)
@@ -183,6 +212,7 @@ class RulesetCoverageAuditor(BaseAuditor):
         self._emit_permission_coverage(granted, known_objects)
         self._emit_custom_gap(granted)
         self._emit_fiori_coverage(known_actions, known_objects)
+        self._emit_unknown_objects()
         return self.findings
 
     # ------------------------------------------------------------------ #
@@ -225,6 +255,20 @@ class RulesetCoverageAuditor(BaseAuditor):
                 else:
                     out.standard.add(tcode)
         return out
+
+    def _risks(self) -> List[Dict[str, Any]]:
+        """The ruleset under measurement, injected or shipped.
+
+        Split out of `_ruleset_vocabulary` because SODCOV-007 needs the risks
+        themselves, not the vocabulary derived from them: its finding is about
+        which RULES are dead, and that cannot be recovered from a flat set of
+        object names.
+        """
+        if self._ruleset is not None:
+            return self._ruleset
+        # Imported here, not at module scope, for the reason given below.
+        from modules.access_risk_analysis import AccessRiskAnalysisAuditor
+        return AccessRiskAnalysisAuditor.RULESET or []
 
     def _ruleset_vocabulary(self) -> Tuple[Set[str], Set[str]]:
         """Every action and authorization object the ruleset can name."""
@@ -354,8 +398,9 @@ class RulesetCoverageAuditor(BaseAuditor):
             description="Of %d distinct authorization objects granted in the roles, %d "
             "appear in a ruleset permission predicate. Conflicts involving the "
             "other %d can only ever be judged at transaction level, which is "
-            "where false positives and false negatives both come from."
-            % (len(granted_objects), len(seen), len(missing)),
+            "where false positives and false negatives both come from.%s"
+            % (len(granted_objects), len(seen), len(missing),
+               self._unverified_objects_note()),
             affected_items=missing[:40],
             remediation=(
                 "An object absent from every predicate is not necessarily a "
@@ -403,6 +448,158 @@ class RulesetCoverageAuditor(BaseAuditor):
                 "custom_tcodes": custom[:40],
                 "custom_truncated": max(0, len(custom) - 40),
                 "roles_granting_them": sorted(granted.custom_by_role)[:20],
+            },
+        )
+
+    def _unverified_objects_note(self) -> str:
+        """Say when object EXISTENCE was not checked.
+
+        Without TOBJ this module can say which objects the estate grants and
+        which the ruleset names, and cannot say whether a named object exists at
+        all. A rule naming a mistyped object is silent, and silence here reads
+        as coverage.
+        """
+        if self._object_catalogue():
+            return ""
+        return (" No authorization-object catalogue (TOBJ) was supplied, so "
+                "whether every object the ruleset names actually EXISTS in this "
+                "release was not checked. A rule naming an object that does not "
+                "exist can never fire, and is indistinguishable here from a rule "
+                "that ran and found nothing — supply auth_object_catalogue to "
+                "measure it (SODCOV-007).")
+
+    def _object_catalogue(self) -> Set[str]:
+        """Authorization objects this system defines, from TOBJ."""
+        out = set()
+        for row in (self.data.get(OBJECT_CATALOGUE_EXPORT) or []):
+            if not isinstance(row, dict):
+                continue
+            for key in ("OBJCT", "OBJECT", "AUTH_OBJECT", "NAME"):
+                value = str(row.get(key, "")).strip().upper()
+                if value:
+                    out.add(value)
+                    break
+        return out
+
+    def _emit_unknown_objects(self) -> None:
+        """Rules naming authorization objects this release does not define.
+
+        Reported as dead RULES rather than as unknown objects, because that is
+        the consequence: a function whose permissions are all missing can never
+        be held, and a segregation rule containing one can never fire. It sits
+        in the library, is counted in the ruleset size, and answers nothing.
+        """
+        catalogue = self._object_catalogue()
+        if not catalogue:
+            return              # not supplied; disclosed on SODCOV-002 instead
+
+        referenced, absent = set(), set()
+        dead: List[str] = []
+        for risk in self._risks():
+            rid = str(risk.get("risk_id", "?"))
+            for func in (risk.get("functions") or []):
+                objs = {str(perm.get("object", "")).strip().upper()
+                        for perm in (func.get("permissions") or [])}
+                objs.discard("")
+                if not objs:
+                    continue
+                referenced |= objs
+                missing = objs - catalogue
+                absent |= missing
+                # ALL of them missing means this function is unholdable, which
+                # kills the whole rule. Some missing is survivable: the default
+                # match across a function's objects is "any".
+                if missing == objs and rid not in dead:
+                    dead.append(rid)
+
+        if not absent:
+            self.finding(
+                check_id="SODCOV-007",
+                title="Every authorization object the SoD ruleset names exists "
+                      "in this system",
+                severity=self.SEVERITY_INFO,
+                category=self.CATEGORY,
+                description=(
+                    "All %d authorization objects referenced by the ruleset "
+                    "appear in this system's object catalogue, so no rule is "
+                    "dead because of a name that does not resolve. This does "
+                    "not mean each object is the RIGHT one for the duty it "
+                    "guards - only that a rule naming it can fire at all."
+                    % len(referenced)),
+                affected_items=[],
+                remediation=(
+                    "1. No action. Re-run this check after any ruleset change "
+                    "or system upgrade, since both can invalidate an object "
+                    "name that resolves today."),
+                references=["TOBJ - authorization object definitions"],
+                details={"objects_referenced": len(referenced),
+                         "objects_absent": 0, "rules_unfirable": [],
+                         "coverage_state": "complete"},
+            )
+            return
+
+        self.finding(
+            check_id="SODCOV-007",
+            title=("%d SoD rule(s) can never fire: they require authorization "
+                   "objects this system does not define" % len(dead))
+            if dead else
+            ("%d authorization object(s) named by the ruleset do not exist in "
+             "this system" % len(absent)),
+            severity=(self.SEVERITY_HIGH if dead else self.SEVERITY_MEDIUM),
+            category=self.CATEGORY,
+            description=(
+                "The ruleset references %d authorization objects and %d of them "
+                "are absent from this system's catalogue. An absent object is "
+                "not the same as an ungranted one: the matcher is fail-closed, "
+                "so a predicate naming an object nobody holds is simply not "
+                "satisfied - correct behaviour - while a predicate naming an "
+                "object that does not EXIST can never be satisfied by anyone, "
+                "and is indistinguishable in the output from a rule that ran "
+                "and found nothing.%s The usual causes are a transcription "
+                "error in the ruleset, an object from a different SAP release "
+                "or component than this system runs, or a rule written against "
+                "an add-on that is not installed here."
+                % (len(referenced), len(absent),
+                   "" if not dead else
+                   " %d rule(s) are dead as a result: every object on one of "
+                   "their functions is missing, so that function can never be "
+                   "held and the rule can never fire for anybody. Those rules "
+                   "are counted in the ruleset size and answer nothing."
+                   % len(dead))),
+            affected_items=(
+                ["%s — requires %s, absent here" % (rid, ", ".join(sorted(
+                    {str(perm.get("object", "")).strip().upper()
+                     for risk in self._risks() if risk.get("risk_id") == rid
+                     for func in (risk.get("functions") or [])
+                     for perm in (func.get("permissions") or [])} - catalogue)))
+                 for rid in dead[:30]]
+                + ["object not in catalogue: %s" % o
+                   for o in sorted(absent)[:30]]),
+            remediation=(
+                "1. Check each absent object against SU21 in this system. A "
+                "name that is simply mistyped is the cheapest case and the "
+                "commonest.\n"
+                "2. Where the object is real but belongs to a component this "
+                "system does not run, remove or gate the rule rather than "
+                "leaving it: a rule that cannot fire here inflates the ruleset "
+                "size without adding coverage.\n"
+                "3. Where the object is right but the FIELD is wrong, this "
+                "check will not see it - it matches on object name only. "
+                "Confirm the field against SU21 at the same time.\n"
+                "4. Re-run after correcting. Rules listed as unfirable should "
+                "disappear from this finding and begin appearing in the "
+                "conflict results if the estate holds them.\n"
+                "5. Treat any previous clean result for the rules named here as "
+                "unmeasured rather than passed - they were not evaluated."),
+            references=["TOBJ - authorization object definitions",
+                        "SU21 - authorization object maintenance",
+                        "docs/SOD_REFERENCE.md section 2"],
+            details={
+                "objects_referenced": len(referenced),
+                "objects_absent": len(absent),
+                "absent_objects": sorted(absent)[:60],
+                "rules_unfirable": dead[:60],
+                "coverage_state": "complete",
             },
         )
 

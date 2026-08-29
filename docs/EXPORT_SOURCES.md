@@ -8,7 +8,7 @@
 Every logical source the scanner can read, what it enables, and whether
 [`EXPORT_GUIDE.md`](EXPORT_GUIDE.md) tells you how to produce it.
 
-**135 logical sources, all of them with a written procedure** in the export
+**136 logical sources, all of them with a written procedure** in the export
 guide. This table is the regression detector for that: add a source to the loader
 without writing its procedure and it appears here as *not yet written*.
 
@@ -25,6 +25,7 @@ clean — see chapter 13 of the architecture guide.
 | `applied_notes` | `applied_notes.csv`, `snote_status.csv`, `implemented_notes.csv` | `sap_hotnews` | documented |
 | `ara_ruleset` | `ara_ruleset.json`, `sod_ruleset_custom.json` | `access_risk_analysis` | documented |
 | `audit_config` | `audit_config.csv`, `sm19.csv` | `ecs_config_items`, `log_monitoring`, `log_review`, `network_services` | documented |
+| `auth_object_catalogue` | `auth_object_catalogue.csv`, `auth_object_catalog.csv`, `tobj.csv` | — | documented |
 | `auth_objects` | `auth_objects.csv` | `code_transport`, `iam_advanced`, `user_auth_audit` | documented |
 | `background_job_steps` | `background_job_steps.csv`, `tbtcp.csv`, `job_steps.csv` | `basis_job_command` | documented |
 | `background_jobs` | `background_jobs.csv`, `tbtco.csv`, `sm37_jobs.csv` | `basis_job_command`, `resilience_posture` | documented |

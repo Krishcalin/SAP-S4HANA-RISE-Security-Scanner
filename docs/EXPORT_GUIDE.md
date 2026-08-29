@@ -97,6 +97,22 @@ Quick: `SA38 → RSUSR002 → Execute → Export`
 Required: BNAME, PROFILE
 ```
 
+### Authorization Object Catalogue (`auth_object_catalogue.csv`)
+**Table:** `TOBJ` (or **Transaction:** `SU21`)
+```
+Required: OBJCT
+```
+Optional. This is the list of authorization objects the release *defines*, not
+who holds them — static SAP content rather than a customer setting, which is why
+the RFC collector does not produce it and most uploads will not carry it.
+
+Supplying it lets the scanner check that every object named by the SoD ruleset
+actually exists in your system (`SODCOV-007`). Without it, a rule naming a
+mistyped or wrong-release object can never fire for anybody, and that is
+indistinguishable in the report from a rule that ran and found nothing.
+
+Not to be confused with `auth_objects.csv`, which is per-user grants.
+
 ### Security Parameters (`security_params.csv`)
 **Report:** `RSPARAM` or **Transaction:** `RZ11`
 ```

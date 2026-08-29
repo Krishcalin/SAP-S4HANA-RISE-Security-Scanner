@@ -808,6 +808,11 @@
       "basis": "infrastructure",
       "verified": false,
       "open_question": "Not covered by section 3, and arguably a governance record the customer keeps rather than an SAP artefact. Classified `ticket` because the restore itself is SAP's under RISE and that is where the evidence comes from — but this is inference, and a design-partner tenant should settle it alongside the HANA rows."
+    },
+    "auth_object_catalogue": {
+      "state": "yes",
+      "how": "SE16/SE16N on TOBJ, or SU21; object definitions are static SAP content, so no customer-specific authorisation is involved",
+      "basis": "application_layer"
     }
   }
 }

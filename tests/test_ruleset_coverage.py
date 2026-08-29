@@ -304,3 +304,102 @@ def test_the_fiori_surface_is_measured_even_without_role_authorizations():
         {"fiori_tiles": [tile()]}, ruleset=TINY_RULESET).run_all_checks()
     assert one(findings, "SODCOV-006") is not None
     assert one(findings, "SODCOV-004") is not None       # and still says so
+
+
+# ── objects the release does not define ────────────────────────────────────
+#
+# The matcher is fail-closed, so a predicate naming an object nobody holds is
+# simply unsatisfied — correct for an object that exists and is ungranted, and a
+# silent catastrophe for one that does not exist at all. A typo produces a rule
+# that can never fire for anybody and looks exactly like a rule that ran and
+# found nothing. TOBJ is what tells the two apart.
+
+def catalogue(*objects):
+    return [{"OBJCT": o} for o in objects]
+
+
+def cov(rows=None, ruleset=TINY_RULESET, tobj=None):
+    data = {"role_auth_values": rows if rows is not None else [row(low="FK02")]}
+    if tobj is not None:
+        data["auth_object_catalogue"] = tobj
+    return RulesetCoverageAuditor(data, ruleset=ruleset).run_all_checks()
+
+
+def test_without_a_catalogue_object_existence_is_not_claimed_either_way():
+    """Most uploads will not carry TOBJ. Absence must produce no verdict."""
+    assert one(cov(), "SODCOV-007") is None
+
+
+def test_the_object_coverage_finding_says_existence_was_not_checked():
+    """Otherwise the percentage reads as though the objects were verified.
+    Needs a granted OBJECT, not just a transaction, or SODCOV-002 has nothing
+    to measure and does not fire at all."""
+    rows = [row(low="FK02"), row(obj="F_LFA1_BUK", field="ACTVT", low="02")]
+    assert "was not checked" in one(cov(rows), "SODCOV-002")["description"]
+
+
+def test_a_complete_catalogue_reports_clean_rather_than_staying_silent():
+    """"We looked and everything resolved" is a different statement from "we did
+    not look", and this module exists to keep them apart."""
+    f = one(cov(tobj=catalogue("F_LFA1_BUK", "F_REGU_BUK")), "SODCOV-007")
+    assert f is not None and f["severity"] == "INFO"
+    assert f["details"]["objects_absent"] == 0
+
+
+def test_a_rule_whose_only_object_is_absent_is_reported_as_unfirable():
+    """THE finding. Not "an object is missing" — "this rule can never fire"."""
+    f = one(cov(tobj=catalogue("F_LFA1_BUK")), "SODCOV-007")
+    assert f["severity"] == "HIGH"
+    assert f["details"]["rules_unfirable"] == ["T-01"]
+    assert "F_REGU_BUK" in f["details"]["absent_objects"]
+
+
+def test_the_finding_names_the_rule_and_the_object_it_cannot_resolve():
+    f = one(cov(tobj=catalogue("F_LFA1_BUK")), "SODCOV-007")
+    assert any("T-01" in i and "F_REGU_BUK" in i for i in f["affected_items"])
+
+
+def test_an_absent_object_beside_a_present_one_does_not_kill_the_rule():
+    """Within a function the default match across distinct objects is 'any', so
+    one surviving object still lets the function be held. Reporting it as dead
+    would overstate the damage."""
+    ruleset = [{"risk_id": "T-02", "functions": [
+        {"name": "A", "actions": ["FK02"], "permissions": [
+            {"object": "F_LFA1_BUK", "field": "ACTVT", "values": ["02"]},
+            {"object": "F_GONE_XXX", "field": "ACTVT", "values": ["02"]}]},
+        {"name": "B", "actions": ["F110"], "permissions": [
+            {"object": "F_REGU_BUK", "field": "ACTVT", "values": ["02"]}]}]}]
+    f = one(cov(ruleset=ruleset,
+                tobj=catalogue("F_LFA1_BUK", "F_REGU_BUK")), "SODCOV-007")
+    assert f["severity"] == "MEDIUM"          # noted, not fatal
+    assert f["details"]["rules_unfirable"] == []
+    assert f["details"]["absent_objects"] == ["F_GONE_XXX"]
+
+
+def test_the_catalogue_is_read_from_the_ordinary_tobj_column_names():
+    for key in ("OBJCT", "OBJECT", "AUTH_OBJECT", "NAME"):
+        rows = [{key: "F_LFA1_BUK"}, {key: "F_REGU_BUK"}]
+        assert one(cov(tobj=rows), "SODCOV-007")["details"]["objects_absent"] == 0
+
+
+def test_it_is_measurable_without_any_role_export():
+    """The catalogue question is about the RULESET, not about what the estate
+    granted, so it survives an upload with no AGR_1251 at all."""
+    a = RulesetCoverageAuditor({"auth_object_catalogue": catalogue("F_LFA1_BUK")},
+                               ruleset=TINY_RULESET)
+    assert one(a.run_all_checks(), "SODCOV-007") is not None
+
+
+def test_the_shipped_ruleset_resolves_against_its_own_object_list():
+    """A sanity check on the library itself: every object the 99 shipped rules
+    name must resolve when the catalogue contains exactly those objects. It
+    cannot tell whether the names are RIGHT — provenance covers that — but it
+    catches a predicate that could never be satisfied by construction."""
+    from modules.access_risk_analysis import AccessRiskAnalysisAuditor as ARA
+    objects = sorted({p["object"] for r in ARA.RULESET
+                      for f in r["functions"] for p in f.get("permissions", [])})
+    f = one(RulesetCoverageAuditor(
+        {"auth_object_catalogue": catalogue(*objects)}).run_all_checks(),
+        "SODCOV-007")
+    assert f["severity"] == "INFO", f["details"]["absent_objects"]
+    assert f["details"]["objects_referenced"] == len(objects)

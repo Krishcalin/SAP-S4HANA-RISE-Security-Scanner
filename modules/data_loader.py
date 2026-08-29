@@ -79,6 +79,15 @@ class DataLoader:
         "user_roles":        ["user_roles.csv", "agr_users.csv"],
         "profiles":          ["profiles.csv", "usr04.csv"],
         "auth_objects":      ["auth_objects.csv"],
+        # TOBJ: the CATALOGUE of authorization objects this release
+        # defines. Deliberately separate from `auth_objects` above, which
+        # existing consumers read as per-USER grants (UNAME/OBJECT/VALUE).
+        # Object definitions are static SAP content rather than a customer
+        # setting, which is why the collector does not produce this and it
+        # is optional everywhere.
+        "auth_object_catalogue":
+                             ["auth_object_catalogue.csv",
+                              "auth_object_catalog.csv", "tobj.csv"],
         "security_params":   ["security_params.csv", "rsparam.csv", "profile_params.csv"],
         "rfc_destinations":  ["rfc_destinations.csv", "sm59.csv", "rfcdes.csv"],
         "icf_services":      ["icf_services.csv", "sicf.csv", "icf_nodes.csv"],
