@@ -47,6 +47,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from modules import abap_sast_rules as R                      # noqa: E402
+from modules import abap_sast_extra as X                      # noqa: E402
 from modules import abap_sast as _sast                        # noqa: E402
 from modules.abap_sast import AbapSastAuditor                 # noqa: E402
 
@@ -103,15 +104,30 @@ def _member(m):
     return body[0]
 
 
+#: Rule tables live in TWO modules. The first version of this file walked only
+#: `abap_sast_rules`, so 31 rules in `abap_sast_extra` - RAP, AMDP, CDS, native
+#: SQL, dynamic tokens - were never enumerated and silently counted as unproven.
+#: A harness that decides what to prove by scanning one module is a harness with
+#: its own blind spot, which is the failure it exists to find elsewhere.
+RULE_MODULES = (R, X)
+
+
 def all_rules():
     """Every pattern rule, ONCE. Several appear in more than one table, and
     counting them twice inflated the coverage figure this file publishes."""
     seen = set()
-    for name in sorted(n for n in dir(R) if n.isupper() and n.endswith("_RULES")):
-        for rule in getattr(R, name):
-            if rule.get("pattern") and rule["id"] not in seen:
-                seen.add(rule["id"])
-                yield rule
+    for mod in RULE_MODULES:
+        for name in sorted(n for n in dir(mod)
+                           if n.isupper() and n.endswith("_RULES")):
+            table = getattr(mod, name)
+            if not isinstance(table, (list, tuple)):
+                continue
+            for rule in table:
+                if not isinstance(rule, dict):
+                    continue
+                if rule.get("pattern") and rule.get("id") not in seen:
+                    seen.add(rule["id"])
+                    yield rule
 
 
 def matchable():
@@ -140,7 +156,17 @@ ALL = list(all_rules())
 #: up as a product defect, which is the mistake this whole file exists to
 #: avoid making about somebody else's code.
 PROBE_NAME = {"ABAP-JS": "zprobe.js", "ABAP-BTP": "xs-security.json",
-              "ABAP-CDS": "zprobe.cds"}
+              "ABAP-CDS": "zprobe.asddls", "ABAP-RAP": "zprobe.asbdef"}
+
+
+#: Every file type the scanner routes. Guessing ONE by id prefix was wrong for
+#: rules whose pattern belongs to a different language than their name suggests
+#: - ABAP-BTP-004 matches CDS syntax (`service X {`) and would never fire in the
+#: JSON descriptor its prefix pointed at. "Can this rule fire?" does not depend
+#: on the harness guessing the language correctly, so it no longer has to: the
+#: likely name is tried first and the rest only if that misses.
+ALL_PROBES = ("zprobe.abap", "zprobe.asddls", "zprobe.asbdef", "zprobe.asdcls",
+              "zprobe.js", "xs-security.json", "xs-app.json", "mta.yaml")
 
 
 def probe_for(rule_id: str) -> str:
@@ -148,6 +174,17 @@ def probe_for(rule_id: str) -> str:
         if rule_id.startswith(prefix):
             return name
     return "zprobe.abap"
+
+
+def fires_anywhere(rule_id: str, line: str):
+    """Does this rule fire under ANY file type the scanner routes?"""
+    first = probe_for(rule_id)
+    if rule_id in run_on(line, first):
+        return first
+    for name in ALL_PROBES:
+        if name != first and rule_id in run_on(line, name):
+            return name
+    return None
 
 
 def run_on(line: str, filename: str = "zprobe.abap"):
@@ -164,8 +201,8 @@ def run_on(line: str, filename: str = "zprobe.abap"):
 def test_the_generator_covers_most_of_the_catalogue():
     """Pinned so it cannot quietly fall. A generator that silently stopped
     producing matches would leave this file passing while proving nothing."""
-    assert len(ALL) >= 90
-    assert len(MATCHABLE) >= 90, (
+    assert len(ALL) >= 130
+    assert len(MATCHABLE) >= 115, (
         "%d of %d rules got a verified line; the generator has regressed"
         % (len(MATCHABLE), len(ALL)))
 
@@ -196,8 +233,7 @@ def _split():
     """
     fires, silent = [], []
     for rule, line in MATCHABLE:
-        got = run_on(line, probe_for(rule["id"]))
-        (fires if rule["id"] in got else silent).append((rule, line))
+        (fires if fires_anywhere(rule["id"], line) else silent).append((rule, line))
     return fires, silent
 
 
@@ -211,13 +247,13 @@ FIRES, SILENT = _split()
 #: for a real reason lands here and breaks the build instead of joining a
 #: tolerated pile. That is the whole value of writing it down.
 UNREACHABLE_BY_THIS_HARNESS = {
-    "ABAP-SQLI-001": "taint rule (_taint_sink): needs a tainted source, not a pattern",
-    "ABAP-SQLI-002": "taint rule: the concatenation must reach a SELECT",
+    "ABAP-SQLI-001": "taint rule (_taint_sink): needs a tainted source reaching "
+                     "the sink, which a single synthesised line cannot express",
+    "ABAP-SQLI-002": "taint rule: the concatenated string must reach a SELECT "
+                     "for the rule to have anything to report",
     "ABAP-CINJ-007": "needs a dynamic token the generated line does not carry",
-    "ABAP-AUTH-003": "needs surrounding statement context",
-    "ABAP-BTP-004": "CDS syntax (service ... {), routed by prefix to a descriptor",
-    "ABAP-BTP-007": "descriptor-specific: needs the right file name, not xs-security.json",
-    "ABAP-BTP-008": "descriptor-specific: needs the right file name",
+    "ABAP-AUTH-003": "needs surrounding statement context, not one line",
+    "ABAP-CDS-002":  "needs a DCL access-control document around the grant",
 }
 
 
@@ -229,12 +265,13 @@ def test_the_rule_fires_on_a_line_built_from_its_own_pattern(rule, line):
     A rule whose pattern is satisfiable but whose surrounding code can never
     reach a finding call is dead in exactly the way SODCOV-007 reports for a
     customer's ruleset, and nothing else here would notice."""
-    assert rule["id"] in run_on(line, probe_for(rule["id"]))
+    assert fires_anywhere(rule["id"], line), (
+        "%s matches its own pattern but no file type makes it fire" % rule["id"])
 
 
 def test_most_of_the_catalogue_is_proven_to_fire():
     """The number this file exists to move. Pinned so it cannot fall quietly."""
-    assert len({r["id"] for r, _ in FIRES}) >= 85
+    assert len({r["id"] for r, _ in FIRES}) >= 110
 
 
 def test_the_unreachable_set_is_exactly_what_we_documented():
