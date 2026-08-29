@@ -934,16 +934,25 @@ nothing gets exit 2, which is the honest reading of "we have no idea how much wa
   `test_branding.py`, `test_code_finding_console.py` and `test_graph_paths.py` — together well
   over a hundred tests, and **all of the RBAC coverage**. The journey is implemented in SQL, so a
   mocked database proves the Python is self-consistent and proves nothing about whether it works.
-  Run the whole DB-gated set, not the three this file used to name:
+  **Use `tools/db_test.py`.** It seeds the fixture, runs the suite, and applies the SAME skip
+  ceiling CI applies, so a local run either reproduces CI or tells you why it cannot:
   ```bash
-  docker run -d --name sapsec-test-db -e POSTGRES_USER=sapsec -e POSTGRES_PASSWORD=sapsec \
-      -e POSTGRES_DB=sapsec -p 55433:5432 postgres:16
-  DB_DSN=postgresql://sapsec:sapsec@localhost:55433/sapsec \
-  SESSION_SECRET=$(python -c "import secrets;print(secrets.token_urlsafe(48))") \
-      python -m pytest -q          # the full suite; the nine above now execute
+  docker run -d --name sap-test-db -p 127.0.0.1:55432:5432 \
+      -e POSTGRES_USER=sapsec -e POSTGRES_PASSWORD=x -e POSTGRES_DB=sapsec postgres:16
+
+  export DB_DSN=postgresql://sapsec:x@127.0.0.1:55432/sapsec
+  export SESSION_SECRET=$(python -c "import secrets;print(secrets.token_urlsafe(48))")
+  python -m tools.db_test          # 4152 passed, 0 skipped
   ```
-  A few of them are **data**-dependent as well as DB-dependent and self-skip with "no findings in
-  this database". Seed a scan first (as CI does) or they will quietly prove nothing.
+  Measured: a plain `pytest` here is **3942 passed, 201 skipped**; this is **4152 passed, 0
+  skipped** — 210 more tests, and every one of them database- or data-dependent.
+
+  Several suites are **data**-dependent as well as DB-dependent and self-skip with "no findings
+  in this database", so seeding is not setup — it is the difference between running them and
+  appearing to. The seed lives in `tools/seed_test_db.py` and CI calls the same module; it used
+  to be forty lines inlined in the workflow, which is why a local run could not reproduce a CI
+  one. `tests/test_ci_seed_is_not_inlined.py` fails if that copy grows back, or if the local
+  skip ceiling drifts from CI’s.
 - **The Phase-1 exit criterion is a test, and it must stay green:** scan the same bundle twice
   and get `new 0 · persisting N · resolved 0`. If it ever fails, finding identity has broken
   and every re-upload will report the whole estate as newly broken.

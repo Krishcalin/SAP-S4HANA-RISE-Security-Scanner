@@ -736,48 +736,21 @@ jobs:
       # they never ran and the skip guard below counted them as drift. Seeding first
       # buys real coverage of the finding-detail and code-console surfaces instead of
       # relaxing the guard, which would only move the goalposts.
+      # SEED BEFORE TESTING, not after. Several tests are DATA-dependent rather
+      # than DB-dependent -- they need a scan to have happened, a second system
+      # to scope a viewer to, a second landscape to tell a union from a
+      # narrowing -- and the end-to-end step below used to be the only thing
+      # that created findings, so they never ran and the guard counted them as
+      # drift. Seeding first buys real coverage instead of relaxing the guard.
+      #
+      # The seed itself lives in tools/seed_test_db.py rather than inline here,
+      # so `python -m tools.db_test` can reproduce this run locally against the
+      # SAME fixture. It used to be forty lines of Python in this file, which
+      # meant a developer could not run the database half the way CI does
+      # without copying them -- and a copy is a second thing to keep in step.
+      # tests/test_ci_seed_is_not_inlined.py fails if it grows back.
       - name: Seed a scan so data-dependent suites actually execute
-        run: |
-          python - <<'PY'
-          import sys; sys.path.insert(0, ".")
-          from pathlib import Path
-          from server import db, ingest
-          db.init_schema()
-          land = db.one("INSERT INTO landscape (name, deployment_mode) "
-                        "VALUES ('seed','rise_pce') RETURNING id")["id"]
-          sysid = db.one("INSERT INTO sap_system (landscape_id, sid, client, tier) "
-                         "VALUES (%s,'SED','100','prod') RETURNING id", (land,))["id"]
-          run = db.one("INSERT INTO scan_run (landscape_id, system_id, status) "
-                       "VALUES (%s,%s,'pending') RETURNING id", (land, sysid))["id"]
-          ingest.scan_directory(Path("sample_data"), land, sysid, run,
-                                deployment_mode="rise_pce",
-                                default_sid="SED", default_client="100")
-          # A SECOND SYSTEM AND A SECOND LANDSCAPE, both otherwise empty.
-          #
-          # Two suites skipped for want of them and the job stayed green, which is
-          # the precise failure the guard below exists to catch -- it just could not
-          # see these two, because they skip on DATA rather than on a missing
-          # DB_DSN. A row-scoping test needs some system that is NOT the one
-          # holding the finding, to scope a viewer to; the coverage-narrowing test
-          # needs two landscapes to tell a union from a narrowing. With one of
-          # each, a scoping test that never exercised scoping reported success.
-          #
-          # Neither needs findings of its own: the assertions are about what the
-          # narrowing EXCLUDES.
-          db.execute("INSERT INTO sap_system (landscape_id, sid, client, tier) "
-                     "VALUES (%s,'SE2','200','dev')", (land,))
-          db.execute("INSERT INTO landscape (name, deployment_mode) "
-                     "VALUES ('seed-second','rise_pce')")
-
-          n = db.one("SELECT count(*) AS n FROM finding")["n"]
-          assert n > 0, "the seed produced no findings — the data-dependent suites would still skip"
-          systems = db.one("SELECT count(*) AS n FROM sap_system")["n"]
-          landscapes = db.one("SELECT count(*) AS n FROM landscape")["n"]
-          assert systems >= 2 and landscapes >= 2, (
-              "the scoping and narrowing suites need a second system and a second "
-              "landscape or they skip, and the job goes green having tested neither")
-          print(f"seeded {n} findings, {systems} systems, {landscapes} landscapes")
-          PY
+        run: python -m tools.seed_test_db
 
       - name: Run the full test suite
         run: |

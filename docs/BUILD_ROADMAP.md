@@ -754,8 +754,8 @@ production.
 To run the DB suite locally:
 
 ```
-docker run -d --name ci-pg -e POSTGRES_USER=sapsec -e POSTGRES_PASSWORD=x   -e POSTGRES_DB=sapsec -p 55432:5432 postgres:16
-DB_DSN=postgresql://sapsec:x@127.0.0.1:55432/sapsec SESSION_SECRET=<32+ chars>   python -m pytest tests/ -q
+docker run -d --name sap-test-db -p 127.0.0.1:55432:5432   -e POSTGRES_USER=sapsec -e POSTGRES_PASSWORD=x -e POSTGRES_DB=sapsec postgres:16
+DB_DSN=postgresql://sapsec:x@127.0.0.1:55432/sapsec SESSION_SECRET=<32+ chars>   python -m tools.db_test
 ```
 
 ### Edge provenance, and the backlog's last items, 2026-08-22
