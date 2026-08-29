@@ -60,6 +60,7 @@ function view(crq: unknown) {
       expired_acceptances: 0,
       weak_identity: 0,
       regressed: 0,
+      sod_trust: null,
     },
     systems: [],
     recent_runs: [],
@@ -141,5 +142,56 @@ describe('Dashboard — the quantification funnel', () => {
       expect(container.textContent).not.toContain('Loading'))
     expect(screen.queryByText(/no loss figure yet/i)).toBeNull()
     expect(screen.queryByText(/Annualised loss exposure/)).toBeNull()
+  })
+})
+
+
+/* ── the segregation verdict ─────────────────────────────────────────────
+ *
+ * SODCOV-000 tells the reader to read it before the conflict results. In the
+ * offline report it renders above them; here it was one row in a findings list
+ * — the same failure fixed there and left standing on this surface.
+ */
+describe('Dashboard — how far the segregation result can be believed', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // Same reason as the block above: the CSF and domain strips each fetch and
+    // each swallow their own failure, so rejecting them keeps this block about
+    // the verdict rather than pinning two unrelated response shapes.
+    vi.mocked(csf).mockRejectedValue(new Error('not under test'))
+    vi.mocked(domains).mockRejectedValue(new Error('not under test'))
+  })
+
+  function withTrust(trust: unknown) {
+    const v = view(null) as Record<string, unknown>
+    ;(v.summary as Record<string, unknown>).sod_trust = trust
+    return v
+  }
+
+  it('shows the verdict and its limits, worst first', async () => {
+    vi.mocked(dashboard).mockResolvedValue(
+      withTrust({ verdict: 'unbounded', severity: 'HIGH',
+                  limits: ['a role grants every transaction',
+                           'the ruleset names 0% of the Fiori surface'] }) as never)
+    renderPage()
+    expect(await screen.findByText(/Segregation of duties: UNBOUNDED/)).toBeTruthy()
+    expect(screen.getByText(/a role grants every transaction/)).toBeTruthy()
+    expect(screen.getByText(/names 0% of the Fiori surface/)).toBeTruthy()
+  })
+
+  it('says so when nothing qualifies the result', async () => {
+    vi.mocked(dashboard).mockResolvedValue(
+      withTrust({ verdict: 'usable', severity: 'INFO', limits: [] }) as never)
+    renderPage()
+    expect(await screen.findByText(/No limit was found/)).toBeTruthy()
+  })
+
+  it('renders nothing when the check did not run', async () => {
+    // A missing verdict is NOT a good one. Defaulting to "usable" here would
+    // manufacture the reassurance this whole family of checks exists to refuse.
+    vi.mocked(dashboard).mockResolvedValue(view(null) as never)
+    renderPage()
+    await screen.findAllByText(/318/)   // the count appears in more than one card
+    expect(screen.queryByText(/Segregation of duties:/)).toBeNull()
   })
 })

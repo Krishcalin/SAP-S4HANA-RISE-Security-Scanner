@@ -129,6 +129,30 @@ export function Dashboard() {
         </div>
       )}
 
+      {/* HOW FAR THE SEGREGATION RESULT CAN BE BELIEVED, before the counts.
+          SODCOV-000 tells the reader to read it before the conflict results. In
+          the offline report it renders above them; here it was one row in a
+          findings list, which is the same failure fixed there and left standing
+          on this surface. Rendered only when the check ran: a missing verdict
+          is not a good one. */}
+      {summary.sod_trust && (
+        <div className={`banner ${summary.sod_trust.severity === 'INFO'
+          ? 'banner-info' : 'banner-warn'}`}>
+          <strong className="font-semibold">
+            Segregation of duties: {summary.sod_trust.verdict.toUpperCase()}
+          </strong>{' '}
+          {summary.sod_trust.limits.length === 0
+            ? 'No limit was found that would qualify it.'
+            : `${summary.sod_trust.limits.length} stated limit${
+                summary.sod_trust.limits.length === 1 ? '' : 's'}, worst first:`}
+          {summary.sod_trust.limits.length > 0 && (
+            <ul className="mt-1 ml-4 list-disc">
+              {summary.sod_trust.limits.map((l, i) => <li key={i}>{l}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
+
       {summary.regressed > 0 && (
         <div className="banner banner-warn">
           <strong className="font-semibold">

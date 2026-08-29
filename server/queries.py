@@ -213,6 +213,22 @@ def dashboard_summary(scope: Optional[Sequence[int]]) -> Dict[str, Any]:
     regressed = db.one(
         f"SELECT count(*) AS n FROM finding f WHERE {w} AND f.regression_count > 0", params)
 
+    # HOW FAR THE SEGREGATION RESULT CAN BE BELIEVED, on the landing page.
+    #
+    # SODCOV-000's own text tells the reader to read it before the conflict
+    # results. In the offline report it is rendered above them; in the console
+    # it was one row in a findings list, which is the same failure that was
+    # fixed there two commits ago and left standing here.
+    #
+    # The newest observation, because the verdict is a fact about a RUN: an
+    # estate that supplies its Fiori exports next month should see the verdict
+    # move without the finding being treated as new.
+    trust = db.one(
+        f"SELECT f.severity, o.details FROM finding f "
+        f"JOIN finding_observation o ON o.finding_id = f.id "
+        f"WHERE {w} AND f.check_id = 'SODCOV-000' "
+        f"ORDER BY o.scan_run_id DESC LIMIT 1", params)
+
     return {
         "by_severity": {r["severity"] or "UNKNOWN": r["n"] for r in by_sev},
         "by_remediation_owner": {r["remediation_owner"]: r["n"] for r in by_owner},
@@ -221,6 +237,15 @@ def dashboard_summary(scope: Optional[Sequence[int]]) -> Dict[str, Any]:
         "expired_acceptances": expired["n"] if expired else 0,
         "weak_identity": weak["n"] if weak else 0,
         "regressed": regressed["n"] if regressed else 0,
+        # None when the ruleset-coverage module did not run or its finding is
+        # closed. The page renders nothing rather than an encouraging default:
+        # "no verdict" is not "usable", and inventing the reassuring reading is
+        # the failure this whole family of checks reports on.
+        "sod_trust": ({
+            "verdict": (trust["details"] or {}).get("verdict"),
+            "limits": (trust["details"] or {}).get("limits") or [],
+            "severity": trust["severity"],
+        } if trust and (trust["details"] or {}).get("verdict") else None),
     }
 
 

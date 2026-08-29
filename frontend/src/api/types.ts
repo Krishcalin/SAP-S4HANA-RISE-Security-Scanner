@@ -333,6 +333,14 @@ export interface DashboardSummary {
   expired_acceptances: number
   weak_identity: number
   regressed: number
+  /** How far the segregation-of-duties result can be believed, from SODCOV-000.
+   *  Null when the ruleset-coverage module did not run — which is NOT the same
+   *  as "usable", so the page renders nothing rather than a default. */
+  sod_trust: {
+    verdict: string
+    limits: string[]
+    severity: string
+  } | null
 }
 
 /** server/app.py `api_dashboard`. */
