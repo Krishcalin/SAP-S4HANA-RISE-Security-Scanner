@@ -1435,6 +1435,39 @@ window.addEventListener('beforeprint', () => {{
                   <div class="remediation-text">{html.escape(mitigation_text)}</div>
                 </div>"""
 
+            # WHETHER THE DATA BEHIND THIS FINDING WAS COMPLETE.
+            #
+            # The section above already says how many modules ran on partial
+            # input. That is an aggregate: it cannot tell a reader WHICH
+            # conclusion to weigh differently, and without this badge a finding
+            # drawn from a fraction of its module\'s evidence looked exactly
+            # like one drawn from all of it.
+            #
+            # Only the incomplete case is marked. Badging all 408 findings
+            # "complete" would be noise, and the absence of the badge already
+            # carries that meaning once the coverage section has explained it.
+            evidence = f.get("evidence") or {}
+            ev_badge, ev_html = "", ""
+            if evidence and not evidence.get("complete", True):
+                missing = [str(m) for m in (evidence.get("missing_sources") or [])]
+                ev_badge = (
+                    '<span class="ev-badge" title="This module ran without '
+                    'some of its inputs: '
+                    + html.escape(", ".join(missing) or "unknown")
+                    + '">partial data</span>')
+                ev_html = f"""
+                <div class="finding-section">
+                  <div class="finding-section-title">Evidence behind this finding</div>
+                  <div class="ev-text">This check ran without {len(missing)} of the
+                  {evidence.get("declared_sources", 0)} exports its module reads:
+                  <strong>{html.escape(", ".join(missing))}</strong>.
+                  What is reported here is drawn from the exports that were
+                  supplied. It is not a statement about what the missing ones
+                  would have shown, and a clean result in the areas they feed
+                  means the question was not asked rather than that the answer
+                  was good.</div>
+                </div>"""
+
             pr = self._tier_of(f)
             p_badge, data_tier = "", ""
             if pr is not None and getattr(pr, "tier", None):
@@ -1446,7 +1479,7 @@ window.addEventListener('beforeprint', () => {{
     <div class="finding-card" data-severity="{html.escape(f['severity'])}" data-category="{html.escape(f['category'])}"{data_tier} data-owner="{html.escape(str(f.get('remediation_owner') or ''))}">
       <div class="finding-header">
         <span class="sev-badge {html.escape(f['severity'])}">{html.escape(f['severity'])}</span>
-        {p_badge}{self._owner_badge(f)}
+        {p_badge}{ev_badge}{self._owner_badge(f)}
         <span class="finding-title">{html.escape(f['title'])}</span>
         <span class="finding-id">{html.escape(f['check_id'])}</span>
         <span class="finding-chevron">&#9654;</span>
@@ -1456,6 +1489,7 @@ window.addEventListener('beforeprint', () => {{
           <div class="finding-section-title">Security Risk</div>
           <div class="risk-text">{html.escape(risk_text)}</div>
         </div>
+        {ev_html}
         {affected_html}
         {remediation_html}
         {refs_html}
@@ -1848,6 +1882,13 @@ window.addEventListener('beforeprint', () => {{
         # can act on.
         not_run = counts.get("modules_not_run", 0)
         empty = counts.get("sources_empty", 0)
+        # Counted from the findings themselves rather than from the manifest.
+        # The manifest counts MODULES that ran degraded; this counts the
+        # conclusions a reader is actually looking at, which is the number that
+        # tells them how much of the report to weigh differently.
+        partial_findings = sum(
+            1 for f in self.findings
+            if not (f.get("evidence") or {}).get("complete", True))
         lead = html.escape(manifest.get("summary", ""))
 
         empty_html = ""
@@ -1893,6 +1934,10 @@ window.addEventListener('beforeprint', () => {{
       .cov-complete {{ color:#15803d; background:rgba(34,197,94,.13); }}
       .cov-degraded {{ color:var(--medium); background:var(--medium-bg); }}
       .cov-skipped {{ color:var(--text-muted); border:1px dashed var(--border); }}
+      .ev-badge {{ font-size:.62rem; font-weight:700; padding:.12rem .4rem;
+                  border-radius:4px; white-space:nowrap; color:var(--medium);
+                  background:var(--medium-bg); border:1px solid rgba(234,179,8,.25); }}
+      .ev-text {{ font-size:.82rem; color:var(--text-muted); line-height:1.5; }}
     </style>
     <h2>What this scan could not look at</h2>
     <div class="cov-lead">{lead}</div>
@@ -1901,6 +1946,8 @@ window.addEventListener('beforeprint', () => {{
         <div class="cov-cap">logical sources supplied</div></div>
       <div class="cov-card"><div class="cov-big">{degraded}</div>
         <div class="cov-cap">modules ran on partial input</div></div>
+      <div class="cov-card"><div class="cov-big">{partial_findings}</div>
+        <div class="cov-cap">findings resting on partial data</div></div>
       <div class="cov-card"><div class="cov-big">{skipped}</div>
         <div class="cov-cap">modules had no input supplied</div></div>
       <div class="cov-card"><div class="cov-big">{not_run}</div>

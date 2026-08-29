@@ -330,13 +330,20 @@ class PDFReportGenerator:
         # `not_run` is its own figure. It counted for nothing here while the table
         # below stamped it on every module of a filtered run, so the line and the
         # list disagreed about the same scan.
+        # Counted from the findings, not the manifest: the manifest counts
+        # MODULES that ran degraded, this counts the conclusions a reader is
+        # actually looking at.
+        partial_findings = sum(
+            1 for f in self.findings
+            if not (f.get("evidence") or {}).get("complete", True))
         self._para(
             "%s of %s logical sources supplied  -  %s module(s) ran on partial input  -  "
             "%s had no input supplied  -  %s were not executed  -  "
-            "%s file(s) present but empty"
+            "%s file(s) present but empty  -  %s finding(s) rest on partial data"
             % (counts.get("sources_supplied", 0), counts.get("sources_known", 0),
                counts.get("modules_degraded", 0), counts.get("modules_skipped", 0),
-               counts.get("modules_not_run", 0), counts.get("sources_empty", 0)),
+               counts.get("modules_not_run", 0), counts.get("sources_empty", 0),
+               partial_findings),
             size=8.5, color=MUTED, leading=12, gap_after=12)
 
         order = {"not_run": 0, "skipped": 1, "not_requested": 2, "degraded": 3,

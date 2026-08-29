@@ -117,3 +117,85 @@ def test_the_real_scan_marks_degraded_modules_and_not_the_rest():
     assert degraded[0]["evidence"]["missing_sources"]
     # ARA's only absent input is the optional custom ruleset
     assert clean and clean[0]["evidence"]["complete"] is True
+
+
+# ── and it has to reach the page ───────────────────────────────────────────
+#
+# The marker was attached to the finding dict and no renderer read it, so 150 of
+# 408 findings carried complete:false and the deliverable said nothing. A
+# qualification that never reaches the reader is the same failure it was built
+# to fix, one layer up.
+
+def _report_html(findings, tmp=[None]):
+    """Render a report and read it back. `generate` writes to a path."""
+    import tempfile, os
+    from modules.report_generator import ReportGenerator
+    meta = {"scan_date": "2026-08-29", "system": "SED", "client": "100"}
+    d = tempfile.mkdtemp()
+    out = os.path.join(d, "r.html")
+    ReportGenerator(findings, meta).generate(out)
+    with io.open(out, encoding="utf-8") as fh:
+        return fh.read()
+
+
+def _finding(complete=True, missing=None, check_id="X-1"):
+    return {"check_id": check_id, "title": "t", "severity": "HIGH",
+            "category": "c", "description": "d", "affected_items": [],
+            "affected_count": 0, "remediation": "", "references": [],
+            "details": {}, "timestamp": "2026-08-29T00:00:00",
+            "evidence": {"complete": complete, "declared_sources": 3,
+                         "missing_sources": missing or []}}
+
+
+def test_an_incomplete_finding_is_badged_in_the_html():
+    html = _report_html([_finding(False, ["vendor_master"])])
+    assert 'class="ev-badge"' in html
+    assert "partial data" in html
+
+
+def test_the_badge_names_the_missing_exports():
+    html = _report_html([_finding(False, ["vendor_master", "vendor_bank"])])
+    assert "vendor_master, vendor_bank" in html
+
+
+def test_a_complete_finding_is_not_badged():
+    """Badging all 408 findings 'complete' would be noise, and the absence of
+    the badge already carries that meaning once the coverage section explains
+    it."""
+    assert 'class="ev-badge"' not in _report_html([_finding(True)])
+
+
+def test_the_body_says_what_the_gap_means_rather_than_only_naming_it():
+    html = _report_html([_finding(False, ["vendor_master"])])
+    assert "Evidence behind this finding" in html
+    assert "the question was not asked" in html
+
+
+def test_a_finding_with_no_marker_at_all_is_not_badged():
+    """Findings can reach a renderer from a database round-trip that predates
+    the field. They must not be reported as incomplete on that account."""
+    f = _finding(True)
+    del f["evidence"]
+    assert 'class="ev-badge"' not in _report_html([f])
+
+
+def test_the_coverage_section_counts_the_findings_not_just_the_modules():
+    """The manifest counts MODULES that ran degraded. That cannot tell a reader
+    which conclusions to weigh differently; this number can.
+
+    Needs a manifest: the whole section is correctly omitted without one."""
+    import os
+    import tempfile
+    from modules.report_generator import ReportGenerator
+    findings = [_finding(False, ['a']), _finding(False, ['b']), _finding(True)]
+    manifest = {'counts': {'sources_supplied': 10, 'sources_known': 12,
+                           'modules_degraded': 1, 'modules_skipped': 0,
+                           'modules_not_run': 0, 'sources_empty': 0},
+                'modules': {}}
+    out = os.path.join(tempfile.mkdtemp(), 'r.html')
+    ReportGenerator(findings, {'scan_date': '2026-08-29'},
+                    coverage=manifest).generate(out)
+    with io.open(out, encoding='utf-8') as fh:
+        html = fh.read()
+    assert 'findings resting on partial data' in html
+    assert '>2<' in html          # the finding count, not the module figure of 1

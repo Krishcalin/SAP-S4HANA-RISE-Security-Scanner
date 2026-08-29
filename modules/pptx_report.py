@@ -565,6 +565,12 @@ class PPTXReportGenerator:
         # Five cards, not four. `modules_not_run` was computed on every run and
         # displayed nowhere, so a deck built from `--modules users` showed three
         # reassuring zeroes over a scan in which twenty-nine modules never ran.
+        # Counted from the findings, not the manifest: the manifest counts
+        # MODULES that ran degraded, this counts the conclusions a reader is
+        # actually looking at.
+        partial_findings = sum(
+            1 for f in self.findings
+            if not (f.get("evidence") or {}).get("complete", True))
         cards = [
             (str(counts.get("sources_supplied", 0)) + " / " + str(counts.get("sources_known", 0)),
              "logical sources supplied"),
@@ -572,9 +578,10 @@ class PPTXReportGenerator:
             (str(counts.get("modules_skipped", 0)), "modules had no input"),
             (str(counts.get("modules_not_run", 0)), "modules not executed"),
             (str(counts.get("sources_empty", 0)), "files present but empty"),
+            (str(partial_findings), "findings on partial data"),
         ]
         x = Inches(0.6)
-        cw = (W - Inches(1.2) - Inches(1.2)) / 5
+        cw = (W - Inches(1.2) - Inches(1.2)) / len(cards)
         for value, caption in cards:
             s.text(x, Inches(2.5), cw, Inches(0.6), [_p(value, 26, b=True, color=INK)])
             s.text(x, Inches(3.1), cw, Inches(0.5), [_p(caption, 10, color=SUB)])
