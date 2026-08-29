@@ -192,6 +192,10 @@ check the scanner emits routes to a team, because a prefix table mis-matches qui
 ## Phase 3 — FAIR on the front page ✅ **COMPLETE**
 
 **The cleanest open lane** — neither incumbent has any monetary output at all.
+⚠️ **Superseded 2026-08-29** — true of the two vendors studied, false of the
+market. Pathlock ships Risk Quantification and SAP sells the OEM edition.
+See [`COMPETITOR_PATHLOCK.md`](COMPETITOR_PATHLOCK.md) §1.1 for what
+actually differentiates the two methods.
 
 | Component | File | Status |
 |---|---|---|

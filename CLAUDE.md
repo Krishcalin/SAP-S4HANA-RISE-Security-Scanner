@@ -709,7 +709,7 @@ wrong in that way.
 | `systrust` | system_trust | trusted RFC, SAProuter, msg server, UCON, SAP*/default passwords |
 | `baseline` | baseline_params | SAP Security Baseline profile params: auth engine, SNC fallback, GUI scripting, weak hashes, sapstartsrv, gateway ACL, SSO cookies, ICM log |
 | `s4authz` | s4_business_authz | S/4HANA business roles/catalogs/restrictions, CDS auth-check, OData V4, Cloud Connector principal propagation, CF platform roles, birthright role collections |
-| `ara` | access_risk_analysis | offline GRC-style **permission-level SoD** from AGR_1251+AGR_USERS: 27-risk ruleset (P2P/O2C/R2R/H2R/Basis), mitigating controls, per-user risk score; iam SoD defers to it when role_auth_values present |
+| `ara` | access_risk_analysis | offline GRC-style **permission-level SoD** from AGR_1251+AGR_USERS: 36-risk ruleset (34 SoD + 2 critical access; 70 functions, 131 permission predicates, 126 tcodes, 62 auth objects, 10 processes — counted 2026-08-29), mitigating controls, per-user risk score; iam SoD defers to it when role_auth_values present |
 | `jobcmd` | basis_job_command | **host-command-execution surface**: SM69/SXPGCOSTAB external cmds (shell-wrap/ADDPAR/path/danger-verb) + TBTCO/TBTCP armed job step users (SAP*/DDIC/SAP_ALL, RSBDCOS0, external steps, deleted/dialog, identity-borrow); reuses users/profiles |
 | `grcac` | grc_access_control | **GRC Access Control**: EAM/Firefighter usage+ownership, ARM access-request workflow, GRC-native SoD violations, mitigating controls, SoD ruleset governance |
 | `rolegov` | role_governance | **role design**: SU24 proposal hygiene for custom tcodes, ungenerated profiles (AGR_1016), derived-role authorization-value drift vs parent |

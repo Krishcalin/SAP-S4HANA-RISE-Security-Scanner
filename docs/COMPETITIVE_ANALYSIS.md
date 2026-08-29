@@ -5,7 +5,11 @@ adversarial verification passes, which between them downgraded or corrected sixt
 
 **Companion documents:** [`RISE_SECURITY_MODEL.md`](RISE_SECURITY_MODEL.md) ·
 [`COMPETITOR_EMBEDDED_INCUMBENT.md`](COMPETITOR_EMBEDDED_INCUMBENT.md) — a fuller dossier that supersedes
-§3 below wherever the two differ · [`PIVOT_PLAN.md`](PIVOT_PLAN.md)
+§3 below wherever the two differ · [`PIVOT_PLAN.md`](PIVOT_PLAN.md) ·
+[**`COMPETITOR_PATHLOCK.md`**](COMPETITOR_PATHLOCK.md) — **2026-08-29, and it supersedes the
+monetary-lane finding in §1.2 below.** This document analyses two vendors;
+Pathlock is neither of them, ships financial risk quantification as a named
+module, and is SAP-certified for clean core with RISE with SAP.
 
 **Rules observed throughout.** No vendor text, code or images are reproduced — capabilities are
 described by what they *do*. Claims are labelled `verified` (read from a primary source),
@@ -34,7 +38,18 @@ on it.**
 config-derived attack-path graph at the platform incumbent (their integrator-published data model has **no
 edge or relationship entity at all** — a vulnerability points at exactly one asset), and none of
 financial risk quantification at either vendor. **FAIR/monetary quantification is the cleanest
-open lane and we already have the engine.** The graph lane is contested: the embedded incumbent's
+open lane and we already have the engine.**
+
+> ⚠️ **SUPERSEDED, 2026-08-29 — see [`COMPETITOR_PATHLOCK.md`](COMPETITOR_PATHLOCK.md) §1.1.**
+> The sentence above is true of the two vendors named here and **false of the
+> market**. Pathlock ships a named **Risk Quantification** module, and SAP
+> itself sells the OEM edition with the words *"associate a dollar value with
+> access risk violations"*. What survives is narrower and more defensible:
+> theirs is **deterministic and realised** — the summed value of documents that
+> actually flowed through a conflicted path, which requires live transaction
+> data — while ours is **probabilistic and forward-looking**, and needs no
+> access to the running system. Two different questions. Never again write
+> "neither vendor has any monetary output" without naming which vendors. The graph lane is contested: the embedded incumbent's
 research director released **its estate-graph feature** in 2026, framed as "SAP's BloodHound moment", and an OWASP
 project already renders an SAP inter-system connection graph. We are entering a category, not
 inventing one.
