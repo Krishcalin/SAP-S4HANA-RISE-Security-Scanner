@@ -198,15 +198,25 @@ brief describes a rule distinguishing view-only from change — `ACTVT 03` vs `0
 | Ruleset | Published count | Ours |
 |---|---|---|
 | SAP ECC | **over 207 SoD** + ~20 sensitive access | — |
-| SAP S/4HANA | **over 137 SoD** + ~20 sensitive access | **36 risks** (34 SoD + 2 critical) |
+| SAP S/4HANA | **over 137 SoD** + ~20 sensitive access | **99 risks** (85 SoD + 14 critical) |
 | S/4HANA Public Cloud | over 80 SoD + over 119 sensitive access | — |
 | Oracle EBS | over 200 risks | n/a |
 | Oracle ERP Cloud | over 100 SoD + over 220 sensitive access | n/a |
 | Dynamics 365 F&O | over 100 SoD + 30+ sensitive access | n/a |
 
-All `verified` from pathlock.com/integrations/ pages. Ours: 36 risks, 70
-functions, 131 permission predicates, 126 tcodes, 62 authorization objects,
-10 processes.
+All `verified` from pathlock.com/integrations/ pages. Ours, after two expansion
+batches: **99 risks**, 184 functions, 272 permission predicates, 369 transaction
+codes, 102 authorization objects, 11 processes. Batch 1 took it 36 -> 59 and
+batch 2 took it 59 -> 99, weighted to the operational processes (manufacturing,
+inventory, quality, maintenance, projects, warehouse), which went from 9 rules
+to 25.
+
+Two cautions travel with that number, and both are in-band. Every rule carries
+`provenance` saying which tier its authorization objects came from, because only
+the original finance rules were verified object by object. And the count is
+still the wrong axis to compete on: §1.2 is the argument that measured COVERAGE
+of a specific estate beats a published rule count, and that argument does not
+get better because our count went up.
 
 ### The cross-application story has a measured limit
 

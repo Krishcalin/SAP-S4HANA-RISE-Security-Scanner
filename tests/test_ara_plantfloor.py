@@ -91,7 +91,8 @@ def test_plant_floor_rules_declare_their_provenance():
     cannot mistake the two tiers."""
     plant = [r for r in ARA.RULESET
              if r["process"] in {"MFG", "INV", "QM", "PM", "PS", "WM"}]
-    assert len(plant) == 9
+    # Batch 2 took the operational tier from 9 rules to 25.
+    assert len(plant) == 25
     for r in plant:
         assert r.get("provenance"), f"{r['risk_id']} has no provenance note"
         assert r.get("references"), r["risk_id"]

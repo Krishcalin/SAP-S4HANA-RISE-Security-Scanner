@@ -6,7 +6,7 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**439** check ids are written as literals in `modules/`, across **37** modules. A further **305** are built at runtime from shipped rule tables, giving **744** in total.
+**439** check ids are written as literals in `modules/`, across **37** modules. A further **345** are built at runtime from shipped rule tables, giving **784** in total.
 
 Each check is published with **what it reads** and **which SAP Security Baseline requirement it answers** — the two things that make a catalogue auditable rather than a number. A competitor publishing a count and no itemised list is making a claim; this is a claim somebody else can check.
 
@@ -25,7 +25,7 @@ Every check below carries the SAP Security Baseline requirement it answers, wher
 - **28 of 28** requirements that are IN SCOPE for this product are addressed by at least one check here.
 - **10 of 38** published requirements are out of scope, because they are for a stack this product does not read. They are named below, not dropped: the denominator has to be honest in both directions, and a reader comparing 28 against 38 has no way to know that.
 - **0** in-scope requirements are not addressed at all. They are listed below rather than summarised away.
-- **524 of 744** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
+- **524 of 784** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
 
 > ⚠️ These are CHECK ITEMS in the CSA policies, not the 'control points' counted in the Baseline document — the widely-quoted 214 (69/92/53) is that other unit. The two do not reconcile; do not publish a percentage of one against the other.
 
@@ -812,7 +812,7 @@ Examples: `ABAP-AMDP-001`, `ABAP-AMDP-002`, `ABAP-AMDP-003`, `ABAP-AMDP-004`, `A
 
 Custom-code scan rules. All four tables emit into the same `ABAP-` namespace: ABAP/UI5, JavaScript, BTP descriptors, and the cross-artefact checks, which carry no pattern because the finding is the ABSENCE of an artefact.
 
-### `ARA-<risk id>` — 59
+### `ARA-<risk id>` — 99
 
 Source: `modules/access_risk_analysis.py — RULESET`
 
