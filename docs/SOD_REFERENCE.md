@@ -181,6 +181,33 @@ Tile visibility ≠ authorization — removing a tile leaves the endpoint callab
 and never added the second connector **reports SoD on S/4HANA while blind to
 every Fiori-initiated action.** One of the most common causes of a green report.
 
+**Implemented — 2026-08-29.** This was our own blind spot too, and closing it
+took two pieces that are easy to confuse:
+
+1. *Measuring* the gap — `modules/ruleset_coverage.py`, check **SODCOV-006**,
+   reports what share of an estate's published apps and services the ruleset can
+   name, **separately** from the transaction figure. Averaging them would let
+   93% of transactions conceal 0% of Fiori behind one number, and on an S/4HANA
+   estate the 0% is the finding. On our own sample the ruleset names **none** of
+   5 apps and 13 services, and names neither `S_SERVICE` nor `S_START` in any
+   predicate — so it could not express a permission-level Fiori rule even where
+   an app was listed.
+2. *Closing* it — `modules/access_risk_analysis.py` resolves
+   `role → tile → app → service` and `role → S_SERVICE → service`, so a rule
+   naming a Fiori app or an OData service now fires. No app is mapped to an
+   "equivalent" transaction: that table is in no export here, and guessing it
+   would put users into conflicts on the strength of an inference.
+
+The two wildcards are kept disjoint. `S_TCODE '*'` confers no launchpad tile and
+no service grant; the first version of the gate let it short-circuit, which made
+every super-user an offender on every Fiori rule — on the sample estate, two
+users holding zero tiles between them. A negative control caught it, not review.
+
+Per the note above that tile visibility is not authorization, a tile is counted
+as reach. That can over-report where the tile and authorization exports
+disagree, which is the direction §1.1 says to err in: an over-report is visible
+and can be cleared, an under-report is indistinguishable from a clean result.
+
 ### 4.2 Generic table access defeats transaction-keyed rules entirely
 
 `verified` — `S_TABU_DIS` (fields `DICBERCLS`, `ACTVT`; groups in `TDDAT`) and
@@ -273,6 +300,66 @@ the values that you maintained in the last release are lost."*
 transaction still works. Over-broad proposals (`*` in `ACTVT` or an org field) →
 false positives *and* a real unintended capability. SU24 unmaintained for `Z*`
 → the same custom transaction carries different object sets in different roles.
+
+### 4.8 Execution evidence, and why its absence must not reduce anything
+
+Every rule above answers *could this user do both halves*. Change documents
+answer part of a stronger question — *did they* — because CDHDR records which
+user changed which object under which transaction, on which date.
+
+The market's organising use of that data is de-prioritisation: a conflict nobody
+has exercised is ranked down. **We do the opposite half only.** Evidence of
+performance raises severity by one level; absence of evidence lowers nothing.
+
+The reason is that this log cannot support the negative:
+
+- change documents exist only for objects with change logging switched **on**,
+  so the record is partial by construction;
+- a **display** action leaves no change document at all, so any risk with a read
+  half can never be fully evidenced here;
+- the log covers a **window**, and a conflict exercised before it began looks
+  identical to one never exercised.
+
+Read against §1.1 — SAP's own guidance that it is better to over-report and
+clear than to under-report and never see — de-prioritising on this evidence is
+optimising the axis SAP warns against, and its quiet results are
+indistinguishable from unasked questions. So the three states are kept apart in
+the output: `realised`, `no_evidence_in_window`, `unmeasured`.
+
+**The sharper finding runs the other way.** A user can appear in the log having
+performed both halves while the authorization export does not show them holding
+either. On our own sample, `LWANG` is recorded running SU01 and PFCG — both
+halves of BASIS-01 — with no AGR_1251 rows at all. Two readings fit, and
+`ARA-DIDDO-001` asserts neither: the role export may be incomplete, or the
+access may have been withdrawn after use. Both matter. The first means every
+clean SoD answer about that user was computed from data missing the part that
+would have produced the conflict; the second is the correct outcome of an access
+review, and a point-in-time snapshot has no other way to show access that once
+existed. What is asserted is only what is checkable — the log records it, the
+authorization data does not explain it, and a segregation result for that user
+cannot be relied on until one of the two readings is confirmed.
+
+**The Fiori half of this is specified, not built, and the reason is data.**
+§4.1 closed the *can-do* gap for Fiori, but the equivalent *did-do* evidence has
+nowhere to come from: the launchpad usage export we currently take
+(`fiori_app_usage`) is aggregate — `APP_ID, TITLE, LAUNCH_COUNT, LAST_LAUNCH,
+CATALOG` — with **no user column**. Aggregate launch counts cannot evidence that
+a particular identity exercised both halves of a conflict, and no amount of
+inference recovers the missing dimension.
+
+What would close it is a per-user export, from `/UI2/APP_USAGE` or the
+equivalent launchpad usage table, shaped:
+
+```
+USERNAME, APP_ID, ODATA_SERVICE, LAUNCH_COUNT, FIRST_LAUNCH, LAST_LAUNCH
+```
+
+With that, `_execution_index` gains a second source and every rule in §4.8
+applies unchanged — including the asymmetry, and including `ARA-DIDDO-001`,
+which would then also catch a user who exercised a conflict entirely through
+Fiori. Until the export exists, execution evidence covers the transaction
+surface only, and that limit is stated in the finding rather than left for a
+reader to discover.
 
 ---
 

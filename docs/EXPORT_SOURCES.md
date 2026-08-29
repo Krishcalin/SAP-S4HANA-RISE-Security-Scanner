@@ -46,7 +46,7 @@ clean — see chapter 13 of the architecture guide.
 | `certificate_inventory` | `certificate_inventory.csv`, `strust_certs.csv` | `crypto_posture` | documented |
 | `cf_roles` | `cf_roles.csv`, `cf_org_space_roles.csv` | `s4_business_authz` | documented |
 | `change_document_items` | `change_document_items.csv`, `cdpos.csv` | `master_data_changes` | documented |
-| `change_documents` | `change_documents.csv`, `cdhdr.csv` | `code_transport`, `master_data_changes` | documented |
+| `change_documents` | `change_documents.csv`, `cdhdr.csv` | `access_risk_analysis`, `code_transport`, `master_data_changes` | documented |
 | `client_settings` | `client_settings.csv`, `scc4.csv` | `code_transport`, `ecs_config_items`, `log_review`, `system_trust` | documented |
 | `cloud_connector` | `cloud_connector.json`, `scc_config.json`, `cloud_connector_configuration.json`, `scc_api_configuration.json` | `btp_cloud_surface`, `s4_business_authz` | documented |
 | `code_inventory` | `code_inventory.csv`, `custom_objects.csv` | `atc_import`, `code_inventory_report`, `code_transport` | documented |
@@ -71,7 +71,7 @@ clean — see chapter 13 of the architecture guide.
 | `fiori_app_usage` | `fiori_app_usage.csv`, `app_usage.csv` | `fiori_ui` | documented |
 | `fiori_catalogs` | `fiori_catalogs.csv`, `flpd_catalogs.csv` | `fiori_ui` | documented |
 | `fiori_spaces` | `fiori_spaces.json`, `spaces_pages.json` | `fiori_ui` | documented |
-| `fiori_tiles` | `fiori_tiles.csv`, `flpd_tiles.csv` | `fiori_ui` | documented |
+| `fiori_tiles` | `fiori_tiles.csv`, `flpd_tiles.csv` | `access_risk_analysis`, `fiori_ui` | documented |
 | `firefighter_log` | `firefighter_log.csv`, `ff_log.csv`, `spm_log.csv` | `iam_advanced` | documented |
 | `grac_access_requests` | `grac_access_requests.csv`, `gracreq.csv` | `grc_access_control` | documented |
 | `grac_firefighter_log` | `grac_firefighter_log.csv`, `gracfflog.csv` | `grc_access_control` | documented |
@@ -103,7 +103,7 @@ clean — see chapter 13 of the architecture guide.
 | `mitigating_controls` | `mitigating_controls.csv`, `mitigations.csv`, `grc_mitigations.csv` | `access_risk_analysis` | documented |
 | `ms_acl` | `ms_acl.csv`, `ms_acl_info.csv`, `msacl.csv` | `system_trust` | documented · not obtainable in RISE |
 | `oauth_clients` | `oauth_clients.json`, `xsuaa_clients.json` | `integration_layer` | documented |
-| `odata_auth` | `odata_auth.csv`, `iwfnd_auth.csv` | `fiori_ui` | documented |
+| `odata_auth` | `odata_auth.csv`, `iwfnd_auth.csv` | `access_risk_analysis`, `fiori_ui` | documented |
 | `odata_v4_services` | `odata_v4_services.csv`, `iwfnd_v4.csv` | `s4_business_authz` | documented |
 | `payment_runs` | `payment_runs.csv`, `reguh.csv` | `master_data_changes` | documented |
 | `personal_data_inventory` | `personal_data_inventory.csv`, `pdi.csv` | `data_protection` | documented |

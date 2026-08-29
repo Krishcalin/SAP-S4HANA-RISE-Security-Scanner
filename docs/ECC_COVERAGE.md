@@ -51,7 +51,7 @@ The estimate was conservative, not mistaken.
 
 | | of 34 |
 |---|---:|
-| identical to the full sample — *"runs with no code change"* | **15** |
+| identical to the full sample — *"runs with no code change"* | **14** |
 | produce findings, but fewer than with full data | 7 |
 | **produce findings at all** | **22** |
 | cannot exist on ECC (no HANA, Fiori, BTP, CDS, S/4 business roles) | 6 |
@@ -178,3 +178,24 @@ coincidence, and needed no ECC-specific handling.
 Parity is therefore **15 of 34** identical and **25 of 34** producing something.
 Recorded here rather than left to move quietly, per the guard in
 `tests/test_ecc_coverage.py`.
+
+
+## 2026-08-29 — `ruleset_coverage` learned about Fiori, parity moved 15 → 14
+
+The entry above is now half true, and the half that expired is the interesting
+one. `ruleset_coverage` was ECC-identical *by construction* only for as long as
+it read AGR_1251 and nothing else. It now also measures the Fiori surface — how
+much of an estate's apps and OData services the SoD ruleset can name — and that
+surface is described by `fiori_tiles` and `odata_auth`, which the ECC fixture
+does not carry and correctly cannot: ECC has no launchpad to publish one.
+
+So the full sample now receives a fifth finding (SODCOV-006, Fiori coverage) and
+the ECC fixture receives four. The module left the identical set by becoming
+more honest, exactly as `sap_hotnews` did above, and the trade is worth naming:
+a coverage module that reported the same coverage on an ECC estate and an
+S/4HANA estate would have been identical for the least interesting reason
+available — it was not looking at the surface that distinguishes them.
+
+Measured parity is **14 of 37** identical and **25 of 37** producing something.
+(The `of 34` in the summary table above predates three later modules; the
+counts in the *identical* and *producing* rows are the ones under test.)

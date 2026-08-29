@@ -54,6 +54,28 @@ there was no data to measure at all. What must never happen is a bare
 percentage presented as the estate's coverage while a wildcard role sits behind
 it — which is the failure the earlier revision over-corrected for.
 
+THERE ARE TWO SURFACES, AND THE FIRST VERSION MEASURED ONE
+────────────────────────────────────────────────────────────
+An S/4HANA user reaches a capability through a transaction code OR through a
+Fiori app, and the two are governed differently. A transaction is gated by
+S_TCODE; a Fiori app is gated by its OData service's start authorization
+(S_SERVICE), and — this is the part that breaks rulesets — **a Fiori app carries
+no permissions of its own.** The permissions belong to the service behind it.
+SAP's own scope table says as much, and its guidance for building a
+permission-level Fiori rule is to copy the service's authorizations across by
+hand, per function.
+
+The first version of this module counted S_TCODE grants and nothing else. On an
+estate whose users work through Fiori that reports a confident percentage over
+the classic surface while the Fiori surface is not measured at all — which is
+the same "confident number over an unasked question" this module was written to
+prevent, reproduced inside it.
+
+So the surfaces are measured and reported SEPARATELY, never averaged. Averaging
+would let 93% of transactions hide 0% of Fiori apps behind one number, and the
+0% is the finding. When a Fiori surface exists and the ruleset names none of it,
+the transaction figure says so on its own face.
+
 CUSTOM TRANSACTIONS ARE COUNTED APART
 -------------------------------------
 No shipped ruleset — ours, SAP's, or a competitor's — can contain a customer's
@@ -80,6 +102,19 @@ CUSTOM_PREFIXES = ("Z", "Y")
 #: Values that mean "every transaction". `*` is the SAP wildcard; a range with a
 #: blank or `*` LOW is the same thing spelled differently.
 WILDCARDS = ("*", "")
+
+#: Exports that describe the Fiori surface. An app reaches a back-end
+#: capability through the OData service behind its tile, so the tile export is
+#: what carries the app -> service half of the chain.
+FIORI_TILE_EXPORT = "fiori_tiles"
+FIORI_CATALOG_EXPORT = "fiori_catalogs"
+ODATA_EXPORT = "odata_auth"
+
+#: Start authorization for an OData service (SAP Help). A ruleset that never
+#: mentions it cannot express a permission-level Fiori rule at all.
+ODATA_START_OBJECT = "S_SERVICE"
+#: …and for a Web Dynpro application.
+WEBDYNPRO_START_OBJECT = "S_START"
 
 #: Below this share of the granted estate, a SoD result should not be read as an
 #: estate-wide answer. Chosen as a reporting threshold, not a quality bar: it is
@@ -130,6 +165,10 @@ class RulesetCoverageAuditor(BaseAuditor):
                 "not a coverage of zero and it is not a coverage of 100% — it "
                 "is an unasked question. Supply AGR_1251 (role_auth_values) to "
                 "answer it.")
+            # The Fiori surface is described by different exports and may be
+            # present when AGR_1251 is not.
+            known_actions, known_objects = self._ruleset_vocabulary()
+            self._emit_fiori_coverage(known_actions, known_objects)
             return self.findings
 
         granted = self._granted(rows)
@@ -143,6 +182,7 @@ class RulesetCoverageAuditor(BaseAuditor):
         self._emit_action_coverage(granted, known_actions)
         self._emit_permission_coverage(granted, known_objects)
         self._emit_custom_gap(granted)
+        self._emit_fiori_coverage(known_actions, known_objects)
         return self.findings
 
     # ------------------------------------------------------------------ #
@@ -270,7 +310,8 @@ class RulesetCoverageAuditor(BaseAuditor):
                len(seen), len(missing), fraction * 100,
                "" if bounded else
                " A wildcard grant means the estate reaches more transactions "
-               "than were measured here - see SODCOV-005."),
+               "than were measured here - see SODCOV-005.")
+            + self._other_surface_note(),
             affected_items=missing[:40],
             remediation=(
                 "Review the unseen transactions. Each is either irrelevant to "
@@ -362,6 +403,133 @@ class RulesetCoverageAuditor(BaseAuditor):
                 "custom_tcodes": custom[:40],
                 "custom_truncated": max(0, len(custom) - 40),
                 "roles_granting_them": sorted(granted.custom_by_role)[:20],
+            },
+        )
+
+    def _other_surface_note(self) -> str:
+        """A transaction-coverage figure must not read as an estate figure
+        while a second, unmeasured surface exists."""
+        apps, services, _ = self._fiori_surface()
+        if not apps and not services:
+            return ""
+        return (" This estate ALSO publishes %d Fiori app(s) and %d OData "
+                "service(s), which are a separate surface measured in "
+                "SODCOV-006 — the figure above is about transaction codes "
+                "only." % (len(apps), len(services)))
+
+    def _fiori_surface(self):
+        """(apps, services) this estate publishes through roles.
+
+        Read from the tile and catalog exports rather than from role
+        authorizations, because that is where the app -> service association
+        lives. An app with no tile is not reachable from a launchpad, and an
+        app whose tile names no service cannot be resolved to a back-end
+        authorization at all — which is itself worth counting.
+        """
+        apps, services, unresolvable = set(), set(), set()
+        for row in (self.data.get(FIORI_TILE_EXPORT) or []):
+            if not isinstance(row, dict):
+                continue
+            app = str(row.get("APP_ID", row.get("APP", ""))).strip().upper()
+            service = str(row.get("ODATA_SERVICE",
+                                  row.get("SERVICE", ""))).strip().upper()
+            if app:
+                apps.add(app)
+                if not service:
+                    unresolvable.add(app)
+            if service:
+                services.add(service)
+        for row in (self.data.get(ODATA_EXPORT) or []):
+            if isinstance(row, dict):
+                name = str(row.get("SERVICE_NAME",
+                                   row.get("SERVICE", ""))).strip().upper()
+                if name:
+                    services.add(name)
+        return apps, services, unresolvable
+
+    def _emit_fiori_coverage(self, known_actions: Set[str],
+                             known_objects: Set[str]) -> None:
+        """What share of the Fiori surface the ruleset can name.
+
+        Reported apart from the transaction figure on purpose: averaging the
+        two would let a high transaction score conceal a Fiori score of zero,
+        and on an S/4HANA estate the zero is the finding.
+        """
+        apps, services, unresolvable = self._fiori_surface()
+        if not apps and not services:
+            # No Fiori exports. NOT a Fiori-free estate — an unmeasured one.
+            if self.data.get(FIORI_CATALOG_EXPORT):
+                self._emit_unknown(
+                    "catalogs were supplied but no tile or OData export, so the "
+                    "apps behind them could not be resolved and the Fiori half "
+                    "of this estate's SoD coverage is unmeasured.")
+            return
+
+        named_apps = apps & known_actions
+        named_services = services & known_actions
+        covered = len(named_apps) + len(named_services)
+        total = len(apps) + len(services)
+        fraction = covered / total if total else 0.0
+        can_express = bool({ODATA_START_OBJECT,
+                            WEBDYNPRO_START_OBJECT} & known_objects)
+
+        self.finding(
+            check_id="SODCOV-006",
+            title="SoD ruleset sees %.0f%% of this estate's Fiori surface"
+                  % (fraction * 100),
+            severity=(self.SEVERITY_HIGH if fraction < LOW_COVERAGE_THRESHOLD
+                      else self.SEVERITY_MEDIUM if covered < total
+                      else self.SEVERITY_INFO),
+            category=self.CATEGORY,
+            description=(
+                "This estate publishes %d Fiori app(s) and %d OData service(s) "
+                "through roles, and the SoD ruleset names %d of them. An "
+                "S/4HANA user reaches a capability through a Fiori app just as "
+                "readily as through a transaction code, but the two are "
+                "governed separately — so a conflict available only through "
+                "Fiori cannot appear in any result derived from transaction "
+                "codes.%s%s"
+                % (len(apps), len(services), covered,
+                   "" if can_express else
+                   " The ruleset also names neither S_SERVICE nor S_START in "
+                   "any predicate, so it currently cannot express a "
+                   "permission-level Fiori rule even where an app is listed: a "
+                   "Fiori app carries no permissions of its own, they belong to "
+                   "the service behind it.",
+                   "" if not unresolvable else
+                   " %d app(s) have a tile naming no OData service, so they "
+                   "cannot be resolved to a back-end authorization at all."
+                   % len(unresolvable))),
+            affected_items=sorted((apps | services) - known_actions)[:40],
+            remediation=(
+                "1. Treat this figure as separate from the transaction "
+                "coverage figure. They measure different surfaces and "
+                "averaging them conceals the weaker one.\n"
+                "2. Where a business capability is reachable through both a "
+                "transaction and a Fiori app, the risk needs both named, or it "
+                "fires for one population of users and not the other.\n"
+                "3. Resolve each app through its OData service to the back-end "
+                "authorization objects, and put those objects in the "
+                "function's permissions — that is what makes a Fiori rule "
+                "permission-level rather than app-level.\n"
+                "4. Where the ruleset cannot yet express Fiori rules at all, "
+                "record that any clean SoD result covers the classic surface "
+                "only."),
+            references=["SAP Help: Scope of Risk Analysis — Fiori Catalog [FCAT] "
+                        "has no standard ruleset",
+                        "SAP Help: OData services have start authorization "
+                        "object S_SERVICE; Web Dynpro apps have S_START",
+                        "docs/SOD_REFERENCE.md section 4.1"],
+            details={
+                "fiori_apps": len(apps),
+                "odata_services": len(services),
+                "named_by_ruleset": covered,
+                "coverage_fraction": round(fraction, 4),
+                "can_express_permission_level_fiori_rules": can_express,
+                "apps_with_no_service": sorted(unresolvable)[:20],
+                "unseen_examples": sorted((apps | services) - known_actions)[:40],
+                "coverage_state": "complete",
+                "surface": "fiori",
             },
         )
 

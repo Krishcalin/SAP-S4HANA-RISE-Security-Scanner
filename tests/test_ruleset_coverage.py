@@ -228,3 +228,79 @@ def test_it_never_raises_on_malformed_rows():
     RulesetCoverageAuditor({"role_auth_values": [
         {}, {"OBJECT": ""}, "not a dict", {"AGR_NAME": None, "OBJECT": "S_TCODE"},
     ]}).run_all_checks()
+
+
+# ── the Fiori surface ──────────────────────────────────────────────────────
+#
+# The first version of this module counted S_TCODE grants and nothing else. On
+# an S/4HANA estate whose users work through Fiori, that reports a confident
+# percentage over the classic surface while the Fiori surface goes unmeasured —
+# the same failure the module exists to prevent, reproduced inside it.
+
+def tile(app="F0733", service="API_USER_MANAGEMENT", role="Z_ADMIN"):
+    return {"TILE_ID": "T1", "APP_ID": app, "CATALOG_ID": "Z_CAT",
+            "ODATA_SERVICE": service, "ROLE": role}
+
+
+def fiori_audit(tiles, ruleset=TINY_RULESET, rows=None):
+    data = {"role_auth_values": rows if rows is not None else [row(low="FK02")],
+            "fiori_tiles": tiles}
+    return RulesetCoverageAuditor(data, ruleset=ruleset).run_all_checks()
+
+
+def test_a_fiori_surface_the_ruleset_cannot_name_scores_zero():
+    """THE Fiori test. An app the ruleset never mentions cannot appear in any
+    conflict, and on an S/4HANA estate that is most of the surface."""
+    finding = one(fiori_audit([tile(), tile("F0735", "API_BUSINESS_ROLE")]),
+                  "SODCOV-006")
+    assert finding is not None
+    assert finding["details"]["coverage_fraction"] == 0.0
+    assert finding["details"]["fiori_apps"] == 2
+    assert finding["severity"] == "HIGH"
+
+
+def test_the_transaction_figure_discloses_the_other_surface():
+    """93% of transactions must not read as 93% of the estate while a second,
+    unmeasured surface exists."""
+    findings = fiori_audit([tile()])
+    assert "separate surface measured in SODCOV-006" in \
+        one(findings, "SODCOV-001")["description"]
+
+
+def test_an_estate_with_no_fiori_exports_gets_no_fiori_finding():
+    """A compliant — or classic-only — estate must be silent."""
+    assert one(audit([row(low="FK02")]), "SODCOV-006") is None
+
+
+def test_naming_the_app_is_not_enough_without_the_start_object():
+    """A Fiori app carries NO permissions of its own; they belong to the OData
+    service behind it. A ruleset naming apps but never S_SERVICE cannot express
+    a permission-level Fiori rule, and says so."""
+    ruleset = [{"functions": [{"actions": ["F0733"], "permissions": []}]}]
+    finding = one(fiori_audit([tile()], ruleset=ruleset), "SODCOV-006")
+    assert finding["details"]["can_express_permission_level_fiori_rules"] is False
+    assert "neither S_SERVICE nor S_START" in finding["description"]
+
+
+def test_the_start_object_makes_permission_level_fiori_rules_expressible():
+    ruleset = [{"functions": [{"actions": ["F0733"], "permissions": [
+        {"object": "S_SERVICE", "field": "SRV_NAME", "values": ["*"]}]}]}]
+    finding = one(fiori_audit([tile()], ruleset=ruleset), "SODCOV-006")
+    assert finding["details"]["can_express_permission_level_fiori_rules"] is True
+
+
+def test_an_app_whose_tile_names_no_service_is_counted_as_unresolvable():
+    """It cannot be resolved to a back-end authorization at all, which is a
+    different problem from the ruleset not naming it."""
+    finding = one(fiori_audit([tile(service="")]), "SODCOV-006")
+    assert finding["details"]["apps_with_no_service"] == ["F0733"]
+    assert "cannot be resolved to a back-end authorization" in finding["description"]
+
+
+def test_the_fiori_surface_is_measured_even_without_role_authorizations():
+    """The two surfaces are described by different exports. An estate may
+    supply the Fiori ones and not AGR_1251."""
+    findings = RulesetCoverageAuditor(
+        {"fiori_tiles": [tile()]}, ruleset=TINY_RULESET).run_all_checks()
+    assert one(findings, "SODCOV-006") is not None
+    assert one(findings, "SODCOV-004") is not None       # and still says so

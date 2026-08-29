@@ -49,13 +49,96 @@ lot, for instance). SAP's own model calls that a transaction-based rule and
 notes it is coarser than an authorization-based one; each such rationale says
 which kind it is rather than implying object-level precision it does not have.
 
+A CAPABILITY HAS TWO DOORS AND THIS CHECK USED TO WATCH ONE
+An S/4HANA user reaches a business capability through a transaction code OR
+through a Fiori app, and only the first passes through S_TCODE. A Fiori app is
+launched from a tile, resolved to an OData service, and gated by that service's
+start authorization S_SERVICE. So an action gate built solely on S_TCODE cannot
+see a conflict whose two halves are Fiori apps — and reports it clean.
+
+The reach is therefore resolved along the chain the estate itself publishes:
+
+    role → tile → app → OData service        (fiori_tiles export)
+    role → S_SERVICE grant → OData service    (AGR_1251, same as any object)
+
+and an action named in a rule is held if it matches a transaction the role can
+start OR an app/service it can reach. The two are kept in SEPARATE sets with
+SEPARATE wildcards on purpose: S_TCODE '*' does not confer Fiori reach and
+S_SERVICE '*' does not confer transaction reach, and collapsing them would
+fabricate access that the estate does not grant.
+
+A TILE IS TREATED AS REACH, AND THAT ERRS ONE WAY ON PURPOSE
+Tile visibility is not authorization: removing a tile leaves the OData endpoint
+callable, and holding a tile without the matching S_SERVICE grant does not make
+the service startable. So counting a tile as reach can over-report, on an estate
+whose tile export and authorization export disagree.
+
+That is the right direction to be wrong in, for two reasons. SAP's own guidance
+on ruleset design is that it is better to over-report a conflict and clear it
+than to under-report one and never see it. And requiring an explicit S_SERVICE
+row would make every estate that does not export S_SERVICE show zero Fiori
+reach — a confident silence over an unasked question, which is the failure this
+whole module is built to avoid. An over-report is visible and can be cleared; an
+under-report looks exactly like a clean result.
+
+What is deliberately NOT done: no app is mapped to an "equivalent" transaction.
+That mapping is not in any export here, and inventing it would put users into
+conflicts on the strength of a guess. An app reaches only what its own service
+reaches, and the permission half of every rule is still checked against
+AGR_1251 — reaching a service is not holding the object behind it.
+
+HOLDING A CONFLICT AND HAVING USED IT ARE DIFFERENT CLAIMS
+Everything above answers "could this user do both halves". A separate and
+stronger question is whether they DID, and change documents answer part of it:
+CDHDR records which user changed which object under which transaction, on which
+date. A conflict evidenced that way is not a theoretical exposure, it is a
+realised one, and it deserves to be read first.
+
+The evidence also cuts the other way, and that turned out to be the sharper
+finding. A user can appear in the change log having performed both halves of a
+conflict while the authorization export does not show them holding either. On
+our own sample that is exactly what LWANG does: change documents record them
+running SU01 and PFCG, and their roles carry no AGR_1251 rows at all. Whatever
+the explanation - an export that omitted those roles, or access withdrawn after
+it was used - every can-do answer about that user is unreliable, and a report
+that stays silent presents an unreliable answer as a clean one. ARA-DIDDO-001
+names those cases.
+
+THE ASYMMETRY IS THE WHOLE DESIGN. Evidence of performance RAISES severity by
+one level. Absence of evidence lowers NOTHING, ever, and the reason is that this
+log cannot support the negative:
+
+  - change documents exist only for objects with change logging switched on, so
+    the record is partial by construction;
+  - a display action leaves no change document at all, so any risk with a read
+    half can never be fully evidenced here;
+  - the log covers a window, and a conflict exercised before it began looks
+    identical to one never exercised.
+
+So "no evidence" is reported as no evidence, never as safety. That is the
+opposite of the usage-based de-prioritisation the market sells, and it is
+deliberate: SAP's own ruleset guidance is that it is better to over-report a
+conflict and clear it than to under-report one and never see it. A tool that
+quietly downgrades every unexercised conflict is optimising the axis SAP warns
+against, and its clean results are indistinguishable from unasked questions.
+
 Data sources:
   - role_auth_values.csv  → AGR_1251 (AGR_NAME, OBJECT, AUTH, FIELD, LOW, HIGH)
   - user_roles.csv        → AGR_USERS (UNAME, AGR_NAME)  [optional; falls back to
                             per-role analysis when absent]
   - mitigating_controls.csv (optional) → USER, RISK_ID, CONTROL_ID, VALID_TO
   - ara_ruleset.json (optional)        → custom risks to extend/override the built-in set
+  - fiori_tiles.csv (optional)         → ROLE, APP_ID, ODATA_SERVICE — the app half
+                                         of the action gate; absent on ECC, which
+                                         has no launchpad to publish one
+  - change_documents.csv (optional)    → CDHDR (USERNAME, TCODE, UDATE) — execution
+                                         evidence; raises severity where a conflict
+                                         was actually exercised, never lowers it
 """
+
+#: Start authorization for an OData service. A Fiori app is gated by the
+#: service behind it, never by S_TCODE, which is why it needs its own gate.
+FIORI_START_OBJECT = "S_SERVICE"
 
 from typing import Dict, List, Any, Optional
 from collections import defaultdict
@@ -1017,6 +1100,10 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
 
     _SEV = {"CRITICAL": BaseAuditor.SEVERITY_CRITICAL, "HIGH": BaseAuditor.SEVERITY_HIGH,
             "MEDIUM": BaseAuditor.SEVERITY_MEDIUM, "LOW": BaseAuditor.SEVERITY_LOW}
+    #: One level up, for a conflict with evidence it was actually exercised.
+    #: There is deliberately no table in the other direction.
+    _RAISE = {"LOW": "MEDIUM", "MEDIUM": "HIGH", "HIGH": "CRITICAL",
+              "CRITICAL": "CRITICAL"}
 
     def run_all_checks(self) -> List[Dict[str, Any]]:
         role_index = self._build_role_index()
@@ -1032,9 +1119,15 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
             self._evaluate_risk(risk, user_risk)
 
         self._emit_user_risk_profile(user_risk)
+        self._emit_unexplained_execution()
         return self.findings
 
     # ------------------------------------------------------------------ parsing
+    #: Lazily built by `_fiori_universe`; None until first use.
+    _fiori_pub = None
+    #: Lazily built by `_execution_index`; None until first use.
+    _exec_idx = None
+
     def _build_role_index(self) -> Optional[Dict[str, Dict[str, Any]]]:
         rows = self.data.get("role_auth_values")
         if not rows:
@@ -1086,7 +1179,9 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
 
         roles: Dict[str, Dict[str, Any]] = {}
         for inst in grouped.values():
-            r = roles.setdefault(inst["role"], {"tcodes": set(), "star_tcode": False, "auths": []})
+            r = roles.setdefault(inst["role"], {"tcodes": set(), "star_tcode": False,
+                                                "auths": [], "fiori": set(),
+                                                "star_service": False})
             r["auths"].append(inst)
             if inst["object"] == "S_TCODE":
                 for low, _high in inst["fields"].get("TCD", []):
@@ -1095,7 +1190,87 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
                         r["star_tcode"] = True
                     elif lv:
                         r["tcodes"].add(lv)
+            elif inst["object"] == FIORI_START_OBJECT:
+                # An OData service start grant. Kept apart from `tcodes` so that
+                # its wildcard cannot widen transaction reach, and vice versa.
+                for field in ("SRV_NAME", "SERVICE", "NAME"):
+                    for low, _high in inst["fields"].get(field, []):
+                        lv = str(low).strip().upper()
+                        if lv == "*":
+                            r["star_service"] = True
+                        elif lv:
+                            r["fiori"].add(lv)
+        self._add_tile_reach(roles)
         return roles
+
+    def _app_service_map(self) -> Dict[str, str]:
+        """APP_ID -> OData service, read from the tile export.
+
+        This is the resolution step that makes a Fiori rule expressible at all:
+        an app carries no permissions of its own, they belong to the service
+        behind it. An app whose tile names no service is left unmapped rather
+        than guessed at — `ruleset_coverage` counts those separately.
+        """
+        mapping: Dict[str, str] = {}
+        for row in (self.data.get("fiori_tiles") or []):
+            if not isinstance(row, dict):
+                continue
+            app = str(row.get("APP_ID", row.get("APP", ""))).strip().upper()
+            svc = str(row.get("ODATA_SERVICE", row.get("SERVICE", ""))).strip().upper()
+            if app and svc:
+                mapping[app] = svc
+        return mapping
+
+    def _add_tile_reach(self, roles: Dict[str, Dict[str, Any]]) -> None:
+        """Add each role's launchpad reach: the apps assigned to it and the
+        services behind them.
+
+        A role that appears ONLY in the tile export still gets an entry — a role
+        granting Fiori apps and no S_TCODE is an ordinary S/4HANA business role,
+        and dropping it would silently exclude its holders from every result.
+        """
+        # A LIST, not a set: these are dicts and a set of them raises
+        # TypeError. It only ever runs when some role holds S_SERVICE '*',
+        # which the sample estate does not, so only a test could find it.
+        star_services = [r for r in roles.values() if r["star_service"]]
+        known_services = set()
+        for row in (self.data.get("fiori_tiles") or []):
+            if not isinstance(row, dict):
+                continue
+            role = str(row.get("ROLE", row.get("AGR_NAME", ""))).strip()
+            app = str(row.get("APP_ID", row.get("APP", ""))).strip().upper()
+            svc = str(row.get("ODATA_SERVICE", row.get("SERVICE", ""))).strip().upper()
+            if svc:
+                known_services.add(svc)
+            if not role:
+                continue
+            r = roles.setdefault(role, {"tcodes": set(), "star_tcode": False,
+                                        "auths": [], "fiori": set(),
+                                        "star_service": False})
+            if app:
+                r["fiori"].add(app)
+            if svc:
+                r["fiori"].add(svc)
+        for row in (self.data.get("odata_auth") or []):
+            if isinstance(row, dict):
+                name = str(row.get("SERVICE_NAME", row.get("SERVICE", ""))).strip().upper()
+                if name:
+                    known_services.add(name)
+        # A wildcard S_SERVICE grant reaches every service the estate publishes,
+        # and through each service the app in front of it — calling the endpoint
+        # directly needs no tile. It reaches no service the estate does NOT
+        # publish, so the widening is bounded by the export rather than open.
+        if star_services and known_services:
+            # A MULTIMAP: several apps can sit in front of one service, and
+            # inverting the dict directly would keep only the last of them.
+            by_service: Dict[str, set] = defaultdict(set)
+            for app, svc in self._app_service_map().items():
+                by_service[svc].add(app)
+            reachable = set(known_services)
+            for svc in known_services:
+                reachable |= by_service.get(svc, set())
+            for r in star_services:
+                r["fiori"] |= reachable
 
     def _build_units(self, role_index: Dict[str, Dict[str, Any]]):
         """Return (units, mode). Aggregate to the USER when AGR_USERS is available,
@@ -1113,12 +1288,15 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
                     umap[user].append(role)
             units: Dict[str, Dict[str, Any]] = {}
             for user, roles in umap.items():
-                u = {"tcodes": set(), "star_tcode": False, "auths": [], "roles": []}
+                u = {"tcodes": set(), "star_tcode": False, "auths": [],
+                     "roles": [], "fiori": set(), "star_service": False}
                 for role in roles:
                     ri = role_index.get(role)
                     if ri:
                         u["tcodes"] |= ri["tcodes"]
                         u["star_tcode"] = u["star_tcode"] or ri["star_tcode"]
+                        u["fiori"] |= ri["fiori"]
+                        u["star_service"] = u["star_service"] or ri["star_service"]
                         u["auths"].extend(ri["auths"])
                         u["roles"].append(role)
                 if u["roles"]:
@@ -1127,6 +1305,82 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
                 return units, "user"
         # fallback: each role is a pseudo-unit
         return ({r: {**v, "roles": [r]} for r, v in role_index.items()}, "role")
+
+    def _execution_index(self) -> Dict[str, Dict[str, List[str]]]:
+        """user (upper) -> tcode (upper) -> the dates it was used on.
+
+        Built from change documents, which are per-user, per-transaction and
+        dated. Rows with no user or no transaction are skipped rather than
+        bucketed under a blank key: an unattributed change is not evidence
+        about anybody.
+        """
+        if self._exec_idx is None:
+            idx: Dict[str, Dict[str, List[str]]] = defaultdict(lambda: defaultdict(list))
+            for row in (self.data.get("change_documents") or []):
+                if not isinstance(row, dict):
+                    continue
+                user = str(row.get("USERNAME", row.get("UNAME",
+                                   row.get("USER", "")))).strip().upper()
+                tcode = str(row.get("TCODE", "")).strip().upper()
+                if not user or not tcode:
+                    continue
+                date = str(row.get("UDATE", row.get("DATE", ""))).strip()
+                idx[user][tcode].append(date)
+            self._exec_idx = idx
+        return self._exec_idx
+
+    def _evidence_window(self) -> str:
+        """The span the evidence actually covers, so a reader can see what a
+        silence is worth. A conflict exercised before this window began looks
+        exactly like one never exercised."""
+        dates = sorted(d for by_t in self._execution_index().values()
+                       for dl in by_t.values() for d in dl if d)
+        return "%s to %s" % (dates[0], dates[-1]) if dates else ""
+
+    def _fiori_evidence_gap(self) -> str:
+        """Execution evidence covers transactions only. On an estate that also
+        publishes Fiori, saying so is the difference between a stated limit and
+        a silent one — the launchpad usage export we take is aggregate and
+        carries no user column, so it cannot evidence anybody."""
+        if not self._fiori_universe():
+            return ""
+        return (" It also covers transaction executions only: this estate "
+                "publishes a Fiori surface, and the launchpad usage export is "
+                "aggregate with no user column, so a conflict exercised through "
+                "Fiori would leave no trace here either.")
+
+    def _exercised_functions(self, uid: str, risk: Dict[str, Any]) -> List[str]:
+        """Which of a risk's functions this unit has evidence of performing.
+
+        Role mode is excluded: change documents name a USER, and attributing a
+        user's action to every role they hold would put the evidence on roles
+        whose holders never did anything.
+        """
+        if self._mode != "user":
+            return []
+        used = self._execution_index().get(uid.upper())
+        if not used:
+            return []
+        done = []
+        for func in (risk.get("functions") or []):
+            acts = {str(a).strip().upper() for a in (func.get("actions") or [])
+                    if str(a).strip()}
+            if acts & set(used):
+                done.append(func.get("name", "?"))
+        return done
+
+    def _realised_by(self, risk: Dict[str, Any], offenders: List[str]) -> List[str]:
+        """Offenders with evidence of performing EVERY function in the risk.
+
+        Every, not any: performing one half of a segregation-of-duties pair is
+        ordinary work. The conflict is realised only when the same identity has
+        exercised both sides.
+        """
+        funcs = risk.get("functions") or []
+        if not funcs:
+            return []
+        return sorted(uid for uid in offenders
+                      if len(self._exercised_functions(uid, risk)) == len(funcs))
 
     def _load_mitigations(self) -> Dict[str, set]:
         """user (upper) -> set of mitigated risk_ids (upper); '*' mitigates all.
@@ -1214,8 +1468,8 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
         # requiring the maintain activity — display is excluded); 'all' is used for the
         # conjunctive critical rules. Within a single object all field requirements must be
         # met by one authorization instance (handled in _object_ok).
-        acts = [str(a).strip().upper() for a in (func.get("actions") or []) if str(a).strip()]
-        if acts and not (unit["star_tcode"] or (unit["tcodes"] & set(acts))):
+        acts = {str(a).strip().upper() for a in (func.get("actions") or []) if str(a).strip()}
+        if acts and not self._can_start(unit, acts):
             return False
         perms = func.get("permissions") or []
         if not perms:
@@ -1229,6 +1483,57 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
             return False  # permissions declared but all object-less → do not fall open to tcode-only
         results = [self._object_ok(unit["auths"], obj, reqs) for obj, reqs in by_obj.items()]
         return all(results) if perm_match == "all" else any(results)
+
+    def _fiori_universe(self) -> set:
+        """Every app and service this estate publishes.
+
+        Used to tell a Fiori action apart from a transaction one, which is what
+        keeps the two wildcards from leaking into each other.
+        """
+        if self._fiori_pub is None:
+            pub = set()
+            for row in (self.data.get("fiori_tiles") or []):
+                if isinstance(row, dict):
+                    for key in ("APP_ID", "APP", "ODATA_SERVICE", "SERVICE"):
+                        v = str(row.get(key, "")).strip().upper()
+                        if v:
+                            pub.add(v)
+            for row in (self.data.get("odata_auth") or []):
+                if isinstance(row, dict):
+                    v = str(row.get("SERVICE_NAME",
+                                    row.get("SERVICE", ""))).strip().upper()
+                    if v:
+                        pub.add(v)
+            self._fiori_pub = pub
+        return self._fiori_pub
+
+    def _can_start(self, unit: Dict[str, Any], acts: set) -> bool:
+        """Can this unit start ANY of a function's actions, by either door?
+
+        Actions within a function are alternatives — ME21N or the Manage
+        Purchase Orders app both reach purchase-order creation — so one hit is
+        enough.
+
+        THE TWO WILDCARDS MUST NOT LEAK INTO EACH OTHER, and the first version
+        of this method let one of them. S_TCODE '*' short-circuited the whole
+        gate, so once Fiori apps became nameable actions it made every holder of
+        a super-user role an offender on every Fiori rule — on the sample
+        estate, two users with zero tiles between them. A transaction wildcard
+        confers no launchpad tile and no S_SERVICE grant; treating it as though
+        it did would have manufactured the conflicts this module exists to find
+        honestly. A negative control caught it: apps the estate does not publish
+        matched users who could not have reached them.
+
+        So S_TCODE '*' satisfies only actions that are NOT published Fiori
+        objects. An action the estate publishes as neither is treated as a
+        transaction, which is the safe reading of an unknown token — a role
+        holding every transaction really does hold it if it is one.
+        """
+        if unit["tcodes"] & acts:
+            return True
+        if unit.get("fiori", ()) & acts:
+            return True
+        return bool(unit["star_tcode"] and (acts - self._fiori_universe()))
 
     def _risk_offenders(self, risk: Dict[str, Any]) -> List[str]:
         funcs = risk.get("functions") or []
@@ -1354,6 +1659,11 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
 
         sev_str = str(risk.get("severity", "HIGH")).upper()
         severity = self._SEV.get(sev_str, self.SEVERITY_HIGH)
+        realised = self._realised_by(risk, residual)
+        if realised:
+            # Evidence of performance raises by one level. Nothing lowers it.
+            sev_str = self._RAISE.get(sev_str, sev_str)
+            severity = self._SEV.get(sev_str, severity)
         rtype = str(risk.get("risk_type", "SOD")).upper()
         kind = "SoD conflict" if rtype == "SOD" else "Critical access"
         funcs = risk.get("functions") or []
@@ -1370,6 +1680,23 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
             f"{len(residual)} {unit_word}(s) hold {'both sides of' if rtype == 'SOD' else ''} "
             f"this risk ({fnames}). {risk.get('rationale', '')}".strip()
         )
+        if realised:
+            desc += (
+                f" {len(realised)} of them did not merely hold this conflict but "
+                f"EXERCISED both sides: {', '.join(realised[:8])}"
+                f"{' and others' if len(realised) > 8 else ''} — change documents "
+                f"record them running the transactions, so this is a realised "
+                f"exposure rather than a theoretical one, and the severity above "
+                f"is raised one level accordingly.")
+        elif self._execution_index():
+            desc += (
+                " The change-document log supplied covers "
+                f"{self._evidence_window() or 'an unstated period'} and shows none "
+                "of them exercising both sides. That is not evidence they did not: "
+                "change documents exist only where change logging is on, display "
+                "actions leave none at all, and anything before the window is "
+                "invisible. The severity is therefore unchanged, not reduced."
+                + self._fiori_evidence_gap())
         if mitigated:
             desc += f" ({mitigated} further {unit_word}(s) suppressed by a documented mitigating control.)"
         if self._mode == "role":
@@ -1395,7 +1722,16 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
             ),
             references=refs,
             details={"total_affected": len(residual), "mitigated": mitigated,
-                     "risk_type": rtype, "process": risk.get("process", "")},
+                     "risk_type": rtype, "process": risk.get("process", ""),
+                     "realised_by": realised,
+                     "realised_count": len(realised),
+                     # THREE states, not two: "nobody did it" and "we could not
+                     # look" must never render as the same result.
+                     "evidence_state": ("unmeasured" if not self._execution_index()
+                                        else "realised" if realised
+                                        else "no_evidence_in_window"),
+                     "evidence_window": self._evidence_window(),
+                     "evidence_source": "change_documents (CDHDR)"},
             affected_objects=self._risk_objects(risk, residual[:100]),
             # AGGREGATE: one finding per RISK summarising every user that holds it, so the
             # member list must stay out of its identity. Remediating one of five offenders
@@ -1404,6 +1740,110 @@ class AccessRiskAnalysisAuditor(BaseAuditor):
             # which is the correct, stable subject here.
             scope="aggregate",
         )
+
+    def _emit_unexplained_execution(self) -> None:
+        """Conflicts the change log evidences and the authorization export cannot
+        account for.
+
+        This is a reliability finding before it is a risk finding. Two readings
+        fit, and both matter:
+
+          - the export is incomplete for those roles, in which case every SoD
+            answer about that user is drawn from data that is missing the part
+            which would have produced the conflict;
+          - the access was genuinely withdrawn between the logged action and the
+            snapshot, which is a good outcome and still worth seeing, because it
+            is the only place a report shows access that USED to exist.
+
+        Neither reading is asserted here. What is asserted is narrow and
+        checkable: the log records this identity performing every function of
+        this risk, and the authorization data supplied does not explain how.
+        """
+        if self._mode != "user" or not self._execution_index():
+            return
+        unexplained: Dict[str, Dict[str, Any]] = {}
+        for risk in self.RULESET:
+            funcs = risk.get("functions") or []
+            if len(funcs) < 2 or str(risk.get("risk_type", "SOD")).upper() != "SOD":
+                continue                      # a single-function rule is not a conflict
+            for uid in self._execution_index():
+                if uid in self._units and self._risk_held(self._units[uid], risk):
+                    continue                  # explained: they hold it, already reported
+                if len(self._exercised_functions(uid, risk)) != len(funcs):
+                    continue
+                rec = unexplained.setdefault(uid, {"risks": [], "tcodes": set()})
+                rec["risks"].append(str(risk.get("risk_id", "?")))
+                rec["tcodes"] |= set(self._execution_index()[uid])
+        if not unexplained:
+            return
+
+        no_auth_rows = sorted(u for u in unexplained
+                              if not (self._units.get(u) or {}).get("auths"))
+        items = []
+        for uid in sorted(unexplained):
+            rec = unexplained[uid]
+            items.append("%s — exercised %s using %s"
+                         % (uid, "/".join(sorted(rec["risks"])),
+                            ", ".join(sorted(rec["tcodes"])[:6])))
+        self.finding(
+            check_id="ARA-DIDDO-001",
+            title=("%d user(s) exercised a conflict the authorization export "
+                   "does not explain" % len(unexplained)),
+            severity=self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=(
+                "Change documents record these users performing BOTH sides of a "
+                "segregation-of-duties risk, and the authorization data supplied "
+                "does not show them holding it. The conflict is evidenced; the "
+                "access that allowed it is not visible. Two readings fit and this "
+                "check does not choose between them: the role export may be "
+                "incomplete for these users, or the access may have been "
+                "withdrawn after it was used. %s"
+                "Either way the segregation-of-duties result for these users is "
+                "drawn from data that contradicts the execution record, so a "
+                "clean SoD answer about them cannot be relied on — which is the "
+                "reason this is reported rather than dropped as a mismatch."
+                % ("%d of them %s no authorization rows at all in the export, "
+                   "which points at the first reading. "
+                   % (len(no_auth_rows), "has" if len(no_auth_rows) == 1 else "have")
+                   if no_auth_rows else "")),
+            affected_items=items[:100],
+            remediation=(
+                "1. Re-export AGR_1251 for the named users' roles and confirm "
+                "whether the rows were simply missing; a partial role export is "
+                "the most common cause and the cheapest to rule out.\n"
+                "2. If the rows are genuinely absent, establish how the "
+                "transactions were executed: a role deleted since, a firefighter "
+                "or emergency-access session, a reference user, or a profile "
+                "assigned directly rather than through a role.\n"
+                "3. If the access was withdrawn after use, record that — it is "
+                "the correct outcome and the change log is the only place the "
+                "report can show it.\n"
+                "4. Until one of the above explains every name here, treat SoD "
+                "results for these users as unverified rather than clean."),
+            references=[
+                "CDHDR/CDPOS change documents — SAP change logging",
+                "AGR_1251 — role authorization values",
+                "docs/SOD_REFERENCE.md section 4.3 (technical identities) and 4.5",
+            ],
+            details={
+                "users": sorted(unexplained),
+                "users_with_no_authorization_rows": no_auth_rows,
+                "evidence_window": self._evidence_window(),
+                "evidence_source": "change_documents (CDHDR)",
+                "coverage_state": "complete",
+            },
+            scope="aggregate",
+        )
+
+    def _risk_held(self, unit: Dict[str, Any], risk: Dict[str, Any]) -> bool:
+        """Does this unit hold every function of the risk? (the can-do answer)"""
+        funcs = risk.get("functions") or []
+        perm_match = risk.get("perm_match") or (
+            "all" if str(risk.get("risk_type", "SOD")).upper().startswith("CRITICAL")
+            else "any")
+        return bool(funcs) and all(self._function_held(unit, f, perm_match)
+                                   for f in funcs)
 
     def _emit_user_risk_profile(self, user_risk: Dict[str, List[tuple]]):
         if not user_risk or self._mode != "user":
