@@ -298,6 +298,20 @@ export function Findings() {
                 </td>
                 <td className={TD}>
                   <Link className="text-accent" to={`/findings/${f.id}`}>{f.title}</Link>
+                  {/* Rests on partial data. A compact marker beside the title
+                      rather than a banner: the list is scanned, and the detail
+                      page carries the full explanation. Only the incomplete
+                      case is marked — its absence already means complete. */}
+                  {f.latest_evidence?.complete === false && (
+                    <span className="pill st text-medium ml-1.5"
+                          title={`This check ran without ${
+                            (f.latest_evidence.missing_sources ?? []).length
+                          } of its module's exports: ${
+                            (f.latest_evidence.missing_sources ?? []).join(', ')
+                          }. A clean result in the areas they feed means the question was not asked.`}>
+                      partial data
+                    </span>
+                  )}
                   {f.regression_count > 0 && (
                     <span className="pill st text-high ml-1.5"
                           title="previously resolved, then seen again">

@@ -362,7 +362,21 @@ def list_findings(scope: Optional[Sequence[int]], system_id: Optional[int] = Non
                (f.due_date IS NOT NULL AND f.due_date < CURRENT_DATE
                 AND f.state IN ('open','submitted_to_provider')) AS is_overdue,
                GREATEST(0, EXTRACT(DAY FROM (COALESCE(f.resolved_at, now())
-                                             - f.first_seen_at))::int) AS days_open
+                                             - f.first_seen_at))::int) AS days_open,
+               -- Whether the newest observation's data was complete. A
+               -- correlated subquery rather than a join: `finding_observation`
+               -- carries UNIQUE (finding_id, scan_run_id), so this is an index
+               -- lookup per row, and a join would need a window function to
+               -- pick the newest and would change the row count if it went
+               -- wrong.
+               --
+               -- On the LIST as well as the detail because a reader scanning
+               -- fifty rows should not have to open each one to learn which
+               -- rest on partial data. That is the same "reachable in
+               -- principle" that left the trust statement at card 151.
+               (SELECT o.evidence FROM finding_observation o
+                 WHERE o.finding_id = f.id
+                 ORDER BY o.scan_run_id DESC LIMIT 1) AS latest_evidence
         FROM finding f
         JOIN check_definition cd ON cd.check_id = f.check_id
         LEFT JOIN sap_system s ON s.id = f.system_id

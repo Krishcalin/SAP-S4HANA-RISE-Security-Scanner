@@ -88,3 +88,73 @@ describe('the filter row', () => {
     }
   })
 })
+
+/* ── which rows rest on partial data ───────────────────────────────────────
+ *
+ * The detail page and the dashboard verdict already carried this. The list did
+ * not, so a reader scanning fifty findings had to open each one to learn which
+ * conclusions were drawn from a fraction of their module's inputs.
+ */
+function row(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 1, check_id: 'USR-001', title: 'Default user SAP* is unlocked',
+    severity: 'HIGH', state: 'open', priority_tier: 'P2', priority_score: 40,
+    priority_rationale: null, regression_count: 0, assignee: null,
+    owning_team: 'identity', default_team: 'identity', category: 'Identity',
+    remediation_owner: 'customer_fixable', days_open: 3,
+    expired_acceptance: false, is_overdue: false, due_date: null,
+    acceptance_due: null, system_label: 'PRD/100', system_tier: 'prod',
+    sid: 'PRD', system_client: '100', baseline_req_id: null,
+    latest_evidence: null,
+    ...overrides,
+  }
+}
+
+async function renderWith(rows: unknown[]) {
+  const client = await import('../api/client')
+  vi.mocked(client.findings).mockResolvedValue(
+    { findings: rows, total: rows.length, page: 1, pages: 1 } as never)
+  vi.mocked(client.systems).mockResolvedValue([] as never)
+  vi.mocked(client.views).mockResolvedValue([] as never)
+  vi.mocked(client.domains).mockResolvedValue({
+    domains: [], unplaced: { counts: {}, total: 0, reasons: {}, note: '' },
+    totals: { domains: 12, assessable: 11, findings: 0, placed: 0 },
+  } as never)
+  render(<MemoryRouter><Findings /></MemoryRouter>)
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Findings' }))
+    .toBeInTheDocument())
+}
+
+describe('the partial-data marker on the list', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('marks a row whose module ran without some of its inputs', async () => {
+    await renderWith([row({
+      latest_evidence: { complete: false, declared_sources: 3,
+                         missing_sources: ['user_groups'] } })])
+    expect(await screen.findByText('partial data')).toBeInTheDocument()
+  })
+
+  it('names the missing exports where a reader can reach them', async () => {
+    await renderWith([row({
+      latest_evidence: { complete: false, declared_sources: 3,
+                         missing_sources: ['user_groups', 'auth_objects'] } })])
+    const marker = await screen.findByText('partial data')
+    expect(marker.getAttribute('title')).toContain('user_groups, auth_objects')
+  })
+
+  it('leaves a complete row unmarked, because absence already means complete',
+     async () => {
+    await renderWith([row({
+      latest_evidence: { complete: true, declared_sources: 3,
+                         missing_sources: [] } })])
+    expect(screen.queryByText('partial data')).toBeNull()
+  })
+
+  it('leaves a row with no marker at all unmarked', async () => {
+    // Findings stored before the column existed carry nothing. Not knowing is
+    // a third state and must not render as either answer.
+    await renderWith([row()])
+    expect(screen.queryByText('partial data')).toBeNull()
+  })
+})
