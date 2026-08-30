@@ -61,7 +61,7 @@ product became client-server**, deliberately and one-way. It has NOT been relaxe
 
 Background and the full plan: [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md),
 [`docs/BUILD_ROADMAP.md`](docs/BUILD_ROADMAP.md).
-- **714 checks across 36 audit modules.** Measure, never estimate — and know which number you
+- **793 checks across 38 audit modules.** Measure, never estimate — and know which number you
   are quoting. `modules/` holds 70 files, of which **36 emit findings**; the other 34 are rule
   tables, loaders, importers and report writers. Those 33 are exactly `sap_scanner.py`'s
   `--modules` choices. Check IDs: **363** are written as literals, and **621** exist once the
@@ -687,7 +687,7 @@ wrong in that way.
   `None → TRUE` / `[] → FALSE` semantics, different join). Two implementations of the access
   boundary is one more than is safe; do not add a third.
 
-### The 36 modules (module key → class → focus)
+### The 38 modules (module key → class → focus)
 
 | key | module | focus |
 |---|---|---|
@@ -848,6 +848,61 @@ nothing gets exit 2, which is the honest reading of "we have no idea how much wa
    introduces a **new category** string, add it to `compliance_mapping.CATEGORY_THEMES` so its
    findings map to framework controls.
 7. **Smoke test end-to-end** (see below), then commit.
+
+## Saying how far a result can be believed
+
+This is the product's sharpest differentiator and the part most easily broken by
+a well-meaning change. **A clean result and an unasked question look identical on
+a page.** Everything below exists so they do not.
+
+### The rules that govern it
+
+1. **Three states, never two.** `complete` / `degraded` / `unknown`. "We looked
+   and found nothing" and "we could not look" are different claims, and only one
+   is evidence. An export that was supplied and held no rows is a real answer;
+   one that failed to decode is not, and is recorded as `None`, never `[]`.
+2. **A summary takes the FLOOR, never the mean.** `SODCOV-000` averages nothing:
+   93% of transactions against 0% of Fiori is a comfortable 47% describing
+   neither surface. A summary that buries its worst input is the failure the
+   checks beneath it exist to report.
+3. **Derived, never recomputed.** `SODCOV-000` reads the findings beneath it —
+   including `MITIG-*` handed over through `run_ctx["peer_findings"]`. A summary
+   that recalculates can disagree with its own detail, in front of the reader
+   least able to tell which half to believe.
+4. **Unknown attribution keeps the warning.** Where the evidence marker cannot
+   resolve which sources a check reads, it falls back to the module's. Noise is
+   visible and gets fixed; a silent all-clear is what the field exists to prevent.
+5. **A qualification nobody reaches is not a qualification.** This has been got
+   wrong four times: the evidence marker attached to findings no renderer read;
+   `SODCOV-000` rendering as card 151 of 419 while telling the reader to read it
+   first; both landing in the offline report and not the console. If you add a
+   statement meant to be read, check where it renders.
+
+### What exists
+
+| | |
+|---|---|
+| `SODCOV-000` | The workpaper sentence: usable / partial / unbounded / not measured |
+| `SODCOV-001..006` | Coverage of the transaction **and** Fiori surfaces, separately — an app is gated by `S_SERVICE`, not `S_TCODE` |
+| `SODCOV-007` | Rules naming objects the release does not define. Fail-closed matching makes them permanently silent |
+| `SODCOV-008..010` | The customer's own ruleset: broken rules, silent overrides, and the delta against ours |
+| `MITIG-001/002` | What a mitigating control suppressed, and whether the row could support an audit conclusion |
+| `EXPORT-001/002` | Supplied exports that could not be decoded, or decoded only via a fallback |
+| `finding["evidence"]` | Per-**check** completeness, attached in `BaseAuditor.finding()` beside the standards mapping |
+| `docs/CHECK_FIRING.md` | How many of our own checks are proven to fire. CI fails if it drifts |
+
+### If you touch this
+
+- Adding a check id? `docs/CHECKS_REFERENCE.md`, `docs/ARCHITECTURE.*`, the
+  README figures and `docs/CHECK_FIRING.md` all carry counts, and all four have
+  tests. Run the builders; do not hand-edit the generated ones.
+- Adding a check that emits under a new prefix? Route it in
+  `modules/rise_ownership.py`. An unrouted prefix reaches nobody's worklist, and
+  that guard has caught it twice.
+- Changing what a module reads? The evidence marker derives from
+  `coverage.check_sources()`, so it follows automatically — but only for reads it
+  can see. A read through a new helper shape needs the accessor detection
+  extended, or every finding falls back to the module's whole source list.
 
 ## Conventions & gotchas (learned the hard way)
 
@@ -1025,7 +1080,7 @@ quantification. And absence of a capability in a competitor's public material is
 Twenty-two routes. The ones added most recently, and why each exists:
 
 - **`/checks/:id`** — what a check IS. The console could always say `LOG-AUD-001`
-  fired and never what it is; 714 ids were explained only in a markdown file no
+  fired and never what it is; 793 ids were explained only in a markdown file no
   console reader can open. `server/checkdocs.py` ASSEMBLES this from the sources
   already authoritative for each field — it authors nothing.
 - **`/requirements/:id`** — one SAP Baseline requirement family, SAP's own wording

@@ -16,7 +16,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/SAP%20Note%203250501-92%2F92%20parameters-0FAAFF?style=flat-square&logo=sap&logoColor=white" alt="SAP Note 3250501: 92/92"/>
-  <img src="https://img.shields.io/badge/checks-714%20across%2036%20modules-red?style=flat-square" alt="714 checks, 36 modules"/>
+  <img src="https://img.shields.io/badge/checks-793%20across%2038%20modules-red?style=flat-square" alt="793 checks, 38 modules"/>
   <img src="https://img.shields.io/badge/custom%20code-133%20ABAP%2FJS%2FBTP%20rules%20%2B%20taint-8A2BE2?style=flat-square" alt="133 static-analysis rules with taint analysis"/>
   <img src="https://img.shields.io/badge/reports-HTML%20%C2%B7%20PDF%20%C2%B7%20PPTX-555?style=flat-square" alt="HTML · PDF · PPTX Reports"/>
   <img src="https://img.shields.io/badge/server-FastAPI%20%2B%20PostgreSQL%2016-336791?style=flat-square&logo=postgresql&logoColor=white" alt="Server: FastAPI + PostgreSQL 16"/>
@@ -52,7 +52,8 @@
   - [What the console holds](#what-the-console-holds)
 - **[Connected mode](#connected-mode)**
   - [What the server adds over the CLI](#what-the-server-adds-over-the-cli)
-- **[Audit Modules](#audit-modules)** &nbsp;<sub>36 modules · 80 documented families</sub>
+- **[How far can this report be believed?](#how-far-can-this-report-be-believed)** &nbsp;<sub>coverage, suppression, evidence</sub>
+- **[Audit Modules](#audit-modules)** &nbsp;<sub>38 modules · 80 documented families</sub>
   <details><summary><sub>expand by family</sub></summary>
 
   - **Identity & Access** &nbsp; [Segregation of Duties](#segregation-of-duties-iam-sod-) · [Firefighter / Emergency Access](#firefighter--emergency-access-iam-ff-) · [Role Expiry & Validity](#role-expiry--validity-iam-exp-) · [Cross-System Identity](#cross-system-identity-iam-xid-) · [Access Review Compliance](#access-review-compliance-iam-rev-) · [Role Design Quality](#role-design-quality-iam-role-)
@@ -127,7 +128,7 @@ It runs in **two modes that share one scanner core**:
 
 - **No direct system connection required** — offline & agentless by default. Nothing is ever installed in the SAP system and no RFC user is created, in either mode.
 - **Connected mode is optional and separately invoked.** `python -m collect …` reads from a system you authorise and writes the same export files the offline path consumes — read-only, enforced in the transport rather than promised. The scanner itself still connects to nothing. See [Connected mode](#connected-mode). In RISE, third-party ABAP add-ons are an Excluded Task requiring an additional SKU and a multi-week evaluation; an export bundle needs none of that.
-- **714 security checks across 36 audit modules** — ABAP authorizations, HANA DB, BTP/Cloud, GRC Access Control, SOX financial-config controls, permission-level Segregation of Duties, and a custom-code scanner. Precisely: **432** check IDs are written as literals and **714** exist once the six runtime-generated families (profile parameters, ABAP rules, SoD risks, imported code families, ATC families, conflicting-duty pairs) resolve against their shipped rulesets.
+- **793 security checks across 38 audit modules** — ABAP authorizations, HANA DB, BTP/Cloud, GRC Access Control, SOX financial-config controls, permission-level Segregation of Duties, and a custom-code scanner. Precisely: **448** check IDs are written as literals and **793** exist once the six runtime-generated families (profile parameters, ABAP rules, SoD risks, imported code families, ATC families, conflicting-duty pairs) resolve against their shipped rulesets.
 - **Findings map to OWASP and ASVS, with the basis stated** — every finding carries `owasp.basis`, which is `cwe` where OWASP's own published CWE list settles the category, `family` where this product makes a curated judgement (with the reasoning recorded), or `null` where no honest mapping exists. **616 of 673** checks map; the remaining 57 are declared, not swept into A05 — RISE shared-responsibility findings are about a contract, SOX financial-configuration controls are about a different framework, and backup/DR is about availability. A scanner whose every check mapped cleanly to the Top 10 would either be a web-application scanner or be overstating itself. **CVSS vectors are attached to CVEs only** — taken from the SAP CNA record — and never invented for a configuration finding, which has no attack vector to describe.
 - **Complete against SAP's mandatory ECS baseline** — **92 of 92** profile parameters from **SAP Note 3250501** (the hardening requirements SAP makes mandatory for AS ABAP in Enterprise Cloud Services), plus its configuration half. Every value is read from a recorded extract of the note, never hand-typed, because a transcription typo tells a customer they are compliant when they are not.
 - **Deployment-aware** — `--deployment-mode` decides what *compliant* means. `snc/accept_insecure_gui = 1` is **SAP's own mandated value** in ECS, `rfc/callback_security_method = 1` is a **documented exception** SAP permits (the ECS standard is `3`), and an unlocked `DDIC` is explicitly not required to be locked. All three are findings on classic on-premise ABAP. A RISE-specific scanner that flags SAP's own baseline is confidently wrong on every compliant system.
@@ -140,7 +141,7 @@ It runs in **two modes that share one scanner core**:
 - **RISE-aware** — findings carry a remediation owner. In RISE a customer can *see* a bad profile parameter and cannot change it, so those findings render as a pre-drafted service request to SAP, never as "change this".
 - **Standards-aligned** — CIS SAP Benchmark, DSAG best-practice guide, SAP Security Baseline
 
-**Pipeline:** &nbsp;`LOAD` CSV/JSON exports → `MODULES` (36 auditors) → `CHECKS` (~714 rules) → `RANK` by severity & P1–P4 priority → `MAP` to compliance frameworks → *(optional)* `QUANTIFY` FAIR loss exposure ($) → `REPORT` (HTML · PDF · PPTX) **or** `STORE` (PostgreSQL → web console, run-over-run diff, graph nodes).
+**Pipeline:** &nbsp;`LOAD` CSV/JSON exports → `MODULES` (38 auditors) → `CHECKS` (~793 rules) → `RANK` by severity & P1–P4 priority → `MAP` to compliance frameworks → *(optional)* `QUANTIFY` FAIR loss exposure ($) → `REPORT` (HTML · PDF · PPTX) **or** `STORE` (PostgreSQL → web console, run-over-run diff, graph nodes).
 
 > **A note on dependencies.** The CLI still runs on the Python standard library alone — the HTML, PDF and PPTX engines are all hand-built. The **server tier** deliberately ends that rule: a browser console and a durable finding store cannot be built on the stdlib. The discipline that replaces it is a **single-digit runtime dependency count** (currently 4 — Jinja2 left with the server-rendered console on 2026-08-09), no ORM and no graph database. The console is a **React + TypeScript SPA** built at build time and served as static files by the same FastAPI process at `/` — so it costs build-time tooling, not a runtime dependency and not a second service. The deployment is still one app container plus one PostgreSQL. See [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md).
 
@@ -233,7 +234,7 @@ product's clearest structural advantage, and a third service would forfeit it.
   that comes back re-opens the **same row** with its history intact rather than appearing as new.
   *Unexamined* is the fifth because it has to be: a run that could not observe a finding leaves it
   open and says so, rather than reporting a remediation that never happened.
-- **Coverage manifest** — *"you supplied 105 of 135 sources; 10 modules ran with incomplete
+- **Coverage manifest** — *"you supplied 105 of 136 sources; 10 modules ran with incomplete
   input; 1 source is not obtainable in RISE at all."* Without it a partial upload produces a
   clean-looking report over a fraction of the estate.
 - **Risk acceptance with expiry**, false-positive disputes with a mandatory reason, and a
@@ -254,6 +255,74 @@ product's clearest structural advantage, and a third service would forfeit it.
 
 
 <sub>[↑ Contents](#contents)</sub>
+
+## How far can this report be believed?
+
+Every scanner produces findings. The harder question is what a *clean* result
+means, and most of this product's distinctive work is spent answering it — a
+question nobody in this market publishes an answer to.
+
+**A clean result and an unasked question look identical on a page.** These
+checks exist so they do not.
+
+### The segregation ruleset, measured against your estate
+
+`SODCOV-000` is one sentence for the workpaper: **is this segregation result
+usable, partial, unbounded, or not measured at all?** It is the *weakest* of the
+measures below, never an average — averaging broad transaction coverage against
+a Fiori surface the ruleset cannot see produces a comfortable number describing
+neither. It is derived from the checks beneath it rather than recomputed, so the
+summary and the detail cannot disagree.
+
+| | What it answers |
+|---|---|
+| `SODCOV-001/002` | What share of the transactions and authorization objects your estate grants does the ruleset actually name? |
+| `SODCOV-004` | Nothing to measure against — reported as *unmeasurable*, never as zero |
+| `SODCOV-005` | A role granting every transaction makes the percentage a floor, not a figure |
+| `SODCOV-006` | The **Fiori** surface, measured separately. An app is gated by `S_SERVICE`, not `S_TCODE`, so a conflict reachable only through the launchpad is invisible to a transaction-keyed ruleset |
+| `SODCOV-007` | Rules naming authorization objects your release does not define. Fail-closed matching makes these permanently silent, and identical in the output to a rule that ran and found nothing |
+| `SODCOV-008/009` | Your **own** ruleset, validated: rules that can never fire, rules that fire for *everybody*, and rules silently replacing shipped ones |
+| `SODCOV-010` | Run alone as your GRC system runs it, what would your ruleset never name that this one covers? Reported in both directions — the reverse is a gap in *this* product |
+
+### What a mitigating control is actually worth
+
+A SAP mitigating control is a **row**; a compensating control is an audit
+**conclusion**. Nothing makes the first produce the second — PCAOB AS 2201 §.68
+requires precision sufficient to prevent or detect a material misstatement, and
+a row asserts nothing about precision.
+
+Suppression is honoured, because organisations rely on it. `MITIG-001` reports
+every conflict a row removed so nothing leaves the report silently, and
+`MITIG-002` reports rows that cannot support a conclusion at all — a blanket
+entry suppressing every risk for a user, a missing approver, a missing expiry
+that means nothing will ever make it lapse.
+
+### Which findings rest on partial data
+
+Every finding carries whether the data behind it was complete, resolved **per
+check** rather than per module, and it is shown — a badge on the finding, a
+count in the coverage section, a line in the PDF and the deck, a marker on the
+console list. *Absence* means the export was not supplied or could not be read;
+an export supplied that held no rows is a real answer and is not marked.
+
+### Reading what SAP actually writes
+
+Exports arrive as SAP GUI produces them: **UTF-16** from a Windows list
+download, **latin-1** from a German-language system. Both used to decode to
+nothing and read downstream as an export containing nothing. A file that still
+cannot be read is reported as `EXPORT-001` and counted as *not supplied*, never
+as empty.
+
+### Our own checks, proven to fire
+
+`docs/CHECK_FIRING.md` publishes how many of the product's checks are
+demonstrated to produce a finding somewhere in the test suite — currently
+**706 of 793** — with the remainder listed rather than glossed. A check that
+can never fire is indistinguishable from one correctly staying quiet, and we
+found five segregation rules in exactly that state. CI fails if the figure
+drifts.
+
+---
 
 ## Connected mode
 
@@ -321,7 +390,7 @@ absent parameter be judged rather than merely disclosed, is in
 | 🧩 **S/4HANA & Cloud Authorization** | S4AUTHZ-001→008 (8) | The cloud-era authorization layer: super-admin business-role templates (SAP_BR_ADMINISTRATOR*), business-role restrictions left 'Unrestricted', business-catalog sprawl, CDS views with @AccessControl.authorizationCheck disabled, published OData V4 service groups without S_SERVICE, Cloud Connector system mappings without principal propagation, over-assigned Cloud Foundry Org Manager / Space Developer, and birthright role collections mapped to the Default IdP group |
 | ☁️ **SAP Cloud ALM CSA Results** | CSA-SAP/COV (4) | SAP’s own Configuration & Security Analysis verdicts, imported and reported **as SAP’s** — supplied as `csa_findings.csv`. Cloud ALM is included with every RISE subscription and needs no transport, RFC user or agent. Policy ids resolve against the SAP Security Baseline catalogue this product vendors from SAP’s published policies, so each result carries SAP’s requirement and priority tier; severity is **SAP’s tier**, never a ranking of ours, because a verdict arrives without the value that produced it. `NOT ASSESSED` is kept apart from `NON-COMPLIANT` and degrades coverage. The complementary path — raw configuration-store exports that feed this product’s own checks — is `modules/cloudalm_import.py`. |
 | 🧬 **CAP & XSUAA Application Security** | CAPX-CDS/GRAPH/SCOPE/AUTH/ATTR/TOK/URI/CRED/TEN (15) | The application as **written**, not as deployed — supplied with `--cap-src`. Follows the chain that decides who can call what: scope ← role-template ← role-collection ← IdP group. Reads `xs-security.json` exactly (broken references in the chain, scopes granted to other applications, `$ACCEPT_GRANTED_AUTHORITIES`, `valueRequired:false` attributes that build unrestricted roles, token lifetimes that **override** the subaccount policy `BTP-TOK-*` cannot see, wildcard OAuth redirect URIs, unrotatable instance secrets, shared tenant mode) and the CDS model lexically (services with no `@requires`/`@restrict`, `@restrict` privileges with no `to:` — which SAP documents as granting to *every* user — roles the model enforces that no descriptor grants, restricted entities a single `$expand` reaches from a service that never demanded their role — CAP evaluates authorization "only on the target entity of the request" — and personal-data elements a projection carries into a service, since CAP supports no property-level authorization at all). Joined to `btp_role_collections.json` it answers the question an auditor actually asks: which application scopes does every federated user already hold. |
-| ⚖️ **Access Risk Analysis (SoD)** | ARA-* (27 risks + user score) | GRC-style **offline Segregation-of-Duties** from AGR_1251 + AGR_USERS. Resolves each user's transactions **and** authorization object/field/activity across all roles, then evaluates a verified ruleset at the **permission level** (so display-only access is not a false positive): 25 SoD conflicts across Procure-to-Pay, Order-to-Cash, Record-to-Report, Hire-to-Retire and Basis/Security, plus 2 HR critical accesses. Honours documented **mitigating controls** (with expiry) and produces a **per-user risk profile**. Extensible via a custom ruleset JSON. (Supersedes the coarse transaction-level SoD in Advanced IAM, which now defers to this module when AGR_1251 is available.) |
+| ⚖️ **Access Risk Analysis (SoD)** | ARA-* (99 risks + user score) | GRC-style **offline Segregation-of-Duties** from AGR_1251 + AGR_USERS. Resolves each user's transactions **and** authorization object/field/activity across all roles, then evaluates a verified ruleset at the **permission level** (so display-only access is not a false positive): 85 SoD conflicts and 14 critical accesses across eleven processes — Procure-to-Pay, Order-to-Cash, Record-to-Report, Hire-to-Retire, Basis/Security and the plant floor (manufacturing, inventory, quality, maintenance, projects, warehouse). Every rule carries `provenance` naming the tier its authorization objects came from, because only the original finance rules were verified object by object. Honours documented **mitigating controls** (with expiry) and produces a **per-user risk profile**. Extensible via a custom ruleset JSON. (Supersedes the coarse transaction-level SoD in Advanced IAM, which now defers to this module when AGR_1251 is available.) |
 | ⚙️ **Basis Jobs & OS Commands** | JOBCMD-CMD/JOB-* (11) | The realised **host-command-execution** surface: external OS-command definitions (SM69 / SXPGCOSTAB) that wrap a shell/interpreter, allow runtime argument injection (ADDPAR), resolve to an unqualified/user-writable path, or wrap a destructive/exfil utility — plus armed background jobs (TBTCO/TBTCP) whose step user (AUTHCKNAM) is SAP*/DDIC/SAP_ALL, that shell out to an OS command/program, that run RSBDCOS0 (SM69-allowlist bypass) or unreviewed custom code, whose step user is deleted/locked/dialog, or differs from the scheduler (identity borrowing). Reuses `users`/`profiles` to resolve privileged step users. Complements the ABAP Authorization module (which covers who *can* act) with what is *actually* defined and scheduled. |
 | 🚨 **GRC Access Control** | GRC-FF/ARM/ARA/MIT/RS (13) | The **SAP GRC Access Control** process layer (not just configuration): Emergency Access Management / Firefighter usage without owner review, self-owned firefighter IDs, uncontrolled Firefighter logon; Access Request Management approvals bypassing SoD risk analysis, auto-provisioned requests, missing risk analysis; GRC-native SoD violations left open past SLA; mitigating controls without a monitor or past validity; and SoD-ruleset governance (blank/critical risk levels, ruleset currency). |
 | 👔 **Role Design & Governance** | RG-SU24/GEN/DRV (3) | Role-build hygiene: custom Z*/Y* transactions with unmaintained SU24 authorization proposals (default-check gaps), roles whose profiles were never generated (AGR_1016) so the authorizations are inert, and derived roles whose authorization values have **drifted** from their parent (org-level fields excepted) — a common source of silent over-entitlement. |
