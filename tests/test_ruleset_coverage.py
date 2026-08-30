@@ -686,3 +686,88 @@ def test_the_limits_are_ordered_worst_first():
     limits = one(RulesetCoverageAuditor(data).run_all_checks(),
                  "SODCOV-000")["details"]["limits"]
     assert "grants every transaction" in limits[0]
+
+
+# ── the verdict has to know what was hidden ────────────────────────────────
+#
+# SODCOV-000 read USABLE / INFO on an estate whose only conflict had been
+# removed by a blanket mitigation row carrying no approver, no expiry and no
+# control id. The statement that exists to say how far a result can be believed
+# was the last place in the product still capable of a false all-clear — and it
+# renders above the findings in every format and on the console dashboard.
+
+from modules.access_risk_analysis import AccessRiskAnalysisAuditor as _ARA2  # noqa: E402
+
+SUPPRESSIBLE = [{"risk_id": "ZS", "name": "vendor create vs pay",
+                 "description": "d", "risk_type": "SOD", "severity": "CRITICAL",
+                 "process": "P2P", "functions": [
+                     {"name": "A", "actions": ["FK01"], "permissions": [
+                         {"object": "F_LFA1_BUK", "field": "ACTVT",
+                          "values": ["02"]}]},
+                     {"name": "B", "actions": ["F110"], "permissions": [
+                         {"object": "F_REGU_BUK", "field": "ACTVT",
+                          "values": ["02"]}]}]}]
+
+HOLDS_IT = [row(low="FK01"), row(low="F110"),
+            row(obj="F_LFA1_BUK", field="ACTVT", low="02"),
+            row(obj="F_REGU_BUK", field="ACTVT", low="02")]
+
+
+def with_peers(mitigations=None):
+    """Run ARA first, then the coverage module over the same estate."""
+    data = {"role_auth_values": HOLDS_IT,
+            "user_roles": [{"UNAME": "U1", "AGR_NAME": "Z_ROLE"}]}
+    if mitigations is not None:
+        data["mitigating_controls"] = mitigations
+    ara = _ARA2(dict(data))
+    ara.RULESET = SUPPRESSIBLE
+    peers = ara.run_all_checks()
+    cov = RulesetCoverageAuditor(dict(data), {}, {"peer_findings": peers},
+                                 ruleset=SUPPRESSIBLE)
+    return one(cov.run_all_checks(), "SODCOV-000")
+
+
+BLANKET = [{"USER": "U1", "RISK_ID": "*", "CONTROL_ID": "", "VALID_TO": ""}]
+
+
+def test_an_unsuppressed_estate_still_reads_usable():
+    f = with_peers()
+    assert f["details"]["verdict"] == "usable"
+    assert f["details"]["suppression_checked"] is True
+
+
+def test_a_risk_hidden_by_a_mitigation_stops_the_verdict_reading_usable():
+    """THE false all-clear. A conflict removed from the report is not a
+    conflict that was not there."""
+    f = with_peers(BLANKET)
+    assert f["details"]["verdict"] == "partial"
+    assert f["severity"] == "HIGH"
+    assert f["details"]["risks_hidden_by_mitigation"] == 1
+
+
+def test_the_limit_says_a_suppression_is_not_an_absence():
+    limits = " ".join(with_peers(BLANKET)["details"]["limits"])
+    assert "reflects a suppression rather than an absence" in limits
+
+
+def test_unsupportable_rows_are_named_as_their_own_limit():
+    limits = " ".join(with_peers(BLANKET)["details"]["limits"])
+    assert "cannot support an audit conclusion" in limits
+
+
+def test_the_verdict_names_the_mitigation_checks_it_was_derived_from():
+    """Derived, not recomputed — a summary that recalculates can disagree with
+    the detail it summarises."""
+    derived = with_peers(BLANKET)["details"]["derived_from"]
+    assert "MITIG-001" in derived and "MITIG-002" in derived
+
+
+def test_without_peer_findings_it_says_suppression_was_not_examined():
+    """Absence of suppression data is NOT an absence of suppression. Claiming
+    a clean verdict without having looked would be the same defect one level
+    up."""
+    a = RulesetCoverageAuditor({"role_auth_values": HOLDS_IT},
+                               ruleset=SUPPRESSIBLE)
+    f = one(a.run_all_checks(), "SODCOV-000")
+    assert f["details"]["suppression_checked"] is False
+    assert "not examined in this run" in f["description"]

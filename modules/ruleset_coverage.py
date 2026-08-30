@@ -585,6 +585,27 @@ class RulesetCoverageAuditor(BaseAuditor):
 
         limits, verdict, severity = [], "usable", self.SEVERITY_INFO
 
+        # WHAT WAS HIDDEN BEFORE THE READER GOT HERE.
+        #
+        # This verdict read USABLE / INFO on an estate whose only conflict had
+        # been removed by a blanket mitigation row carrying no approver, no
+        # expiry and no control id. The statement that exists to say how far a
+        # result can be believed was the last place in the product still capable
+        # of a false all-clear, and it was rendered above the findings in every
+        # format and on the console dashboard.
+        #
+        # Read from the peer findings rather than recomputed from the mitigation
+        # rows: MITIG-001 already decided what was suppressed, and a summary
+        # that recalculates can disagree with the detail it summarises.
+        peers = {f.get("check_id"): f
+                 for f in ((self.run_context or {}).get("peer_findings") or [])
+                 if isinstance(f, dict)}
+        suppression_checked = bool(peers)
+        hidden = ((peers.get("MITIG-001", {}).get("details") or {})
+                  .get("risks_hidden_entirely") or 0)
+        unsupportable = ((peers.get("MITIG-002", {}).get("details") or {})
+                         .get("unsupportable") or 0)
+
         # The floor, in order of how badly each one undermines the result.
         if "SODCOV-004" in seen:
             verdict = "not measured"
@@ -615,6 +636,23 @@ class RulesetCoverageAuditor(BaseAuditor):
                 limits.append(
                     "the ruleset names %.0f%% of the transactions this estate "
                     "grants" % (tx * 100))
+
+        if hidden:
+            # A conflict removed from the report is not a conflict that was not
+            # there, and a verdict that cannot see the difference is worthless.
+            verdict = "partial" if verdict == "usable" else verdict
+            severity = max(severity, self.SEVERITY_HIGH, key=self._rank)
+            limits.append(
+                "%d risk(s) were removed from this report entirely by a "
+                "mitigating control (MITIG-001), so a clean result in those "
+                "areas reflects a suppression rather than an absence" % hidden)
+        if unsupportable:
+            severity = max(severity, self.SEVERITY_HIGH, key=self._rank)
+            limits.append(
+                "%d mitigating control row(s) cannot support an audit "
+                "conclusion (MITIG-002) - a blanket entry, a missing approver "
+                "or a missing expiry - yet still suppress conflicts"
+                % unsupportable)
 
         dead = detail("SODCOV-007", "rules_unfirable") or []
         if dead:
@@ -662,7 +700,11 @@ class RulesetCoverageAuditor(BaseAuditor):
                    "" if not limits else " Stated limits: " + "; ".join(limits) + ".",
                    "" if limits else
                    " No limit was found that would qualify it: coverage was "
-                   "measurable, bounded, and broad on every surface examined.")),
+                   "measurable, bounded, and broad on every surface examined."
+                   + ("" if suppression_checked else
+                      " NOTE: whether any conflict was suppressed by a "
+                      "mitigating control was not examined in this run, so "
+                      "this statement covers ruleset coverage only."))),
             affected_items=["limit: " + l for l in limits],
             remediation=(
                 "1. Quote the verdict, not the conflict count, when recording "
@@ -682,8 +724,13 @@ class RulesetCoverageAuditor(BaseAuditor):
             details={
                 "verdict": verdict,
                 "limits": limits,
-                "derived_from": sorted(c for c in seen if c.startswith("SODCOV-")
-                                       and c != "SODCOV-000"),
+                "derived_from": sorted(
+                    [c for c in seen
+                     if c.startswith("SODCOV-") and c != "SODCOV-000"]
+                    + [c for c in peers if c.startswith("MITIG-")]),
+                # Absence of suppression data is NOT an absence of suppression.
+                "suppression_checked": suppression_checked,
+                "risks_hidden_by_mitigation": hidden,
                 "coverage_state": "complete",
             },
             scope="aggregate",

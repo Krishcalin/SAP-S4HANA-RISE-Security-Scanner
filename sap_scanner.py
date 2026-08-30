@@ -558,6 +558,17 @@ def main():
 
     if "sodcov" in run_modules:
         print("[*] Running SoD Ruleset Coverage (what fraction of this estate the ruleset can see)...")
+        # SODCOV-000 is the one sentence on how far the SoD result can be
+        # believed, and a conflict SUPPRESSED by a mitigating control is
+        # exactly the sort of thing that qualifies it. Access risk analysis
+        # runs above and reports its suppressions as MITIG-001, so the
+        # findings so far are handed over rather than recomputed - a
+        # summary that recalculates can disagree with its own detail.
+        # Into run_ctx itself, not a hand-rolled variant beside it.
+        # tests/test_run_context_is_uniform.py exists precisely to stop the
+        # call shapes diverging again, and passing a different dict here would
+        # have reintroduced the shape it was written to eliminate.
+        run_ctx["peer_findings"] = list(all_findings)
         auditor = RulesetCoverageAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
