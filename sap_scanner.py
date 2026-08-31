@@ -772,10 +772,14 @@ def main():
         # report severity filter never changes the quantified loss exposure.
         fair_prio = (prio_results if args.severity == "ALL"
                      else RiskPrioritizer().prioritize(fair_findings))
+        # ONE ANSWERS FILE, TWO CALIBRATIONS. The frequency keys live beside
+        # the loss keys in crq_parameters.json rather than in a file of their
+        # own: they are answers from the same person in the same conversation,
+        # and a second file is a second thing to forget.
         crq_out = fair_adapter.run(
             fair_findings, fair_prio, org_overrides=org_overrides,
             engine_path=args.crq_engine, simulations=args.crq_sims,
-            loss_answers=crq_answers)
+            loss_answers=crq_answers, frequency_answers=crq_answers)
         if crq_answers:
             print(f"    Loss figures: {len(crq_answers)} answer(s) from {crq_source}")
         else:
@@ -797,15 +801,31 @@ def main():
             # present a currency figure" and then printed one two lines later —
             # and a figure on a terminal is copied into a chat message exactly as
             # readily as one in a PDF.
-            if (fair_summary.get("loss_model") or {}).get("applied"):
+            priced = (fair_summary.get("loss_model") or {}).get("applied")
+            timed = (fair_summary.get("frequency_model") or {}).get("applied")
+            if priced and timed:
                 print("    Annual loss exposure (ALE):  P50 ${:,.0f}   P90 ${:,.0f}   mean ${:,.0f}".format(
                     pf["ale_p50"], pf["ale_p90"], pf["mean_ale"]))
                 print("    Reducible toward hardened posture: ~${:,.0f} (P90)".format(
                     fair_summary["reducible_ale_p90"]))
+            elif priced:
+                # ANNUALISED means "times a rate", and nobody has supplied one.
+                # The loss magnitudes ARE this customer's, so what each event
+                # would cost is theirs to read; how often is not, and an annual
+                # figure built on the catalogue's rate is half theirs and
+                # presented as all of it.
+                print("    Loss magnitudes priced from your figures. NO ANNUAL "
+                      "exposure is reported: nobody has said how often SAP is "
+                      "actually attacked here.")
+                print("    Supply observed_contacts_per_year (blocked logons, "
+                      "rejected RFC calls, WAF blocks) to annualise it.")
             else:
                 print("    Scenario shape computed; NO currency figure is reported "
                       "for this organisation because none of its own loss figures "
                       "were supplied.")
+            cross = fair_summary.get("frequency_cross_check")
+            if cross:
+                print("    ! " + cross)
         else:
             print("    CRQ engine not found - scenario JSON exported only. Quantify it with:")
             print(f"      python crq_engine.py {crq_json_path} --html")

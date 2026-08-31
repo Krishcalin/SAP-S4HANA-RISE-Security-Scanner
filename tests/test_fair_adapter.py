@@ -202,7 +202,11 @@ def test_end_to_end_when_engine_available():
         _f("ARA-P2P-01", "Access Risk Analysis (SoD)", "CRITICAL"),
         _f("LOG-AUD-001", "Logging, Monitoring & IR", "CRITICAL"),
     ]
-    out = fa.run(findings, _prio(findings), simulations=3000, seed=1)
+    # At the catalogue's own contact rate: scale 1.0, so every figure below is
+    # the one this test has always asserted. The uncalibrated case is its own
+    # test, because it asserts the opposite.
+    out = fa.run(findings, _prio(findings), simulations=3000, seed=1,
+                 frequency_answers={"observed_contacts_per_year": 5})
     assert out["engine_found"] is True
     s = out["summary"]
     assert s["portfolio"]["ale_p90"] > 0
@@ -342,6 +346,11 @@ def test_the_pdf_marks_a_scenario_nothing_was_routed_to(tmp_path):
         "portfolio": {"mean_ale": 1407000, "ale_p90": 2000000, "loss_exceedance": []},
         "organization": {"revenue": 1e9, "industry": "manufacturing"},
         "loss_model": {"applied": True},
+        # Both factors, because the priced table this test is about renders only
+        # when the figure on it is fully calibrated. Marking only the loss half
+        # would land in the untimed section, where there is no ALE column for
+        # the marker to sit beside.
+        "frequency_model": {"applied": True},
         "reducible_ale_p90": 0, "input_finding_count": 1,
     }
     finding = _f("USR-001", "User & Authorization")

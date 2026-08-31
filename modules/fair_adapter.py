@@ -426,7 +426,8 @@ def run(findings: List[Dict[str, Any]], priorities: List[Any],
         org_overrides: Optional[Dict[str, Any]] = None,
         engine_path: Optional[str] = None,
         simulations: int = 10000, seed: int = 42,
-        loss_answers: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        loss_answers: Optional[Dict[str, Any]] = None,
+        frequency_answers: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Full adapter run. Returns:
         {
           "crq_input": <as-is CRQ scenario JSON to export / hand to crq_engine>,
@@ -485,6 +486,21 @@ def run(findings: List[Dict[str, Any]], priorities: List[Any],
             "scale_factor": scale,
         }
 
+    # THE CUSTOMER'S OWN CONTACT RATE, APPLIED HERE FOR THE SAME REASON.
+    #
+    # Annualised Loss Exposure is frequency times magnitude. The loss model above
+    # calibrates the magnitude; without this, the other factor is the catalogue's
+    # illustrative company and the product was multiplying one measured number by
+    # one borrowed one and presenting the result as the customer's exposure.
+    from .fair_frequency_model import apply_to_scenario as _apply_frequency
+    from .fair_frequency_model import calibrate as _calibrate_frequency
+
+    frequency_calibration = _calibrate_frequency(frequency_answers)
+    if frequency_calibration.applied:
+        catalog = dict(catalog)
+        catalog["scenarios"] = [_apply_frequency(s, frequency_calibration)
+                                for s in catalog.get("scenarios", [])]
+
     built = build_inputs(priorities, catalog, org)
     out: Dict[str, Any] = {
         "crq_input": built["asis"], "meta": built["meta"],
@@ -493,6 +509,7 @@ def run(findings: List[Dict[str, Any]], priorities: List[Any],
         "engine_found": False, "summary": None,
         "organization": org,
         "loss_model": loss_provenance,
+        "frequency_model": dict(frequency_calibration),
     }
 
     engine_module, engine_origin = locate_engine_with_origin(engine_path)
@@ -525,6 +542,39 @@ def run(findings: List[Dict[str, Any]], priorities: List[Any],
         sc["unexamined"] = mm.get("unexamined", False)
     reducible_p90 = max(0.0, asis["portfolio"]["ale_p90"] - target["portfolio"]["ale_p90"])
     reducible_mean = max(0.0, asis["portfolio"]["mean_ale"] - target["portfolio"]["mean_ale"])
+
+    # WHAT AN UNCALIBRATED FREQUENCY IS ALLOWED TO SAY.
+    #
+    # The currency keys are REMOVED rather than annotated, which is the same
+    # decision the loss side already made and for the same reason: a number in a
+    # board pack is screenshotted without its footnote, and an absent number
+    # cannot be quoted. What survives is everything that does not depend on how
+    # often the event happens — the scenario ranking, the findings routed to
+    # each, and the loss magnitude per event when the loss side IS calibrated,
+    # which answers "what does this cost us when it happens" without pretending
+    # to answer "how often".
+    # THE CROSS-CHECK RUNS EITHER WAY.
+    #
+    # It was first written inside the uncalibrated branch, which is the half of
+    # the time it matters least. A customer who supplies a contact rate AND
+    # reports no incidents in three years is the more interesting case: the
+    # model now has their own number in it and still expects more events than
+    # they have seen, and saying so is the difference between a figure they can
+    # argue with and one they can only accept or reject.
+    from .fair_frequency_model import cross_check as _cross_check
+    cross = _cross_check(frequency_calibration,
+                         sum(s.get("mean_lef", 0.0) for s in asis["scenarios"]))
+
+    if not frequency_calibration.applied:
+        for portfolio in (asis["portfolio"], target["portfolio"]):
+            for key in ("ale_p10", "ale_p50", "ale_p90", "ale_p95", "ale_p99",
+                        "mean_ale", "loss_exceedance", "p_no_loss"):
+                portfolio.pop(key, None)
+        for scenario in asis["scenarios"]:
+            for key in ("ale_p50", "ale_p90", "ale_p95", "mean_ale", "mean_lef"):
+                scenario.pop(key, None)
+        reducible_p90 = None
+        reducible_mean = None
     out["summary"] = {
         "organization": org, "simulations": simulations,
         "scenarios": asis["scenarios"],
@@ -532,6 +582,11 @@ def run(findings: List[Dict[str, Any]], priorities: List[Any],
         "target_portfolio": target["portfolio"],
         "reducible_ale_p90": reducible_p90,
         "reducible_ale_mean": reducible_mean,
+        # Travels WITH the figure, like the loss model's does. A frequency whose
+        # basis lives one API call away is a frequency that will be quoted
+        # without it.
+        "frequency_model": dict(frequency_calibration),
+        "frequency_cross_check": cross,
         "detection": built["detection"],
         # Surface the fallback-routing count so the report can disclose when
         # findings could not be attributed to a specific loss scenario (they are

@@ -190,6 +190,13 @@ def compute_and_store(conn, run_id: int, landscape_id: int,
                 "crq_parameters_id": (parameter_set or {}).get("id"),
                 "model_version": MODEL_VERSION,
                 "loss_model": summary.get("loss_model"),
+                # AND THE OTHER FACTOR IN THE SAME MULTIPLICATION. The stored
+                # ale_* columns are NULL when no contact rate was supplied, and
+                # a NULL that does not say why is a NULL somebody renders as
+                # zero. This is what lets the console tell "nobody priced the
+                # business" from "nobody said how often" from "no risk".
+                "frequency_model": summary.get("frequency_model"),
+                "frequency_cross_check": summary.get("frequency_cross_check"),
                 # WHICH CATALOGUE AND WHICH ENGINE PRODUCED THIS.
                 # A loss band edited in data/fair_scenarios.json moves every
                 # customer's figure on unchanged findings; an engine dropped at

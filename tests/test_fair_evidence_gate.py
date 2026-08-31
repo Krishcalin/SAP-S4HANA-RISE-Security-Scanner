@@ -40,8 +40,15 @@ def _ale(findings):
     """Portfolio ALE p90 and the disclosed unevidenced count."""
     prioritizer = RiskPrioritizer()
     with contextlib.redirect_stdout(io.StringIO()):
-        result = fair_adapter.run(findings, prioritizer.prioritize(findings),
-                                  catalog_path=None, simulations=4000, seed=7)
+        result = fair_adapter.run(
+            findings, prioritizer.prioritize(findings),
+            catalog_path=None, simulations=4000, seed=7,
+            # At the catalogue's own contact rate, so the scale is 1.0 and every
+            # figure this file asserts is the one it has always asserted. These
+            # tests are about whether a finding PRICES — band selection, not
+            # frequency — and without a frequency answer there is deliberately no
+            # ALE to compare.
+            frequency_answers={"observed_contacts_per_year": 5})
     summary = result.get("summary")
     if summary is None:
         pytest.skip("CRQ engine not locatable in this environment")

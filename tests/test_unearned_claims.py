@@ -31,10 +31,16 @@ def test_industry_does_not_change_the_figure():
     identical P90, while the PDF told the auditor the loss was "scaled to the
     stated revenue/industry".
     """
+    # Calibrated at the catalogue's own contact rate, so the scale is 1.0 and
+    # these figures are the ones this test has always compared. Without a
+    # frequency answer there is deliberately no figure to compare at all.
+    calibrated = {"observed_contacts_per_year": 5}
     a = fa.run([], [], org_overrides={"industry": "financial_services"},
-               simulations=400)["summary"]["portfolio"]["ale_p90"]
+               simulations=400,
+               frequency_answers=calibrated)["summary"]["portfolio"]["ale_p90"]
     b = fa.run([], [], org_overrides={"industry": "education"},
-               simulations=400)["summary"]["portfolio"]["ale_p90"]
+               simulations=400,
+               frequency_answers=calibrated)["summary"]["portfolio"]["ale_p90"]
     assert a == b
 
 
@@ -338,3 +344,187 @@ def test_component_prereq_needs_positive_evidence_of_absence():
     assert "3633838" not in missing_absent["details"]["missing_notes"]
     scope = next(f for f in absent if f["check_id"] == "HOTNEWS-005")
     assert "3633838" in scope["details"]["unassessable_notes"]
+
+
+# ── 4. the half-measured annualised figure ───────────────────────────────────
+#
+# Annualised Loss Exposure is frequency times magnitude. `fair_loss_model`
+# calibrates the magnitude from the customer's own answers and the product
+# refuses to print a currency figure without them. Nothing did the same for the
+# frequency: `contact_frequency` came out of the catalogue for every customer
+# alike, so the ALE was one measured number multiplied by one borrowed one and
+# presented as neither.
+
+CALIBRATED = {"observed_contacts_per_year": 5}      # the catalogue's own rate
+
+
+def _f(check_id, category, severity="HIGH", desc=""):
+    """A finding, in the shape the adapter routes.
+
+    `desc` matters: the adapter reads "internet exposed" and "actively
+    exploited" out of it to choose the exposed/exploited frequency bands, so a
+    finding with an empty description models a much quieter estate than the
+    same finding with one.
+    """
+    return {"check_id": check_id, "category": category, "severity": severity,
+            "title": check_id, "description": desc, "affected_items": [],
+            "remediation": "", "references": [], "details": {}}
+
+
+def _prio(findings):
+    from modules.risk_prioritizer import RiskPrioritizer
+    return RiskPrioritizer().prioritize(findings)
+
+
+def _summary(**kwargs):
+    return fa.run([], [], simulations=400, **kwargs)["summary"]
+
+
+def test_no_annual_figure_without_an_observed_contact_rate():
+    """The refusal. Every key that annualises is absent, not annotated.
+
+    Absent rather than caveated for the reason the loss side already gives: a
+    number in a board pack is screenshotted without its footnote.
+    """
+    portfolio = _summary()["portfolio"]
+    for key in ("ale_p10", "ale_p50", "ale_p90", "ale_p95", "ale_p99",
+                "mean_ale", "loss_exceedance", "p_no_loss"):
+        assert key not in portfolio, "%s survived an uncalibrated frequency" % key
+
+
+def test_what_survives_is_what_does_not_depend_on_frequency():
+    """Withholding the rate must not withhold the analysis.
+
+    The scenario matching is driven by findings and is true whatever the
+    contact rate is; so is the ranking, and so are the disclosures.
+    """
+    summary = _summary()
+    assert summary["scenarios"], "the scenario shape went with the figure"
+    assert all("finding_count" in sc for sc in summary["scenarios"])
+    assert "unrouted" in summary and "unevidenced" in summary
+    assert summary["frequency_model"]["applied"] is False
+    assert summary["frequency_model"]["reason"]
+
+
+def test_an_observed_contact_rate_brings_the_figure_back():
+    portfolio = _summary(frequency_answers=CALIBRATED)["portfolio"]
+    assert portfolio["ale_p90"] > 0
+    assert len(portfolio["loss_exceedance"]) > 1
+
+
+def test_the_catalogue_rate_changes_nothing_it_should_not():
+    """Calibrating AT the illustrative rate must reproduce the old figure.
+
+    Otherwise this work moved every customer's number under cover of a
+    refusal, and nobody would know which change did it.
+    """
+    at_catalogue = _summary(frequency_answers={"observed_contacts_per_year": 5})
+    assert abs(at_catalogue["frequency_model"]["scale"] - 1.0) < 1e-9
+
+
+def test_the_rate_actually_moves_the_figure():
+    """A calibration that changed nothing would be decoration."""
+    quiet = _summary(frequency_answers={"observed_contacts_per_year": 1})
+    busy = _summary(frequency_answers={"observed_contacts_per_year": 25})
+    assert busy["portfolio"]["ale_p90"] > quiet["portfolio"]["ale_p90"] * 2
+
+
+def test_an_incident_count_alone_cannot_calibrate():
+    """THE ZERO TRAP.
+
+    "How many SAP incidents have you had?" is the obvious question and the
+    dangerous one. An organisation with no audit log, no SIEM and no monitoring
+    answers zero — truthfully — and a model that believed it would tell the
+    organisations least able to see an attack that they are the safest, using a
+    tool whose own findings say their logging is off.
+    """
+    summary = _summary(frequency_answers={"sap_security_incidents_3y": 0})
+    assert summary["frequency_model"]["applied"] is False
+    assert "ale_p90" not in summary["portfolio"]
+    assert "incident count" in summary["frequency_model"]["reason"]
+
+
+def test_a_zero_incident_count_is_reported_as_a_disagreement():
+    """It is still worth saying that the model and the customer disagree.
+
+    Zero events in three years bounds the true rate at 1.0 a year with 95%
+    confidence — the rule of three — so a model above that is not merely higher
+    than what was seen, it contradicts it. An estate with open criticals is
+    used because an empty one models below the bound, where the two are
+    compatible and saying nothing is the right answer.
+    """
+    findings = [
+        _f("HOTNEWS-003", "SAP Security Notes (HotNews)", "CRITICAL",
+           desc="actively exploited; internet exposed"),
+        _f("LOG-AUD-001", "Logging, Monitoring & IR", "CRITICAL"),
+    ]
+    summary = fa.run(findings, _prio(findings), simulations=800,
+                     frequency_answers={"sap_security_incidents_3y": 0}
+                     )["summary"]
+    said = summary["frequency_cross_check"] or ""
+    assert "not being detected" in said, said
+
+
+def test_the_cross_check_still_fires_once_the_rate_is_supplied():
+    """The half of the time it matters most.
+
+    A customer who supplies a contact rate AND reports no incidents has their
+    own number in the model, and it still expects more events than they have
+    seen. That is the difference between a figure they can argue with and one
+    they can only accept or reject.
+    """
+    findings = [
+        _f("HOTNEWS-003", "SAP Security Notes (HotNews)", "CRITICAL",
+           desc="actively exploited; internet exposed"),
+        _f("LOG-AUD-001", "Logging, Monitoring & IR", "CRITICAL"),
+    ]
+    summary = fa.run(findings, _prio(findings), simulations=800,
+                     frequency_answers={"observed_contacts_per_year": 5,
+                                        "sap_security_incidents_3y": 0}
+                     )["summary"]
+    assert summary["portfolio"]["ale_p90"] > 0          # the figure is reported
+    assert "not being detected" in (summary["frequency_cross_check"] or "")
+
+
+def test_a_quiet_estate_and_a_quiet_customer_do_not_disagree():
+    """Silence where the two are compatible. A cross-check that fires on
+    everything is one nobody reads."""
+    summary = _summary(frequency_answers={"sap_security_incidents_3y": 0})
+    assert summary["frequency_cross_check"] is None
+
+
+def test_one_answer_cannot_swing_the_model_by_orders_of_magnitude():
+    """A customer reporting four probes a year is describing their monitoring;
+    one reporting ten million is describing background internet noise."""
+    from modules import fair_frequency_model as ffm
+    tiny = ffm.calibrate({"observed_contacts_per_year": 0.0001})
+    huge = ffm.calibrate({"observed_contacts_per_year": 10_000_000})
+    assert tiny["scale"] == ffm.MIN_SCALE and tiny["clamped"] is True
+    assert huge["scale"] == ffm.MAX_SCALE and huge["clamped"] is True
+
+
+def test_a_clamped_answer_says_so():
+    """A customer whose answer was changed should not be the last to know."""
+    from modules import fair_frequency_model as ffm
+    honest = ffm.calibrate({"observed_contacts_per_year": 5})
+    assert honest["clamped"] is False
+
+
+def test_only_contact_frequency_moves():
+    """Probability of action is the actor's motivation against this kind of
+    target, not how much traffic arrives. Scaling both applies one observation
+    twice."""
+    from modules import fair_frequency_model as ffm
+    scenario = {
+        "contact_frequency": {"baseline": {"min": 1.0, "likely": 2.0, "max": 4.0},
+                              "exposed": {"min": 2.0, "likely": 5.0, "max": 12.0}},
+        "probability_of_action": {"baseline": {"min": 0.02, "likely": 0.08,
+                                               "max": 0.2}},
+    }
+    out = ffm.apply_to_scenario(scenario, ffm.calibrate(
+        {"observed_contacts_per_year": 10}))          # scale 2.0
+    assert out["contact_frequency"]["baseline"]["likely"] == 4.0
+    assert out["contact_frequency"]["exposed"]["likely"] == 10.0
+    assert out["probability_of_action"] == scenario["probability_of_action"]
+    # and the caller's dict was not mutated underneath it
+    assert scenario["contact_frequency"]["baseline"]["likely"] == 2.0

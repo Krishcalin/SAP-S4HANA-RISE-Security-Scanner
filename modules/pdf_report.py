@@ -626,6 +626,56 @@ class PDFReportGenerator:
             "findings. Only the loss magnitude is unpriced.",
             size=8, color=MUTED, leading=11, gap_after=10)
 
+    def _fair_untimed(self, fair):
+        """Priced per event, but nobody has said how often it happens.
+
+        More is reportable here than on the unpriced page, and the difference
+        matters: the loss magnitudes ARE this organisation's, so what a scenario
+        costs when it occurs is a real answer from real figures. Only the
+        annualisation is withheld, because only the annualisation needs a rate
+        nobody supplied.
+
+        Measured before this page existed: `_money(None)` is `float(None or 0)`,
+        so the priced page rendered "$0" for the annual exposure of an estate
+        with 74 open criticals. A missing number printed as zero risk, in the
+        document that goes to an auditor.
+        """
+        self._new_content_page()
+        self._section_title("Financial Risk Exposure (FAIR)")
+        self._para(
+            "NO ANNUAL FIGURE IS PRESENTED FOR THIS ORGANISATION. Its own loss figures "
+            "priced what each scenario costs when it happens, and those are below. "
+            "Turning them into an annual exposure needs the other half of the "
+            "calculation - how often SAP here is actually contacted by an attacker - "
+            "and nobody has supplied it. The shipped catalogue assumes five contacts a "
+            "year for every customer alike, which is an illustration and not a "
+            "measurement of this estate.",
+            size=9, color=INK, leading=13, gap_after=8)
+        self._para(
+            "Add observed_contacts_per_year to crq_parameters.json - blocked logons, "
+            "rejected RFC calls, gateway denials, WAF blocks in front of Fiori, from the "
+            "SIEM or the Security Audit Log - and this section will annualise from this "
+            "organisation's own rate.",
+            size=8.5, color=MUTED, leading=12, gap_after=14)
+        for sc in sorted(fair.get("scenarios", []) or [],
+                         key=lambda s: -(s.get("mean_lm") or 0)):
+            fc = sc.get("finding_count")
+            self._para(
+                "%s  -  %s per event, %s finding(s) routed, worst severity %s"
+                % (sc.get("name", sc.get("id", "")),
+                   self._money(sc.get("mean_lm")),
+                   fc if fc is not None else "-",
+                   sc.get("worst_severity", "-")),
+                size=8.5, color=INK, leading=12, gap_after=4)
+        cross = fair.get("frequency_cross_check")
+        if cross:
+            self._para(str(cross), size=8.5, color=INK, leading=12, gap_after=6)
+        self._para(
+            "Cost per event is priced from this organisation's figures. Scenario matching "
+            "is driven by its findings. Only the yearly rate is missing, and only the "
+            "yearly rate is withheld.",
+            size=8, color=MUTED, leading=11, gap_after=10)
+
     def _fair_section(self):
         fair = self.fair
         if not fair or not fair.get("portfolio"):
@@ -637,6 +687,11 @@ class PDFReportGenerator:
         # manufacturer's losses under the customer's name, to the cent.
         if not (fair.get("loss_model") or {}).get("applied"):
             self._fair_unpriced(fair)
+            return
+
+        # AND THE RATE, which is the other factor in the same multiplication.
+        if not (fair.get("frequency_model") or {}).get("applied"):
+            self._fair_untimed(fair)
             return
 
         pf = fair["portfolio"]

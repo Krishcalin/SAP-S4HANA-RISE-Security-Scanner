@@ -1635,6 +1635,23 @@ window.addEventListener('beforeprint', () => {{
         if not (fair.get("loss_model") or {}).get("applied"):
             return self._render_fair_unpriced(fair)
 
+        # AND THE SAME RULE FOR THE OTHER FACTOR.
+        #
+        # Annualised Loss Exposure is frequency times magnitude. The check above
+        # covers the magnitude; this covers the rate, which came out of the
+        # catalogue for every customer alike until a `frequency_model` existed.
+        # Without both, the annual figure is one measured number multiplied by
+        # one borrowed one.
+        #
+        # Measured before this branch existed: the section rendered with the ALE
+        # keys absent and `.get(..., 0)` underneath them, so a report with no
+        # supplied contact rate printed "$0" — telling a customer with 74 open
+        # criticals that their annual exposure was nothing. A missing number
+        # presented as zero risk is worse than the illustrative figure it
+        # replaced.
+        if not (fair.get("frequency_model") or {}).get("applied"):
+            return self._render_fair_untimed(fair)
+
         pf = fair["portfolio"]
         org = fair.get("organization", {})
         sims = fair.get("simulations", 0)
@@ -1769,6 +1786,69 @@ window.addEventListener('beforeprint', () => {{
     {unrouted_html}
     {unevidenced_html}
   </div>"""
+
+    def _render_fair_untimed(self, fair) -> str:
+        """Priced per event, but nobody has said how often.
+
+        This is the more interesting of the two refusals, because there IS
+        something true to report. The loss magnitudes came from the customer's
+        own figures, so "what does this cost us when it happens" is theirs to
+        read. Only the annualisation is withheld, because only the annualisation
+        needs a rate nobody has supplied.
+        """
+        m = self._fmt_money
+        unrouted = int(fair.get("unrouted") or 0)
+        unevidenced = int(fair.get("unevidenced") or 0)
+        disclosures = ""
+        if unrouted:
+            disclosures += (
+                '<p class="fair-note" style="font-style:normal;">&#9432; '
+                + str(unrouted) + " finding(s) had no explicit scenario route and were "
+                "folded into the privileged-access scenario, which may overstate it.</p>")
+        if unevidenced:
+            disclosures += (
+                '<p class="fair-note" style="font-style:normal;">&#9432; '
+                + str(unevidenced) + " code finding(s) rest on a statement pattern with "
+                "no data-flow evidence and did <strong>not</strong> calibrate this "
+                "analysis. They are still reported, ranked and tracked to closure.</p>")
+
+        cross = fair.get("frequency_cross_check")
+        if cross:
+            disclosures += (
+                '<p class="fair-note" style="font-style:normal;">&#9888; '
+                + html.escape(str(cross)) + "</p>")
+
+        scenarios = sorted(fair.get("scenarios", []) or [],
+                           key=lambda s: -(s.get("mean_lm") or 0))
+        rows_html = "".join(
+            "<tr><td>" + html.escape(str(sc.get("name", sc.get("id", "")))) + "</td>"
+            "<td class='num'>" + m(sc.get("mean_lm") or 0) + "</td>"
+            "<td class='num'>"
+            + (str(sc.get("finding_count")) if sc.get("finding_count") is not None else "&mdash;")
+            + "</td><td>" + html.escape(str(sc.get("worst_severity", ""))) + "</td></tr>"
+            for sc in scenarios)
+
+        return f"""
+    <h2><span class="fair-eyebrow">Cyber Risk Quantification</span> Financial Risk Exposure &middot; FAIR</h2>
+    <div style="margin:.6rem 0 1rem;padding:.8rem 1rem;border-left:4px solid var(--medium);background:var(--medium-bg);border-radius:6px;">
+      <strong>No annual figure is presented for this organisation.</strong>
+      Your loss figures priced what each scenario costs <em>when it happens</em>, and those are below. Turning
+      them into an annual exposure needs the other half of the calculation &mdash; how often SAP here is actually
+      contacted by an attacker &mdash; and nobody has supplied it. The shipped catalogue assumes five contacts a
+      year for every customer alike, which is a reasonable illustration and is not a measurement of your estate.
+      <br><br>
+      Add <code>observed_contacts_per_year</code> to <code>crq_parameters.json</code> &mdash; blocked logons,
+      rejected RFC calls, gateway denials, WAF blocks in front of Fiori, from your SIEM or the Security Audit Log
+      &mdash; and this section will annualise from your own rate.
+    </div>
+    <table class="fw-table">
+      <thead><tr><th>Loss scenario</th><th class="num">Cost per event</th><th class="num">Findings routed</th><th>Worst severity</th></tr></thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+    <p class="fair-note">Cost per event is priced from your figures. Scenario matching is driven by your
+      findings. Only the yearly rate is missing, and only the yearly rate is withheld.</p>
+    {disclosures}
+"""
 
     def _render_fair_unpriced(self, fair) -> str:
         """The FAIR section when nobody has priced the business.
