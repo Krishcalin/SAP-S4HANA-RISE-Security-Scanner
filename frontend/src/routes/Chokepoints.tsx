@@ -5,6 +5,8 @@ import type { ChokepointsView, RemediationOwner } from '../api/types'
 import { useTitle } from '../lib/title'
 import { Scissors } from 'lucide-react'
 import { CARD_TITLE as CARD_H3, KPI, KPI_NOTE } from '../lib/ui'
+import { money } from './Risk'
+import { UNPRICED_CELL } from '../lib/pricing'
 
 /**
  * The shortest worklist this product can produce.
@@ -140,6 +142,7 @@ function Body({ view }: { view: ChokepointsView }) {
           <thead>
             <tr>
               <th className={`${TH} w-[80px] text-right`}>Severs</th>
+              <th className={`${TH} w-[110px] text-right`}>Worth</th>
               <th className={`${TH} w-[90px]`}>Severity</th>
               <th className={`${TH} w-[130px]`}>Check</th>
               <th className={TH}>Title</th>
@@ -159,6 +162,14 @@ function Body({ view }: { view: ChokepointsView }) {
                     {c.paths_cut}
                   </span>
                 </td>
+                {/* WHAT CLOSING IT IS WORTH, and an em dash wherever that
+                    cannot be said. `money(0)` renders "$0", which is a claim
+                    that the exposure was computed and came to nothing; this is
+                    the absence of a computation, and the two must not look
+                    alike. See frontend/src/lib/pricing.ts. */}
+                <td className={`${TD} text-right font-mono`}>
+                  {c.ale_severed ? money(c.ale_severed) : UNPRICED_CELL}
+                </td>
                 <td className={TD}>
                   <span className={`pill sev-${c.severity ?? 'INFO'}`}>{c.severity}</span>
                 </td>
@@ -170,7 +181,21 @@ function Body({ view }: { view: ChokepointsView }) {
                 </td>
                 <td className={TD}>
                   {c.title}
-                  {c.scenarios.length > 0 && (
+                  {/* The consequence, per scenario, in the words the graph can
+                      actually support: how many of how many routes this closes.
+                      "1 of 4" is the sentence that stops somebody reading a
+                      partial cut as a closure. */}
+                  {c.scenario_detail && c.scenario_detail.length > 0 ? (
+                    <div className="text-ink3 text-[12px]">
+                      {c.scenario_detail.map((s) => (
+                        <span key={s.scenario} className="mr-3">
+                          {s.severs_all
+                            ? `closes ${s.scenario} outright`
+                            : `${s.scenario}: ${s.paths_cut} of ${s.paths_open} routes`}
+                        </span>
+                      ))}
+                    </div>
+                  ) : c.scenarios.length > 0 && (
                     <div className="text-ink3 text-[12px]">
                       ends at {c.scenarios.join(', ')}
                     </div>

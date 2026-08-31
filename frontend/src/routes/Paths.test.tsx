@@ -56,6 +56,8 @@ function chokepoint(over: Partial<PathsOverview['chokepoints'][0]> = {}) {
     finding_id: 1,
     paths_cut: 1,
     scenarios: ['Fraudulent payment'],
+    scenario_detail: null,
+    ale_severed: null,
     check_id: 'AUTH-002',
     severity: 'CRITICAL' as const,
     state: 'open' as const,

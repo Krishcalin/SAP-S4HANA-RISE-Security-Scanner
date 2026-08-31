@@ -491,10 +491,29 @@ export interface AttackPath {
 
 /** server/graph.py `chokepoints` — the landing worklist, not the graph. Each row
  *  carries its consequence: "close this and N paths die". */
+/** One scenario this finding's cut hops stand on, and how completely. */
+export interface ChokepointScenario {
+  scenario: string
+  paths_cut: number
+  paths_open: number
+  /** True when no open path to this scenario survives the fix. The ONLY
+   *  condition under which money is attached — see server/graph.py. */
+  severs_all: boolean
+  ale_mean: number | null
+  ale_p90: number | null
+  loss_model?: { applied?: boolean } | null
+}
+
 export interface Chokepoint {
   finding_id: number
   paths_cut: number
   scenarios: string[]
+  scenario_detail: ChokepointScenario[] | null
+  /** Annual exposure with no route left once this is fixed, summed over the
+   *  scenarios it severs OUTRIGHT. Null where it severs none of them, or where
+   *  the customer has not priced the business — a partial cut has no honest
+   *  figure and this model does not invent one. */
+  ale_severed: number | null
   check_id: string
   severity: Severity | null
   state: FindingState

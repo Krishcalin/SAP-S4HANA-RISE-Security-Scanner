@@ -356,7 +356,7 @@ def path_findings(path_id: int) -> List[Dict[str, Any]]:
 
 def chokepoints(scope: Optional[Sequence[int]], limit: int = 15,
                 landscape_id: Optional[int] = None) -> List[Dict[str, Any]]:
-    """Findings that sit on a CUT hop of the most open paths.
+    """Findings that sit on a CUT hop of the most open paths, and what that is worth.
 
     This is the landing metric, not the graph. It converts a 300-row report into a
     short worklist with a stated consequence per line — "close this and 4 paths
@@ -364,6 +364,32 @@ def chokepoints(scope: Optional[Sequence[int]], limit: int = 15,
 
     Only cut hops count. A finding on a non-cut hop reduces exploitability without
     severing anything, and including it would promise a closure it cannot deliver.
+
+    WHY THERE IS MONEY ON THIS ROW NOW
+    ----------------------------------
+    Every path names the FAIR scenario it ends at, and every scenario carries a
+    calibrated annual figure. The two lived side by side and were never joined,
+    so the one screen where somebody decides what to do on Monday ranked its
+    worklist by a path count while the currency figure sat on a different page.
+
+    WHAT THE FIGURE IS ALLOWED TO MEAN, WHICH IS THE WHOLE PROBLEM
+    --------------------------------------------------------------
+    The tempting arithmetic is "sum the ALE of every scenario this finding's cut
+    paths reach". It is wrong, and wrong in the flattering direction:
+
+      * A scenario is reachable by SEVERAL paths. Cutting one of six leaves the
+        scenario reachable, and claiming its whole ALE would promise a closure
+        the graph explicitly says does not happen.
+      * The FAIR figure is driven by findings routed to a scenario, not by paths.
+        Severing a path does not mechanically remove a scenario's exposure.
+
+    So money is attached ONLY where this finding cuts EVERY open path to a
+    scenario — where the graph's own claim is that the scenario becomes
+    unreachable by any modelled route. That makes the headline rare and strong:
+    "close this one thing and the entire ransomware scenario has no path left".
+    Everywhere else the row still says how many of how many paths it severs, and
+    says no number, because a fraction of a scenario's ALE is a quantity this
+    model does not compute and cannot defend.
     """
     clause, params = _scoped(scope)
     land = ""
@@ -384,21 +410,82 @@ def chokepoints(scope: Optional[Sequence[int]], limit: int = 15,
                    (jsonb_array_elements_text(ids))::bigint AS finding_id
             FROM cut_findings WHERE is_cut
         )
+        ,
+        -- How many open paths reach each scenario AT ALL. The denominator of
+        -- the only claim this function is allowed to monetise.
+        scenario_paths AS (
+            SELECT p.fair_scenario, count(*) AS paths_open
+            FROM attack_path p
+            WHERE p.closed_at IS NULL AND {clause}{land}
+            GROUP BY p.fair_scenario
+        ),
+        -- The most recent completed run's per-scenario figure. NULL where the
+        -- customer has not calibrated, which is a state this must survive: the
+        -- worklist is still a worklist without money on it.
+        priced AS (
+            SELECT DISTINCT ON (c.scenario_id)
+                   c.scenario_id, c.ale_mean, c.ale_p90,
+                   -- Carried so the console can apply `isPriced` rather than a
+                   -- null check, exactly as the paths screen does. A row written
+                   -- before the loss model existed has ale_mean populated from
+                   -- the catalogue's illustrative company, and a null check
+                   -- would put that on screen as the customer's money.
+                   c.detail -> 'loss_model' AS loss_model
+            FROM crq_result c
+            JOIN scan_run r ON r.id = c.scan_run_id
+            WHERE c.scenario_id IS NOT NULL AND r.status = 'complete'
+            ORDER BY c.scenario_id, r.started_at DESC
+        ),
+        per_scenario AS (
+            SELECT e.finding_id, e.fair_scenario,
+                   count(DISTINCT e.path_id) AS paths_cut,
+                   sp.paths_open,
+                   count(DISTINCT e.path_id) >= sp.paths_open AS severs_all,
+                   pr.ale_mean, pr.ale_p90, pr.loss_model
+            FROM exploded e
+            JOIN scenario_paths sp ON sp.fair_scenario = e.fair_scenario
+            LEFT JOIN priced pr ON pr.scenario_id = e.fair_scenario
+            GROUP BY e.finding_id, e.fair_scenario, sp.paths_open,
+                     pr.ale_mean, pr.ale_p90, pr.loss_model
+        )
         SELECT e.finding_id, count(DISTINCT e.path_id) AS paths_cut,
                array_agg(DISTINCT e.fair_scenario) AS scenarios,
                f.check_id, f.severity, f.state, f.priority_tier,
-               f.remediation_owner, cd.title, s.sid, s.client
+               f.remediation_owner, cd.title, s.sid, s.client,
+               -- Per scenario: severed how many of how many, and what it is
+               -- worth if the answer is "all of them".
+               (SELECT jsonb_agg(jsonb_build_object(
+                           'scenario', ps.fair_scenario,
+                           'paths_cut', ps.paths_cut,
+                           'paths_open', ps.paths_open,
+                           'severs_all', ps.severs_all,
+                           'ale_mean', ps.ale_mean,
+                           'ale_p90', ps.ale_p90,
+                           'loss_model', ps.loss_model)
+                       ORDER BY ps.severs_all DESC, ps.paths_cut DESC)
+                  FROM per_scenario ps WHERE ps.finding_id = e.finding_id)
+                   AS scenario_detail,
+               -- THE SORT KEY, and the only number on this row that is money.
+               -- Summed over the scenarios this finding leaves with no open
+               -- path at all; null where it severs none of them outright.
+               (SELECT sum(ps.ale_mean) FROM per_scenario ps
+                 WHERE ps.finding_id = e.finding_id AND ps.severs_all
+                   AND (ps.loss_model ->> 'applied')::boolean IS TRUE)
+                   AS ale_severed
         FROM exploded e
         JOIN finding f ON f.id = e.finding_id
         JOIN check_definition cd ON cd.check_id = f.check_id
         LEFT JOIN sap_system s ON s.id = f.system_id
         GROUP BY e.finding_id, f.check_id, f.severity, f.state, f.priority_tier,
                  f.remediation_owner, cd.title, s.sid, s.client
-        ORDER BY paths_cut DESC,
+        -- Money first where there is money; the old ordering underneath it, so
+        -- an uncalibrated deployment sees exactly the list it saw before.
+        ORDER BY ale_severed DESC NULLS LAST,
+                 paths_cut DESC,
                  CASE f.severity WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1
                                  WHEN 'MEDIUM' THEN 2 ELSE 3 END
         LIMIT %s
-        """, params + [limit])
+        """, params + params + [limit])
 
 
 def path_summary(scope: Optional[Sequence[int]]) -> Dict[str, Any]:

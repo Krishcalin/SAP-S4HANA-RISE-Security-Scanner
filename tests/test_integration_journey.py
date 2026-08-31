@@ -241,8 +241,45 @@ def test_crq_is_computed_and_priced_on_the_complete_finding_set(database, landsc
     assert row["detail"]["engine_found"] is True, (
         "no Monte-Carlo engine was found, so the headline differentiator produced "
         "no number at all")
-    assert row["ale_p90"] and row["ale_p90"] > 0
-    assert row["ale_p50"] <= row["ale_p90"], "median exceeds the 90th percentile"
+
+    # AND NO ANNUAL FIGURE, BECAUSE sample_data ANSWERS NOTHING.
+    #
+    # This used to assert ale_p90 > 0 and passed by storing the catalogue's
+    # illustrative $1bn manufacturer's exposure under this landscape's name. The
+    # console never showed it — frontend/src/lib/pricing.ts gates every screen on
+    # `loss_model.applied` — but it was in the row, in the trend, and in the API.
+    # Annualised exposure needs both a loss figure and a contact rate, and an
+    # unanswered estate has neither.
+    assert row["ale_p90"] is None, (
+        "an annual figure was stored for an estate that supplied no loss figures "
+        "and no contact rate")
+    assert row["detail"]["frequency_model"]["applied"] is False
+
+
+@pytest.mark.skipif(not SAMPLE.is_dir(), reason="sample_data not present")
+def test_answers_reach_the_engine_from_the_console_too(database, landscape, system):
+    """THE DEFECT THIS GUARDS was live and shipped.
+
+    `sap_scanner.py` was taught to pass the customer's contact rate into the
+    quantification and the two server call sites were not, so a console customer
+    could enter it on the parameters screen and watch it be ignored — the
+    console could never produce an annual figure at all, however carefully they
+    answered. It was invisible on the CLI, which is where the change was tested.
+    """
+    from server import crq
+
+    crq.save_parameters(landscape, {
+        "sap_revenue": 1_000_000_000,
+        "observed_contacts_per_year": 5,
+    }, created_by=None)
+    _scan(database, landscape, system)
+
+    row = crq.latest([system])
+    assert row["detail"]["frequency_model"]["applied"] is True, (
+        "the contact rate did not reach the engine from the server path")
+    assert row["ale_p90"] and float(row["ale_p90"]) > 0
+    assert float(row["ale_p50"]) <= float(row["ale_p90"]), \
+        "median exceeds the 90th percentile"
 
     # Residual after remediation must be non-zero: "fix everything and your risk
     # is exactly $0" is not a claim any risk function accepts.

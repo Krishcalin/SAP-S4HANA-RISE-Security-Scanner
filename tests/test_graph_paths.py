@@ -422,3 +422,215 @@ def test_row_scoping_applies_to_paths(landscape):
     assert graph.list_paths([sysid], landscape), "a scoped user could not see their path"
     assert not graph.list_paths([], landscape), \
         "an empty scope returned paths; it must mean nothing, not everything"
+
+
+# ── what a choke point is worth ──────────────────────────────────────────────
+#
+# Every path names the FAIR scenario it ends at and every scenario carries an
+# annual figure. Joining them is what turns "close this and 4 paths die" into
+# "close this and $X of annual exposure has no route left" — and it is also the
+# easiest place in this product to overclaim, because the flattering arithmetic
+# is one SQL sum away.
+
+
+def _price(conn, landscape_id, scenario, ale_mean, applied=True):
+    """A completed run carrying one scenario's annual figure.
+
+    `applied` is the customer's own loss figures having been supplied. It is a
+    parameter rather than a constant because the interesting case is the false
+    one: a stored figure the customer never priced must not reach the worklist
+    as their money.
+    """
+    import json
+    run = db_one(conn, "INSERT INTO scan_run (landscape_id, status) "
+                       "VALUES (%s,'complete') RETURNING id", (landscape_id,))
+    conn.execute(
+        "INSERT INTO crq_result (scan_run_id, scenario_id, ale_mean, ale_p90, "
+        "detail) VALUES (%s,%s,%s,%s,%s)",
+        (run, scenario, ale_mean, ale_mean * 2,
+         json.dumps({"loss_model": {"applied": applied}})))
+    return run
+
+
+def db_one(conn, sql, params):
+    return conn.execute(sql, params).fetchone()["id"]
+
+
+def _one_path(pid, scenario, cut_check):
+    return {"id": pid, "name": pid, "fair_scenario": scenario, "severity": "HIGH",
+            "hops": [{"name": "cut", "required": True, "cut": True,
+                      "checks": [cut_check], "why_cut": "test"}]}
+
+
+@pytestmark_db
+def test_severing_every_path_to_a_scenario_names_the_money(landscape):
+    """The one claim the graph actually supports: no route left at all."""
+    from server import db, graph
+
+    with db.connection() as conn:
+        _seed(conn, landscape, ["M-ONLY"])
+        conn.commit()
+        _price(conn, landscape, "SAP-RCE-01", 4_000_000)
+        run = db_one(conn, "INSERT INTO scan_run (landscape_id, status) "
+                           "VALUES (%s,'complete') RETURNING id", (landscape,))
+        graph.store_paths(conn, landscape, run,
+                          {"paths": [_one_path("M-1", "SAP-RCE-01", "M-ONLY")]})
+        conn.commit()
+
+    row = [c for c in graph.chokepoints(None, landscape_id=landscape)
+           if c["check_id"] == "M-ONLY"][0]
+    assert float(row["ale_severed"]) == 4_000_000
+    detail = row["scenario_detail"][0]
+    assert detail["severs_all"] is True
+    assert detail["paths_cut"] == detail["paths_open"] == 1
+
+
+@pytestmark_db
+def test_severing_some_paths_names_no_money(landscape):
+    """THE OVERCLAIM THIS EXISTS TO PREVENT.
+
+    A scenario reachable by two paths is not closed by cutting one of them, so
+    none of its annual figure has been removed. The row still says one of two —
+    that is true and useful — but a fraction of a scenario's ALE is a quantity
+    this model does not compute, and inventing one here would be the single
+    most quotable wrong number the product could produce.
+    """
+    from server import db, graph
+
+    with db.connection() as conn:
+        _seed(conn, landscape, ["M-HALF", "M-OTHER"])
+        conn.commit()
+        _price(conn, landscape, "SAP-RCE-01", 4_000_000)
+        run = db_one(conn, "INSERT INTO scan_run (landscape_id, status) "
+                           "VALUES (%s,'complete') RETURNING id", (landscape,))
+        graph.store_paths(conn, landscape, run, {"paths": [
+            _one_path("M-2", "SAP-RCE-01", "M-HALF"),
+            _one_path("M-3", "SAP-RCE-01", "M-OTHER"),
+        ]})
+        conn.commit()
+
+    row = [c for c in graph.chokepoints(None, landscape_id=landscape)
+           if c["check_id"] == "M-HALF"][0]
+    assert row["ale_severed"] is None, "a partial cut was priced"
+    detail = row["scenario_detail"][0]
+    assert detail["severs_all"] is False
+    assert (detail["paths_cut"], detail["paths_open"]) == (1, 2)
+
+
+@pytestmark_db
+def test_the_money_outranks_a_bigger_path_count(landscape):
+    """The behaviour change, stated as an ordering.
+
+    A finding that cuts three paths and closes nothing is a smaller decision
+    than one that cuts a single path and leaves a four-million-dollar scenario
+    with no route at all. The old list put the three first.
+    """
+    from server import db, graph
+
+    with db.connection() as conn:
+        _seed(conn, landscape, ["M-BUSY", "M-WORTH"])
+        conn.commit()
+        _price(conn, landscape, "SAP-RCE-01", 4_000_000)
+        run = db_one(conn, "INSERT INTO scan_run (landscape_id, status) "
+                           "VALUES (%s,'complete') RETURNING id", (landscape,))
+        graph.store_paths(conn, landscape, run, {"paths": [
+            # three paths to an UNPRICED scenario, all cut by one finding
+            _one_path("M-4", "SAP-INTF-05", "M-BUSY"),
+            _one_path("M-5", "SAP-INTF-05", "M-BUSY"),
+            _one_path("M-6", "SAP-INTF-05", "M-BUSY"),
+            # one path to the priced one
+            _one_path("M-7", "SAP-RCE-01", "M-WORTH"),
+        ]})
+        conn.commit()
+
+    listed = [c["check_id"] for c in graph.chokepoints(None, landscape_id=landscape)]
+    assert listed.index("M-WORTH") < listed.index("M-BUSY")
+
+
+@pytestmark_db
+def test_a_figure_the_customer_never_priced_is_not_their_money(landscape):
+    """The catalogue's illustrative $1bn manufacturer must not arrive here.
+
+    `crq_result.ale_mean` is populated whether or not the customer supplied
+    their own loss figures, and every row written before the loss model existed
+    carries the illustrative company's number. A null check would put that on
+    the worklist as this customer's exposure, which is the defect
+    frontend/src/lib/pricing.ts was written to stop happening on five other
+    screens.
+    """
+    from server import db, graph
+
+    with db.connection() as conn:
+        _seed(conn, landscape, ["M-FAKE"])
+        conn.commit()
+        _price(conn, landscape, "SAP-RCE-01", 9_000_000, applied=False)
+        run = db_one(conn, "INSERT INTO scan_run (landscape_id, status) "
+                           "VALUES (%s,'complete') RETURNING id", (landscape,))
+        graph.store_paths(conn, landscape, run,
+                          {"paths": [_one_path("M-13", "SAP-RCE-01", "M-FAKE")]})
+        conn.commit()
+
+    row = [c for c in graph.chokepoints(None, landscape_id=landscape)
+           if c["check_id"] == "M-FAKE"][0]
+    assert row["ale_severed"] is None
+    # The severing itself is still true and still reported: the graph's claim
+    # does not depend on anybody having priced anything.
+    assert row["scenario_detail"][0]["severs_all"] is True
+
+
+@pytestmark_db
+def test_an_uncalibrated_deployment_sees_the_list_it_always_saw(landscape):
+    """Nobody loses a worklist for not having answered the money questions.
+
+    With no priced scenario there is no `ale_severed` on any row, and the order
+    falls back to paths cut then severity — which is what this screen did
+    before there was any money on it.
+    """
+    from server import db, graph
+
+    with db.connection() as conn:
+        _seed(conn, landscape, ["M-A", "M-B"])
+        conn.commit()
+        run = db_one(conn, "INSERT INTO scan_run (landscape_id, status) "
+                           "VALUES (%s,'complete') RETURNING id", (landscape,))
+        graph.store_paths(conn, landscape, run, {"paths": [
+            _one_path("M-8", "SAP-RCE-01", "M-A"),
+            _one_path("M-9", "SAP-RCE-01", "M-A"),
+            _one_path("M-10", "SAP-DATA-04", "M-B"),
+        ]})
+        conn.commit()
+
+    rows = graph.chokepoints(None, landscape_id=landscape)
+    assert all(r["ale_severed"] is None for r in rows)
+    assert [r["check_id"] for r in rows][0] == "M-A"      # cuts two, not one
+
+
+@pytestmark_db
+def test_a_closed_path_is_not_counted_in_the_denominator(landscape):
+    """Otherwise closing paths makes the remaining ones look un-severable.
+
+    `paths_open` counts only open paths, so a scenario whose other route has
+    already been shut becomes severable by the finding on the route that is
+    left — which is exactly the progress the journey exists to show.
+    """
+    from server import db, graph
+
+    with db.connection() as conn:
+        _seed(conn, landscape, ["M-LAST", "M-GONE"])
+        conn.commit()
+        _price(conn, landscape, "SAP-RCE-01", 4_000_000)
+        run = db_one(conn, "INSERT INTO scan_run (landscape_id, status) "
+                           "VALUES (%s,'complete') RETURNING id", (landscape,))
+        graph.store_paths(conn, landscape, run, {"paths": [
+            _one_path("M-11", "SAP-RCE-01", "M-LAST"),
+            _one_path("M-12", "SAP-RCE-01", "M-GONE"),
+        ]})
+        conn.commit()
+        conn.execute("UPDATE attack_path SET closed_at = now() "
+                     "WHERE template_id = %s AND landscape_id = %s",
+                     ("M-12", landscape))
+        conn.commit()
+
+    row = [c for c in graph.chokepoints(None, landscape_id=landscape)
+           if c["check_id"] == "M-LAST"][0]
+    assert float(row["ale_severed"]) == 4_000_000

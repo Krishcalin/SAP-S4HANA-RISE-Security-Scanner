@@ -41,6 +41,8 @@ function row(over: Partial<ChokepointsView['chokepoints'][0]> = {}) {
     finding_id: 1,
     paths_cut: 1,
     scenarios: ['SAP-RCE-01'],
+    scenario_detail: null,
+    ale_severed: null,
     check_id: 'INTG-GW-001',
     severity: 'CRITICAL' as const,
     state: 'open' as const,
@@ -137,5 +139,44 @@ describe('Choke Points', () => {
       new (s: number, m: string) => Error)(403, 'nope'))
     render(<MemoryRouter><Chokepoints /></MemoryRouter>)
     await waitFor(() => expect(screen.getByText(/not permitted/)).toBeTruthy())
+  })
+})
+
+describe('what a cut is worth', () => {
+  it('shows the money only where the fix closes a scenario outright', async () => {
+    draw(view({
+      chokepoints: [row({
+        ale_severed: 4_000_000,
+        scenario_detail: [{
+          scenario: 'SAP-RCE-01', paths_cut: 2, paths_open: 2,
+          severs_all: true, ale_mean: 4_000_000, ale_p90: 8_000_000,
+        }],
+      })],
+    }))
+    expect(await screen.findByText('$4M')).toBeInTheDocument()
+    expect(screen.getByText(/closes SAP-RCE-01 outright/)).toBeInTheDocument()
+  })
+
+  it('says how many of how many routes a partial cut closes', async () => {
+    // The sentence that stops somebody reading a partial cut as a closure.
+    draw(view({
+      chokepoints: [row({
+        ale_severed: null,
+        scenario_detail: [{
+          scenario: 'SAP-RCE-01', paths_cut: 1, paths_open: 4,
+          severs_all: false, ale_mean: 4_000_000, ale_p90: 8_000_000,
+        }],
+      })],
+    }))
+    expect(await screen.findByText(/SAP-RCE-01: 1 of 4 routes/)).toBeInTheDocument()
+  })
+
+  it('renders an em dash, never a zero, where there is no figure', async () => {
+    // "$0" is a claim that the exposure was computed and came to nothing.
+    // This is the absence of a computation. See lib/pricing.ts.
+    draw(view({ chokepoints: [row({ ale_severed: null })] }))
+    await screen.findByText('INTG-GW-001')
+    expect(screen.queryByText('$0')).not.toBeInTheDocument()
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
   })
 })

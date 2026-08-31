@@ -167,6 +167,14 @@ can see what got fixed and what came back, an attack-path graph, a dashboard
 with the financial figure on it, role-based access, an audit log, and a
 read-only MCP interface for asking questions of the data.
 
+**The worklist is ordered by money, not by severity.** The graph knows which
+findings sit on the one hop that severs a path; the FAIR model knows what the
+scenario at the end of that path is worth. Join them and the first line reads
+*"close this and $4M of annual exposure has no route left"*. A figure appears
+only where the fix closes **every** open path to a scenario — anywhere else the
+row says how many of how many routes it cuts and shows no number, because a
+fraction of a scenario's exposure is a quantity this model does not compute.
+
 ---
 
 ## Reports

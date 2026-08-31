@@ -142,7 +142,12 @@ def compute_and_store(conn, run_id: int, landscape_id: int,
 
     try:
         result = fair_run(findings, priorities, org_overrides=overrides or None,
-                          simulations=simulations, loss_answers=loss_answers)
+                          simulations=simulations, loss_answers=loss_answers,
+                          # THE SAME ANSWERS FILE FEEDS BOTH CALIBRATIONS.
+                          # Passing only the loss half here is how the console
+                          # ends up unable to produce an annual figure at all,
+                          # however carefully the customer answered.
+                          frequency_answers=loss_answers)
     except Exception:                                    # noqa: BLE001
         log.exception("FAIR run failed")
         return {"computed": False, "reason": "FAIR run raised"}
@@ -363,9 +368,21 @@ def save_parameters(landscape_id: int, answers: Dict[str, Any],
     Unknown keys are dropped rather than stored: they would travel into the loss
     model, match nothing, and look like an answered question in the UI.
     """
+    from modules.fair_frequency_model import ANSWERS as FREQUENCY_KEYS
     from modules.fair_loss_model import PARAMETER_KEYS
+
+    # BOTH ANSWER NAMESPACES, or the filter silently eats half of them.
+    #
+    # This existed to drop unknown keys, which is right — an unrecognised answer
+    # travels into the model, matches nothing, and shows in the UI as a question
+    # somebody answered. It had exactly one namespace, so when the frequency
+    # answers arrived the console accepted `observed_contacts_per_year` on the
+    # screen, dropped it here, and could never produce an annual figure however
+    # carefully the customer answered. It failed silently in the one place a
+    # silent failure is indistinguishable from the feature not existing.
+    accepted = set(PARAMETER_KEYS) | set(FREQUENCY_KEYS)
     clean = {k: v for k, v in (answers or {}).items()
-             if k in PARAMETER_KEYS and v not in (None, "")}
+             if k in accepted and v not in (None, "")}
     row = db.one(
         "INSERT INTO crq_parameters (landscape_id, answers, currency, note, created_by) "
         "VALUES (%s, %s, %s, %s, %s) RETURNING id",
@@ -410,7 +427,8 @@ def quantify_with_parameters(findings: List[Dict[str, Any]],
 
     priorities = prioritize(findings or [])
     result = fair_run(findings or [], priorities, simulations=simulations,
-                      seed=seed, loss_answers=answers or None)
+                      seed=seed, loss_answers=answers or None,
+                      frequency_answers=answers or None)
     summary = result.get("summary")
     if not summary:
         from modules.fair_loss_model import build_loss_components
