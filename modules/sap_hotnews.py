@@ -386,6 +386,7 @@ class SapHotNewsAuditor(BaseAuditor):
         # same report as the findings it would otherwise silently distort.
         self._report_catalogue_disagreement(catalog)
         self._report_below_fix_level(present)
+        self._report_applied_but_undelivered(present)
         self._report_sap_published_hotnews(catalog, present)
         # Only ABAP-assessable entries count as missing: the absence of an AS
         # Java note from this system's SNOTE export is not evidence about the
@@ -1108,6 +1109,106 @@ class SapHotNewsAuditor(BaseAuditor):
         if unmatched:
             return "unknown", []
         return "n/a", []
+
+    # ── HOTNEWS-014: applied is not the same as effective ──────────────────
+
+    def _report_applied_but_undelivered(self, present: Set[str]):
+        """A note the SNOTE export records as applied, whose fix is not there.
+
+        EVERY OTHER CHECK IN THIS MODULE ASKS WHETHER A NOTE IS MISSING. This
+        one asks whether a note that is recorded as PRESENT actually landed,
+        which is the question an operator cannot answer from SNOTE — SNOTE
+        records that a note was implemented, not that the software carrying its
+        fix is installed.
+
+        WHY THIS DOES NOT REOPEN THE FALSE POSITIVE `_report_below_fix_level`
+        REFUSES. That check requires absence from the SNOTE export, and says
+        why: a note applied through correction instructions legitimately does
+        not move a component's support-package level, so "applied AND below the
+        component SP" is normal and reporting it would be the loudest possible
+        false positive.
+
+        The exception is a fix SNOTE CANNOT DELIVER. A HANA revision is
+        installed by upgrading the database; there is no ABAP correction
+        instruction that produces one. So a note whose only published fix is a
+        HANA revision, recorded as applied in an ABAP system's SNOTE export
+        while the database is still below that revision, is not the normal case
+        — it is two of the customer's own exports disagreeing, and the
+        arithmetic between them is the only thing this product contributes.
+
+        DELIBERATELY NOT EXTENDED TO KERNEL NOTES, though SAP publishes a kernel
+        fix level for 71 further notes and the same reasoning would hold: this
+        module reads no kernel source (`_installed_levels` reads
+        `system_component` and nothing else), so there is no installed level to
+        compare against. Supplying one is the way to widen this check, and until
+        then those notes are simply not examined here rather than reported as
+        fine.
+        """
+        catalogue = self._sap_catalogue()
+        installed = self._installed_hana()
+        if not installed:
+            return
+
+        rows = []
+        for note in sorted(present):
+            record = catalogue.get(note)
+            if not record or not record.get("hana_fix"):
+                continue
+            # A note with a component support-package path too could have been
+            # delivered that way. Only notes whose ONLY published fix is the
+            # database revision produce a contradiction here.
+            if record.get("fix_levels"):
+                continue
+            state, evidence = self._hana_verdict(record, installed)
+            if state == "below":
+                rows.append((note, record, evidence))
+        if not rows:
+            return
+
+        rows.sort(key=lambda r: (-(r[1].get("cvss") or 0), r[0]))
+        items = ["%s — %s (CVSS %s): %s"
+                 % (note, ", ".join(record["cve"]) or "no CVE",
+                    record.get("cvss") or "?", "; ".join(evidence))
+                 for note, record, evidence in rows]
+        critical = [r for r in rows
+                    if (r[1].get("cvss") or 0) >= 9.0 or r[1].get("priority") == 1]
+        self.finding(
+            check_id="HOTNEWS-014",
+            title="Note recorded as applied, but the fix it needs is not installed",
+            severity=self.SEVERITY_CRITICAL if critical else self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=(
+                "%d SAP Security Note(s) appear in this system's applied-notes "
+                "export, and the HANA revision SAP publishes as their fix is "
+                "still not installed. These notes are fixed by a database "
+                "revision only — SAP publishes no component support package "
+                "for them — and no ABAP correction instruction can deliver "
+                "one. SNOTE records that a note was IMPLEMENTED; it cannot "
+                "record that the software carrying the correction is present, "
+                "so a system can report a note as handled while remaining "
+                "exposed to it. The two facts below are the customer's own "
+                "exports; the comparison between them is the only thing this "
+                "product adds.\n\n%s" % (len(rows), "\n".join(items))),
+            affected_items=[r[0] for r in rows],
+            remediation=(
+                "1. For each note below, check the installed HANA revision "
+                "against the fix revision SAP publishes in the note itself.\n"
+                "2. If the database really is below it, the note is not "
+                "effective on this system whatever SNOTE says: schedule the "
+                "HANA revision.\n"
+                "3. If the database has since been upgraded, the applied-notes "
+                "or hana_version export is stale — re-export both before "
+                "treating this as closed.\n"
+                "4. Do not close this on the strength of the SNOTE status "
+                "alone. That status is what this finding contradicts."),
+            references=["SAP Note — see each note number listed",
+                        "SAP Security Baseline — patch management"],
+            details={"notes": [r[0] for r in rows],
+                     "installed_hana": installed,
+                     # Named so a reader can tell this apart from HOTNEWS-013,
+                     # which is about notes that are ABSENT.
+                     "contradicts": "applied_notes"},
+        )
 
     def _settled_notes(self, present: Set[str]) -> Dict[str, Any]:
         """Notes this run could decide, cached: {note: (state, evidence)}."""
