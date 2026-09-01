@@ -92,7 +92,8 @@ Background and the full plan: [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md),
   compliance mapping → fix-first findings*; `risk_prioritizer.py` computes the P1–P4 order and
   `compliance_mapping.py` maps categories to **eight** frameworks — ISO/IEC 27001:2022,
   NIST CSF 2.0, **NIST SP 800-53 Rev 5**, **DORA (EU 2022/2554)**, CIS Controls v8,
-  TISAX/VDA ISA, SOC 2 and EU GDPR. Each finding renders its detailed **Security Risk** narrative +
+  TISAX/VDA ISA, SOC 2, EU GDPR and **NERC CIP** (standard + requirement only; no
+  part-level citation, no version suffix — see the entry's own comment). Each finding renders its detailed **Security Risk** narrative +
   step-by-step **Remediation** from the findings knowledge base (`finding_kb.py` loading
   `data/finding_details.json`, keyed by check-id with family-prefix fallback), falling back
   to the finding's own `description`/`remediation` when no KB entry exists. When you add

@@ -4,7 +4,7 @@ Compliance / Control-Framework Mapping
 Maps the scanner's technical findings onto the control frameworks an SAP RISE
 landscape is typically audited against — ISO/IEC 27001:2022, NIST CSF 2.0,
 NIST SP 800-53 Rev 5, CIS Controls v8, TISAX (VDA ISA), SOC 2 (Trust Services
-Criteria), EU GDPR and DORA (Regulation (EU) 2022/2554).
+Criteria), EU GDPR, DORA (Regulation (EU) 2022/2554) and NERC CIP.
 
 This is a *gap-mapping*, not a certification: each finding is attributed to the
 control areas it is evidence against, so an auditor can navigate the technical
@@ -484,6 +484,80 @@ class ComplianceMapper:
                 "secure-development": [("CC8", "Change Management")],
                 "incident-response": [("CC7", "System Operations")],
                 "supplier-cloud": [("CC9", "Risk Mitigation")],
+            },
+        },
+        {
+            # NERC CIP — the North American reliability standards a utility's
+            # BES Cyber Systems are audited against. Added because this product
+            # already carries OT and plant-floor content, and a utility running
+            # SAP is the buyer for whom CIP-007 and CIP-010 land directly on the
+            # parameter, patch and account checks this scanner already runs.
+            #
+            # CITED AT STANDARD + REQUIREMENT, NEVER AT PART LEVEL. "CIP-007 R2"
+            # is defensible; "CIP-007-6 R2 Part 2.3" asserts what a specific
+            # sub-part says, and a Part-level mapping nobody here has verified
+            # line by line is exactly the coverage that collapses on the first
+            # auditor question. Same decision DORA gets above, same reason.
+            #
+            # NO VERSION SUFFIX. The standards are revised — CIP-007-6 becomes
+            # CIP-007-7 — and a version pinned here would go stale silently and
+            # still be quoted as current. The requirement numbering is what is
+            # stable enough to cite.
+            #
+            # WHAT IS NOT CLAIMED, each a deliberate absence:
+            #   CIP-002 (categorisation)    the customer's determination of which
+            #                               systems are BES Cyber Systems. An SAP
+            #                               export says nothing about it — and it
+            #                               governs whether any of the below apply.
+            #   CIP-003 (policy)            programme artefacts: policies, a
+            #                               designated CIP Senior Manager.
+            #   CIP-006, CIP-014 (physical) doors, fences, guards.
+            #   CIP-012 (control centres)   real-time assessment data between
+            #                               control centres. Not SAP.
+            # Segregation of duties and secure development are mapped for other
+            # frameworks and deliberately NOT here: NERC CIP has no SoD
+            # requirement, and its software provisions concern vendor supply
+            # chain (CIP-013) rather than a customer's own ABAP.
+            #
+            # AND THE CAVEAT THAT BELONGS IN FRONT OF AN AUDITOR: an SAP ERP
+            # system is very often NOT a BES Cyber System. Where it falls
+            # outside CIP scope these requirements do not reach it at all, and
+            # this mapping is then evidence about a system the standard does not
+            # govern. That determination is CIP-002's, and the customer's.
+            "id": "nerccip", "name": "NERC CIP",
+            "subtitle": "Critical Infrastructure Protection — standard and requirement",
+            "themes": {
+                "access-control": [("CIP-004 R4", "Access management programme"),
+                                   ("CIP-004 R5", "Access revocation"),
+                                   ("CIP-007 R5", "System access control")],
+                "privileged-access": [("CIP-004 R4", "Access management programme"),
+                                      ("CIP-007 R5", "System access control")],
+                # CIP-007 R5 is where shared accounts, default passwords and
+                # password parameters live, which is most of what this scanner
+                # reads about credentials.
+                "authentication": [("CIP-007 R5", "System access control")],
+                # Encryption of Interactive Remote Access is CIP-005 R2; the
+                # protection of BES Cyber System Information is CIP-011 R1.
+                "cryptography": [("CIP-005 R2", "Interactive Remote Access management"),
+                                 ("CIP-011 R1", "Information protection")],
+                "data-protection": [("CIP-011 R1", "Information protection")],
+                "logging-monitoring": [("CIP-007 R4", "Security event monitoring")],
+                "vuln-mgmt": [("CIP-007 R2", "Security patch management"),
+                              ("CIP-010 R3", "Vulnerability assessments")],
+                "secure-config": [("CIP-010 R1", "Configuration change management"),
+                                  ("CIP-007 R1", "Ports and services")],
+                "network-security": [("CIP-005 R1", "Electronic Security Perimeter"),
+                                     ("CIP-005 R2", "Interactive Remote Access management"),
+                                     ("CIP-007 R1", "Ports and services")],
+                "change-management": [("CIP-010 R1", "Configuration change management"),
+                                      ("CIP-010 R2", "Configuration monitoring")],
+                "backup-recovery": [("CIP-009 R1", "Recovery plan specifications")],
+                "app-runtime": [("CIP-007 R1", "Ports and services"),
+                                ("CIP-005 R1", "Electronic Security Perimeter")],
+                "incident-response": [("CIP-008 R1", "Incident response planning")],
+                # RISE is a vendor-operated service, which is the subject of
+                # CIP-013 rather than of any control the customer applies.
+                "supplier-cloud": [("CIP-013 R1", "Supply chain risk management")],
             },
         },
         {

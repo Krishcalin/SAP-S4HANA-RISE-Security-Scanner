@@ -85,7 +85,11 @@ The areas covered:
 - **Patching, logging, encryption, transports, backup and recovery**
 
 Findings are mapped to ISO 27001, NIST 800-53, NIST CSF, CIS Controls, DORA,
-TISAX, SOC 2, SOX and GDPR.
+TISAX, SOC 2, SOX, GDPR and **NERC CIP** — the last for a utility, cited at
+standard and requirement (`CIP-007 R2`) rather than at part level, because a
+part-level citation nobody has verified line by line is the coverage that
+collapses on the first auditor question. An SAP system is very often not a BES
+Cyber System at all; that determination is CIP-002's, and the customer's.
 
 ---
 
