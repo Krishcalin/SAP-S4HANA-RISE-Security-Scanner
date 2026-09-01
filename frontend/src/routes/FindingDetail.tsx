@@ -2,8 +2,9 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router'
 import {
   ApiError, assignFinding, finding as fetchFinding, findingHistory, setFindingState,
+  serviceRequest as fetchServiceRequest,
 } from '../api/client'
-import type { FindingDetail as Finding, FindingHistory } from '../api/types'
+import type { ServiceRequest, FindingDetail as Finding, FindingHistory } from '../api/types'
 import { useSession } from '../lib/session'
 import { useTitle } from '../lib/title'
 import { CheckRef } from '../components/Refs'
@@ -40,6 +41,21 @@ export function FindingDetail() {
   // strip. null until it loads, so the queue's title stays up rather than
   // blinking through a placeholder.
   useTitle(finding?.check_id ?? null)
+
+  // The drafted request, fetched only for a finding that has one. A separate
+  // call because it is a separate question — and because a page that failed
+  // entirely when the draft did would be worse at showing the finding.
+  const [request, setRequest] = useState<ServiceRequest | null>(null)
+
+  useEffect(() => {
+    setRequest(null)
+    if (!Number.isInteger(findingId)) return
+    let cancelled = false
+    fetchServiceRequest(findingId)
+      .then((r) => { if (!cancelled) setRequest(r) })
+      .catch(() => { /* not SAP's to change, or not visible: no draft, no box */ })
+    return () => { cancelled = true }
+  }, [findingId, reloads])
 
   useEffect(() => {
     if (!Number.isInteger(findingId)) { setError('That is not a finding id.'); return }
@@ -424,6 +440,38 @@ export function FindingDetail() {
           <p className="text-ink3 m-0">No risk narrative is authored for this check.</p>
         )}
       </div>
+
+      {/* THE TEXT THE BANNER ABOVE HAS BEEN PROMISING.
+          It said "the pre-drafted text is below" and there was none; what was
+          below was the generic remediation, which for a profile parameter opens
+          "Set login/min_password_lng to…" — the instruction the sentence above
+          it has just said the customer cannot carry out. This is above
+          Remediation on purpose: for a setting somebody else operates, the
+          request IS the remediation. */}
+      {request && (
+        <>
+          <h2 className={H2}>Service request to SAP</h2>
+          <div className={CARD}>
+            <p className="text-[13px] text-ink3 mb-2">
+              {request.has_values
+                ? 'Ready to send. It names the system, the setting, both values '
+                  + 'and the SAP note they come from.'
+                : 'The export did not carry this setting\u2019s value, so this asks '
+                  + 'SAP to confirm it rather than stating a change.'}
+            </p>
+            <pre className="whitespace-pre-wrap font-mono text-[12px] leading-[1.5]
+                            text-ink bg-panel2 border border-line rounded p-3
+                            overflow-x-auto">{request.text}</pre>
+            <button
+              type="button"
+              className="btn mt-2"
+              onClick={() => void navigator.clipboard?.writeText(request.text)}
+            >
+              Copy
+            </button>
+          </div>
+        </>
+      )}
 
       <h2 className={H2}>Remediation</h2>
       <div className={CARD}>

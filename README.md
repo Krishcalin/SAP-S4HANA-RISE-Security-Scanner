@@ -249,8 +249,13 @@ cannot support. A clean result and an unasked question look identical on a page.
   itself mandates in ECS are findings on classic on-premise. `--deployment-mode`
   decides which rules apply; a RISE scanner that flags SAP's own baseline is
   confidently wrong on every compliant system.
-- **In RISE you often cannot fix it yourself.** Those findings are written as a
-  service request to SAP, not as "change this".
+- **In RISE you often cannot fix it yourself.** Those findings come with the
+  service request already written — the system, the setting, the current and
+  required values and the SAP note they come from — rather than an instruction
+  to make a change the contract does not let you make. One request per system
+  rather than one per setting, because forty-seven tickets is not a remediation
+  plan. Where the export did not carry a value, the draft asks SAP to confirm
+  it instead of stating a change with a blank in it.
 - **There is no industry multiplier.** `--crq-industry` sets a label on the
   report and scales nothing.
 

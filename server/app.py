@@ -530,6 +530,52 @@ def api_chokepoints(user: Dict[str, Any] = Depends(current_user),
     }
 
 
+@app.get("/api/findings/{finding_id}/service-request")
+def api_service_request(finding_id: int,
+                        user: Dict[str, Any] = Depends(current_user)):
+    """The text to send SAP for a setting the customer may not change.
+
+    The finding page has told people for months that "the pre-drafted text is
+    below" and there was none; what was below opened with "Set
+    login/min_password_lng to…", the instruction the RISE model exists to stop
+    this product giving. This is the text.
+    """
+    from server import servicerequest
+
+    # The same scope gate the finding page itself uses, and the same 404 for
+    # both "does not exist" and "not yours": distinguishing them lets a scoped
+    # user enumerate ids in landscapes they cannot see.
+    if queries.get_finding(finding_id, auth.scope_for(user)) is None:
+        raise HTTPException(status_code=404, detail="not found")
+    drafted = servicerequest.draft(finding_id)
+    if not drafted:
+        # Not an error: a finding the customer CAN fix has no request to raise,
+        # and the screen should say so rather than show an empty box.
+        raise HTTPException(status_code=404,
+                            detail="this finding is not SAP's to change")
+    return drafted
+
+
+@app.get("/api/systems/{system_id}/service-request")
+def api_system_service_request(system_id: int,
+                               user: Dict[str, Any] = Depends(current_user)):
+    """Every SAP-owned setting on one system, as ONE request.
+
+    The unit SAP ECS works in. Forty-seven separate tickets is not a
+    remediation plan, it is a way to be ignored.
+    """
+    from server import servicerequest
+
+    scope = auth.scope_for(user)
+    if scope is not None and system_id not in scope:
+        raise HTTPException(status_code=404, detail="not found")
+    drafted = servicerequest.draft_for_system(system_id)
+    if not drafted:
+        raise HTTPException(status_code=404,
+                            detail="nothing on this system is SAP's to change")
+    return drafted
+
+
 @app.get("/api/severing-sets")
 def api_severing_sets(user: Dict[str, Any] = Depends(current_user)):
     """Per scenario: the smallest set of fixes that leaves it no route at all.

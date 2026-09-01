@@ -549,6 +549,20 @@ export interface SeveringSet {
   }[]
 }
 
+/** server/servicerequest.py — the text to send SAP for a setting the customer
+ *  is not allowed to change. */
+export interface ServiceRequest {
+  finding_id: number
+  check_id: string
+  system: string
+  setting: string
+  /** False when the export carried no current or required value, so the draft
+   *  asks SAP to confirm rather than instructing a change with a blank in it. */
+  has_values: boolean
+  provider_ticket_ref: string | null
+  text: string
+}
+
 export interface ChokepointsView {
   chokepoints: Chokepoint[]
   /** True when the query hit its cap. Returned rather than inferred: a list that
