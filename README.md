@@ -16,9 +16,9 @@
 
 ---
 
-## What this is
+## The SAP Security Tool
 
-You export configuration data out of your SAP systems as CSV and JSON files.
+MonitorRisk is an open source SAP Security Tool which someone can use to assess the effectiveness of the security controls within an SAP RISE Private or Public cloud environment. This is a solution built as a client server architecture using Python3, FastAPI, React, PostgreSQL16, TypeScript. You export configuration data out of your SAP systems as CSV and JSON files.
 This reads those files and tells you what is wrong, how bad it is, who can fix
 it, and what it might cost you.
 
