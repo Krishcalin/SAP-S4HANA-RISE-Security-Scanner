@@ -1,5 +1,5 @@
 import {
-  Calculator, CircleAlert, ListOrdered, CircleDollarSign, Landmark, LayoutDashboard, LayoutGrid, Scissors, ShieldCheck, TrendingUp, Upload, UserCog, Waypoints, type LucideIcon,
+  Calculator, CircleAlert, ListOrdered, ScrollText, CircleDollarSign, Landmark, LayoutDashboard, LayoutGrid, Scissors, ShieldCheck, TrendingUp, Upload, UserCog, Waypoints, type LucideIcon,
 } from 'lucide-react'
 import type { Role } from '../api/types'
 
@@ -48,6 +48,10 @@ export const NAV_MAIN: NavItem[] = [
   // all sit in one domain.
   { to: '/top-risks', label: 'Top5Risk', icon: ListOrdered },
   { to: '/crq', label: 'Quantify Risk', icon: Calculator },
+  // Every framework this product maps. NIST CSF keeps its own entry below
+  // because it has its own module and a Function-level screen; the other
+  // nine had nowhere to appear until this existed.
+  { to: '/compliance', label: 'Compliance', icon: ScrollText },
   { to: '/csf', label: 'NIST CSF', icon: Landmark },
   { to: '/upload', label: 'Upload', icon: Upload, minRole: 'analyst' },
 ]

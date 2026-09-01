@@ -146,3 +146,56 @@ def test_an_unmapped_category_flags_no_requirement():
     got = _assess("A Category That Does Not Exist")
     assert got["nerccip"]["mapped_findings"] == 0
     assert got["nerccip"]["controls"] == []
+
+
+# ── the console route that surfaces all of this ──────────────────────────────
+#
+# TEN FRAMEWORKS THAT REACHED NO SCREEN. The mapper's only consumers were the
+# offline HTML, PDF and PPTX generators, so a customer who works in the console
+# and never exports a report saw none of it. NIST CSF had a screen because it
+# has its own module; the other nine had nowhere to appear.
+
+def test_the_console_has_a_route_for_every_framework():
+    source = (ROOT / "server" / "app.py").read_text(encoding="utf-8")
+    assert '@app.get("/api/compliance")' in source
+    assert "compliance_mapping.ComplianceMapper" in source
+
+
+def test_the_route_is_wired_into_the_console():
+    """nav.ts states the rule: a route with no nav entry is a route nobody
+    finds."""
+    nav = (ROOT / "frontend" / "src" / "lib" / "nav.ts").read_text(encoding="utf-8")
+    app = (ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+    assert "'/compliance'" in nav and "Compliance" in nav
+    assert 'path="/compliance"' in app
+
+
+def test_no_percentage_is_computed_or_rendered():
+    """`compliance_mapping` forbids one and states why: this product sees
+    findings, not the control environment. The endpoint and the page are the two
+    places one would get invented."""
+    api = (ROOT / "server" / "app.py").read_text(encoding="utf-8")
+    block = api[api.index('@app.get("/api/compliance")'):]
+    block = block[:block.index("@app.get", 10)]
+    assert "No percentage" in block or "no percentage" in block
+
+    page = (ROOT / "frontend" / "src" / "routes" / "Compliance.tsx"
+            ).read_text(encoding="utf-8")
+    assert "absence of findings" in page.lower(), (
+        "the page no longer says that no findings is not compliance")
+    # WHETHER A PERCENTAGE IS RENDERED IS NOT ASSERTED HERE, deliberately. A
+    # first attempt banned the word "percentage" from the file and failed on
+    # the page's own comment explaining why there is none — a test that forbids
+    # the vocabulary of its own rule. The claim worth holding is about OUTPUT,
+    # and it is held where output exists: Compliance.test.tsx renders the page
+    # and asserts the text carries no `\d+%` and no <progress> element.
+
+
+def test_the_payload_carries_the_caveat_for_an_api_consumer():
+    """A consumer that never opens the screen still gets the sentence with the
+    numbers."""
+    api = (ROOT / "server" / "app.py").read_text(encoding="utf-8")
+    block = api[api.index('@app.get("/api/compliance")'):]
+    block = block[:block.index("@app.get", 10)]
+    assert '"note":' in block
+    assert "NOT an assertion of compliance" in block

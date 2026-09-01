@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { ShieldHalf } from 'lucide-react'
-import { ApiError, csf, dashboard, domains } from '../api/client'
+import { ApiError, compliance as fetchCompliance, csf, dashboard, domains }
+  from '../api/client'
 import type {
+  ComplianceView,
   CsfView, Dashboard as DashboardData, DomainsView, FindingState,
   RemediationOwner, SapSystem, ScanRun, SecurityDomain, Severity,
 } from '../api/types'
@@ -39,6 +41,12 @@ export function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [error, setError] = useState('')
   const [csfView, setCsfView] = useState<CsfView | null>(null)
+  /* Ten frameworks that reached no screen until /compliance existed — the
+     mapper's only consumers were the offline report generators. Fetched
+     separately and failing quietly for the same reason the CSF strip does: a
+     dashboard that will not render because one panel could not load is worse
+     than a dashboard missing a panel. */
+  const [compliance, setCompliance] = useState<ComplianceView | null>(null)
   const [domainView, setDomainView] = useState<DomainsView | null>(null)
 
   useEffect(() => {
@@ -57,6 +65,10 @@ export function Dashboard() {
   // "clean in every Function" rather than "this did not load".
   useEffect(() => {
     let cancelled = false
+    fetchCompliance()
+      .then((c) => { if (!cancelled) setCompliance(c) })
+      .catch(() => { /* the panel is omitted; the page still renders */ })
+
     csf()
       .then((v) => { if (!cancelled) setCsfView(v) })
       .catch(() => { /* strip stays hidden; see above */ })
@@ -431,6 +443,44 @@ export function Dashboard() {
           The scope line under the tiles is not decoration. Ten of the 22
           Categories are outside anything an SAP export can answer, and a reader
           who takes this strip for full CSF coverage has been misled by us. */}
+      {/* ── compliance posture ───────────────────────────────────────────
+          The frameworks an auditor asks about, summarised where somebody
+          lands rather than only in an exported PDF. No percentage: a control
+          carrying findings has gaps, and the absence of findings against one
+          is not an assertion of compliance with it. */}
+      {compliance && (
+        <>
+          <h2 className={H2}>Compliance posture</h2>
+          <div className={CARD}>
+            <div className="flex flex-wrap gap-2">
+              {compliance.frameworks.map((f) => (
+                <span
+                  key={f.id}
+                  className="rounded-lg border border-line px-2.5 py-1.5 text-xs"
+                  title={f.subtitle}
+                >
+                  <span className="text-ink">{f.name}</span>{' '}
+                  <span className={f.mapped_findings > 0 ? 'text-high tabular-nums'
+                                                         : 'text-ink3'}>
+                    {f.mapped_findings > 0
+                      ? `${f.controls_flagged}/${f.total_controls}`
+                      : 'nothing mapped'}
+                  </span>
+                </span>
+              ))}
+            </div>
+            <p className="text-[12px] text-ink3 mt-2.5 max-w-prose">
+              Controls carrying findings, out of the controls this product maps
+              — not out of everything each framework contains. A control with no
+              findings is not thereby met.{' '}
+              <Link className="text-accent hover:underline" to="/compliance">
+                Compliance posture →
+              </Link>
+            </p>
+          </div>
+        </>
+      )}
+
       {csfView && (
         <>
           <h2 className={H2}>

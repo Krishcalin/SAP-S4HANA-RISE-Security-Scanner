@@ -49,7 +49,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import Scope
 
 from server import analytics, auth, checkdocs, crq, db, export, graph, ingest, queries, sapcontent
-from modules import domains, nist_csf, platforms
+from modules import domains, nist_csf, platforms, compliance_mapping
 #: SESSION_COOKIE is imported but not USED here any more — the routes that set and
 #: cleared it were the Jinja form's sign-in and sign-out, and the SPA uses
 #: /api/auth/login and /api/auth/logout instead. It stays as a deliberate
@@ -1237,6 +1237,43 @@ def api_csf(user: Dict[str, Any] = Depends(current_user)):
     # ran renders as the green "no findings" chip. Measured on a users-only
     # upload: eleven Categories, including all of Detect and Respond.
     return nist_csf.roll_up(findings, coverage=queries.latest_coverage(scope))
+
+
+@app.get("/api/compliance")
+def api_compliance(user: Dict[str, Any] = Depends(current_user)):
+    """Open findings mapped onto every control framework this product claims.
+
+    TEN FRAMEWORKS THAT REACHED NO SCREEN. `modules/compliance_mapping.py` maps
+    findings to ISO/IEC 27001:2022, NIST CSF 2.0, NIST SP 800-53 Rev 5, SOX
+    ITGC, DORA, CIS Controls v8, TISAX, SOC 2, EU GDPR and NERC CIP — and until
+    this route existed the only consumers were the offline HTML, PDF and PPTX
+    generators. A customer who reads the console and never exports a report saw
+    none of it. NIST CSF had a screen because it has its own module; the other
+    nine had nowhere to appear.
+
+    NO PERCENTAGE, HERE OR ANYWHERE. `compliance_mapping` forbids one and states
+    the reason: this product sees findings, not the control environment, so a
+    "% compliant" would be a claim about evidence it does not hold. What comes
+    back is a count of controls carrying findings, out of the controls this
+    product maps — never out of the framework's own total, which is a different
+    denominator entirely.
+
+    A framework with nothing mapped is returned rather than dropped. Dropping it
+    would leave a reader unable to tell "we map this and found nothing" from
+    "we do not map this at all", which is the distinction the whole module is
+    built around.
+    """
+    findings = queries.findings_for_compliance(auth.scope_for(user))
+    return {
+        "frameworks": compliance_mapping.ComplianceMapper(findings).assess(),
+        "findings_considered": len(findings),
+        # Said out loud in the payload, so an API consumer that never reads the
+        # screen still gets the caveat with the numbers.
+        "note": ("A control carrying findings has open gaps. The absence of "
+                 "findings against a control is NOT an assertion of compliance "
+                 "with it: this product reads configuration exports, not the "
+                 "control environment. No percentage is computed."),
+    }
 
 
 @app.get("/api/csf/{function_id}")

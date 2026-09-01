@@ -25,6 +25,7 @@ import { Dashboard } from './Dashboard'
 vi.mock('../api/client', () => ({
   dashboard: vi.fn(),
   csf: vi.fn(),
+  compliance: vi.fn(),
   domains: vi.fn(),
   ApiError: class ApiError extends Error {
     status: number
@@ -33,7 +34,7 @@ vi.mock('../api/client', () => ({
 }))
 vi.mock('../lib/title', () => ({ useTitle: () => {} }))
 
-import { csf, dashboard, domains } from '../api/client'
+import { compliance, csf, dashboard, domains } from '../api/client'
 
 function system(over: Record<string, unknown>) {
   return {
@@ -76,6 +77,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(csf).mockRejectedValue(new Error('not under test'))
   vi.mocked(domains).mockRejectedValue(new Error('not under test'))
+  vi.mocked(compliance).mockRejectedValue(new Error('not under test'))
 })
 
 describe('the estate says when it was last measured', () => {

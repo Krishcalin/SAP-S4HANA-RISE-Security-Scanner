@@ -1126,6 +1126,41 @@ export interface Measured {
   stale: boolean
 }
 
+/** modules/compliance_mapping.py — findings mapped onto a control framework.
+ *
+ *  NO PERCENTAGE EXISTS ON THIS TYPE, deliberately. The module forbids one:
+ *  this product reads configuration exports, not the control environment, so a
+ *  "% compliant" would be a claim about evidence it does not hold. */
+export interface ComplianceControl {
+  id: string
+  name: string
+  themes: string[]
+  crit: number
+  high: number
+  med: number
+  low: number
+  total: number
+}
+
+export interface ComplianceFramework {
+  id: string
+  name: string
+  subtitle: string
+  controls: ComplianceControl[]
+  /** Controls carrying at least one finding, out of the controls THIS PRODUCT
+   *  maps — never out of the framework's own total, which is a different
+   *  denominator entirely. */
+  controls_flagged: number
+  total_controls: number
+  mapped_findings: number
+}
+
+export interface ComplianceView {
+  frameworks: ComplianceFramework[]
+  findings_considered: number
+  note: string
+}
+
 export interface CsfView {
   measured: Measured | null
   framework: string

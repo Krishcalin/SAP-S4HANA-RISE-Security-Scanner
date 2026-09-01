@@ -27,6 +27,7 @@ import { Dashboard } from './Dashboard'
 vi.mock('../api/client', () => ({
   dashboard: vi.fn(),
   csf: vi.fn(),
+  compliance: vi.fn(),
   domains: vi.fn(),
   ApiError: class ApiError extends Error {
     status: number
@@ -39,7 +40,7 @@ vi.mock('../api/client', () => ({
 
 vi.mock('../lib/title', () => ({ useTitle: () => {} }))
 
-import { csf, dashboard, domains } from '../api/client'
+import { compliance, csf, dashboard, domains } from '../api/client'
 
 const CRQ_PRICED = {
   id: 1, scan_run_id: 1, scenario_id: null,
@@ -87,6 +88,7 @@ describe('Dashboard — the quantification funnel', () => {
     // keep this file about the CRQ card, rather than pinning two unrelated
     // response shapes that would then have to be maintained here.
     vi.mocked(csf).mockRejectedValue(new Error('not under test'))
+    vi.mocked(compliance).mockRejectedValue(new Error('not under test'))
     vi.mocked(domains).mockRejectedValue(new Error('not under test'))
   })
 
@@ -164,6 +166,7 @@ describe('Dashboard — how far the segregation result can be believed', () => {
     // each swallow their own failure, so rejecting them keeps this block about
     // the verdict rather than pinning two unrelated response shapes.
     vi.mocked(csf).mockRejectedValue(new Error('not under test'))
+    vi.mocked(compliance).mockRejectedValue(new Error('not under test'))
     vi.mocked(domains).mockRejectedValue(new Error('not under test'))
   })
 

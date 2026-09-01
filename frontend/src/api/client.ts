@@ -32,6 +32,7 @@ import type {
   CheckIndexEntry, ChokepointsView,
   ServiceRequest, SeveringSet, Coverage, CrqControlsView,
   CrqParametersView, CrqQuantifyResult, CrqTrendPoint, CsfFunctionView,
+  ComplianceView,
   CsfView, Dashboard, DomainsView, FindingDetail, FindingFilters, TopRisksView,
   FindingHistory, FindingPage, GeneratedPassword, Health, Journey, Landscape,
   Me, PathView, PathsOverview, RequirementDoc, ResolvedView, RiskView,
@@ -502,6 +503,15 @@ export function crqControls(landscapeId: number): Promise<CrqControlsView> {
 }
 export function crqTrend(limit = 12): Promise<{ points: CrqTrendPoint[] }> {
   return get<{ points: CrqTrendPoint[] }>(`/crq/trend?limit=${limit}`)
+}
+
+// ══ Compliance posture, across every framework ══════════════════════════════
+//
+// Ten frameworks that reached no screen until this existed: the mapper's only
+// consumers were the offline HTML, PDF and PPTX generators, so a customer who
+// reads the console and never exports a report saw none of it.
+export function compliance(): Promise<ComplianceView> {
+  return get<ComplianceView>('/compliance')
 }
 
 // ══ Top risks, per domain ═══════════════════════════════════════════════════
