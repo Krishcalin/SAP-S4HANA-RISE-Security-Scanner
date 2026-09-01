@@ -614,6 +614,40 @@ class CryptoPostureAuditor(BaseAuditor):
             scope="aggregate",
         )
 
+    #: Export shapes where the platform, not the customer, owns encryption at
+    #: rest — SAP HANA Cloud. `docs/EXPORT_GUIDE.md` documents this exact shape:
+    #: {"deployment": "hana_cloud", "data_at_rest": "enforced_by_sap",
+    #:  "can_be_disabled": false}
+    HANA_MANAGED_DEPLOYMENTS = ("hana_cloud", "hanacloud", "hana cloud")
+
+    def _encryption_is_sap_managed(self, config: Dict[str, Any]) -> bool:
+        """Is encryption at rest the platform's to own rather than the tenant's?
+
+        THREE FALSE FINDINGS CAME FROM NOT ASKING THIS. Every flag below is read
+        with `if not <flag> or str(<flag>).lower() in ("false", ...)`, which
+        makes an ABSENT key indistinguishable from a disabled one. Fed the HANA
+        Cloud export shape that `docs/EXPORT_GUIDE.md` itself documents — which
+        carries `deployment`, `data_at_rest` and `can_be_disabled`, and none of
+        the three flags this file looks for — the scanner produced:
+
+            CRYPTO-HANA-001  HIGH    HANA data volume encryption is disabled
+            CRYPTO-HANA-002  MEDIUM  HANA log volume encryption is disabled
+            CRYPTO-HANA-004  HIGH    HANA backup encryption is disabled
+
+        about a platform whose entry in that same guide says "it is not possible
+        to disable encryption... There is no setting to export and no finding to
+        raise". A missing key is not a disabled control, and a HIGH finding that
+        cannot be true costs more than the check is worth.
+        """
+        if str(config.get("deployment", "")).strip().lower().replace(
+                "-", "_") in self.HANA_MANAGED_DEPLOYMENTS:
+            return True
+        # Stated directly by the export, whatever the deployment is called.
+        if str(config.get("can_be_disabled", "")).strip().lower() in ("false", "no", "0"):
+            return True
+        return str(config.get("data_at_rest", "")).strip().lower() in (
+            "enforced_by_sap", "enforced", "always_on")
+
     def check_hana_encryption(self):
         """Check HANA encryption at rest and in transit."""
         hana = self.data.get("hana_encryption")
@@ -621,6 +655,43 @@ class CryptoPostureAuditor(BaseAuditor):
             return
 
         config = hana if isinstance(hana, dict) else {}
+
+        # SAP owns it here, and the customer has no switch to be wrong about.
+        # Reported once, as information, rather than three times as a defect.
+        if self._encryption_is_sap_managed(config):
+            self.finding(
+                check_id="CRYPTO-HANA-006",
+                title="Encryption at rest is operated by SAP on this deployment",
+                severity=self.SEVERITY_INFO,
+                category="Cryptographic Posture",
+                description=(
+                    "This export describes a deployment where encryption at rest "
+                    "is enforced by SAP and cannot be switched off by the "
+                    "customer, so the data, log and backup encryption checks "
+                    "below are not applicable rather than passed. They are not "
+                    "run: a control the customer cannot operate is not a control "
+                    "this product should report on, and reporting it as DISABLED "
+                    "— which is what an absent flag used to produce — asserts "
+                    "something the platform does not permit."
+                ),
+                affected_items=[
+                    "deployment: %s" % (config.get("deployment") or "not stated"),
+                    "data_at_rest: %s" % (config.get("data_at_rest") or "not stated"),
+                    "can_be_disabled: %s" % (config.get("can_be_disabled")
+                                             if "can_be_disabled" in config
+                                             else "not stated"),
+                ],
+                remediation=(
+                    "Nothing to do for the volume-encryption controls. Confirm "
+                    "with SAP which encryption responsibilities remain yours "
+                    "under the shared-responsibility model for this deployment "
+                    "— typically key custody and backup handling rather than "
+                    "the volume switches."
+                ),
+                references=["SAP HANA Cloud — shared responsibility model"],
+                details={"sap_managed_encryption": True},
+            )
+            return
 
         # Data volume encryption
         dve = config.get("dataVolumeEncryption", config.get("encryption_at_rest",

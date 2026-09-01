@@ -6,13 +6,13 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**449** check ids are written as literals in `modules/`, across **38** modules. A further **345** are built at runtime from shipped rule tables, giving **794** in total.
+**459** check ids are written as literals in `modules/`, across **38** modules. A further **345** are built at runtime from shipped rule tables, giving **804** in total.
 
 Each check is published with **what it reads** and **which SAP Security Baseline requirement it answers** — the two things that make a catalogue auditable rather than a number. A competitor publishing a count and no itemised list is making a claim; this is a claim somebody else can check.
 
 ## What this file does not claim
 
-**62 of the 449 titles and 30 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**62 of the 459 titles and 30 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -25,7 +25,7 @@ Every check below carries the SAP Security Baseline requirement it answers, wher
 - **28 of 28** requirements that are IN SCOPE for this product are addressed by at least one check here.
 - **10 of 38** published requirements are out of scope, because they are for a stack this product does not read. They are named below, not dropped: the denominator has to be honest in both directions, and a reader comparing 28 against 38 has no way to know that.
 - **0** in-scope requirements are not addressed at all. They are listed below rather than summarised away.
-- **533 of 794** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
+- **536 of 804** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
 
 > ⚠️ These are CHECK ITEMS in the CSA policies, not the 'control points' counted in the Baseline document — the widely-quoted 214 (69/92/53) is that other unit. The two do not reconcile; do not publish a percentage of one against the other.
 
@@ -282,7 +282,7 @@ Reads: `auth_objects`, `change_documents`, `client_settings`, `code_inventory`, 
 | `CODE-TMS-004` | MEDIUM | Transport imports outside normal change windows (weekends) | `CHANGE-A` |
 | `CODE-TMS-005` | CRITICAL | Transports imported into production directly from development | `CHANGE-A` |
 
-### `crypto_posture` — 18 checks
+### `crypto_posture` — 19 checks
 
 Category: Cryptographic Posture
 
@@ -299,6 +299,7 @@ Reads: `certificate_inventory`, `crypto_library`, `hana_encryption`, `hana_param
 | `CRYPTO-HANA-003` | MEDIUM | HANA encryption uses internal/default root key management | `NETENC-A` |
 | `CRYPTO-HANA-004` | HIGH | HANA backup encryption is disabled | `NETENC-A` |
 | `CRYPTO-HANA-005` | HIGH | HANA system replication is not TLS-encrypted | `NETENC-A` |
+| `CRYPTO-HANA-006` | INFO | Encryption at rest is operated by SAP on this deployment | `NETENC-A` |
 | `CRYPTO-KEY-001` | MEDIUM | Key management policy gaps | `NETENC-A` |
 | `CRYPTO-LIB-001` | HIGH | *varies* — Outdated SAP Crypto Library: … | `NETENC-A` |
 | `CRYPTO-PSE-001` | HIGH | PSE files with errors or expired certificates | `NETENC-A` |
@@ -417,7 +418,7 @@ Reads: `grac_access_requests`, `grac_firefighter_log`, `grac_firefighter_owners`
 | `GRC-SYNC-001` | MEDIUM | GRC synchronisation jobs are behind — every export here inherits the gap | — |
 | `GRC-SYNC-002` | LOW | GRC job-log export contains no recognisable synchronisation job | — |
 
-### `hana_db_security` — 22 checks
+### `hana_db_security` — 31 checks
 
 Reads: `hana_audit_policies`, `hana_db_users`, `hana_granted_privileges`, `hana_granted_roles`, `hana_parameters`, `hana_version` — the sources the MODULE consumes; an individual check below reads some subset of them.
 
@@ -427,23 +428,32 @@ Reads: `hana_audit_policies`, `hana_db_users`, `hana_granted_privileges`, `hana_
 | `HANADB-AUDIT-002` | HIGH | Audit trail written to CSV text file (tamperable) | `AUDIT-H` |
 | `HANADB-AUDIT-003` | HIGH | No active HANA audit policies | `AUDIT-H` |
 | `HANADB-AUDIT-004` | MEDIUM | Audit policies do not cover critical action groups | `AUDIT-H` |
+| `HANADB-AUDIT-005` | INFO | HANA auditing state could not be read from the export | `AUDIT-H` |
 | `HANADB-PARAM-001` | HIGH | Weak HANA password-policy parameters | `PWDPOL-H` |
 | `HANADB-PARAM-002` | MEDIUM | Detailed connect errors exposed to clients | — |
 | `HANADB-PARAM-003` | HIGH | TLS not enforced for HANA SQL connections | — |
 | `HANADB-PARAM-004` | HIGH | HANA log_mode = overwrite (no point-in-time recovery) | — |
 | `HANADB-PARAM-005` | MEDIUM | HANA cross-database (MDC) access is enabled | — |
 | `HANADB-PARAM-006` | CRITICAL | HANA internal communication listens on all network interfaces | `NETCF-H` |
+| `HANADB-PARAM-007` | HIGH | System replication channel is not secured | — |
+| `HANADB-PARAM-008` | HIGH | IMPORT/EXPORT file access is not restricted | — |
+| `HANADB-PARAM-009` | HIGH | Tenant administrators can change controls this scan asserts | — |
 | `HANADB-PRIV-001` | CRITICAL | Sensitive privileges granted to PUBLIC | `CRITAU-H` |
 | `HANADB-PRIV-002` | CRITICAL | Critical system privileges granted directly to users | `CRITAU-H` |
 | `HANADB-PRIV-003` | HIGH | Broad system privileges granted directly to users | `CRITAU-H` |
 | `HANADB-PRIV-004` | MEDIUM | Sensitive privileges granted WITH ADMIN OPTION | `CRITAU-H` |
 | `HANADB-PRIV-005` | CRITICAL | Analytic-privilege bypass (_SYS_BI_CP_ALL) granted | `CRITAU-H` |
 | `HANADB-PRIV-006` | HIGH | Debug privileges (DEBUG / ATTACH DEBUGGER) granted to users | `CRITAU-H` |
+| `HANADB-PRIV-007` | HIGH | Critical system privileges reach users through role membership | `CRITAU-H` |
+| `HANADB-PRIV-008` | CRITICAL | Critical system privilege combinations held by one grantee | `CRITAU-H` |
+| `HANADB-PRIV-009` | HIGH | Execute rights on the HANA full system info dump | `CRITAU-H` |
 | `HANADB-ROLE-001` | HIGH | Powerful predefined roles granted to users | — |
 | `HANADB-TRACE-001` | CRITICAL | HANA SQL trace is set to record query results | `TRACES-H` |
+| `HANADB-TRACE-002` | MEDIUM | HANA trace components are set to DEBUG | `TRACES-H` |
 | `HANADB-USER-001` | CRITICAL | *varies* | `STDUSR-H` |
 | `HANADB-USER-002` | HIGH | DB users with password lifetime check disabled | `STDUSR-H` |
 | `HANADB-USER-003` | MEDIUM | *varies* — Dormant HANA DB users (no logon in …+ days) | `STDUSR-H` |
+| `HANADB-USER-004` | HIGH | Installation account left active after setup | `STDUSR-H` |
 | `HANADB-VER-001` | CRITICAL | *varies* | `SECUPD-H` |
 
 ### `iam_advanced` — 30 checks

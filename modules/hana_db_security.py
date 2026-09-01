@@ -7,33 +7,78 @@ modules do not cover. (Encryption-at-rest of the HANA data/log volumes is
 handled separately by the Cryptographic Posture module.)
 
 Covers:
-  - Privileged / standard DB users (SYSTEM deactivation, password lifetime, dormancy)
-  - System privileges and the PUBLIC role (least privilege, grantable options)
-  - Analytic-privilege bypass (_SYS_BI_CP_ALL)
-  - Powerful predefined roles
+  - Privileged / standard DB users (SYSTEM and DBADMIN deactivation, password
+    lifetime, dormancy) and setup accounts left active after installation
+  - System privileges and the PUBLIC role (least privilege, grantable options),
+    resolved THROUGH role membership as well as directly
+  - Privilege COMBINATIONS SAP names as critical, which no per-privilege check
+    can see
+  - Analytic-privilege bypass (_SYS_BI_CP_ALL) and powerful predefined roles
+  - Object rights that confer broad extract without a system privilege
+    (FULL_SYSTEM_INFO_DUMP)
   - Database auditing (enabled, trail target, critical action coverage)
-  - Security-relevant HANA parameters (password policy, error disclosure, SQL TLS)
+  - Security-relevant HANA parameters: password policy, error disclosure, SQL
+    TLS, log mode, cross-database access, internal listen interface, the system
+    replication channel, IMPORT/EXPORT file access, [trace] levels, and the
+    multidb.ini blocklist that decides whether a tenant can undo any of them
+
+WHAT A DATABASE EXPORT CANNOT SETTLE, so that it is not re-derived every time
+somebody reads SAP's checklist against this file. None of the following is a
+gap in the checks; each is a fact no HANA view carries:
+
+  - Operating-system users, groups, sudoers, file permissions and OS patch
+    level — including whether an XS Advanced space runs as its own OS user
+    rather than as <sid>adm
+  - Open ports, network zoning, and which endpoints are externally reachable
+  - The XS Advanced controller: spaces, applications, space role assignments,
+    the platform router's TLS configuration and its server certificate
+  - The hdbuserstore, the SSFS and PKI master keys, and root-key change dates
+  - Trace-file deletion, and anything about a file after it was written
+
+Two of these are collector gaps rather than impossibilities and are worth
+closing: AUDIT_POLICIES.TRAIL_TYPE (per-policy trail target, finer than the
+system-wide default read today), and the PSES view (per-tenant certificate
+collections, which is what would settle whether tenants share a SAML trust
+store). Both are ordinary SQL against views SAP publishes.
 
 Data sources — and which of these view names SAP has actually published.
 
-Two of the five are confirmed against the SAP HANA Cloud, SAP HANA Database
-Security Guide (QRC 2/2026). Three are this file's own working knowledge, read
-as fact for as long as they have existed. They are probably right; nobody has
-shown that they are, and a view name a customer cannot query is a support call.
-So they are marked, exactly as the GRC module's are:
+ALL FIVE ARE NOW VERIFIED. Three of them were this file's own working knowledge,
+marked UNVERIFIED with the reason stated: "a view name a customer cannot query
+is a support call". SAP's *SAP HANA Security Checklists and Recommendations*
+(SAP HANA Platform 2.0 SPS 05, document version 1.1, 2021-07-09, PUBLIC) queries
+all three by name in executable SQL, which settles them:
 
   - hana_db_users.csv           → USERS                  [verified: User Types;
                                   CREATOR, CREATE_PROVIDER_TYPE and
-                                  CREATE_PROVIDER_NAME are named columns]
+                                  CREATE_PROVIDER_NAME are named columns. The
+                                  checklist adds USER_DEACTIVATED,
+                                  DEACTIVATION_TIME, LAST_SUCCESSFUL_CONNECT,
+                                  IS_PASSWORD_LIFETIME_CHECK_ENABLED and
+                                  LAST_PASSWORD_CHANGE_TIME]
   - hana_granted_privileges.csv → GRANTED_PRIVILEGES     [verified: named as the
-                                  view that reports the granting user]
-  - hana_granted_roles.csv      → GRANTED_ROLES          [UNVERIFIED]
-  - hana_parameters.csv         → M_INIFILE_CONTENTS     [UNVERIFIED — but the
-                                  *sections* are confirmed: `password policy` in
-                                  indexserver.ini, `ldap` in global.ini]
-  - hana_audit_policies.csv     → AUDIT_POLICIES         [UNVERIFIED — auditing
-                                  via audit policies is confirmed, the view that
-                                  lists them is not]
+                                  view that reports the granting user; the
+                                  checklist queries it for DEBUG / ATTACH
+                                  DEBUGGER]
+  - hana_granted_roles.csv      → GRANTED_ROLES          [verified: the checklist
+                                  queries `GRANTED_ROLES WHERE ROLE_NAME =
+                                  'CONTENT_ADMIN'` and again for MODELING]
+  - hana_parameters.csv         → M_INIFILE_CONTENTS     [verified: the checklist
+                                  queries `"PUBLIC"."M_INIFILE_CONTENTS"`
+                                  throughout, and names FILE_NAME, SECTION, KEY
+                                  and VALUE as columns]
+  - hana_audit_policies.csv     → AUDIT_POLICIES         [verified: the checklist
+                                  queries `"PUBLIC"."AUDIT_POLICIES" WHERE
+                                  TRAIL_TYPE='CSV'` — which also names a
+                                  TRAIL_TYPE column this product does not yet
+                                  export]
+
+The checklist names further views this product does not read, and they are
+recorded here so nobody has to re-derive them: EFFECTIVE_PRIVILEGE_GRANTEES and
+EFFECTIVE_PRIVILEGES (privileges including those held through roles),
+EFFECTIVE_ROLE_GRANTEES, PSES (certificate collections, per tenant),
+ENCRYPTION_ROOT_KEYS, M_ENCRYPTION_OVERVIEW (SCOPE 'LOG' / 'PERSISTENCE'),
+M_CUSTOMIZABLE_FUNCTIONALITIES and USER_PARAMETERS.
 
 DEPLOYMENT CHANGES WHAT "NOT SUPPLIED" MEANS HERE. SAP HANA Cloud runs a shared
 responsibility model: the customer owns users, authorisation, auditing, masking
@@ -81,6 +126,51 @@ class HanaDbSecurityAuditor(BaseAuditor):
         "AUDIT OPERATOR", "LOG ADMIN", "SAVEPOINT ADMIN",
     }
 
+    #: Privileges SAP's HANA Security Checklist names as administrator-only that
+    #: neither set above carried. TWO OF THEM CONTAIN NO "ADMIN" SUBSTRING —
+    #: BACKUP OPERATOR and CREATE REMOTE SOURCE — so the `"ADMIN" in priv`
+    #: fallback in `check_public_grants` missed them as well as the sets did.
+    #: CREATE REMOTE SOURCE defines an outbound connection to another database
+    #: and BACKUP OPERATOR takes a full copy of this one; neither is a
+    #: configuration change and both move data off the system.
+    CHECKLIST_ADMIN_PRIVS = frozenset({
+        "BACKUP OPERATOR", "CREATE REMOTE SOURCE", "LDAP ADMIN", "OPTIMIZER ADMIN",
+        "SSL ADMIN", "VERSION ADMIN", "WORKLOAD ADMIN", "CREATE SCENARIO",
+        "SCENARIO ADMIN", "CLIENT PARAMETER ADMIN",
+    })
+    HIGH_SYSTEM_PRIVS = HIGH_SYSTEM_PRIVS | CHECKLIST_ADMIN_PRIVS
+
+    #: Pairs SAP's checklist names as critical *combinations*.
+    #:
+    #: A PAIR IS NOT VISIBLE ONE PRIVILEGE AT A TIME, which is why no amount of
+    #: tuning the sets above finds one. USER ADMIN with ROLE ADMIN is
+    #: self-service escalation — create a role, grant it anything, grant it to
+    #: yourself — and each half on its own is ordinary enough that this module
+    #: reports it at HIGH and an auditor moves on. AUDIT ADMIN with AUDIT
+    #: OPERATOR is the ability to decide what is recorded and then to delete
+    #: what was.
+    CRITICAL_PRIV_PAIRS = (
+        ("USER ADMIN", "ROLE ADMIN",
+         "can create a role, grant any privilege to it, and grant it to itself"),
+        ("CREATE SCENARIO", "SCENARIO ADMIN",
+         "can create a calculation scenario and then run it with its own rights"),
+        ("AUDIT ADMIN", "AUDIT OPERATOR",
+         "can change what is audited and then delete the audit trail"),
+        ("CREATE STRUCTURED PRIVILEGE", "STRUCTUREDPRIVILEGE ADMIN",
+         "can author an analytic privilege and activate it without review"),
+    )
+
+    #: Accounts SAP documents as setup-only: created by an installation step and
+    #: meant to be deactivated once it is finished. XSA_ADMIN is not in
+    #: SUPERUSERS deliberately — that set drives HANADB-USER-001, whose
+    #: remediation is about break-glass recovery, and this account has no
+    #: break-glass role. Its remediation is "deactivate it permanently, having
+    #: first granted XS_AUTHORIZATION_ADMIN and XS_USER_ADMIN elsewhere".
+    SETUP_ACCOUNTS = {
+        "XSA_ADMIN": ("SAP HANA XS Advanced installation",
+                      "granted every XS Advanced controller role collection"),
+    }
+
     # Analytic (structured) privilege that disables all analytic-privilege row
     # filtering in modeled views — effectively unrestricted reporting-data access.
     CP_ALL = "_SYS_BI_CP_ALL"
@@ -115,6 +205,10 @@ class HanaDbSecurityAuditor(BaseAuditor):
         self.check_grantable_privileges()
         self.check_analytic_privilege_bypass()
         self.check_powerful_roles()
+        self.check_role_held_privileges()
+        self.check_critical_privilege_combinations()
+        self.check_setup_accounts()
+        self.check_system_info_dump_grants()
         self.check_auditing_enabled()
         self.check_audit_trail_target()
         self.check_audit_policy_coverage()
@@ -126,6 +220,10 @@ class HanaDbSecurityAuditor(BaseAuditor):
         self.check_debug_privileges()
         self.check_internal_listen_interface()
         self.check_sql_trace_results()
+        self.check_replication_channel()
+        self.check_import_export_file_security()
+        self.check_trace_levels()
+        self.check_tenant_parameter_blocklist()
         self.check_hana_maintenance_status()
         return self.findings
 
@@ -289,6 +387,73 @@ class HanaDbSecurityAuditor(BaseAuditor):
             scope="object",
         )
 
+    def check_setup_accounts(self):
+        """HIGH: an installation account left active after the installation.
+
+        XSA_ADMIN is created by the XS Advanced installation holding every
+        controller role collection, and SAP's checklist says to deactivate it
+        once named administrators exist. It is a separate check id from
+        HANADB-USER-001 on purpose: that finding is about a break-glass account
+        and its remediation says to keep it for emergencies, which is the wrong
+        advice for an account with no emergency role.
+        """
+        users = self.data.get("hana_db_users")
+        if not users:
+            return
+        live, objects = [], []
+        for row in users:
+            name = str(row.get("USER_NAME", row.get("USER", row.get("NAME", "")))).strip().upper()
+            if name not in self.SETUP_ACCOUNTS:
+                continue
+            deactivated = row.get("USER_DEACTIVATED", row.get("DEACTIVATED",
+                          row.get("IS_DEACTIVATED", row.get("ACTIVE", ""))))
+            is_active = (self._truthy(row.get("ACTIVE", "")) if "ACTIVE" in row
+                         else self._falsy(deactivated))
+            if not is_active:
+                continue
+            origin, power = self.SETUP_ACCOUNTS[name]
+            last = str(row.get("LAST_SUCCESSFUL_CONNECT", "") or "").strip()
+            # "Never used" and "used last week" are different findings wearing
+            # the same title, and the second one is the worse of the two.
+            usage = ("last successful connect %s" % last if last
+                     else "no successful connect recorded")
+            live.append("%s — active; created by %s; %s; %s"
+                        % (name, origin, power, usage))
+            self._add_obj(objects, "hana_user", name)
+        if not live:
+            return
+        self.finding(
+            check_id="HANADB-USER-004",
+            title="Installation account left active after setup",
+            severity=self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=(
+                "%d account(s) created by an installation step are still "
+                "active. SAP documents these as setup-only: they hold their "
+                "platform's full administrative capability, they are not "
+                "break-glass accounts, and they are meant to be deactivated "
+                "once named administrators exist. An active one is a standing "
+                "administrative account that nobody owns."
+                % len(live)
+            ),
+            affected_items=live,
+            remediation=(
+                "1. Grant the capabilities still needed to named "
+                "administrators — for XSA_ADMIN that is XS_AUTHORIZATION_ADMIN "
+                "and XS_USER_ADMIN on a named account.\n"
+                "2. Deactivate the setup account: ALTER USER <name> DEACTIVATE "
+                "USER NOW.\n"
+                "3. Under RISE the account sits on the SAP-operated database; "
+                "raise a service request rather than issuing the ALTER USER."
+            ),
+            references=[
+                "SAP HANA Security Checklists and Recommendations — "
+                "Recommendations for XS Advanced",
+            ],
+            affected_objects=objects,
+            scope="object",
+        )
+
     def check_password_lifetime(self):
         """HIGH: non-technical DB users whose password lifetime check is disabled
         (password never expires)."""
@@ -389,6 +554,35 @@ class HanaDbSecurityAuditor(BaseAuditor):
             )
 
     # --------------------------------------------------------------- privileges
+    def _resolution_entries(self, section: str) -> int:
+        """How many rows the export carries for an ini SECTION, any key.
+
+        `internal_hostname_resolution` and `system_replication_hostname_resolution`
+        are sections whose KEYS are adapter IP addresses, so they can only be
+        counted, never looked up by name.
+        """
+        wanted = section.lower()
+        return sum(1 for r in (self.data.get("hana_parameters") or [])
+                   if str(r.get("SECTION", "")).strip().lower() == wanted)
+
+    def _param_rows(self, section: str, key: str = None):
+        """Raw parameter rows for a section, optionally one key.
+
+        Deliberately NOT `_param_index()`: that collapses to one value per key
+        across every file, which is wrong for a section like [trace] that exists
+        in indexserver.ini, nameserver.ini and xsengine.ini at once.
+        """
+        want_section = section.lower()
+        want_key = key.lower() if key else None
+        for row in (self.data.get("hana_parameters") or []):
+            if str(row.get("SECTION", "")).strip().lower() != want_section:
+                continue
+            rkey = str(row.get("KEY", "")).strip()
+            if want_key and rkey.lower() != want_key:
+                continue
+            yield (str(row.get("FILE_NAME", "")).strip(), rkey,
+                   str(row.get("VALUE", "")).strip())
+
     def _iter_priv_rows(self):
         rows = self.data.get("hana_granted_privileges") or []
         for row in rows:
@@ -520,6 +714,319 @@ class HanaDbSecurityAuditor(BaseAuditor):
                 # Same rollup as HANADB-PRIV-002, one severity band down.
                 scope="aggregate",
             )
+
+    # ------------------------------------------------- privileges held via roles
+    def _role_members(self):
+        """{ROLE: {grantee, ...}} from hana_granted_roles."""
+        members = {}
+        for row in (self.data.get("hana_granted_roles") or []):
+            grantee = str(row.get("GRANTEE", row.get("USER_NAME", ""))).strip()
+            role = str(row.get("ROLE_NAME", row.get("ROLE", ""))).strip()
+            if grantee and role:
+                members.setdefault(role.upper(), set()).add(grantee)
+        return members
+
+    def _effective_holders(self, role: str, members: dict, depth: int = 0):
+        """Every grantee that reaches `role`, directly or through another role.
+
+        Roles are granted to roles in HANA, so membership is a graph and not a
+        list. `seen` is not tidiness — a role granted back to one of its own
+        members is a cycle, and a cycle here would not return.
+        """
+        out, stack, seen = {}, [(role.upper(), [role])], set()
+        while stack:
+            current, chain = stack.pop()
+            if current in seen or len(chain) > 8:
+                continue
+            seen.add(current)
+            for grantee in members.get(current, ()):
+                gu = grantee.upper()
+                if gu in self.TECHNICAL_USERS or gu.startswith("_SYS"):
+                    continue
+                if gu in members:            # a role: keep walking outward
+                    stack.append((gu, chain + [grantee]))
+                    continue
+                out.setdefault(grantee, chain + [grantee])
+        return out
+
+    def _direct_holdings(self):
+        """{grantee: {privileges}} for USER grantees, from the privilege export."""
+        held = {}
+        for grantee, gtype, priv, _obj, _g in self._iter_priv_rows():
+            gu = grantee.upper()
+            if not gu or gu == "PUBLIC" or gu in self.TECHNICAL_USERS or gu.startswith("_SYS"):
+                continue
+            if gtype and gtype not in ("USER", ""):
+                continue
+            if priv:
+                held.setdefault(grantee, set()).add(priv)
+        return held
+
+    def _role_holdings(self):
+        """{ROLE: {privileges}} — the half of the export this module ignored."""
+        held = {}
+        for grantee, gtype, priv, _obj, _g in self._iter_priv_rows():
+            if gtype not in ("ROLE",):
+                continue
+            gu = grantee.upper()
+            if not gu or gu.startswith("_SYS"):
+                continue
+            # PUBLIC is a role and every user holds it, so resolving it would
+            # name the whole user list here. HANADB-PRIV-001 already reports
+            # that state, at CRITICAL, which is the right severity for it —
+            # this check would only restate it one band lower.
+            if gu == "PUBLIC":
+                continue
+            if priv:
+                held.setdefault(grantee, set()).add(priv)
+        return held
+
+    def _effective_holdings(self):
+        """{grantee: {privilege: path}} — direct grants AND grants via roles.
+
+        SAP's own view for this is EFFECTIVE_PRIVILEGE_GRANTEES, which this
+        product does not export. It is derivable from the two exports it does
+        have, and deriving it is the difference between auditing an estate that
+        ignores SAP's advice and auditing one that follows it.
+        """
+        members = self._role_members()
+        effective = {}
+        for grantee, privs in self._direct_holdings().items():
+            for priv in privs:
+                effective.setdefault(grantee, {}).setdefault(priv, [grantee])
+        for role, privs in self._role_holdings().items():
+            holders = self._effective_holders(role, members)
+            for holder, chain in holders.items():
+                for priv in privs:
+                    # A direct grant already recorded wins: it is the shorter,
+                    # more actionable path and the one PRIV-002 already reports.
+                    effective.setdefault(holder, {}).setdefault(priv, list(reversed(chain)))
+        return effective
+
+    @staticmethod
+    def _route(holdings: dict, priv: str) -> str:
+        """How a grantee came to hold a privilege — for the display string.
+
+        Named, because "USER ADMIN + ROLE ADMIN" is a different conversation
+        depending on whether one arrived through a role somebody else owns.
+        """
+        chain = holdings.get(priv) or []
+        if len(chain) <= 1:
+            return "direct"
+        return "via " + " ← ".join("role %s" % c for c in chain[1:])
+
+    def check_role_held_privileges(self):
+        """CRITICAL system privileges that reach users through role membership.
+
+        THE MODULE DECLINED TO LOOK HERE, AND SAID SO. `check_system_privileges`
+        carried the line
+
+            if gtype and gtype not in ("USER", ""):   # role grants handled elsewhere
+
+        and role grants were not handled elsewhere: `check_powerful_roles` reads
+        `hana_granted_roles`, which is who holds which role, never which
+        privileges a role holds. So every privilege granted to a role was
+        invisible to this file.
+
+        That is the wrong half to be blind to. SAP tells customers to grant
+        through roles rather than to users, so the estates that follow the
+        advice put DATA ADMIN, DEVELOPMENT and INIFILE ADMIN in exactly the
+        place this module refused to read — and got a clean report for it,
+        while an estate that granted the same privileges directly got a
+        CRITICAL. The tool was scoring the shape of the grant, not the power.
+
+        Granting through roles is NOT the defect and this finding does not say
+        it is. What it reports is reach: who ends up holding a critical system
+        privilege once role membership is resolved, which nobody could see
+        before.
+        """
+        if not self.data.get("hana_granted_privileges"):
+            return
+        role_holdings = self._role_holdings()
+        if not role_holdings:
+            return
+        members = self._role_members()
+        paths, objects, orphan_roles = [], [], []
+        for role, privs in sorted(role_holdings.items()):
+            critical = sorted(privs & self.CRITICAL_SYSTEM_PRIVS)
+            if not critical:
+                continue
+            holders = self._effective_holders(role, members)
+            if not holders and "hana_granted_roles" not in self.data:
+                # The role holds the privilege; the membership export is not
+                # supplied, so WHO holds the role is not known. Saying "nobody"
+                # here would be the false clean this check exists to end.
+                #
+                # `not in self.data`, NOT a falsy test: an export that was
+                # supplied and came back empty is an answer — no role is granted
+                # to anyone — while an export that was never supplied is a
+                # question. A falsy test reads both as the question and puts an
+                # "unknown holders" line on an estate that told us.
+                orphan_roles.append("role %s ← %s (holders unknown: "
+                                    "hana_granted_roles not supplied)"
+                                    % (role, ", ".join(critical)))
+                self._add_obj(objects, "hana_role", role)
+                continue
+            self._add_obj(objects, "hana_role", role)
+            for priv in critical:
+                self._add_obj(objects, "hana_privilege", priv)
+            for holder, chain in sorted(holders.items()):
+                trail = " ← ".join("role %s" % c if c.upper() in members else c
+                                   for c in reversed(chain))
+                paths.append("%s ← %s" % (trail, ", ".join(critical)))
+                self._add_obj(objects, "hana_user", holder)
+        if not paths and not orphan_roles:
+            return
+        items = paths + orphan_roles
+        self.finding(
+            check_id="HANADB-PRIV-007",
+            title="Critical system privileges reach users through role membership",
+            severity=self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=(
+                "%d effective grant(s) of near-unrestricted system privileges "
+                "(DATA ADMIN, USER ADMIN, ROLE ADMIN, DEVELOPMENT, INIFILE "
+                "ADMIN and the encryption/credential/trust administrators) that "
+                "no user holds directly — each arrives through one or more "
+                "roles. Granting through roles is SAP's own recommendation and "
+                "is not the problem being reported. What is reported is reach: "
+                "these accounts hold the privilege in practice, and a review "
+                "that reads only direct grants does not see them."
+                % len(items)
+            ),
+            affected_items=items,
+            remediation=(
+                "1. For each path, confirm the account still needs the "
+                "privilege the role carries.\n"
+                "2. Split broad admin roles so that a role granting DATA ADMIN "
+                "is not also the role granting routine access.\n"
+                "3. Verify against SAP's own resolution: SELECT * FROM "
+                "\"PUBLIC\".\"EFFECTIVE_PRIVILEGE_GRANTEES\" WHERE "
+                "PRIVILEGE = 'DATA ADMIN';"
+            ),
+            references=[
+                "SAP HANA Security Checklists and Recommendations — "
+                "Critical System Privileges",
+                "SAP HANA Security Guide — System Privileges",
+            ],
+            affected_objects=objects,
+            # One finding over the whole resolved graph. Removing one member from
+            # one role must shrink it, not retire it and raise a new one.
+            scope="aggregate",
+        )
+
+    def check_critical_privilege_combinations(self):
+        """CRITICAL: privilege pairs SAP says must not meet on one grantee.
+
+        Resolved through roles, because the pair is just as dangerous when the
+        two halves arrive by different routes — and rather more likely to,
+        since nobody granting one role is looking at what the other one holds.
+        """
+        if not self.data.get("hana_granted_privileges"):
+            return
+        effective = self._effective_holdings()
+        if not effective:
+            return
+        offenders, objects = [], []
+        for grantee, holdings in sorted(effective.items()):
+            privs = set(holdings)
+            for first, second, consequence in self.CRITICAL_PRIV_PAIRS:
+                if first not in privs or second not in privs:
+                    continue
+                offenders.append(
+                    "%s holds %s (%s) + %s (%s) — %s"
+                    % (grantee, first, self._route(holdings, first),
+                       second, self._route(holdings, second), consequence))
+                self._add_obj(objects, "hana_user", grantee)
+                self._add_obj(objects, "hana_privilege", first)
+                self._add_obj(objects, "hana_privilege", second)
+        if not offenders:
+            return
+        self.finding(
+            check_id="HANADB-PRIV-008",
+            title="Critical system privilege combinations held by one grantee",
+            severity=self.SEVERITY_CRITICAL,
+            category=self.CATEGORY,
+            description=(
+                "%d grantee/pair combination(s) that SAP's HANA Security "
+                "Checklist names as critical. Each half of these pairs is "
+                "ordinary enough on its own that a per-privilege review passes "
+                "it; together they close a loop. USER ADMIN with ROLE ADMIN is "
+                "self-service escalation to any privilege in the database, and "
+                "AUDIT ADMIN with AUDIT OPERATOR is the ability to change what "
+                "is recorded and then remove the record."
+                % len(offenders)
+            ),
+            affected_items=offenders,
+            remediation=(
+                "Separate the pair. Move one half to a different account or "
+                "role so that no single grantee holds both, and record the "
+                "split as a segregation-of-duties control rather than a "
+                "one-time revocation."
+            ),
+            references=[
+                "SAP HANA Security Checklists and Recommendations — "
+                "System Privileges: Critical Combinations",
+            ],
+            affected_objects=objects,
+            scope="aggregate",
+        )
+
+    def check_system_info_dump_grants(self):
+        """HIGH: EXECUTE on the full system info dump procedures.
+
+        SAP's checklist singles these out because the dump they produce is not
+        a diagnostic summary — it is configuration, trace content and query
+        text written to a file on the database host, readable by whoever can
+        reach that directory. The grant is an EXECUTE on an object, so none of
+        the system-privilege checks in this file can see it.
+        """
+        if not self.data.get("hana_granted_privileges"):
+            return
+        offenders, objects = [], []
+        for grantee, gtype, priv, obj, _g in self._iter_priv_rows():
+            gu = grantee.upper()
+            if not gu or gu in self.TECHNICAL_USERS or gu.startswith("_SYS"):
+                continue
+            if "FULL_SYSTEM_INFO_DUMP" not in obj.upper():
+                continue
+            if priv and priv != "EXECUTE":
+                continue
+            label = "%s%s ← EXECUTE ON %s" % (
+                grantee, " (role)" if gtype == "ROLE" else "", obj)
+            offenders.append(label)
+            self._add_obj(objects,
+                          "hana_role" if gtype == "ROLE" else "hana_user", grantee)
+        if not offenders:
+            return
+        self.finding(
+            check_id="HANADB-PRIV-009",
+            title="Execute rights on the HANA full system info dump",
+            severity=self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=(
+                "%d grantee(s) can run FULL_SYSTEM_INFO_DUMP_CREATE or "
+                "FULL_SYSTEM_INFO_DUMP_RETRIEVE. The dump collects "
+                "configuration, trace files and statement text into an archive "
+                "on the database host; anyone who can create one and retrieve "
+                "it obtains a broad extract of the system without holding any "
+                "system privilege that a privilege review would flag."
+                % len(offenders)
+            ),
+            affected_items=offenders,
+            remediation=(
+                "Revoke EXECUTE on SYS.FULL_SYSTEM_INFO_DUMP_CREATE and "
+                "SYS.FULL_SYSTEM_INFO_DUMP_RETRIEVE from all but the support "
+                "accounts that need them, and grant them for the duration of a "
+                "support incident rather than permanently."
+            ),
+            references=[
+                "SAP HANA Security Checklists and Recommendations — "
+                "Recommendations for Support Users",
+            ],
+            affected_objects=objects,
+            scope="aggregate",
+        )
 
     def check_grantable_privileges(self):
         """MEDIUM: privileges granted WITH ADMIN/GRANT OPTION enable sprawl."""
@@ -662,6 +1169,41 @@ class HanaDbSecurityAuditor(BaseAuditor):
             return
         state = self._get_param(idx, "global_auditing_state", "auditing configuration")
         if state is None:
+            # SILENCE WAS THE WRONG ANSWER HERE. SAP's own checklist says
+            # auditing is DISABLED BY DEFAULT, so an export that carries no
+            # global_auditing_state row is describing the insecure state, not an
+            # unknown one — and returning quietly turned the check that reports
+            # "no forensic trail at all" into a clean report. The parameter
+            # export is supplied (`idx` is non-empty above), so this is an
+            # absent setting rather than an absent source.
+            self.finding(
+                check_id="HANADB-AUDIT-005",
+                title="HANA auditing state could not be read from the export",
+                severity=self.SEVERITY_INFO,
+                category=self.CATEGORY,
+                description=(
+                    "The supplied HANA parameter export carries no "
+                    "[auditing configuration] global_auditing_state row. SAP's "
+                    "HANA Security Checklist states that auditing is disabled by "
+                    "default, so an unset value is very probably OFF rather than "
+                    "unknown — but this product will not score it as a verdict "
+                    "it did not read. Establish the value before treating the "
+                    "absence of audit findings as evidence of an audit trail."
+                ),
+                affected_items=["[auditing configuration] global_auditing_state: "
+                                "not present in the export"],
+                remediation=(
+                    "1. Run: SELECT * FROM \"PUBLIC\".\"M_INIFILE_CONTENTS\" "
+                    "WHERE SECTION = 'auditing configuration' AND KEY = "
+                    "'global_auditing_state';\n"
+                    "2. If it returns nothing or false, auditing is off — enable "
+                    "it and define audit policies.\n"
+                    "3. Re-export hana_parameters.csv so the value is on record."
+                ),
+                references=["SAP HANA Security Checklists and Recommendations — "
+                            "Recommendations for Auditing"],
+                details={"degrades_coverage": True},
+            )
             return
         if self._falsy(state):
             self.finding(
@@ -1135,9 +1677,15 @@ class HanaDbSecurityAuditor(BaseAuditor):
         if setting != ".global":
             return
 
-        resolution = self._get_param(idx, "internal_hostname_resolution", None)
+        # A SECTION, NOT A KEY, and the difference made this line a lie.
+        # `_get_param(idx, "internal_hostname_resolution", None)` looks up a KEY
+        # of that name; in global.ini it is a SECTION whose keys are adapter IP
+        # addresses. So the lookup returned None on every real export and the
+        # supplementary line below was emitted unconditionally — asserting that
+        # no internal network is defined on landscapes that define one.
+        resolution = self._resolution_entries("internal_hostname_resolution")
         items = ["[communication] listeninterface = .global"]
-        if resolution is None:
+        if not resolution:
             items.append("internal_hostname_resolution is not set, so no internal "
                          "network is defined to bind to instead")
 
@@ -1261,6 +1809,302 @@ class HanaDbSecurityAuditor(BaseAuditor):
         )
 
     # ---------------------------------------------------- SAP Baseline SECUPD-H
+    # ----------------------------------------------------- parameters, continued
+    #: Controls this module itself asserts, which a tenant administrator can
+    #: undo unless they are on the system database's blocklist. Overridable,
+    #: because an estate may legitimately manage a different set.
+    TENANT_PROTECTED_PARAMS = (
+        ("global_auditing_state", "HANADB-AUDIT-001"),
+        ("default_audit_trail_type", "HANADB-AUDIT-002"),
+        ("sslenforce", "HANADB-PARAM-003"),
+        ("log_mode", "HANADB-PARAM-004"),
+        ("listeninterface", "HANADB-PARAM-006"),
+    )
+
+    def check_replication_channel(self):
+        """HIGH: the system replication channel is unrestricted or unencrypted.
+
+        `[system_replication_communication] allowed_sender` is the allowlist of
+        hosts permitted to open a replication channel. Unset, the internal
+        replication port accepts a connection from anywhere that can route to
+        it — and a replication peer receives the database.
+
+        `enable_ssl` decides whether that channel is encrypted. The two belong
+        in one finding because they are one control surface — who may take a
+        copy of the database, and whether the copy travels in clear — and an
+        auditor fixing one without the other has not secured the channel.
+
+        SILENT WHEN REPLICATION IS NOT CONFIGURED, deliberately. Most systems
+        have no replication and no reason to carry these parameters; firing on
+        every one of them would be noise, and noise is how a real finding gets
+        skimmed past. The check first establishes that this system replicates.
+        """
+        rows = self.data.get("hana_parameters")
+        if not rows:
+            return
+        evidence = []
+        for section in ("system_replication", "system_replication_communication",
+                        "system_replication_hostname_resolution"):
+            count = self._resolution_entries(section)
+            if count:
+                evidence.append("[%s]: %d parameter(s)" % (section, count))
+        if not evidence:
+            return          # no replication configured; nothing to allowlist
+        faults, objects = [], []
+        allowed = [v for _f, _k, v in
+                   self._param_rows("system_replication_communication", "allowed_sender")
+                   if v]
+        if not allowed:
+            faults.append("[system_replication_communication] allowed_sender: "
+                          "not set — any host that can reach the replication "
+                          "port may open a channel")
+            objects.append({"type": "parameter_name", "name": "allowed_sender",
+                            "qualifier": "system_replication_communication"})
+        ssl = [v for _f, _k, v in
+               self._param_rows("system_replication_communication", "enable_ssl")]
+        if ssl and all(self._falsy(v) for v in ssl):
+            faults.append("[system_replication_communication] enable_ssl = %s — "
+                          "the replicated copy travels unencrypted" % ssl[0])
+            objects.append({"type": "parameter_name", "name": "enable_ssl",
+                            "qualifier": "system_replication_communication"})
+        elif not ssl:
+            # Not reported as disabled. The parameter is simply not in the
+            # export, and this file does not turn an unread value into a verdict.
+            faults.append("[system_replication_communication] enable_ssl: not in "
+                          "the export — encryption of the channel not established")
+        if len(faults) == 1 and faults[0].startswith(
+                "[system_replication_communication] enable_ssl: not in"):
+            return      # allowlist is set and the only open point is unread
+        self.finding(
+            check_id="HANADB-PARAM-007",
+            title="System replication channel is not secured",
+            severity=self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=(
+                "This system is configured for system replication and %d of the "
+                "channel's controls is not in place. A replication peer receives "
+                "a continuous copy of the whole database: allowed_sender is the "
+                "allowlist deciding which hosts may become one, and enable_ssl "
+                "decides whether the copy crosses the network in clear. Neither "
+                "is governed by any privilege inside the database."
+                % len(faults)
+            ),
+            affected_items=faults + ["replication is configured — " + e
+                                     for e in evidence],
+            remediation=(
+                "1. Set allowed_sender to the replication partners' internal "
+                "host names or addresses, comma-separated.\n"
+                "2. Set enable_ssl = true and provision the replication "
+                "certificates on both hosts.\n"
+                "3. Keep replication traffic on a separate internal network "
+                "and bind it there rather than on .global.\n"
+                "4. Verify: SELECT * FROM \"PUBLIC\".\"M_INIFILE_CONTENTS\" "
+                "WHERE SECTION = 'system_replication_communication';"
+            ),
+            references=[
+                "SAP HANA Security Checklists and Recommendations — "
+                "Recommendations for System Replication",
+            ],
+            affected_objects=objects,
+            scope="aggregate",
+        )
+
+    def check_import_export_file_security(self):
+        """HIGH: IMPORT/EXPORT may read and write outside the permitted paths.
+
+        `[import_export] file_security` decides which directories a SQL IMPORT
+        or EXPORT can touch. At its strictest the statements are confined to a
+        configured path; relaxed, they reach the database host's file system
+        with the privileges of the database process — which is a route out of
+        the database that no privilege on any table controls.
+
+        The check reports anything that is not the strict value rather than
+        testing for one specific relaxed spelling, and quotes what it read.
+        """
+        rows = self.data.get("hana_parameters")
+        if not rows:
+            return
+        observed = [(f, k, v) for f, k, v in
+                    self._param_rows("import_export", "file_security") if v]
+        if not observed:
+            return
+        weak = [(f, v) for f, _k, v in observed if v.strip().lower() != "high"]
+        if not weak:
+            return
+        grantees = sorted({g for g, _t, p, _o, _x in self._iter_priv_rows()
+                           if p in ("IMPORT", "EXPORT")
+                           and g.upper() not in self.TECHNICAL_USERS
+                           and not g.upper().startswith("_SYS")})
+        items = ["%s [import_export] file_security = %s" % (f or "?", v)
+                 for f, v in weak]
+        if grantees:
+            items.append("held by %d grantee(s) with IMPORT/EXPORT: %s"
+                         % (len(grantees), ", ".join(grantees[:20])))
+        else:
+            # Not the same sentence as "nobody holds it": the privilege export
+            # may simply not have been supplied, and this check does not know.
+            items.append("grantees holding IMPORT/EXPORT: none found in the "
+                         "supplied privilege export")
+        self.finding(
+            check_id="HANADB-PARAM-008",
+            title="IMPORT/EXPORT file access is not restricted",
+            severity=self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=(
+                "[import_export] file_security is not set to its strictest "
+                "value, so SQL IMPORT and EXPORT statements are not confined "
+                "to the configured import/export directory. A user holding "
+                "IMPORT or EXPORT can then read and write files on the "
+                "database host as the database process — a path out of the "
+                "database that no table or schema privilege governs."
+            ),
+            affected_items=items,
+            remediation=(
+                "1. Set [import_export] file_security = high in indexserver.ini "
+                "so IMPORT/EXPORT stay inside the configured path.\n"
+                "2. Review who holds the IMPORT and EXPORT system privileges "
+                "and revoke them where they are not needed.\n"
+                "3. Under RISE this is SAP-operated configuration; raise a "
+                "service request and verify the value afterwards."
+            ),
+            references=[
+                "SAP HANA Security Checklists and Recommendations — "
+                "Recommendations for File System Access",
+            ],
+            affected_objects=[{"type": "parameter_name", "name": "file_security",
+                               "qualifier": "import_export"}],
+            scope="object",
+        )
+
+    def check_trace_levels(self):
+        """MEDIUM: a trace component left at DEBUG.
+
+        Debug traces record statement text and parameter values, which is
+        exactly the data the analytic-privilege and encryption controls exist
+        to protect — written to a file on the host, in clear, readable by
+        whoever can reach the trace directory. SAP's checklist says to switch
+        debug tracing off after diagnosis, and it is routinely forgotten.
+
+        `_param_rows`, NOT `_param_index`, because [trace] exists in
+        indexserver.ini, nameserver.ini and xsengine.ini at once, and the index
+        keeps one value per key name across every file — it would report one
+        component and hide the rest.
+        """
+        rows = self.data.get("hana_parameters")
+        if not rows:
+            return
+        debug = [(f, k, v) for f, k, v in self._param_rows("trace")
+                 if v.strip().lower() == "debug"]
+        if not debug:
+            return
+        items = ["%s [trace] %s = %s" % (f or "?", k, v) for f, k, v in debug]
+        self.finding(
+            check_id="HANADB-TRACE-002",
+            title="HANA trace components are set to DEBUG",
+            severity=self.SEVERITY_MEDIUM,
+            category=self.CATEGORY,
+            description=(
+                "%d trace component(s) are set to DEBUG. Debug traces record "
+                "statement text and parameter values to files on the database "
+                "host in clear text — the same business data that analytic "
+                "privileges restrict and volume encryption protects at rest, "
+                "written where neither control applies. Debug tracing is meant "
+                "to be switched on for a diagnosis and off afterwards."
+                % len(debug)
+            ),
+            affected_items=items,
+            remediation=(
+                "1. Reset each component to its default level: ALTER SYSTEM "
+                "ALTER CONFIGURATION ('<file>', 'SYSTEM') UNSET "
+                "('trace','<component>') WITH RECONFIGURE;\n"
+                "2. Delete trace files written while DEBUG was active — they "
+                "keep the data after the setting is reverted.\n"
+                "3. Restrict the trace directory and the TRACE ADMIN privilege."
+            ),
+            references=[
+                "SAP HANA Security Checklists and Recommendations — "
+                "Recommendations for Trace and Dump Files",
+            ],
+            affected_objects=[{"type": "parameter_name", "name": k,
+                               "qualifier": "trace"} for _f, k, _v in debug],
+            scope="aggregate",
+        )
+
+    def check_tenant_parameter_blocklist(self):
+        """HIGH: a tenant can change a control this scanner asserts.
+
+        In a multi-tenant system, `multidb.ini` on the system database lists the
+        parameters a tenant administrator may NOT change. Anything absent from
+        that list is a control the tenant can switch off — including, if it is
+        absent, the auditing, TLS and log-mode settings four other checks in
+        this file report on. That makes this a meta-control: it decides whether
+        those four findings mean anything.
+
+        THE ABSENT CASE IS SILENT, and the reason is worth stating. An export
+        with no multidb.ini rows is either a single-container system, where the
+        control does not exist, or a multi-tenant system whose collector did not
+        read the file — and nothing in a FILE_NAME/SECTION/KEY/VALUE export
+        distinguishes the two. Firing on every single-container system to cover
+        the second case would put a finding on the majority to describe a
+        minority. The check therefore fires only where multidb.ini rows are
+        present, which is where the answer is knowable.
+
+        The blocklist's internal layout is matched by substring rather than by
+        structure. [UNVERIFIED] against a real multi-tenant export: the file
+        name is SAP's, the row format inside it is this file's assumption, and
+        a substring match is the form that survives being wrong about it.
+        """
+        rows = self.data.get("hana_parameters")
+        if not rows:
+            return
+        multidb = [r for r in rows
+                   if "multidb" in str(r.get("FILE_NAME", "")).strip().lower()]
+        if not multidb:
+            return
+        blob = " ".join(
+            "%s %s %s" % (r.get("SECTION", ""), r.get("KEY", ""), r.get("VALUE", ""))
+            for r in multidb).lower()
+        protected = self.get_config("hana_tenant_protected_params",
+                                    self.TENANT_PROTECTED_PARAMS)
+        missing = [(p, cid) for p, cid in protected if p.lower() not in blob]
+        if not missing:
+            return
+        self.finding(
+            check_id="HANADB-PARAM-009",
+            title="Tenant administrators can change controls this scan asserts",
+            severity=self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=(
+                "This is a multi-tenant system, and %d of the parameters this "
+                "scan reports on are not in the system database's multidb.ini "
+                "blocklist. A tenant administrator can therefore change them "
+                "from inside the tenant. Each one named below is asserted by "
+                "another check in this report, and that check's verdict holds "
+                "only for as long as nobody in the tenant reverses it."
+                % len(missing)
+            ),
+            affected_items=[
+                "%s — not blocklisted; asserted by %s" % (p, cid)
+                for p, cid in missing
+            ],
+            remediation=(
+                "1. Add each parameter to the configuration change blocklist in "
+                "multidb.ini on the system database.\n"
+                "2. Verify: SELECT * FROM \"PUBLIC\".\"M_INIFILE_CONTENTS\" "
+                "WHERE FILE_NAME = 'multidb.ini';\n"
+                "3. Under RISE, multidb.ini is system-database configuration "
+                "and SAP's to change — raise a service request."
+            ),
+            references=[
+                "SAP HANA Security Checklists and Recommendations — "
+                "Recommendations for Tenant Databases",
+            ],
+            affected_objects=[{"type": "parameter_name", "name": p,
+                               "qualifier": "multidb.ini blocklist"}
+                              for p, _cid in missing],
+            scope="aggregate",
+        )
+
     def check_hana_maintenance_status(self):
         """CRITICAL: the installed HANA revision is out of security maintenance.
 

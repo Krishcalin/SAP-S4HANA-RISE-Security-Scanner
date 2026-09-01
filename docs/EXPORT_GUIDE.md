@@ -982,8 +982,12 @@ that on HANA Cloud, `DBADMIN` is deliberately **not** granted `USER ADMIN` — s
 finding it granted to somebody is a change from the delivered state.
 
 ### Security parameters (`hana_parameters.csv`, `m_inifile_contents.csv`)
-*The view name `M_INIFILE_CONTENTS` is unverified here.* The **sections** are
-confirmed: `password policy` in `indexserver.ini`, and `ldap` in `global.ini`.
+*Verified.* SAP's own *SAP HANA Security Checklists and Recommendations*
+queries `"PUBLIC"."M_INIFILE_CONTENTS"` throughout and names `FILE_NAME`,
+`SECTION`, `KEY` and `VALUE` as its columns. Export all four: `FILE_NAME`
+matters more than it looks, because `[trace]` and several other sections exist
+in `indexserver.ini`, `nameserver.ini` and `xsengine.ini` at the same time, and
+an export that drops the file name collapses them into one row per key.
 
 The LDAP TLS parameters and their SAP-documented defaults, which are worth
 exporting whether or not you use LDAP, because the defaults are the finding:
@@ -994,6 +998,17 @@ exporting whether or not you use LDAP, because the defaults are the finding:
 | `sslMaxProtocolVersion` | `MAX` (internally `TLS12`) | maximum accepted |
 | `sslCipherSuites` | `PFS:HIGH::EC_HIGH:+EC_OPT` | permitted ciphers |
 | `timeout` | `0` | **no timeout at all** |
+
+Sections worth exporting deliberately, because a check reads each of them and
+none of them appear if the export filters to a shortlist of well-known keys:
+
+| Section | File | Read by | What it settles |
+|---|---|---|---|
+| `system_replication_communication` | `global.ini` | `HANADB-PARAM-007` | `allowed_sender` (which hosts may become a replication peer, and so take a copy of the database) and `enable_ssl` (whether that copy crosses the network in clear) |
+| `import_export` | `indexserver.ini` | `HANADB-PARAM-008` | `file_security` — whether `IMPORT`/`EXPORT` are confined to the configured path or reach the host file system |
+| `trace` | all `*.ini` | `HANADB-TRACE-002` | which components are at `DEBUG`, and so writing statement text and parameter values to files in clear |
+| `internal_hostname_resolution` | `global.ini` | `HANADB-PARAM-006` | whether an internal network is defined at all. Its **keys are adapter IP addresses**, so export the whole section — there is no fixed key name to ask for |
+| *(whole file)* `multidb.ini` | — | `HANADB-PARAM-009` | which parameters a tenant administrator may not change. Absent from a multi-tenant export, the tenant can reverse the settings four other checks assert |
 
 One more export that needs no view name at all, because SAP gives the statement:
 
@@ -1007,9 +1022,11 @@ answered by this list rather than by a finding.
 
 ### Audit policies (`hana_audit_policies.csv`, `audit_policies.csv`)
 **Route:** auditing configuration in SAP HANA Cloud Central / SAP HANA Cockpit.
-*The view name `AUDIT_POLICIES` is unverified here*; that audit policies are the
-mechanism, and that creating them is an **essential** post-installation task, is
-confirmed.
+*Verified.* SAP's own *SAP HANA Security Checklists and Recommendations*
+queries `"PUBLIC"."AUDIT_POLICIES"` by name — and its `TRAIL_TYPE` column, which
+this product does not yet collect. Add `TRAIL_TYPE` to the export if your tool
+offers it: it says per policy where that policy's trail is written, which is a
+finer answer than the system-wide default this scanner reads today.
 
 ```
 Required: AUDIT_POLICY_NAME, IS_AUDIT_POLICY_ACTIVE (or IS_ENABLED / ACTIVE / STATUS)

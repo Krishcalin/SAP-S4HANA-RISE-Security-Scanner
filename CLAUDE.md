@@ -61,7 +61,7 @@ product became client-server**, deliberately and one-way. It has NOT been relaxe
 
 Background and the full plan: [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md),
 [`docs/BUILD_ROADMAP.md`](docs/BUILD_ROADMAP.md).
-- **794 checks across 38 audit modules.** Measure, never estimate — and know which number you
+- **804 checks across 38 audit modules.** Measure, never estimate — and know which number you
   are quoting. `modules/` holds 70 files, of which **36 emit findings**; the other 34 are rule
   tables, loaders, importers and report writers. Those 33 are exactly `sap_scanner.py`'s
   `--modules` choices. Check IDs: **363** are written as literals, and **621** exist once the
@@ -704,7 +704,7 @@ wrong in that way.
 | `logmon` | log_monitoring | Security Audit Log, SIEM, retention, table logging |
 | `fiori` | fiori_ui | catalog access, OData backend auth, spaces/tiles |
 | `crypto` | crypto_posture | TLS, certs, SNC, **HANA encryption-at-rest** (data/log/**backup**), **system-replication TLS**, PSE, keys |
-| `hanadb` | hana_db_security | HANA DB users/privileges/roles/audit/parameters (not encryption); **log_mode/PITR, MDC cross-DB, DEBUG privileges** |
+| `hanadb` | hana_db_security | HANA DB users/privileges/roles/audit/parameters (not encryption); **log_mode/PITR, MDC cross-DB, DEBUG privileges**; privileges resolved THROUGH role membership (`_effective_holdings`, SAP's `EFFECTIVE_PRIVILEGE_GRANTEES` derived from two exports), critical privilege *pairs*, setup accounts, replication channel, `import_export`, `[trace]` DEBUG, `multidb.ini` tenant blocklist |
 | `hotnews` | sap_hotnews | missing critical SAP Security Notes since 2020 |
 | `authz` | abap_authorizations | AGR_1251 role-content: critical auth objects & transactions |
 | `systrust` | system_trust | trusted RFC, SAProuter, msg server, UCON, SAP*/default passwords |
