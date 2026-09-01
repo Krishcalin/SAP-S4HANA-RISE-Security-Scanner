@@ -22,7 +22,7 @@ MonitorRisk is an open source SAP Security Tool which someone can use to assess 
 This reads those files and tells you what is wrong, how bad it is, who can fix
 it, and what it might cost you.
 
-It never connects to SAP to do that. Nothing is installed in the SAP system, no
+You can extra the file in an offline fashion or in a connected way. Nothing is installed in the SAP system, no
 RFC user is created, and nothing is ever written back. That is deliberate: in a
 RISE contract a third-party ABAP add-on is an excluded task needing a separate
 SKU and a long evaluation, and a folder of exports needs none of it.
