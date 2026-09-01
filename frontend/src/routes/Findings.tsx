@@ -303,7 +303,7 @@ export function Findings() {
                       page carries the full explanation. Only the incomplete
                       case is marked — its absence already means complete. */}
                   {f.latest_evidence?.complete === false && (
-                    <span className="pill st text-medium ml-1.5"
+                    <span className="pill st text-med ml-1.5"
                           title={`This check ran without ${
                             (f.latest_evidence.missing_sources ?? []).length
                           } of its module's exports: ${

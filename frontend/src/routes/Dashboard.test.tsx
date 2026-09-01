@@ -63,6 +63,11 @@ function view(crq: unknown) {
       sod_trust: null,
     },
     systems: [],
+    freshness: {
+      systems: 0, current: 0, stale: 0, never_assessed: 0,
+      stale_after_days: 35, oldest_days: null,
+      never_assessed_labels: [], stale_labels: [],
+    },
     recent_runs: [],
     crq,
     crq_scenarios: [],

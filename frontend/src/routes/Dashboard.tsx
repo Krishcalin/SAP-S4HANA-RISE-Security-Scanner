@@ -4,7 +4,7 @@ import { ShieldHalf } from 'lucide-react'
 import { ApiError, csf, dashboard, domains } from '../api/client'
 import type {
   CsfView, Dashboard as DashboardData, DomainsView, FindingState,
-  RemediationOwner, ScanRun, SecurityDomain, Severity,
+  RemediationOwner, SapSystem, ScanRun, SecurityDomain, Severity,
 } from '../api/types'
 import { Donut } from '../components/Donut'
 import { useTitle } from '../lib/title'
@@ -78,7 +78,11 @@ export function Dashboard() {
   if (error) return <div className="banner banner-bad" role="alert">{error}</div>
   if (!data) return <p className="text-ink3 text-[13px]">Loading…</p>
 
-  const { summary, systems, recent_runs, crq, crq_scenarios } = data
+  const { summary, systems, freshness, recent_runs, crq, crq_scenarios } = data
+  // Registered minus never-scanned. Every aggregate on this screen is built
+  // from findings, and a system with no completed run contributes none — so it
+  // inflates the denominator of a claim it is not part of.
+  const assessed = freshness.systems - freshness.never_assessed
   const reducible = num(crq?.detail?.['reducible_ale_p90'])
 
   return (
@@ -114,9 +118,49 @@ export function Dashboard() {
         <ShieldHalf size={22} className="text-accent" />
         Security Posture
       </h1>
+      {/* IT USED TO SAY "across {systems.length} systems", which counted every
+          REGISTERED system whether or not anything had ever scanned it. On the
+          sample estate that made a figure drawn from five systems read as a
+          figure about seven, and the two it silently included were the two
+          nobody had ever looked at. */}
       <p className="text-ink2 mb-5">
-        Open findings across {systems.length} system{systems.length === 1 ? '' : 's'}.
+        Open findings across {assessed} of {systems.length}{' '}
+        registered system{systems.length === 1 ? '' : 's'}.
+        {freshness.never_assessed > 0 && (
+          <> {freshness.never_assessed}{' '}
+            {freshness.never_assessed === 1 ? 'has' : 'have'} never been
+            assessed, so nothing here is a statement about
+            {freshness.never_assessed === 1 ? ' it' : ' them'}.</>
+        )}
       </p>
+
+      {/* WHEN THE ANSWER IS OLD, SAY SO WHERE THE ANSWER IS. A staleness figure
+          on a settings page nobody opens is not a control; this sits directly
+          above the numbers it qualifies. */}
+      {(freshness.never_assessed > 0 || freshness.stale > 0) && (
+        <div className={freshness.never_assessed > 0 ? 'banner banner-bad'
+                                                     : 'banner banner-warn'}>
+          <strong className="font-semibold">
+            {freshness.never_assessed > 0 && (
+              <>Never assessed: {freshness.never_assessed_labels.join(', ')}.{' '}</>
+            )}
+            {freshness.stale > 0 && (
+              <>Last assessed over {freshness.stale_after_days} days ago:{' '}
+                {freshness.stale_labels.join(', ')}.</>
+            )}
+          </strong>{' '}
+          <span className="text-ink2">
+            SAP publishes Security Notes monthly, so an export older than one
+            cycle cannot account for the patch day that has passed since
+            {freshness.oldest_days !== null && (
+              <> — the oldest answer here is {freshness.oldest_days} days old</>
+            )}.{' '}
+            <Link className="text-accent hover:underline" to="/upload">
+              Upload a current export →
+            </Link>
+          </span>
+        </div>
+      )}
 
       {summary.expired_acceptances > 0 && (
         <div className="banner banner-bad">
@@ -437,7 +481,7 @@ export function Dashboard() {
               <th className={TH}>System</th><th className={TH}>Platform</th>
               <th className={TH}>Tier</th><th className={TH}>Criticality</th>
               <th className={TH}>Exposure</th><th className={TH}>Mode</th>
-              <th className={TH}>Owner</th>
+              <th className={TH}>Owner</th><th className={TH}>Last assessed</th>
             </tr>
           </thead>
           <tbody>
@@ -458,11 +502,17 @@ export function Dashboard() {
                 <td className={`${TD} text-ink2`}>{s.exposure_zone}</td>
                 <td className={`${TD} text-[12px] text-ink2`}>{s.deployment_mode}</td>
                 <td className={`${TD} text-ink2`}>{s.owner ?? '—'}</td>
+                {/* An em dash would put "never scanned" in the same visual
+                    class as "no owner recorded". They are not the same kind of
+                    absence: one is a missing detail, the other means every
+                    other cell on this row describes a system nothing has
+                    looked at. */}
+                <td className={TD}>{assessedCell(s)}</td>
               </tr>
             ))}
             {systems.length === 0 && (
               <tr>
-                <td colSpan={7} className={EMPTY}>
+                <td colSpan={8} className={EMPTY}>
                   No systems registered yet. Upload a bundle to create one.
                 </td>
               </tr>
@@ -589,6 +639,27 @@ const CSF_SLUG: Record<string, string> = {
   GV: 'govern', ID: 'identify', PR: 'protect',
   DE: 'detect', RS: 'respond', RC: 'recover',
 }
+
+/** The one cell on the systems table that can invalidate the whole row. */
+function assessedCell(s: SapSystem) {
+  if (s.last_assessed === null) {
+    return <span className="text-crit font-semibold">never</span>
+  }
+  const days = s.days_since_assessed ?? 0
+  const stale = days > STALE_AFTER_DAYS
+  return (
+    <span className={stale ? 'text-high' : 'text-ink2'}
+          title={new Date(s.last_assessed).toISOString().slice(0, 10)}>
+      {days === 0 ? 'today' : `${days}d ago`}
+    </span>
+  )
+}
+
+/** Mirrors server/queries.py STALE_AFTER_DAYS. The server is the authority —
+ *  `freshness.stale_after_days` carries its value for anything the reader is
+ *  TOLD — and this constant only tints a cell, so a drift between them can
+ *  change a colour and never a number. */
+const STALE_AFTER_DAYS = 35
 
 const CARD = 'rounded-lg border border-cardline bg-panel p-4'
 const G4 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]'

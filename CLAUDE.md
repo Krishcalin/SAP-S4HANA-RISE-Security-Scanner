@@ -877,6 +877,17 @@ a page.** Everything below exists so they do not.
    `SODCOV-000` rendering as card 151 of 419 while telling the reader to read it
    first; both landing in the offline report and not the console. If you add a
    statement meant to be read, check where it renders.
+6. **An answer has a date, and a system with no date has no answer.**
+   `queries.list_systems` carries `last_assessed` / `days_since_assessed` /
+   `assessed_runs`, counting **completed runs only** — a failed run says the
+   scanner stopped, not that the system is clean. `null` means never assessed,
+   and it is a THIRD state: not fresh, not stale, unmeasured. The `days or 0`
+   idiom files it as the freshest thing in the estate, so `queries` filters on
+   `is not None` explicitly and `tests/test_estate_freshness.py` holds it.
+   Measured on the sample estate when this landed: seven systems, two of which
+   (DEV/300, QAS/200) had never been scanned at all, rendering identically to a
+   system assessed that morning, under a heading that read *"Open findings
+   across 7 systems"*.
 
 ### What exists
 
@@ -890,6 +901,9 @@ a page.** Everything below exists so they do not.
 | `EXPORT-001/002` | Supplied exports that could not be decoded, or decoded only via a fallback |
 | `finding["evidence"]` | Per-**check** completeness, attached in `BaseAuditor.finding()` beside the standards mapping |
 | `docs/CHECK_FIRING.md` | How many of our own checks are proven to fire. CI fails if it drifts |
+| `queries.list_systems` | Per system: when a completed run last assessed it. `null` = never |
+| `queries.estate_freshness` | Current / stale / never, the oldest age, and which systems — built from the same rows the table renders, so headline and table cannot drift |
+| `STALE_AFTER_DAYS` | 35: one SAP Security Patch Day cycle plus slack. Governs EMPHASIS only — the measured date is always returned, so no threshold can hide an age |
 
 ### If you touch this
 
@@ -903,6 +917,12 @@ a page.** Everything below exists so they do not.
   `coverage.check_sources()`, so it follows automatically — but only for reads it
   can see. A read through a new helper shape needs the accessor detection
   extended, or every finding falls back to the module's whole source list.
+- Writing a colour into the console? Use a token from `index.css`'s `@theme
+  inline` block. Tailwind emits **nothing** for a class naming no token — no
+  error, no warning — and the element renders in whatever it inherited. That is
+  how `text-medium` (the token is `med`) left the "partial data" marker
+  untinted, which is precisely a qualification nobody reaches. Guarded by
+  `tests/test_colour_tokens_resolve.py`.
 
 ## Conventions & gotchas (learned the hard way)
 

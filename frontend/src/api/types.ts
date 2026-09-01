@@ -134,6 +134,33 @@ export interface SapSystem {
   created_at: string
   landscape_name: string
   deployment_mode: DeploymentMode
+  /** When a complete run last assessed this system, or `null` for a system
+   *  nothing has ever scanned. NULL IS NOT ZERO: a system with no run has no
+   *  age, and rendering it as "0 days" or as an empty cell beside populated
+   *  ones puts it in the same visual class as one assessed this morning. */
+  last_assessed: string | null
+  /** Days since `last_assessed`, computed by PostgreSQL against its own clock
+   *  so two readers in different time zones cannot disagree about staleness.
+   *  `null` exactly when `last_assessed` is. */
+  days_since_assessed: number | null
+  /** Completed runs only. A failed or cancelled run is not an assessment. */
+  assessed_runs: number
+}
+
+/** server/queries.py `estate_freshness` — how much of the estate's answer is
+ *  current. Built from the same rows the systems table renders, so the headline
+ *  and the table can never disagree. */
+export interface EstateFreshness {
+  systems: number
+  current: number
+  stale: number
+  never_assessed: number
+  stale_after_days: number
+  /** Age of the oldest assessment, or `null` when nothing has been assessed at
+   *  all. Systems never scanned are excluded — they have no age to be oldest. */
+  oldest_days: number | null
+  never_assessed_labels: string[]
+  stale_labels: string[]
 }
 
 /** server/queries.py `list_landscapes` — landscape.*. */
@@ -349,6 +376,7 @@ export interface DashboardSummary {
 export interface Dashboard {
   summary: DashboardSummary
   systems: SapSystem[]
+  freshness: EstateFreshness
   recent_runs: ScanRun[]
   crq: CrqPortfolio | null
   crq_scenarios: CrqScenario[]

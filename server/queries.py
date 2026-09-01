@@ -150,14 +150,97 @@ def create_system(*, landscape_id: int, platform: str,
     return dict(row, label=label)
 
 
+#: A scan is only an assessment of the estate if it FINISHED. `status` also
+#: holds queued, running and failed runs, and a failed run tells you nothing
+#: about the system except that the scanner stopped. Every freshness figure in
+#: this file filters on this for that reason, and `coverage_for_scope` below
+#: already did.
+ASSESSED_RUN = "r.status = 'complete'"
+
+#: How old an export may be before its answers are called stale.
+#:
+#: NOT AN INVENTED NUMBER. SAP publishes Security Notes on Security Patch Day,
+#: the second Tuesday of each month. An export older than one full cycle cannot
+#: account for a patch day that has since passed, so the verdicts drawn from it
+#: are answers about a system that no longer exists in that form. 35 days is one
+#: cycle plus the slack between two second-Tuesdays (28-35 days apart).
+#:
+#: It governs EMPHASIS ONLY. The measured date is returned and displayed
+#: whatever this is set to, so moving the threshold can never hide the age of an
+#: answer — it can only change whether the console calls it out.
+STALE_AFTER_DAYS = 35
+
+
 def list_systems(scope: Optional[Sequence[int]]) -> List[Dict[str, Any]]:
+    """The estate, each system carrying the date it was last actually assessed.
+
+    IT USED TO CARRY NO DATE AT ALL, and the dashboard's systems table rendered
+    the result as though every row were equally current. Measured on the live
+    sample estate: seven systems, of which PRD had been assessed that morning,
+    three twenty days earlier, and DEV and QAS had NEVER BEEN ASSESSED — no
+    complete run, ever. All seven rendered identically, and the panel above them
+    read "Open findings across 7 systems", which was a claim about two systems
+    nothing had ever looked at.
+
+    That is the same failure this codebase keeps finding: an absence rendering
+    as a measurement. `null` here means never assessed and must be shown as
+    that; it must never be allowed to read as zero days old.
+    """
     where, params = [], []
     _scoped(where, params, scope, "s.id")
     return db.query(
         f"SELECT s.*, l.name AS landscape_name, l.deployment_mode, "
-        f"{SYSTEM_LABEL_SQL} AS label "
+        f"{SYSTEM_LABEL_SQL} AS label, "
+        f"a.last_assessed, a.assessed_runs, "
+        # Computed in SQL, against the database's clock. A browser computing
+        # this from a timestamp would answer with the reader's clock and time
+        # zone, so two people looking at the same estate could disagree about
+        # whether a system is stale.
+        f"CASE WHEN a.last_assessed IS NULL THEN NULL "
+        f"     ELSE (CURRENT_DATE - a.last_assessed::date) END AS days_since_assessed "
         f"FROM sap_system s JOIN landscape l ON l.id = s.landscape_id "
+        f"LEFT JOIN LATERAL ("
+        f"    SELECT max(r.started_at) AS last_assessed, count(*) AS assessed_runs "
+        f"    FROM scan_run r WHERE r.system_id = s.id AND {ASSESSED_RUN}"
+        f") a ON true "
         f"WHERE {' AND '.join(where)} ORDER BY {SYSTEM_LABEL_SQL}", params)
+
+
+def estate_freshness(scope: Optional[Sequence[int]],
+                     stale_after: int = STALE_AFTER_DAYS) -> Dict[str, Any]:
+    """One sentence's worth of "how much of this answer is current".
+
+    Built from `list_systems` rather than its own query, so the summary and the
+    table under it can never disagree — a headline computed by a second query is
+    a headline that drifts from the rows it summarises.
+    """
+    systems = list_systems(scope)
+    never = [s for s in systems if s["last_assessed"] is None]
+    dated = [s for s in systems if s["last_assessed"] is not None]
+
+    # `is not None`, NEVER `or 0`. A never-assessed system has no age, and the
+    # idiom that turns None into 0 would file it as the freshest thing in the
+    # estate — which is the exact conflation this whole function exists to
+    # prevent, reintroduced in the code that reports it. Written this way the
+    # rule is stated rather than accidentally held by a falsy default.
+    ages = [s["days_since_assessed"] for s in dated
+            if s["days_since_assessed"] is not None]
+    stale = [s for s in dated if s["days_since_assessed"] is not None
+             and s["days_since_assessed"] > stale_after]
+    oldest = max(ages) if ages else None
+    return {
+        "systems": len(systems),
+        "current": len(dated) - len(stale),
+        "stale": len(stale),
+        "never_assessed": len(never),
+        "stale_after_days": stale_after,
+        # The worst case, named. A count of stale systems tells the reader that
+        # something is old; this tells them how old, which is what decides
+        # whether it matters.
+        "oldest_days": oldest,
+        "never_assessed_labels": [s["label"] for s in never],
+        "stale_labels": [s["label"] for s in stale],
+    }
 
 
 # --------------------------------------------------------------------------- #

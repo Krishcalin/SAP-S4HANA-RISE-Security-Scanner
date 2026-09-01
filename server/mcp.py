@@ -53,7 +53,10 @@ SERVER_NAME = "monitorrisk"
 TOOLS: Dict[str, Dict[str, Any]] = {
     "list_systems": {
         "description": "The SAP systems and SaaS tenants in scope, with their "
-                       "deployment mode and tier.",
+                       "deployment mode, tier, and when each was last assessed. "
+                       "last_assessed is null for a system no completed scan has "
+                       "ever covered — that is not the same as recently clean, "
+                       "and nothing else in this estate is a statement about it.",
         "properties": {},
         "handler": lambda scope, args: queries.list_systems(scope),
     },

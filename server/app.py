@@ -990,6 +990,11 @@ def api_dashboard(user: Dict[str, Any] = Depends(current_user)):
     return {
         "summary": queries.dashboard_summary(scope),
         "systems": queries.list_systems(scope),
+        # HOW MUCH OF THE ABOVE IS CURRENT. Every other number on this screen is
+        # an aggregate over systems, and an aggregate cannot say that two of its
+        # members have never been scanned — it just counts nothing for them and
+        # reads as a clean result. See queries.list_systems.
+        "freshness": queries.estate_freshness(scope),
         "recent_runs": queries.recent_runs(scope, limit=10),
         "crq": latest_crq,
         "crq_scenarios": crq.scenarios_for_run(latest_crq["run_id"]) if latest_crq else [],
