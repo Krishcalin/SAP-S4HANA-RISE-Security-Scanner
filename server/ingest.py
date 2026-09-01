@@ -221,11 +221,26 @@ def _upsert_check_definitions(conn: psycopg.Connection,
     remediation per check — and fall back to the finding's own text where the KB
     has no entry.
 
-    `owning_team` is derived once and then LEFT ALONE, as are `responsibility` and
-    `baseline_req_id`: those are human judgements, and a scan must never silently
-    overwrite a curation decision.
+    `owning_team` is derived once and then LEFT ALONE, as is `responsibility`:
+    those are human judgements, and a scan must never silently overwrite a
+    curation decision.
+
+    `baseline_req_id` FILLS THE BLANK AND NEVER OVERWRITES, which honours the
+    same rule from the other side. It was documented as a curation decision and
+    nobody ever curated it: 0 of 458 catalogue rows carried one, so the finding
+    page's "SAP Security Baseline …" line — which reads this column — could
+    never render, while the very same fact was already correct on the check page
+    because `checkdocs` derives it live from `sapcontent.requirement_for`.
+    One fact, two paths, and the stored one was empty.
+
+    Derived is not curated, and the COALESCE below keeps that distinction: a
+    human value survives every future scan, and the derivation only speaks where
+    there is silence. It maps 143 of 458 checks onto 26 of SAP's requirement
+    families — SAP's own vocabulary, which the schema comment argues is "far
+    more defensible in an audit than a house-brand control name".
     """
     from server.enrich import kb_content, team_for
+    from server import sapcontent
 
     seen: Dict[str, Dict[str, Any]] = {}
     for f in findings:
@@ -239,8 +254,9 @@ def _upsert_check_definitions(conn: psycopg.Connection,
             """
             INSERT INTO check_definition
                 (check_id, title, category, default_severity, remediation,
-                 risk_narrative, references_json, owning_team, cwe)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 risk_narrative, references_json, owning_team, cwe,
+                 baseline_req_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (check_id) DO UPDATE SET
                 title            = EXCLUDED.title,
                 category         = EXCLUDED.category,
@@ -254,13 +270,19 @@ def _upsert_check_definitions(conn: psycopg.Connection,
                 -- COALESCE, not EXCLUDED: a curated team survives the next scan.
                 owning_team      = COALESCE(check_definition.owning_team,
                                             EXCLUDED.owning_team),
+                -- Same rule, same reason: a hand-curated requirement wins, and
+                -- the derivation only fills a blank. Neither direction is a
+                -- silent overwrite.
+                baseline_req_id  = COALESCE(check_definition.baseline_req_id,
+                                            EXCLUDED.baseline_req_id),
                 updated_at       = now()
             """,
             (cid, f.get("title", ""), f.get("category"), f.get("severity"),
              kb_fix or f.get("remediation", ""),
              kb_risk or f.get("description", ""),
              Jsonb(f.get("references") or []), team_for(cid),
-             (f.get("details") or {}).get("cwe")),
+             (f.get("details") or {}).get("cwe"),
+             sapcontent.requirement_for(cid)),
         )
 
 
