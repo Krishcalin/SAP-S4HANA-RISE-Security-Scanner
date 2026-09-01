@@ -5,6 +5,7 @@ import type { BurndownPoint, Journey } from '../api/types'
 import { useTitle } from '../lib/title'
 import { TrendingUp } from 'lucide-react'
 import { CARD_TITLE as CARD_H3, KPI, KPI_NOTE } from '../lib/ui'
+import { MeasuredWhen } from '../components/MeasuredWhen'
 
 /**
  * The mitigation journey — ported from server/templates/trend.html. It answers
@@ -85,6 +86,7 @@ export function Trend() {
         <TrendingUp size={22} className="text-accent shrink-0" />
         Mitigation Journey
       </h1>
+      <MeasuredWhen measured={journey?.measured ?? null} subject="trend" />
       <p className="text-ink2 mb-4">
         What changed, who owns it, and whether it is getting better — over the last{' '}
         {window} days.

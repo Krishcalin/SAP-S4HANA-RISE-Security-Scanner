@@ -824,6 +824,7 @@ export interface DomainScore {
 
 /** server/analytics.py `journey_summary` — one call for the trend screen. */
 export interface Journey {
+  measured: Measured | null
   sla: SlaStatus
   aging: AgingBucket[]
   mttr: Mttr
@@ -1108,7 +1109,25 @@ export interface CsfFunctionView {
 }
 
 /** The whole Core rolled up. server/app.py `api_csf`. */
+/** server/queries.py `latest_coverage` — when the answer above it was
+ *  measured. Null when no manifest backed the roll-up, which is NOT the same
+ *  as "today": an answer nobody dated must not be stamped with now.
+ *
+ *  `oldest_days` is the one to quote. The manifest is a union across systems —
+ *  a module counts as having run if it ran for ANY of them — so the weakest
+ *  evidence behind a CLEAR verdict is the oldest run in that union. */
+export interface Measured {
+  systems: number
+  oldest: string
+  newest: string
+  oldest_days: number
+  newest_days: number
+  stale_after_days: number
+  stale: boolean
+}
+
 export interface CsfView {
+  measured: Measured | null
   framework: string
   reference: string
   doi: string
@@ -1280,6 +1299,7 @@ export interface SecurityDomain {
 }
 
 export interface DomainsView {
+  measured: Measured | null
   domains: SecurityDomain[]
   unplaced: {
     counts: Record<string, number>

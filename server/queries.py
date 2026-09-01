@@ -12,8 +12,10 @@ API" structural rather than something to remember.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from modules import coverage as _coverage_module
 from server import db
 
 PAGE_SIZE = 50
@@ -168,7 +170,12 @@ ASSESSED_RUN = "r.status = 'complete'"
 #: It governs EMPHASIS ONLY. The measured date is returned and displayed
 #: whatever this is set to, so moving the threshold can never hide the age of an
 #: answer — it can only change whether the console calls it out.
-STALE_AFTER_DAYS = 35
+#:
+#: IMPORTED, NOT REDEFINED. The offline report asks the same question of an
+#: upload's file timestamps, and two copies of this number would drift the day
+#: somebody tuned one of them — leaving the console and the PDF a customer
+#: sends an auditor disagreeing about whether the same estate is current.
+STALE_AFTER_DAYS = _coverage_module.STALE_AFTER_DAYS
 
 
 def list_systems(scope: Optional[Sequence[int]]) -> List[Dict[str, Any]]:
@@ -877,11 +884,43 @@ def latest_coverage(scope: Optional[Sequence[int]],
         where.append("r.landscape_id = %s")
         params.append(landscape_id)
     rows = db.query(
-        f"SELECT DISTINCT ON (r.system_id) r.system_id, r.coverage "
+        # `started_at` COMES BACK NOW. It was selected only to order by and then
+        # dropped, so a domain reported CLEAR on the strength of an export of
+        # any age and the screen could not say which. Carried on the manifest
+        # rather than returned separately because every caller that renders the
+        # manifest is a caller that should be able to date it.
+        f"SELECT DISTINCT ON (r.system_id) r.system_id, r.coverage, r.started_at "
         f"FROM scan_run r WHERE {' AND '.join(where)} "
         f"ORDER BY r.system_id, r.started_at DESC", params)
     from modules.coverage import merge_manifests
-    return merge_manifests(row["coverage"] for row in rows)
+    merged = merge_manifests(row["coverage"] for row in rows)
+    if merged is None:
+        return None
+
+    # ADDITIVE. `roll_up` in modules/domains.py and modules/nist_csf.py reads
+    # `coverage["modules"]` and nothing else, so a caller that does not know
+    # about these keys is unaffected — which is why this is a new key rather
+    # than a new return shape.
+    stamps = [row["started_at"] for row in rows if row["started_at"]]
+    if stamps:
+        oldest, newest = min(stamps), max(stamps)
+        today = datetime.now(timezone.utc)
+        merged["measured"] = {
+            "systems": len(stamps),
+            "oldest": oldest.isoformat(),
+            "newest": newest.isoformat(),
+            # THE OLDEST DATES THE ROLL-UP, not the newest. This manifest is a
+            # UNION across systems: a module counts as having run if it ran for
+            # any of them. So the weakest evidence behind a CLEAR verdict is the
+            # oldest run in the union, and quoting the newest would date the
+            # answer by its best input rather than its worst — the same mistake
+            # `SODCOV-000` exists to stop a summary making.
+            "oldest_days": max(0, (today - oldest).days),
+            "newest_days": max(0, (today - newest).days),
+            "stale_after_days": STALE_AFTER_DAYS,
+            "stale": (today - oldest).days > STALE_AFTER_DAYS,
+        }
+    return merged
 
 
 def findings_for_domains(scope: Optional[Sequence[int]]) -> List[Dict[str, Any]]:

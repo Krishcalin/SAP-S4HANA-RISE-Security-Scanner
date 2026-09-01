@@ -27,6 +27,7 @@ the failure this file exists to prevent.
 from __future__ import annotations
 
 import ast
+import datetime as _dt
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -1498,3 +1499,98 @@ def summarize(counts: Dict[str, int], deployment_mode: str = "on_prem") -> str:
             and not counts.get("modules_not_run")):
         parts.append("Coverage is complete.")
     return " ".join(parts)
+
+
+# ── how old the evidence is ────────────────────────────────────────────────
+#
+#: How old an export may be before its answers are called stale.
+#:
+#: NOT AN INVENTED NUMBER. SAP publishes Security Notes on Security Patch Day,
+#: the second Tuesday of each month. An export older than one full cycle cannot
+#: account for a patch day that has since passed, so verdicts drawn from it are
+#: answers about a system that no longer exists in that form. 35 days is one
+#: cycle plus the slack between two second-Tuesdays, which fall 28 to 35 days
+#: apart.
+#:
+#: Defined here rather than in `server/` so the offline report and the console
+#: cannot drift apart about what "old" means — `server.queries` imports it.
+STALE_AFTER_DAYS = 35
+
+
+def evidence_age(manifest: Optional[Iterable[Dict[str, Any]]],
+                 now: Optional[_dt.datetime] = None) -> Optional[Dict[str, Any]]:
+    """When the exports behind a report were last written.
+
+    THE NUMBER IS A LOWER BOUND, AND THAT IS THE WHOLE POINT OF THIS FUNCTION.
+    It is derived from each file's modification time, which is when the file was
+    last WRITTEN on the machine that produced the bundle. Copying a directory,
+    unzipping an archive or exporting through a share usually resets that to the
+    moment of the copy — so a file's mtime can only ever be LATER than the
+    moment the data was really taken out of SAP, never earlier.
+
+    Which makes the reading asymmetric, and the report has to say so:
+
+      * "at least 240 days old" is sound. Nothing can make evidence look older
+        than it is, so a large figure is a floor and can be acted on.
+      * "0 days old" says nothing at all. The files may have been copied this
+        morning out of an export taken last year.
+
+    So this reports the floor and never reassures. `stale` is True only when the
+    FLOOR exceeds the threshold; it is never False in a way that means "fresh",
+    only in a way that means "this cannot tell you".
+
+    Returns None when no entry carries a usable timestamp, which is a different
+    state from "the evidence is new" and must not render as one.
+    """
+    entries = list(manifest or [])
+    now = now or _dt.datetime.now()
+    stamps: List[_dt.datetime] = []
+    for entry in entries:
+        raw = str((entry or {}).get("modified") or "").strip()
+        if not raw:
+            continue
+        for shape in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+            try:
+                stamps.append(_dt.datetime.strptime(raw[:len(shape) + 4], shape))
+                break
+            except ValueError:
+                continue
+    if not stamps:
+        return None
+
+    oldest, newest = min(stamps), max(stamps)
+    # The NEWEST file is what dates the bundle: an export directory is written
+    # in one sitting, and one stale leftover among a hundred current files does
+    # not make the assessment old. The oldest is reported beside it so a bundle
+    # assembled over eight months is visible as one.
+    floor_days = max(0, (now - newest).days)
+    return {
+        "files": len(stamps),
+        "oldest": oldest.strftime("%Y-%m-%d"),
+        "newest": newest.strftime("%Y-%m-%d"),
+        "span_days": max(0, (newest - oldest).days),
+        "at_least_days": floor_days,
+        "stale_after_days": STALE_AFTER_DAYS,
+        "stale": floor_days > STALE_AFTER_DAYS,
+    }
+
+
+def evidence_age_sentence(age: Optional[Dict[str, Any]]) -> str:
+    """The one line a reader should see, or nothing.
+
+    Silent when the floor is small, because a small floor is not evidence of
+    freshness — see `evidence_age`. A reassuring sentence built on a number
+    that cannot reassure is worse than no sentence.
+    """
+    if not age:
+        return ""
+    if not age["stale"]:
+        return ""
+    return (
+        "The exports behind this report were last written on or before "
+        "%s — at least %d days ago, more than the %d-day SAP Security Patch "
+        "Day cycle. Findings here describe the system as it was then. A file's "
+        "timestamp can only ever be later than the moment the data left SAP, "
+        "so this is a floor: the evidence may be older still."
+        % (age["newest"], age["at_least_days"], age["stale_after_days"])
+    )

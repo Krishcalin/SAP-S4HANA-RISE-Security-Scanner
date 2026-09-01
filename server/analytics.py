@@ -455,4 +455,9 @@ def journey_summary(scope: Optional[Sequence[int]], days: int = 180,
         "technical_debt": technical_debt(scope),
         "teams": team_scorecard(scope),
         "domains": domain_scorecard(scope, coverage=coverage),
+        # WHEN THIS ESTATE WAS LAST ASSESSED. "Is it getting better" is a
+        # question about a period, and a trend whose most recent point is eight
+        # months old is a statement about eight months ago rendered as the
+        # present. None when the caller supplied no manifest.
+        "measured": (coverage or {}).get("measured"),
     }

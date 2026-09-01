@@ -130,6 +130,36 @@ class ReportGenerator:
         """MonitorRisk tool-vendor logo (top-right)."""
         return ReportGenerator._asset_data_uri("monitorrisk-logo.png")
 
+    def _evidence_age_html(self) -> str:
+        """How old the exports are, as a sentence, before any finding count.
+
+        THE TIMESTAMPS WERE ALREADY HERE AND NOBODY WAS GOING TO FIND THEM.
+        `_evidence_manifest_html` renders a `modified` column for every file,
+        inside a collapsed <details> that on a full bundle is a hundred and
+        thirty rows. A reader would have to open it and scan the column to
+        notice the assessment describes an estate as it stood eight months ago.
+        That is the failure this file already names twice — a qualification
+        nobody reaches is not a qualification.
+
+        SILENT WHEN THE FIGURE CANNOT REASSURE. A file's timestamp is when it
+        was last written on the machine that made the bundle, so copying or
+        unzipping moves it forward; the derived age is a floor and never a
+        measurement of freshness. `evidence_age_sentence` therefore says
+        something only when the FLOOR is already too old, and nothing at all
+        otherwise — see modules/coverage.evidence_age.
+        """
+        from modules.coverage import evidence_age, evidence_age_sentence
+        sentence = evidence_age_sentence(
+            evidence_age(self.meta.get("evidence_manifest")))
+        if not sentence:
+            return ""
+        return f"""
+  <div class="evidence-age" style="margin:18px 0;padding:12px 14px;
+       border-left:4px solid #b45309;background:#fffbeb;border-radius:4px">
+    <strong style="color:#92400e">How old this evidence is</strong>
+    <p style="margin:6px 0 0;font-size:13px;max-width:80ch">{html.escape(sentence)}</p>
+  </div>"""
+
     def _evidence_manifest_html(self) -> str:
         """The evidence manifest: which files, hashed, produced this report.
 
@@ -1117,6 +1147,9 @@ class ReportGenerator:
        them by severity, which is the same mistake the coverage block above was
        moved to fix: a qualification nobody reaches is not a qualification. -->
   {trust_html}
+  <!-- HOW OLD THE EVIDENCE IS, before the finding count and not folded into the
+       manifest's collapsed table. Same rule as the two blocks above it. -->
+  {self._evidence_age_html()}
   {self._evidence_manifest_html()}
   {filter_html}
 

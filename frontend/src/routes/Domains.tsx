@@ -29,6 +29,7 @@ import type { DomainReach, DomainsView, SecurityDomain } from '../api/types'
 import { useTitle } from '../lib/title'
 import { LayoutGrid } from 'lucide-react'
 import { KPI } from '../lib/ui'
+import { MeasuredWhen } from '../components/MeasuredWhen'
 
 const CARD = 'rounded-lg border border-cardline bg-panel p-4'
 const G3 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(300px,1fr))]'
@@ -75,6 +76,7 @@ export function Domains() {
         <LayoutGrid size={22} className="text-accent shrink-0" />
         Security Domains
       </h1>
+      <MeasuredWhen measured={view?.measured ?? null} subject="posture" />
       <p className="text-ink2 mb-5 max-w-[80ch]">
         Your open findings in the twelve domains this market talks in. Each tile
         says two things that are easy to confuse and are not the same:{' '}

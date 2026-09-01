@@ -903,7 +903,9 @@ a page.** Everything below exists so they do not.
 | `docs/CHECK_FIRING.md` | How many of our own checks are proven to fire. CI fails if it drifts |
 | `queries.list_systems` | Per system: when a completed run last assessed it. `null` = never |
 | `queries.estate_freshness` | Current / stale / never, the oldest age, and which systems — built from the same rows the table renders, so headline and table cannot drift |
-| `STALE_AFTER_DAYS` | 35: one SAP Security Patch Day cycle plus slack. Governs EMPHASIS only — the measured date is always returned, so no threshold can hide an age |
+| `STALE_AFTER_DAYS` | 35: one SAP Security Patch Day cycle plus slack. Governs EMPHASIS only — the measured date is always returned, so no threshold can hide an age. Defined ONCE in `modules/coverage.py`; `server.queries` imports it, so the console and the PDF an auditor reads cannot disagree |
+| `queries.latest_coverage` | The manifest now carries `measured`. `oldest_days` is the figure to quote — the manifest is a UNION across systems, so the weakest evidence behind a CLEAR verdict is the oldest run in it. Reaches Domains, CSF and Trend through `roll_up` |
+| `coverage.evidence_age` | How old an UPLOAD is, from the file timestamps. A LOWER BOUND, never a measurement: copying or unzipping resets mtime, so it can only make old evidence look fresher. "At least 240 days" is sound; "0 days" says nothing, and `evidence_age_sentence` is silent there rather than reassuring |
 
 ### If you touch this
 

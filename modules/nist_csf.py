@@ -495,6 +495,12 @@ def roll_up(findings: Sequence[Dict[str, Any]],
         "reference": "NIST CSWP 29, February 26, 2024",
         "doi": "https://doi.org/10.6028/NIST.CSWP.29",
         "functions": functions,
+        # WHEN THE ANSWER WAS MEASURED, carried straight through from the
+        # manifest. A CLEAR verdict on this screen rests on the newest complete
+        # run of each system in scope, and until now the screen could not say
+        # how old that was — see server/queries.latest_coverage. None when the
+        # caller supplied no manifest, which is a different state from "today".
+        "measured": (coverage or {}).get("measured"),
         "totals": {
             "functions": len(FUNCTIONS),
             "categories": len(CATEGORIES),

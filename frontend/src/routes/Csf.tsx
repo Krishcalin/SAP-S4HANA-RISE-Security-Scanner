@@ -22,6 +22,7 @@ import { useTitle } from '../lib/title'
 import { Landmark } from 'lucide-react'
 import { CARD_TITLE as CARD_H3, KPI, KPI_NOTE } from '../lib/ui'
 import { Donut } from '../components/Donut'
+import { MeasuredWhen } from '../components/MeasuredWhen'
 
 const CARD = 'rounded-lg border border-cardline bg-panel p-4'
 
@@ -83,6 +84,7 @@ export function Csf() {
         <Landmark size={22} className="text-accent shrink-0" />
         NIST Cybersecurity Framework 2.0
       </h1>
+      <MeasuredWhen measured={view?.measured ?? null} subject="assessment" />
       <p className="text-ink2 mb-5">
         Your open findings, arranged by the outcome each one is evidence against.
       </p>

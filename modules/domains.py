@@ -431,6 +431,12 @@ def roll_up(findings: Sequence[Dict[str, Any]],
 
     return {
         "domains": out,
+        # WHEN THE ANSWER WAS MEASURED, carried straight through from the
+        # manifest. A CLEAR verdict on this screen rests on the newest complete
+        # run of each system in scope, and until now the screen could not say
+        # how old that was — see server/queries.latest_coverage. None when the
+        # caller supplied no manifest, which is a different state from "today".
+        "measured": (coverage or {}).get("measured"),
         "unplaced": {
             "counts": dict(sorted(unplaced.items(), key=lambda kv: (-kv[1], kv[0]))),
             "total": sum(unplaced.values()),
