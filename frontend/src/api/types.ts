@@ -1280,6 +1280,53 @@ export type DomainReach = 'full' | 'partial' | 'config_only' | 'none'
  *  back clean. */
 export type DomainState = 'assessed' | 'clear' | 'not_supplied' | 'not_assessed'
 
+/** server/queries.py `top_risks_by_domain` — the worst five in each domain.
+ *
+ *  A DIFFERENT QUESTION FROM the findings list, which can return five findings
+ *  that all sit in one domain. This is the shape somebody uses to hand work to
+ *  twelve different owners.
+ *
+ *  `state` is the roll-up's own, and it is the field that decides how an empty
+ *  `shown` list is drawn: only `clear` is good news. */
+export interface TopRiskDomain {
+  id: string
+  label: string
+  state: DomainState
+  total: number
+  counts: Record<string, number>
+  shown: TopRisk[]
+  /** How many DISTINCT risks were not shown. "5 of 138" is a different
+   *  sentence from "5". */
+  not_shown: number
+  /** Distinct risks, which is what the five are drawn from. `total` counts
+   *  FINDINGS, and the two differ whenever one problem lands on several
+   *  systems — so both are given rather than one standing in for the other. */
+  distinct: number
+}
+
+export interface TopRisk {
+  id: number
+  check_id: string
+  severity: string
+  priority_tier: string | null
+  priority_score: number | null
+  state: string
+  category: string
+  title: string
+  sid: string | null
+  system_client: string | null
+  /** How many systems this same check fires on, and which. Five rows of the
+   *  same risk are not five risks. */
+  instances: number
+  systems: string[]
+}
+
+export interface TopRisksView {
+  domains: TopRiskDomain[]
+  per_domain: number
+  measured: Measured | null
+}
+
 export interface SecurityDomain {
   id: string
   /** The buyer's word, verbatim. The honesty lives in `scope`. */

@@ -1,5 +1,5 @@
 import {
-  Calculator, CircleAlert, CircleDollarSign, Landmark, LayoutDashboard, LayoutGrid, Scissors, ShieldCheck, TrendingUp, Upload, UserCog, Waypoints, type LucideIcon,
+  Calculator, CircleAlert, ListOrdered, CircleDollarSign, Landmark, LayoutDashboard, LayoutGrid, Scissors, ShieldCheck, TrendingUp, Upload, UserCog, Waypoints, type LucideIcon,
 } from 'lucide-react'
 import type { Role } from '../api/types'
 
@@ -42,6 +42,11 @@ export const NAV_MAIN: NavItem[] = [
   { to: '/risk', label: 'Risk ($)', icon: CircleDollarSign },
   { to: '/coverage', label: 'Coverage', icon: ShieldCheck },
   { to: '/domains', label: 'Domains', icon: LayoutGrid },
+  // Directly under Domains, because it is the same twelve buckets asked a
+  // narrower question: not "how much is in each" but "what is worst in
+  // each". The findings list cannot answer it — its first five rows can
+  // all sit in one domain.
+  { to: '/top-risks', label: 'Top5Risk', icon: ListOrdered },
   { to: '/crq', label: 'Quantify Risk', icon: Calculator },
   { to: '/csf', label: 'NIST CSF', icon: Landmark },
   { to: '/upload', label: 'Upload', icon: Upload, minRole: 'analyst' },

@@ -843,6 +843,131 @@ def findings_for_crq(scope: Optional[Sequence[int]],
         f"WHERE {' AND '.join(where)}", params)
 
 
+#: How many findings the top-risk view shows per domain.
+TOP_RISKS_PER_DOMAIN = 5
+
+#: The order the console ranks findings in, as data rather than as SQL, so the
+#: top-risk view sorts identically to the findings list.
+#:
+#: TIER FIRST, SEVERITY SECOND, and the reason is in `list_findings`: the tier
+#: already folds in exploitability, exposure and privilege, so sorting on raw
+#: severity would put an unreachable CRITICAL above an actively-exploited HIGH.
+#: A "top five" built on severity alone would be the wrong five.
+_TIER_ORDER = {"P1": 0, "P2": 1, "P3": 2, "P4": 3}
+_SEVERITY_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+
+
+def rank_key(finding: Dict[str, Any]):
+    """Sort key for "worst first". Unknown tier and severity sort last, not
+    first: a finding the priority engine could not place is not evidence that
+    it is urgent."""
+    return (
+        _TIER_ORDER.get(finding.get("priority_tier"), 4),
+        _SEVERITY_ORDER.get(str(finding.get("severity", "")).upper(), 4),
+        # A tie between two findings of the same tier and severity goes to the
+        # one that has been open longer, which is the same tiebreak
+        # `list_findings` uses. `id` stands in for age here: the rows come from
+        # `findings_for_domains`, which does not carry `first_seen_at`, and
+        # ids are assigned in insertion order.
+        finding.get("id") or 0,
+    )
+
+
+def top_risks_by_domain(scope: Optional[Sequence[int]],
+                        per_domain: int = TOP_RISKS_PER_DOMAIN
+                        ) -> Dict[str, Any]:
+    """The worst `per_domain` open findings in each of the twelve domains.
+
+    DERIVED FROM THE ROLL-UP, NOT COMPUTED BESIDE IT. The domain tiles and this
+    page must never disagree about whether a domain was assessed, so the state
+    on each entry is `domains.roll_up`'s own — including the distinction that
+    matters most here.
+
+    AN EMPTY LIST IS FOUR DIFFERENT THINGS, and a page that draws them the same
+    way is the failure this product exists to prevent:
+
+      * `assessed` with rows      — we looked, and here are the worst of them
+      * `clear`                   — we looked and found nothing
+      * `not_supplied`            — we would have looked; the export never came
+      * `not_assessed`            — this product does not cover it, in any run
+
+    Only the second is good news. The caller gets the state so the screen can
+    say which one it is looking at.
+    """
+    from modules import domains as domains_module
+
+    findings = findings_for_domains(scope)
+    rolled = domains_module.roll_up(findings, coverage=latest_coverage(scope))
+
+    buckets: Dict[str, List[Dict[str, Any]]] = {}
+    for finding in findings:
+        domain = domains_module.domain_for(finding.get("check_id"),
+                                           finding.get("category"))
+        if domain:
+            buckets.setdefault(domain, []).append(finding)
+
+    out = []
+    for entry in rolled["domains"]:
+        rows = sorted(buckets.get(entry["id"], []), key=rank_key)
+        risks = _distinct_risks(rows)
+        out.append({
+            "id": entry["id"],
+            "label": entry["label"],
+            "state": entry["state"],
+            "counts": entry["counts"],
+            "total": entry["total"],
+            # The five shown, and how many were not. "5 of 138" is a different
+            # sentence from "5", and the second one invites a reader to think
+            # they have seen the domain.
+            "shown": risks[:per_domain],
+            "not_shown": max(0, len(risks) - per_domain),
+            # Distinct risks, which is what the five are drawn from. The domain
+            # total above counts FINDINGS, and the two differ whenever one
+            # problem lands on several systems — so both are given rather than
+            # one being quietly used as the other.
+            "distinct": len(risks),
+        })
+    return {"domains": out, "per_domain": per_domain,
+            "measured": (latest_coverage(scope) or {}).get("measured")}
+
+
+def _distinct_risks(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """One entry per check, worst instance first, carrying the systems it hits.
+
+    FIVE ROWS OF THE SAME RISK ARE NOT FIVE RISKS. Measured on the live sample
+    estate before this existed: the Patch domain's "top five" was three copies
+    of "Missing HotNews (Priority 1) SAP Security Notes" and two of "Missing
+    notes for actively-exploited SAP vulnerabilities" — the same two problems on
+    five different systems, spending all five slots to say two things.
+
+    A finding here is per-system by design, and that is right for the findings
+    list, where somebody works one system at a time. It is wrong for a
+    "top five", which is read as five different things to go and fix.
+
+    The representative is the WORST-ranked instance, because the rows arrive
+    sorted: the first occurrence of a check is already its highest-priority
+    instance, so a domain whose check is P1 on production and P3 on a sandbox
+    is represented by production.
+    """
+    out: List[Dict[str, Any]] = []
+    seen: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        check = str(row.get("check_id") or "")
+        system = row.get("sid")
+        if check in seen:
+            entry = seen[check]
+            entry["instances"] += 1
+            if system and system not in entry["systems"]:
+                entry["systems"].append(system)
+            continue
+        entry = dict(row)
+        entry["instances"] = 1
+        entry["systems"] = [system] if system else []
+        seen[check] = entry
+        out.append(entry)
+    return out
+
+
 def latest_coverage(scope: Optional[Sequence[int]],
                     landscape_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
     """The coverage manifests behind the findings a reader can currently see.
@@ -935,7 +1060,13 @@ def findings_for_domains(scope: Optional[Sequence[int]]) -> List[Dict[str, Any]]
     params: List[Any] = []
     _scoped(where, params, scope)
     return db.query(
-        "SELECT f.id, f.check_id, f.severity, cd.category, cd.title, "
+        # priority_tier and priority_score are ADDITIVE here: `roll_up`
+        # counts by severity and ignores them. They are carried so that
+        # `top_risks_by_domain` can rank on the same rows the roll-up counts,
+        # rather than issuing a second query that could disagree with the tile
+        # above it.
+        "SELECT f.id, f.check_id, f.severity, f.priority_tier, "
+        "       f.priority_score, f.state, cd.category, cd.title, "
         "       s.sid, s.client AS system_client "
         "FROM finding f "
         "JOIN check_definition cd ON cd.check_id = f.check_id "

@@ -1400,6 +1400,22 @@ def api_domains(user: Dict[str, Any] = Depends(current_user)):
     return domains.roll_up(findings, coverage=queries.latest_coverage(scope))
 
 
+@app.get("/api/top-risks")
+def api_top_risks(user: Dict[str, Any] = Depends(current_user)):
+    """The worst five open findings in each of the twelve domains.
+
+    A DIFFERENT QUESTION FROM /api/findings, which answers "what is worst in
+    the estate" and can return five findings that all sit in one domain. This
+    answers "what is worst in EACH domain", which is the shape somebody uses to
+    hand work to twelve different owners.
+
+    It carries each domain's assessment state rather than only its findings: an
+    empty list means one of four things here, and only one of them is good news
+    — see queries.top_risks_by_domain.
+    """
+    return queries.top_risks_by_domain(auth.scope_for(user))
+
+
 @app.get("/api/domains/{domain_id}")
 def api_domain(domain_id: str,
                user: Dict[str, Any] = Depends(current_user)):

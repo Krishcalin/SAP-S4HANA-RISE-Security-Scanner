@@ -14,6 +14,7 @@ import { RequirementDetail } from './routes/RequirementDetail'
 import { CrqInputs } from './routes/CrqInputs'
 import { DomainDetail } from './routes/DomainDetail'
 import { Domains } from './routes/Domains'
+import { TopRisks } from './routes/TopRisks'
 import { Csf } from './routes/Csf'
 import { CsfFunction } from './routes/CsfFunction'
 import { PathDetail } from './routes/PathDetail'
@@ -70,6 +71,7 @@ export default function App() {
           <Route path="/chokepoints" element={<Chokepoints />} />
           <Route path="/requirements/:id" element={<RequirementDetail />} />
           <Route path="/crq" element={<CrqInputs />} />
+          <Route path="/top-risks" element={<TopRisks />} />
           <Route path="/domains" element={<Domains />} />
           {/* /domains/:id takes a domain id, so it has no nav entry: it is
               reached from the twelve tiles on /domains. */}

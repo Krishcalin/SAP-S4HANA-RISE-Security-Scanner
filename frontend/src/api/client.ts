@@ -32,7 +32,7 @@ import type {
   CheckIndexEntry, ChokepointsView,
   ServiceRequest, SeveringSet, Coverage, CrqControlsView,
   CrqParametersView, CrqQuantifyResult, CrqTrendPoint, CsfFunctionView,
-  CsfView, Dashboard, DomainsView, FindingDetail, FindingFilters,
+  CsfView, Dashboard, DomainsView, FindingDetail, FindingFilters, TopRisksView,
   FindingHistory, FindingPage, GeneratedPassword, Health, Journey, Landscape,
   Me, PathView, PathsOverview, RequirementDoc, ResolvedView, RiskView,
   RunDiff, SapSystem, SaveViewResult, SavedView, ScanRun, SecurityDomain,
@@ -502,6 +502,16 @@ export function crqControls(landscapeId: number): Promise<CrqControlsView> {
 }
 export function crqTrend(limit = 12): Promise<{ points: CrqTrendPoint[] }> {
   return get<{ points: CrqTrendPoint[] }>(`/crq/trend?limit=${limit}`)
+}
+
+// ══ Top risks, per domain ═══════════════════════════════════════════════════
+//
+// A DIFFERENT QUESTION FROM `findings()`, which answers "what is worst in the
+// estate" and can return five findings that all sit in one domain. This answers
+// "what is worst in EACH domain" — the shape somebody uses to hand work to
+// twelve different owners.
+export function topRisks(): Promise<TopRisksView> {
+  return get<TopRisksView>('/top-risks')
 }
 
 // ══ The twelve security domains ═════════════════════════════════════════════

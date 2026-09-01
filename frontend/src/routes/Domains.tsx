@@ -25,7 +25,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 
 import { ApiError, domains as fetchDomains } from '../api/client'
-import type { DomainReach, DomainsView, SecurityDomain } from '../api/types'
+import type { DomainReach, DomainState, DomainsView, SecurityDomain } from '../api/types'
 import { useTitle } from '../lib/title'
 import { LayoutGrid } from 'lucide-react'
 import { KPI } from '../lib/ui'
@@ -46,7 +46,12 @@ const REACH_WORD: Record<DomainReach, string> = {
   none: 'not covered',
 }
 
-export function stateChip(d: SecurityDomain): { cls: string; text: string } {
+/** The wording for a domain's assessment state.
+ *
+ *  Takes only the state, so /top-risks can share it: two screens inventing
+ *  their own phrase for `not_supplied` is how one of them ends up saying
+ *  something reassuring about an export that never arrived. */
+export function stateChip(d: { state: DomainState }): { cls: string; text: string } {
   if (d.state === 'not_assessed') return { cls: 'csf-state-not_assessed', text: 'not assessed' }
   if (d.state === 'not_supplied') return { cls: 'csf-state-not_assessed', text: 'export not supplied' }
   if (d.state === 'clear') return { cls: 'csf-state-clear', text: 'no findings' }
