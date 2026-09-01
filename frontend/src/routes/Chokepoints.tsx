@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { ApiError, chokepoints as fetchChokepoints } from '../api/client'
-import type { ChokepointsView, RemediationOwner } from '../api/types'
+import { ApiError, chokepoints as fetchChokepoints,
+         severingSets as fetchSeveringSets } from '../api/client'
+import type { ChokepointsView, RemediationOwner, SeveringSet } from '../api/types'
 import { useTitle } from '../lib/title'
 import { Scissors } from 'lucide-react'
 import { CARD_TITLE as CARD_H3, KPI, KPI_NOTE } from '../lib/ui'
@@ -55,8 +56,17 @@ export function Chokepoints() {
 
   useTitle('Choke Points')
 
+  const [plans, setPlans] = useState<SeveringSet[] | null>(null)
+
   useEffect(() => {
     let live = true
+    // A separate, non-blocking fetch. The worklist is this page's job; the
+    // plans are the answer to the question the worklist raises, and a page
+    // that failed entirely because the second one did would be worse at the
+    // first one.
+    fetchSeveringSets()
+      .then((v) => { if (live) setPlans(v.scenarios) })
+      .catch(() => { if (live) setPlans([]) })
     fetchChokepoints()
       .then((v) => { if (live) setView(v) })
       .catch((e: unknown) => {
@@ -81,7 +91,69 @@ export function Chokepoints() {
 
       {failure && <div className="banner banner-bad">{failure}</div>}
       {!failure && view === null && <p className="text-[13px] text-ink3">Loading…</p>}
+      {plans !== null && plans.length > 0 && <Plans plans={plans} />}
       {view !== null && <Body view={view} />}
+    </>
+  )
+}
+
+/**
+ * What it takes to close each scenario outright.
+ *
+ * WHY THIS SITS ABOVE THE WORKLIST. A choke point carries a figure only where
+ * closing it ALONE severs every route, and on a real estate that almost never
+ * happens — the reference landscape has four to six independent routes to each
+ * scenario, so every row below shows a dash in the Worth column. Without this
+ * panel the reader's honest conclusion is that the money does not work.
+ *
+ * It answers the question that has an answer: not "which single fix closes
+ * this" but "which fixes, together" — and that is what somebody schedules.
+ */
+function Plans({ plans }: { plans: SeveringSet[] }) {
+  return (
+    <>
+      <h2 className={H2}>What it takes to close a scenario outright</h2>
+      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
+        {plans.map((p) => (
+          <div key={p.scenario} className={CARD}>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="font-semibold text-ink">{p.scenario}</span>
+              <span className="font-mono text-[13px] text-ink">
+                {p.ale_mean ? money(p.ale_mean) : UNPRICED_CELL}
+              </span>
+            </div>
+            {p.closable ? (
+              <>
+                <p className="text-[12px] text-ink3 mt-1 mb-2">
+                  {p.fixes.length === 1
+                    ? 'One fix closes '
+                    : `${p.fixes.length} fixes close `}
+                  {p.paths_open === 1 ? 'its only route' : `all ${p.paths_open} routes`}
+                </p>
+                <ul className="text-[12px] space-y-1">
+                  {p.fixes.map((f) => (
+                    <li key={f.finding_id} className="flex items-baseline gap-2">
+                      <span className={`pill sev-${f.severity ?? 'INFO'} shrink-0`}>
+                        {f.severity}
+                      </span>
+                      <Link className={`${LINK} font-mono shrink-0`}
+                            to={`/findings/${f.finding_id}`}>{f.check_id}</Link>
+                      <span className="text-ink3 truncate">{f.title}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              /* Not a plan with a caveat. A route no fix can sever means no set
+                 of fixes closes this, and offering one that ignored it would be
+                 a false all-clear. */
+              <p className="text-[12px] text-ink3 mt-1">
+                No set of fixes closes this: {p.reason}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
     </>
   )
 }

@@ -530,6 +530,25 @@ export interface Chokepoint {
  *  under them. `open_paths` is the exception and comes from the path summary:
  *  summing `paths_cut` would count every path with more than one cut repeatedly,
  *  and most of them have more than one. */
+/** server/app.py `api_severing_sets` — what it takes to close a scenario. */
+export interface SeveringSet {
+  scenario: string
+  paths_open: number
+  /** False when a route has no hop a fix would sever, so NO set closes it. */
+  closable: boolean
+  reason: string
+  ale_mean: number | null
+  fixes: {
+    finding_id: number
+    check_id: string
+    severity: Severity | null
+    remediation_owner: RemediationOwner
+    title: string
+    sid: string | null
+    client: string | null
+  }[]
+}
+
 export interface ChokepointsView {
   chokepoints: Chokepoint[]
   /** True when the query hit its cap. Returned rather than inferred: a list that

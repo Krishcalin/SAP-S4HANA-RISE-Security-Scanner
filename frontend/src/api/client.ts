@@ -29,7 +29,8 @@
 
 import type {
   AccountInfo, AssignResult, BulkTransitionResult, ChangesSince, CheckDoc,
-  CheckIndexEntry, ChokepointsView, Coverage, CrqControlsView,
+  CheckIndexEntry, ChokepointsView,
+  SeveringSet, Coverage, CrqControlsView,
   CrqParametersView, CrqQuantifyResult, CrqTrendPoint, CsfFunctionView,
   CsfView, Dashboard, DomainsView, FindingDetail, FindingFilters,
   FindingHistory, FindingPage, GeneratedPassword, Health, Journey, Landscape,
@@ -336,6 +337,10 @@ export function path(id: number): Promise<PathView> {
  *  because that one caps the list at 15 to keep the paths screen legible and a
  *  cap that exists for another screen must not decide how much work is shown
  *  here. */
+export function severingSets(): Promise<{ scenarios: SeveringSet[] }> {
+  return get<{ scenarios: SeveringSet[] }>('/severing-sets')
+}
+
 export function chokepoints(limit?: number): Promise<ChokepointsView> {
   return get<ChokepointsView>('/chokepoints', limit ? { limit } : undefined)
 }

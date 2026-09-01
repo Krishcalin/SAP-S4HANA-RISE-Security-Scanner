@@ -23,6 +23,7 @@ import type { ChokepointsView } from '../api/types'
 
 vi.mock('../api/client', () => ({
   chokepoints: vi.fn(),
+  severingSets: vi.fn(),
   ApiError: class ApiError extends Error {
     status: number
     constructor(status: number, message: string) {
@@ -34,7 +35,8 @@ vi.mock('../api/client', () => ({
 
 vi.mock('../lib/title', () => ({ useTitle: () => {} }))
 
-import { chokepoints as fetchChokepoints } from '../api/client'
+import { chokepoints as fetchChokepoints,
+         severingSets as fetchSeveringSets } from '../api/client'
 
 function row(over: Partial<ChokepointsView['chokepoints'][0]> = {}) {
   return {
@@ -63,6 +65,14 @@ function view(over: Partial<ChokepointsView> = {}): ChokepointsView {
     ...over,
   }
 }
+
+// The plans panel fetches separately from the worklist. Defaulted at FILE level
+// rather than inside one describe: the block that tests the money sits in
+// another, and a default that only covers the block somebody edited is how a
+// component change breaks tests that have nothing to do with it.
+beforeEach(() => {
+  vi.mocked(fetchSeveringSets).mockResolvedValue({ scenarios: [] })
+})
 
 function draw(v: ChokepointsView) {
   vi.mocked(fetchChokepoints).mockResolvedValue(v)
@@ -178,5 +188,67 @@ describe('what a cut is worth', () => {
     await screen.findByText('INTG-GW-001')
     expect(screen.queryByText('$0')).not.toBeInTheDocument()
     expect(screen.getAllByText('—').length).toBeGreaterThan(0)
+  })
+})
+
+describe('what it takes to close a scenario', () => {
+  function plan(over = {}) {
+    return {
+      scenario: 'SAP-RCE-01', paths_open: 4, closable: true, reason: '',
+      ale_mean: 13_215_270,
+      fixes: [
+        { finding_id: 7, check_id: 'INTG-GW-001', severity: 'CRITICAL' as const,
+          remediation_owner: 'customer_fixable' as const,
+          title: 'Gateway secinfo has overly permissive permit rules',
+          sid: 'PRD', client: '100' },
+        { finding_id: 8, check_id: 'NET-004', severity: 'HIGH' as const,
+          remediation_owner: 'customer_fixable' as const,
+          title: 'High-risk ICF services are active', sid: 'PRD', client: '100' },
+      ],
+      ...over,
+    }
+  }
+
+  it('answers the question the empty Worth column raises', async () => {
+    // Every row of the worklist shows a dash on a real estate, because no
+    // single fix severs a scenario. This panel says what does.
+    vi.mocked(fetchSeveringSets).mockResolvedValue({ scenarios: [plan()] })
+    draw(view())
+    expect(await screen.findByText(/2 fixes close all 4 routes/)).toBeInTheDocument()
+    expect(screen.getByText('$13.22M')).toBeInTheDocument()
+    // Twice: once in the plan above, once on its own row in the worklist
+    // below. The default fixture uses this check id for both.
+    expect(screen.getAllByText('INTG-GW-001').length).toBe(2)
+  })
+
+  it('says no set closes it rather than offering one that does not', async () => {
+    // A route with no severable hop means NO plan closes this scenario. Showing
+    // a plan anyway would be a false all-clear, which is worse than no answer.
+    vi.mocked(fetchSeveringSets).mockResolvedValue({
+      scenarios: [plan({
+        closable: false, fixes: [],
+        reason: 'one of these routes has no hop that closing a finding would sever',
+      })],
+    })
+    draw(view())
+    expect(await screen.findByText(/No set of fixes closes this/)).toBeInTheDocument()
+    expect(screen.queryByText(/fixes close all/)).not.toBeInTheDocument()
+  })
+
+  it('gives the plan even when nobody has priced the business', async () => {
+    // The set is a fact about the graph. Only the money needs the answers.
+    vi.mocked(fetchSeveringSets).mockResolvedValue({
+      scenarios: [plan({ ale_mean: null })],
+    })
+    draw(view())
+    expect(await screen.findByText(/2 fixes close all 4 routes/)).toBeInTheDocument()
+    expect(screen.queryByText('$0')).not.toBeInTheDocument()
+  })
+
+  it('stays out of the way when the panel has nothing to say', async () => {
+    vi.mocked(fetchSeveringSets).mockResolvedValue({ scenarios: [] })
+    draw(view())
+    await screen.findByText('INTG-GW-001')
+    expect(screen.queryByText(/What it takes to close/)).not.toBeInTheDocument()
   })
 })

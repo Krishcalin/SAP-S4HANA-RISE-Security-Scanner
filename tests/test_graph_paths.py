@@ -646,3 +646,168 @@ def test_a_closed_path_is_not_counted_in_the_denominator(landscape):
     row = [c for c in graph.chokepoints(None, landscape_id=landscape)
            if c["check_id"] == "M-LAST"][0]
     assert float(row["ale_severed"]) == 4_000_000
+
+
+# ── the smallest set of fixes that closes a scenario ─────────────────────────
+#
+# A single finding almost never severs a scenario on a real estate — the
+# reference landscape has four to six independent routes to each — so the
+# chokepoint worklist shows no figure on any row. A SET is the unit that
+# actually closes something and the unit somebody schedules.
+
+
+def _cut_path(pid, scenario, checks):
+    """A path whose single hop is cut by every check named."""
+    return {"id": pid, "name": pid, "fair_scenario": scenario, "severity": "HIGH",
+            "hops": [{"name": "cut", "required": True, "cut": True,
+                      "checks": list(checks), "why_cut": "test"}]}
+
+
+@pytestmark_db
+def test_two_fixes_close_two_routes_that_share_nothing(landscape):
+    from server import db, graph
+
+    with db.connection() as conn:
+        _seed(conn, landscape, ["S-A", "S-B"])
+        conn.commit()
+        _price(conn, landscape, "SAP-RCE-01", 4_000_000)
+        run = db_one(conn, "INSERT INTO scan_run (landscape_id, status) "
+                           "VALUES (%s,'complete') RETURNING id", (landscape,))
+        graph.store_paths(conn, landscape, run, {"paths": [
+            _cut_path("S-1", "SAP-RCE-01", ["S-A"]),
+            _cut_path("S-2", "SAP-RCE-01", ["S-B"]),
+        ]})
+        conn.commit()
+
+    entry = [e for e in graph.severing_sets(None, landscape_id=landscape)
+             if e["scenario"] == "SAP-RCE-01"][0]
+    assert entry["closable"] is True
+    assert entry["paths_open"] == 2
+    assert {f["check_id"] for f in entry["fixes"]} == {"S-A", "S-B"}
+    assert float(entry["ale_mean"]) == 4_000_000
+
+
+@pytestmark_db
+def test_it_finds_the_one_fix_that_does_the_work_of_two(landscape):
+    """The smallest set, not merely A set. One finding on both routes beats
+    one from each, and a greedy pass that took the first hit would miss it."""
+    from server import db, graph
+
+    with db.connection() as conn:
+        _seed(conn, landscape, ["S-BOTH", "S-ONE", "S-TWO"])
+        conn.commit()
+        run = db_one(conn, "INSERT INTO scan_run (landscape_id, status) "
+                           "VALUES (%s,'complete') RETURNING id", (landscape,))
+        graph.store_paths(conn, landscape, run, {"paths": [
+            _cut_path("S-3", "SAP-DATA-04", ["S-BOTH", "S-ONE"]),
+            _cut_path("S-4", "SAP-DATA-04", ["S-BOTH", "S-TWO"]),
+        ]})
+        conn.commit()
+
+    entry = [e for e in graph.severing_sets(None, landscape_id=landscape)
+             if e["scenario"] == "SAP-DATA-04"][0]
+    assert [f["check_id"] for f in entry["fixes"]] == ["S-BOTH"]
+
+
+@pytestmark_db
+def test_a_route_nothing_can_sever_makes_the_scenario_unclosable(landscape):
+    """THE MOST DANGEROUS SENTENCE THIS COULD PRODUCE.
+
+    A path with no cut hop cannot be closed by fixing findings at all. Dropping
+    such paths before the search is the obvious implementation and it would tell
+    somebody "close these two and the scenario is gone" while a route stayed
+    wide open — a false all-clear, which is worse than no answer.
+    """
+    from server import db, graph
+
+    with db.connection() as conn:
+        _seed(conn, landscape, ["S-CUT", "S-SOFT"])
+        conn.commit()
+        run = db_one(conn, "INSERT INTO scan_run (landscape_id, status) "
+                           "VALUES (%s,'complete') RETURNING id", (landscape,))
+        graph.store_paths(conn, landscape, run, {"paths": [
+            _cut_path("S-5", "SAP-INTF-05", ["S-CUT"]),
+            # required, holds, and severs nothing when closed
+            {"id": "S-6", "name": "S-6", "fair_scenario": "SAP-INTF-05",
+             "severity": "HIGH",
+             "hops": [{"name": "soft", "required": True, "cut": False,
+                       "checks": ["S-SOFT"]}]},
+        ]})
+        conn.commit()
+
+    entry = [e for e in graph.severing_sets(None, landscape_id=landscape)
+             if e["scenario"] == "SAP-INTF-05"][0]
+    assert entry["closable"] is False
+    assert entry["fixes"] == []
+    assert "no hop" in entry["reason"]
+
+
+@pytestmark_db
+def test_an_unpriced_scenario_still_gets_its_plan(landscape):
+    """The set is a fact about the graph. Only the money needs the answers."""
+    from server import db, graph
+
+    with db.connection() as conn:
+        _seed(conn, landscape, ["S-P"])
+        conn.commit()
+        _price(conn, landscape, "SAP-PRIV-03", 7_000_000, applied=False)
+        run = db_one(conn, "INSERT INTO scan_run (landscape_id, status) "
+                           "VALUES (%s,'complete') RETURNING id", (landscape,))
+        graph.store_paths(conn, landscape, run,
+                          {"paths": [_cut_path("S-7", "SAP-PRIV-03", ["S-P"])]})
+        conn.commit()
+
+    entry = [e for e in graph.severing_sets(None, landscape_id=landscape)
+             if e["scenario"] == "SAP-PRIV-03"][0]
+    assert entry["closable"] is True
+    assert [f["check_id"] for f in entry["fixes"]] == ["S-P"]
+    assert entry["ale_mean"] is None, "an unpriced figure reached the plan"
+
+
+@pytestmark_db
+def test_a_closed_route_is_not_one_that_needs_fixing(landscape):
+    """Otherwise the plan keeps asking for work that has already been done."""
+    from server import db, graph
+
+    with db.connection() as conn:
+        _seed(conn, landscape, ["S-LIVE", "S-DEAD"])
+        conn.commit()
+        run = db_one(conn, "INSERT INTO scan_run (landscape_id, status) "
+                           "VALUES (%s,'complete') RETURNING id", (landscape,))
+        graph.store_paths(conn, landscape, run, {"paths": [
+            _cut_path("S-8", "SAP-FRAUD-02", ["S-LIVE"]),
+            _cut_path("S-9", "SAP-FRAUD-02", ["S-DEAD"]),
+        ]})
+        conn.commit()
+        conn.execute("UPDATE attack_path SET closed_at = now() "
+                     "WHERE template_id = %s AND landscape_id = %s",
+                     ("S-9", landscape))
+        conn.commit()
+
+    entry = [e for e in graph.severing_sets(None, landscape_id=landscape)
+             if e["scenario"] == "SAP-FRAUD-02"][0]
+    assert entry["paths_open"] == 1
+    assert [f["check_id"] for f in entry["fixes"]] == ["S-LIVE"]
+
+
+def test_the_cover_is_exact_not_greedy():
+    """Pure arithmetic, no database.
+
+    The classic case where greedy loses: the finding on the most routes is not
+    in any smallest set. Greedy takes {A} then needs two more; the answer is two.
+    """
+    from server.graph import _smallest_cover
+
+    # The textbook instance where taking the biggest set first costs you a fix.
+    # Eight routes:
+    #   A cuts routes 0-5   (six — greedy grabs it, and is then stuck with
+    #                        two singletons for routes 6 and 7)
+    #   B cuts routes 0,1,2 and 6
+    #   C cuts routes 3,4,5 and 7
+    # B and C between them cut all eight. Greedy answers three; the answer is two.
+    paths = [{"A", "B"}, {"A", "B"}, {"A", "B"},
+             {"A", "C"}, {"A", "C"}, {"A", "C"},
+             {"B"}, {"C"}]
+    chosen = _smallest_cover(paths)
+    assert len(chosen) == 2, "greedy would have answered 3 here"
+    assert set(chosen) == {"B", "C"}

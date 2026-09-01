@@ -167,6 +167,15 @@ can see what got fixed and what came back, an attack-path graph, a dashboard
 with the financial figure on it, role-based access, an audit log, and a
 read-only MCP interface for asking questions of the data.
 
+**It says what it takes to close a scenario, not just what is worst.** A single
+finding almost never severs a whole scenario — a real estate has four to six
+independent routes to each — so the console computes the smallest *set* of
+fixes that leaves one with no route at all, and prices that. On the bundled
+sample: three fixes close the $13.2M ransomware scenario, two close the payment
+fraud one, twenty-one close all five. The answer is exact rather than
+approximate, and a scenario with a route no fix can sever is reported as
+unclosable rather than handed a plan that ignores it.
+
 **The worklist is ordered by money, not by severity.** The graph knows which
 findings sit on the one hop that severs a path; the FAIR model knows what the
 scenario at the end of that path is worth. Join them and the first line reads

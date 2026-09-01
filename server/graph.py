@@ -497,6 +497,139 @@ def chokepoints(scope: Optional[Sequence[int]], limit: int = 15,
         """, params + params + [limit])
 
 
+def severing_sets(scope: Optional[Sequence[int]],
+                  landscape_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    """Per scenario: the smallest set of open findings that disconnects it.
+
+    WHY THIS EXISTS. `chokepoints` prices a finding only where closing it alone
+    severs every route to a scenario, which is the only claim a single finding
+    supports. On a real estate that almost never happens — the reference
+    landscape has four to six independent routes to each scenario, so every row
+    on that worklist shows no figure and the product's differentiator is
+    invisible on exactly the screen built to carry it.
+
+    A SET is the honest unit. "Close these three and the ransomware scenario has
+    no route left" is a claim the graph fully supports, it is what somebody
+    actually schedules, and it is the first thing in this market that prices a
+    remediation plan rather than a finding.
+
+    THE ANSWER IS EXACT, not capped. Minimum hitting set is NP-hard in general
+    and trivial here, because a finding matters only through WHICH PATHS it
+    cuts. Collapsing candidates to distinct coverage signatures bounds the
+    search by the number of paths rather than the number of findings: six paths
+    admit at most sixty-three useful signatures however many hundred findings
+    sit on them. Dominated signatures — those cutting a subset of another's
+    paths — are dropped, because taking one can never beat taking the other.
+
+    A PATH WITH NO CUT HOP CANNOT BE CLOSED THIS WAY, and a scenario holding one
+    is reported as unclosable rather than being handed a set that quietly
+    ignores it. Filtering those paths out is the obvious implementation and it
+    would produce the product's most dangerous sentence: "close these three" for
+    a scenario that still has a route open.
+    """
+    clause, params = _scoped(scope)
+    land = ""
+    if landscape_id is not None:
+        land = " AND p.landscape_id = %s"
+        params = list(params) + [landscape_id]
+
+    rows = db.query(
+        f"""
+        SELECT p.id, p.fair_scenario, p.detail -> 'hops' AS hops
+        FROM attack_path p
+        WHERE p.closed_at IS NULL AND {clause}{land}
+        """, params)
+
+    by_scenario: Dict[str, List[Any]] = {}
+    for row in rows:
+        cuts = set()
+        for hop in (row["hops"] or []):
+            if hop.get("is_cut"):
+                cuts |= {int(i) for i in (hop.get("finding_ids") or [])}
+        by_scenario.setdefault(row["fair_scenario"], []).append(cuts)
+
+    priced = {r["scenario_id"]: r for r in db.query(
+        """
+        SELECT DISTINCT ON (c.scenario_id) c.scenario_id, c.ale_mean,
+               (SELECT pf.detail -> 'loss_model' FROM crq_result pf
+                 WHERE pf.scan_run_id = c.scan_run_id
+                   AND pf.scenario_id IS NULL) AS loss_model
+        FROM crq_result c JOIN scan_run r ON r.id = c.scan_run_id
+        WHERE c.scenario_id IS NOT NULL AND r.status = 'complete'
+        ORDER BY c.scenario_id, r.started_at DESC
+        """)}
+
+    out: List[Dict[str, Any]] = []
+    for scenario, paths in sorted(by_scenario.items()):
+        money = priced.get(scenario) or {}
+        applied = ((money.get("loss_model") or {}).get("applied") is True)
+        entry: Dict[str, Any] = {
+            "scenario": scenario,
+            "paths_open": len(paths),
+            "ale_mean": money.get("ale_mean") if applied else None,
+        }
+        if any(not cuts for cuts in paths):
+            entry.update(closable=False, fixes=[], reason=(
+                "one of these routes has no hop that closing a finding would "
+                "sever, so no set of fixes disconnects this scenario"))
+            out.append(entry)
+            continue
+
+        chosen = _smallest_cover(paths)
+        entry.update(closable=True, fixes=_describe(chosen), reason="")
+        out.append(entry)
+
+    # Most valuable first where there is a value, then fewest fixes: the order
+    # somebody would work them in.
+    out.sort(key=lambda e: (-(float(e["ale_mean"]) if e["ale_mean"] else 0.0),
+                            len(e["fixes"]) or 99))
+    return out
+
+
+def _smallest_cover(paths: List[set]) -> List[int]:
+    """The fewest findings that touch every path. Exact.
+
+    Candidates are collapsed to their coverage signature — which paths they cut
+    — so the search is bounded by the path count rather than the finding count.
+    """
+    import itertools
+
+    signature: Dict[frozenset, int] = {}
+    for finding in sorted(set().union(*paths)):
+        hits = frozenset(i for i, cuts in enumerate(paths) if finding in cuts)
+        if hits and hits not in signature:
+            signature[hits] = finding
+
+    # A signature covering a subset of another's paths can never be the better
+    # choice, so it is dropped before the search rather than explored.
+    useful = [h for h in signature
+              if not any(h < other for other in signature)]
+    wanted = frozenset(range(len(paths)))
+
+    for size in range(1, len(paths) + 1):
+        for combo in itertools.combinations(useful, size):
+            if frozenset().union(*combo) == wanted:
+                return [signature[h] for h in combo]
+    return []                                   # unreachable: one per path covers
+
+
+def _describe(finding_ids: List[int]) -> List[Dict[str, Any]]:
+    """The findings themselves, so the caller shows a worklist not a set of ids."""
+    if not finding_ids:
+        return []
+    return db.query(
+        """
+        SELECT f.id AS finding_id, f.check_id, f.severity, f.remediation_owner,
+               cd.title, s.sid, s.client
+        FROM finding f
+        JOIN check_definition cd ON cd.check_id = f.check_id
+        LEFT JOIN sap_system s ON s.id = f.system_id
+        WHERE f.id = ANY(%s)
+        ORDER BY CASE f.severity WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1
+                                 WHEN 'MEDIUM' THEN 2 ELSE 3 END, f.check_id
+        """, (list(finding_ids),))
+
+
 def path_summary(scope: Optional[Sequence[int]]) -> Dict[str, Any]:
     clause, params = _scoped(scope)
     counts = db.one(

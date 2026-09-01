@@ -530,6 +530,24 @@ def api_chokepoints(user: Dict[str, Any] = Depends(current_user),
     }
 
 
+@app.get("/api/severing-sets")
+def api_severing_sets(user: Dict[str, Any] = Depends(current_user)):
+    """Per scenario: the smallest set of fixes that leaves it no route at all.
+
+    THE COMPANION TO /api/chokepoints, and on a real estate the more useful of
+    the two. A chokepoint carries a figure only where closing it ALONE severs
+    every route, which the reference landscape shows almost never happens — four
+    to six independent routes reach each scenario there, so every row on that
+    worklist shows a dash. This answers the question that has an answer: not
+    "which single fix closes this" but "which fixes, together".
+
+    Scoped like everything else. A scenario nobody can close — because one of
+    its routes has no hop a fix would sever — comes back `closable: false` with
+    the reason, rather than a plan that quietly leaves that route open.
+    """
+    return {"scenarios": graph.severing_sets(auth.scope_for(user))}
+
+
 @app.get("/api/checks")
 def api_check_index(user: Dict[str, Any] = Depends(current_user)):
     """Every check id the scanner publishes, with its category.
