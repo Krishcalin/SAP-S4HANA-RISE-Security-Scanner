@@ -197,7 +197,13 @@ hand-built engines, which is why the CLI needs no packages.
 ## Use it as a release gate
 
 `--gate` makes the scanner exit non-zero when a change makes things worse, so it
-can sit in a build pipeline:
+can sit in a build pipeline. Three exit codes, and the third is the point:
+
+| | |
+|---|---|
+| `0` | passed |
+| `1` | blocked — this change makes things worse |
+| `2` | **could not assess** — the exports were too thin to judge |
 
 ```bash
 # Record where you are today
@@ -209,8 +215,14 @@ python sap_scanner.py --data-dir exports/ --gate --gate-baseline baseline.json
 
 It judges the change, not the estate, so an old problem does not block a new
 build. It never blocks on something the customer is not allowed to fix. And it
-**never fails open** — if coverage is too thin to judge, the answer is "could
-not assess", never "pass".
+**never fails open** — if coverage got thinner than the baseline, or a check did
+not run at all, the answer is "could not assess", never "pass".
+
+That comparison is the reason the gate is usable. Real exports are always
+incomplete somewhere, so a gate that blocked on any gap would answer "could not
+assess" forever and get switched off. Gaps the baseline recorded are reported and
+let through; a check that could see less than it could last time stops the build
+and is named.
 
 ---
 

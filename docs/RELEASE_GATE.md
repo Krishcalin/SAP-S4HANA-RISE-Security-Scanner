@@ -28,9 +28,13 @@ python sap_scanner.py --data-dir ./exports --abap-src ./abapgit_export \
     --gate-write-baseline gate-baseline.json
 ```
 
-This records the estate's current findings as **accepted**. Commit the file. Without
-it, every existing finding counts as new and the first pipeline run fails on a
-change that introduced none of them.
+This records the estate's current findings as **accepted**, and the checks that
+already report incomplete coverage along with them. Commit the file. Without it,
+every existing finding counts as new and the first pipeline run fails on a change
+that introduced none of them.
+
+Rewrite it whenever you accept a new state — and if you are carrying a
+`version: 1` file from before coverage was recorded, rewrite it once now.
 
 ### 2. Run in warn-only mode for a sprint
 
@@ -106,15 +110,36 @@ a licence to ship. Use `exempt_checks` offline.
 
 ## It never fails open
 
-If coverage was degraded, the answer is `2` — never `0`.
+If coverage got worse, the answer is `2` — never `0`.
 
 Degraded coverage is reported as a FINDING rather than a side channel, so the gate
-reads the same evidence a human would. It no longer keys on one check id: any
-finding carrying `details["degrades_coverage"]` arms the fail-closed path, so a
-coverage check written later arms the gate the day it is written rather than the
-day somebody remembers to teach the gate its id.
+reads the same evidence a human would. It does not key on one check id: any finding
+carrying `details["degrades_coverage"]` is counted, so a coverage check written
+later reaches the gate the day it is written rather than the day somebody remembers
+to teach the gate its id.
 
-The findings that carry it today:
+**Coverage is judged against the baseline, like everything else here.** Two
+different things share that flag. `abap_sast` sets it when the lexer loses its
+place, and the rest of the report is then not evidence of absence. Others set it
+when an export was thin — no profile parameter list, say — and tell you to re-run
+RSPARAM. The second kind is true of nearly every real upload, and blocking on it
+made `CANNOT ASSESS` the only answer the gate could give: on this project's own
+`sample_data`, the richest input that exists, five checks trip it.
+
+So the gate asks whether coverage got *worse*:
+
+| Coverage | Verdict |
+|---|---|
+| A gap the baseline recorded | Reported in the reasons, does not block |
+| A check degrading for the first time | `2`, naming the check |
+| A check that never ran at all (from the coverage manifest) | `2`, always |
+| Degrading checks but no baseline, or a `version: 1` baseline | `2`, telling you to write one |
+
+A `version: 1` baseline recorded no coverage, so it cannot answer the question, and
+"cannot answer" is this rule's own case. Rewrite it with `--gate-write-baseline`
+and only new gaps stop the build from then on.
+
+The findings that carry the flag today:
 
 <!-- BEGIN GENERATED: degraded-coverage findings -->
 
@@ -167,6 +192,9 @@ feature can produce. It is indistinguishable from clean code, and it is a lie to
 automatically, on every build, until somebody notices.
 
 Set `block_on_degraded_coverage: false` only if you are content with that.
+You should not need to: the point of judging coverage against the baseline is that
+the routine gaps stop shouting, so the switch stays on and a real one is still
+heard.
 
 ---
 
@@ -183,7 +211,7 @@ is not.
 | `blocking_confidence` | `["confirmed", "tentative", null]` | Evidence classes allowed to block. `null` covers non-ABAP modules, which carry no evidence class |
 | `blocking_owners` | `["customer_fixable", null]` | Ownership states that may block |
 | `exempt_checks` | `[]` | Check ids or id prefixes that never block |
-| `block_on_degraded_coverage` | `true` | Degraded scan → exit 2 |
+| `block_on_degraded_coverage` | `true` | Coverage worse than the baseline, or a check that did not run → exit 2 |
 | `warn_only` | `false` | Evaluate and report, always exit 0 |
 
 ---

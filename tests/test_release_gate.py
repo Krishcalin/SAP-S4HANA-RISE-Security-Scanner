@@ -298,24 +298,25 @@ def test_degraded_coverage_reaches_the_gate_from_the_scanner():
     # names the old id deliberately, to record what was wrong with it, and an
     # assertion that cannot tell prose from code would forbid explaining itself.
     code = "\n".join(line.split("#")[0] for line in gate_block.splitlines())
-    assert "degrades_coverage" in code
+    assert "release_gate.degrading_detail(" in code, \
+        "nothing collects the findings that said they could not see everything"
     assert "ABAP-LEX-001" not in code, \
         "the gate is matching one check id again; a coverage check added " \
         "afterwards would leave it returning green"
 
-    # And the derivation behaves: any marked finding arms it, unmarked ones do not.
+    # And the derivation behaves: any marked finding arms it, unmarked ones do
+    # not. Exercised through the real function — this test used to re-implement
+    # the filter locally and assert on the copy, which is the same category of
+    # mistake as the id-matching it was written to replace.
     marked = finding(check_id="ABAP-COV-002", severity="INFO")
     marked["details"] = {"degrades_coverage": True}
     plain = finding(check_id="ABAP-SQLI-001", severity="CRITICAL")
 
-    def derive(findings):
-        return [f for f in findings
-                if (f.get("details") or {}).get("degrades_coverage")]
-
+    assert rg.degrading_detail([plain]) == {}
+    assert set(rg.degrading_detail([plain, marked])) == {"ABAP-COV-002"}
     assert rg.evaluate(
-        [plain, marked], degraded=bool(derive([plain, marked]))
+        [plain, marked], degrading_now=rg.degrading_detail([plain, marked])
     ).exit_code == rg.EXIT_CANNOT_ASSESS
-    assert derive([plain]) == []
 
 
 # --------------------------------------------------------------------------- #
@@ -662,7 +663,14 @@ def test_the_scanner_arms_the_gate_from_the_manifest():
     src = (ROOT / "sap_scanner.py").read_text(encoding="utf-8")
     gate_block = src[src.index("# ── Release gate ─", src.index("SCAN COMPLETE")):]
     assert "release_gate.coverage_reasons(coverage_manifest)" in gate_block
-    assert "or bool(coverage_reasons)" in gate_block
+    assert "degraded=bool(coverage_reasons)" in gate_block,         "a module that never ran no longer arms the gate unconditionally"
+    # And the other kind of degradation reaches the gate by id — so it can be
+    # compared against the baseline rather than blocking every run — carrying
+    # what each check said, so the message can name the diagnosis and not just
+    # the id.
+    assert "degrading_now=release_gate.degrading_detail(fair_findings)" in gate_block
+    assert "degrading_at_baseline=baseline_coverage" in gate_block
+    assert "release_gate.load_baseline_coverage(" in gate_block,         "the baseline's recorded coverage is never read, so nothing to compare"
 
 
 # ── the scope file the README tells you to write ─────────────────────────────
@@ -730,3 +738,207 @@ def test_a_scoped_gate_still_ignores_a_finding_it_did_not_touch(tmp_path):
     p.write_text(json.dumps({"objects": ["ZCL_UNRELATED"]}), encoding="utf-8")
     result = rg.evaluate([finding(obj="ZCL_A")], scope=rg.load_scope(p))
     assert result.exit_code == rg.EXIT_PASS
+
+
+# ── coverage, judged against the baseline ────────────────────────────────────
+#
+# THE HEADLINE FEATURE COULD NOT PASS FOR ANYBODY. Rule 4 armed on any finding
+# marked `degrades_coverage`; seventeen call sites across eleven modules set it,
+# and a complete run of this project's own sample_data — 119 of 136 logical
+# sources supplied, the richest input that exists here — tripped five of them.
+# Measured, on that data, before and after:
+#
+#     BEFORE   RELEASE GATE: CANNOT ASSESS                      exit 2
+#     AFTER    RELEASE GATE: PASS ... 0 of 410 are new          exit 0
+#
+# The customer's only two exits were to set block_on_degraded_coverage: false —
+# which docs/RELEASE_GATE.md tells them not to — or to stop running the gate.
+# That is this module's own stated fear, in its own words: "a gate that always
+# blocks gets switched off wholesale, taking the real signal with it."
+#
+# The flag carried two meanings. abap_sast sets it when the lexer loses its
+# place, and the rest of the report is then not evidence of absence. Modules
+# like baseline_params set it when the export did not carry every parameter and
+# tell the reader to re-run RSPARAM: routine, customer-fixable, and present on
+# essentially every upload. These tests hold the line between them WITHOUT
+# reclassifying seventeen sites by hand — a gap the baseline recorded is
+# accepted coverage; a gap that appears for the first time is a regression.
+
+def degrading(check_id, obj="ZCL_A"):
+    f = finding(check_id=check_id, severity="LOW", obj=obj)
+    f["details"]["degrades_coverage"] = True
+    return f
+
+
+def test_coverage_gaps_the_baseline_accepted_do_not_block():
+    """The whole point. This is the case that made the gate unusable."""
+    findings = [finding(), degrading("PARAM-MISSING-OTHER")]
+    result = rg.evaluate(findings,
+                         baseline={rg.fingerprint(f) for f in findings},
+                         degrading_now=["PARAM-MISSING-OTHER"],
+                         degrading_at_baseline={"PARAM-MISSING-OTHER"})
+    assert result.decision == "pass"
+    assert result.exit_code == rg.EXIT_PASS
+    # Passing quietly would be its own fail-open. The reader is told what was
+    # not looked at, even though it did not stop the build.
+    assert any("already present when the baseline was accepted" in r
+               for r in result.reasons)
+
+
+def test_a_check_that_degrades_coverage_for_the_first_time_still_blocks():
+    """The signal the rule exists for, kept intact by the change that quietens
+    the noise around it."""
+    findings = [finding(), degrading("ABAP-LEX-001")]
+    result = rg.evaluate(findings,
+                         baseline={rg.fingerprint(f) for f in findings},
+                         degrading_now=["ABAP-LEX-001", "PARAM-MISSING-OTHER"],
+                         degrading_at_baseline={"PARAM-MISSING-OTHER"})
+    assert result.decision == "cannot_assess"
+    assert result.exit_code == rg.EXIT_CANNOT_ASSESS
+    # It names the check. "Coverage was degraded" alone sends the developer
+    # hunting through 400 findings for which one moved.
+    assert any("ABAP-LEX-001" in r for r in result.reasons)
+    assert not any("PARAM-MISSING-OTHER" in r for r in result.reasons), \
+        "the accepted gap is reported as if it were the regression"
+
+
+def test_a_baseline_that_recorded_no_coverage_fails_closed():
+    """A v1 file cannot answer the question, and "cannot answer" is Rule 4's
+    case, not a reason to wave it through."""
+    result = rg.evaluate([finding(), degrading("ABAP-LEX-001")],
+                         baseline={"deadbeef"},
+                         degrading_now=["ABAP-LEX-001"],
+                         degrading_at_baseline=None)
+    assert result.exit_code == rg.EXIT_CANNOT_ASSESS
+    # And says which command fixes it. A red gate with no route out of it is
+    # the one that gets deleted from the pipeline.
+    assert any("--gate-write-baseline" in r for r in result.reasons)
+    assert any("predates coverage recording" in r for r in result.reasons)
+
+
+def test_with_no_baseline_at_all_degraded_coverage_blocks_as_it_always_did():
+    result = rg.evaluate([finding(), degrading("ABAP-LEX-001")],
+                         degrading_now=["ABAP-LEX-001"])
+    assert result.exit_code == rg.EXIT_CANNOT_ASSESS
+    assert not any("predates coverage recording" in r for r in result.reasons), \
+        "blames a baseline file the caller never supplied"
+
+
+def test_a_check_that_never_ran_blocks_whatever_the_baseline_says():
+    """`degraded` stays unconditional. A module that did not execute emits no
+    finding, so it has no check id to compare — there is nothing to be new."""
+    result = rg.evaluate([finding()],
+                         degraded=True,
+                         degraded_detail="The users module was not executed.",
+                         degrading_now=[],
+                         degrading_at_baseline={"PARAM-MISSING-OTHER"})
+    assert result.exit_code == rg.EXIT_CANNOT_ASSESS
+    assert any("not executed" in r for r in result.reasons)
+
+
+def test_the_coverage_switch_still_turns_the_whole_rule_off():
+    result = rg.evaluate([finding()],
+                         policy={"block_on_degraded_coverage": False},
+                         degrading_now=["ABAP-LEX-001"])
+    assert result.decision != "cannot_assess"
+
+
+def test_a_new_gap_under_warn_only_reports_without_stopping_the_build():
+    result = rg.evaluate([finding()], policy={"warn_only": True},
+                         degrading_now=["ABAP-LEX-001"],
+                         degrading_at_baseline=set())
+    assert result.decision == "cannot_assess"
+    assert result.exit_code == rg.EXIT_PASS
+
+
+def test_the_baseline_records_the_coverage_it_accepted():
+    payload = rg.write_baseline([finding(), degrading("PARAM-MISSING-OTHER")])
+    assert payload["version"] == 2
+    assert payload["degrading_checks"] == ["PARAM-MISSING-OTHER"]
+    assert payload["count"] == 2, "coverage recording changed the finding count"
+
+
+def test_degrading_checks_reports_each_check_once_and_skips_the_nameless():
+    nameless = degrading("PARAM-MISSING-OTHER")
+    nameless["check_id"] = ""
+    assert rg.degrading_checks(
+        [finding(),
+         degrading("PARAM-MISSING-OTHER", obj="ZCL_A"),
+         degrading("PARAM-MISSING-OTHER", obj="ZCL_B"),
+         degrading("ABAP-LEX-001"),
+         nameless]) == ["ABAP-LEX-001", "PARAM-MISSING-OTHER"]
+
+
+def test_reading_back_the_coverage_a_baseline_recorded(tmp_path):
+    p = tmp_path / "b.json"
+    p.write_text(json.dumps(rg.write_baseline(
+        [finding(), degrading("PARAM-MISSING-OTHER")])), encoding="utf-8")
+    assert rg.load_baseline_coverage(p) == {"PARAM-MISSING-OTHER"}
+    # And the fingerprints still load, unchanged, for every existing caller.
+    assert len(rg.load_baseline(p)) == 2
+
+
+@pytest.mark.parametrize("body", ['{"version": 1, "fingerprints": ["a"]}',
+                                  '["a", "b"]',
+                                  '{"fingerprints": [], "degrading_checks": null}'])
+def test_a_file_that_recorded_no_coverage_reads_as_unknown_not_as_none(
+        tmp_path, body):
+    """None and set() are different claims. Reading an old file as "nothing was
+    degrading" would wave through a mis-lexed file on the first run after an
+    upgrade — exactly the fail-open this module exists to prevent."""
+    p = tmp_path / "b.json"
+    p.write_text(body, encoding="utf-8")
+    assert rg.load_baseline_coverage(p) is None
+
+
+def test_the_gate_says_which_check_lost_coverage_in_its_own_words():
+    """An id alone is not a diagnosis.
+
+    THE NEAR MISS THAT PROMPTED THIS. Routing coverage through check ids nearly
+    dropped the descriptions: `--abap-src` pointed at a path that does not exist
+    and the gate went from naming that ("no source was scanned at all") to
+    reciting a list of thirty-seven modules that did not run — true, and the
+    wrong thing to go and fix. The CLI test above caught it. This one holds the
+    behaviour at the level the rule lives at.
+    """
+    result = rg.evaluate([finding()],
+                         degrading_now={"ABAP-COV-001":
+                                        "--abap-src named 'nope', which is not "
+                                        "a directory, so no source was scanned "
+                                        "at all. This is reported as a finding "
+                                        "because an empty result is "
+                                        "indistinguishable from a clean estate."},
+                         degrading_at_baseline=set())
+    assert result.exit_code == rg.EXIT_CANNOT_ASSESS
+    told = " ".join(result.reasons)
+    assert "no source was scanned at all" in told
+    # The first sentence, not the essay. Five of these turn the one line anybody
+    # reads in a build log into a wall of text.
+    assert "indistinguishable from a clean estate" not in told
+
+
+def test_both_kinds_of_gap_are_named_not_whichever_came_first():
+    """A run can have modules that never executed AND a check that lost its
+    footing. Naming one sends the engineer to fix the wrong thing."""
+    result = rg.evaluate([finding()],
+                         degraded=True,
+                         degraded_detail="37 module(s) did not run.",
+                         degrading_now={"ABAP-COV-001": "the path is not a "
+                                                        "directory."},
+                         degrading_at_baseline=None)
+    told = " ".join(result.reasons)
+    assert "37 module(s) did not run" in told
+    assert "ABAP-COV-001" in told
+
+
+def test_accepted_gaps_are_reported_after_the_reason_the_build_stopped():
+    """Both are true and only one of them is why. The blocking reason goes
+    first, so a truncated log still carries it."""
+    result = rg.evaluate([finding()],
+                         degraded=True,
+                         degraded_detail="The users module was not executed.",
+                         degrading_now=["PARAM-MISSING-OTHER"],
+                         degrading_at_baseline={"PARAM-MISSING-OTHER"})
+    assert result.exit_code == rg.EXIT_CANNOT_ASSESS
+    assert "not executed" in result.reasons[0]
+    assert "already present when the baseline was accepted" in result.reasons[1]

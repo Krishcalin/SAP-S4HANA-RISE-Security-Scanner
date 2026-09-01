@@ -67,7 +67,8 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import (Any, Dict, Iterable, List, Mapping, Optional, Sequence,
+                    Set, Tuple, Union)
 
 #: Severity order, worst first. Anything not listed never blocks.
 SEVERITY_ORDER: Tuple[str, ...] = ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")
@@ -189,10 +190,84 @@ def fingerprint(finding: Dict[str, Any]) -> str:
     return digest[:32]
 
 
+def degrading_checks(findings: Iterable[Dict[str, Any]]) -> List[str]:
+    """The checks that said, on this scan, that they could not see everything."""
+    return sorted(degrading_detail(findings))
+
+
+def degrading_detail(findings: Iterable[Dict[str, Any]]) -> Dict[str, str]:
+    """Those checks, each with what it said — which is the diagnosis.
+
+    An id alone sends the reader to the report to look up what ABAP-COV-001 is.
+    The finding already explains it ("--abap-src named ... which is not a
+    directory, so no source was scanned at all"), and the gate's message is
+    often the only part of a build log anybody reads.
+    """
+    out: Dict[str, str] = {}
+    for f in findings:
+        if not (f.get("details") or {}).get("degrades_coverage"):
+            continue
+        check = str(f.get("check_id") or "")
+        if check and check not in out:
+            out[check] = " ".join(str(f.get("description") or "").split())
+    return out
+
+
+def _name_checks(checks: Sequence[str], said: Dict[str, str],
+                 limit: int = 4) -> str:
+    """`ABAP-COV-001 (--abap-src named ... so no source was scanned at all)`."""
+    parts = []
+    for check in checks[:limit]:
+        # THE FIRST SENTENCE, not the whole finding. These descriptions run to a
+        # paragraph and five of them turn the one line anybody reads in a build
+        # log into a wall. The first sentence is the diagnosis; the rest is the
+        # justification, and it is in the report.
+        told = (said.get(check) or "").strip()
+        cut = told.find(". ")
+        if cut > 0:
+            told = told[:cut + 1]
+        if len(told) > 200:
+            # ELIDE THE MIDDLE, not the tail. What is long in these sentences
+            # is a literal — a filesystem path, a list of parameter names — and
+            # it sits in the middle; the clause that says what it MEANS is at
+            # the end. Truncating from the right threw away "so no source was
+            # scanned at all" and kept a temp directory.
+            told = told[:110].rstrip() + " ... " + told[-80:].lstrip()
+        parts.append("%s (%s)" % (check, told) if told else check)
+    listed = "; ".join(parts)
+    if len(checks) > limit:
+        listed += "; and %d more" % (len(checks) - limit)
+    return "%d check(s) — %s —" % (len(checks), listed)
+
+
 def write_baseline(findings: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
-    """The accepted state. Adopting the gate starts here, not with a red build."""
+    """The accepted state. Adopting the gate starts here, not with a red build.
+
+    v2 RECORDS COVERAGE AS WELL AS FINDINGS, because Rule 4 was unusable
+    without it. `degraded` was armed by any finding marking itself
+    coverage-degrading, and on a complete run of the project's own sample_data
+    eleven modules do — so the gate answered "cannot assess" on the best data
+    that exists, and a customer's only routes were to switch the coverage rule
+    off (which docs/RELEASE_GATE.md tells them not to) or to stop using the
+    gate. This module's own comment predicted it: "a gate that always blocks
+    gets switched off wholesale, taking the real signal with it."
+
+    Two different things were sharing one flag. `abap_sast` sets it when the
+    lexer loses its place — "the rest of the report is not evidence of absence",
+    which must always block. `baseline_params` sets it when the export did not
+    carry every parameter, and tells the reader to re-run RSPARAM — routine, and
+    true of every real upload.
+
+    Recording the set here separates them WITHOUT reclassifying seventeen call
+    sites by hand, which would be guesswork per site. Whatever was degrading
+    when the baseline was accepted is the coverage the customer accepted; a
+    check that degrades coverage for the FIRST TIME is the regression, and that
+    is a delta, which is the only kind of judgement this gate makes anywhere
+    else.
+    """
     prints = sorted({fingerprint(f) for f in findings})
-    return {"version": 1, "count": len(prints), "fingerprints": prints}
+    return {"version": 2, "count": len(prints), "fingerprints": prints,
+            "degrading_checks": degrading_checks(findings)}
 
 
 def coverage_reasons(manifest: Optional[Dict[str, Any]]) -> List[str]:
@@ -247,6 +322,21 @@ def load_baseline(path: Path) -> Set[str]:
     if isinstance(data, dict):
         return set(data.get("fingerprints") or [])
     return set(data)                       # a bare list is accepted too
+
+
+def load_baseline_coverage(path: Path) -> Optional[Set[str]]:
+    """The checks that were already degrading when the baseline was accepted.
+
+    None for a v1 baseline, which recorded no coverage at all. None is NOT an
+    empty set: "nothing was degrading" and "we never wrote it down" are
+    different claims, and treating the second as the first would let a mis-lexed
+    file through on the first run after an upgrade.
+    """
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        return None
+    recorded = data.get("degrading_checks")
+    return set(recorded) if isinstance(recorded, list) else None
 
 
 def load_policy(path: Optional[Path]) -> Dict[str, Any]:
@@ -346,6 +436,8 @@ def evaluate(findings: Sequence[Dict[str, Any]],
              scope: Optional[Set[str]] = None,
              degraded: bool = False,
              degraded_detail: str = "",
+             degrading_now: Union[Sequence[str], Mapping[str, str], None] = None,
+             degrading_at_baseline: Optional[Set[str]] = None,
              assessed_checks: Optional[int] = None) -> GateResult:
     """Decide whether this change may ship.
 
@@ -353,6 +445,24 @@ def evaluate(findings: Sequence[Dict[str, Any]],
     less than complete. It is checked FIRST, before any finding is looked at,
     because "we found nothing" and "we could not look" must never produce the same
     exit code.
+
+    `degrading_now` and `degrading_at_baseline` narrow that to the checks whose
+    coverage got WORSE. Supply both and a check that was already degrading when
+    the baseline was accepted no longer blocks, because the customer accepted
+    that coverage; a check degrading for the first time still does. Supply
+    neither — or a v1 baseline, which recorded no coverage — and `degrading_now`
+    blocks whenever it is non-empty, which is what `degraded` always did.
+
+    `degrading_now` takes either ids or `{id: what the check said}`; pass the
+    second (`degrading_detail()` builds it) and the message names the diagnosis
+    instead of an id the reader has to look up.
+
+    THE RULE WAS UNUSABLE WITHOUT THIS. Any finding marking itself
+    coverage-degrading armed it, and on a complete run of the project's own
+    sample_data eleven modules do, so the gate answered "cannot assess" on the
+    best data in existence. This module's own comment predicted the consequence:
+    "a gate that always blocks gets switched off wholesale, taking the real
+    signal with it."
 
     `assessed_checks` is how many checks this scan actually executed —
     `modules.posture_score.assessed_check_count(manifest)` computes it. It exists
@@ -368,16 +478,90 @@ def evaluate(findings: Sequence[Dict[str, Any]],
     warn_only = bool(policy.get("warn_only"))
 
     # ---- Rule 4, checked before anything else -------------------------- #
-    if degraded and policy.get("block_on_degraded_coverage", True):
-        reasons.append(
-            "Coverage was degraded, so this scan cannot support a pass. "
-            + (degraded_detail or "Part of the source could not be analysed.")
-            + " A gate that returns green on a scan that could not see the code "
-              "is worse than no gate: the build goes through and the report looks "
-              "clean.")
-        return GateResult("cannot_assess",
-                          EXIT_PASS if warn_only else EXIT_CANNOT_ASSESS,
-                          reasons, [], {}, 0, 0, policy)
+    #
+    # COVERAGE IS JUDGED AGAINST THE BASELINE, like everything else here.
+    #
+    # It was not, and the rule was therefore unusable. `degraded` was armed by
+    # any finding marking itself coverage-degrading; seventeen call sites across
+    # eleven modules do, and a complete run of this project's own sample_data
+    # trips several of them, so the gate returned "cannot assess" on the best
+    # data in existence. The only escapes were to switch the rule off — which
+    # docs/RELEASE_GATE.md tells the reader not to do — or to stop using the
+    # gate, which is this module's own stated fear: "a gate that always blocks
+    # gets switched off wholesale, taking the real signal with it."
+    #
+    # The flag carries two meanings that had to be told apart. `abap_sast` sets
+    # it when the lexer loses its place, and "the rest of the report is not
+    # evidence of absence" — always a blocker. `baseline_params` sets it when
+    # the export did not carry every parameter and tells the reader to re-run
+    # RSPARAM — routine, and true of nearly every real upload. Rather than
+    # reclassify seventeen sites by hand, ask the question this gate asks
+    # everywhere else: is it WORSE than the state that was accepted? A gap that
+    # was there when the baseline was written is the coverage the customer
+    # signed off. A check that degrades coverage for the first time is a
+    # regression, and still stops the build.
+    #
+    # `degraded` itself stays unconditional. It is what the caller passes for
+    # checks that did not run at all, and there is no per-check identity to
+    # compare for those.
+    coverage_armed = bool(policy.get("block_on_degraded_coverage", True))
+    said: Dict[str, str] = {}
+    if isinstance(degrading_now, Mapping):
+        said = {str(k): str(v) for k, v in degrading_now.items() if k}
+    elif degrading_now is not None:
+        said = {str(c): "" for c in degrading_now if c}
+    now = set(said)
+
+    if coverage_armed and (degraded or now):
+        # BOTH KINDS ARE REPORTED, not whichever was found first. A run can have
+        # modules that never executed AND a check that lost its footing, and
+        # naming only one sends the engineer to fix the wrong thing.
+        why: List[str] = []
+        accepted_note = ""
+        if degraded:
+            why.append(degraded_detail
+                       or "Part of the source could not be analysed.")
+        if now:
+            if degrading_at_baseline is None:
+                # Nothing recorded to compare against. Fail closed, and say
+                # exactly which command fixes it — an unexplained red gate is
+                # the one that gets disabled.
+                why.append(
+                    "%s could not see everything, and there is no recorded "
+                    "coverage to compare against%s. Write one with "
+                    "--gate-write-baseline, and from then on only a NEW gap "
+                    "stops the build." % (
+                        _name_checks(sorted(now), said),
+                        " (the baseline file predates coverage recording)"
+                        if baseline is not None else ""))
+            else:
+                fresh = sorted(now - degrading_at_baseline)
+                if fresh:
+                    why.append(
+                        "%s could see less than when the baseline was accepted. "
+                        "Something that was being analysed no longer is, so the "
+                        "rest of this report is not evidence of absence for it."
+                        % _name_checks(fresh, said))
+                else:
+                    accepted_note = (
+                        "%d check(s) reported incomplete coverage, all of them "
+                        "already present when the baseline was accepted. Not "
+                        "held against this scan — but nothing below is evidence "
+                        "about what they could not see." % len(now))
+        if why:
+            reasons.append(
+                "Coverage was degraded, so this scan cannot support a pass. "
+                + " ".join(why)
+                + " A gate that returns green on a scan that could not see the "
+                  "code is worse than no gate: the build goes through and the "
+                  "report looks clean.")
+            if accepted_note:
+                reasons.append(accepted_note)
+            return GateResult("cannot_assess",
+                              EXIT_PASS if warn_only else EXIT_CANNOT_ASSESS,
+                              reasons, [], {}, 0, 0, policy)
+        if accepted_note:
+            reasons.append(accepted_note)
 
     # ---- Rule 4's third arm: an empty list is not a result -------------- #
     #

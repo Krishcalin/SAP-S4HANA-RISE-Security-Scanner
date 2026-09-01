@@ -915,7 +915,8 @@ def main():
         Path(args.gate_write_baseline).write_text(
             json.dumps(payload, indent=2), encoding="utf-8")
         print(f"[*] Baseline written: {args.gate_write_baseline} "
-              f"({payload['count']} accepted finding(s))")
+              f"({payload['count']} accepted finding(s), "
+              f"{len(payload['degrading_checks'])} with incomplete coverage)")
         sys.exit(0)
 
     if args.gate:
@@ -924,6 +925,11 @@ def main():
                 Path(args.gate_policy) if args.gate_policy else None)
             baseline = (release_gate.load_baseline(Path(args.gate_baseline))
                         if args.gate_baseline else None)
+            # What coverage looked like when that baseline was accepted. None
+            # from a v1 file, which recorded none — see load_baseline_coverage.
+            baseline_coverage = (
+                release_gate.load_baseline_coverage(Path(args.gate_baseline))
+                if args.gate_baseline else None)
             scope = (release_gate.load_scope(Path(args.gate_scope))
                      if args.gate_scope else None)
         except (OSError, ValueError) as exc:
@@ -942,12 +948,10 @@ def main():
         # those returned zero findings, and zero findings is exit 0. A module that
         # knows it could not look now marks the finding, and the gate reads the
         # mark, so a new coverage check arms the gate the day it is written instead
-        # of the day someone remembers to add its id here.
-        degraded_findings = [
-            f for f in fair_findings
-            if (f.get("details") or {}).get("degrades_coverage")]
-
-        # ...AND THE MANIFEST ARMS IT TOO. The per-finding mark catches a module
+        # of the day someone remembers to add its id here. It is collected by
+        # check id, below, so the gate can compare it against the baseline.
+        #
+        # THE MANIFEST ARMS IT TOO. The per-finding mark catches a module
         # that ran and knew it could not see everything; it cannot catch a module
         # that never ran, because such a module emits nothing — and nothing is
         # what the gate reads as "clean". The rule itself lives in
@@ -968,10 +972,23 @@ def main():
             policy=policy,
             baseline=baseline,
             scope=scope,
-            degraded=bool(degraded_findings) or bool(coverage_reasons),
-            degraded_detail=" ".join(
-                [str(f.get("description", "")) for f in degraded_findings]
-                + coverage_reasons).strip(),
+            # ONLY THE MANIFEST ARMS THIS UNCONDITIONALLY NOW. A check that
+            # never ran has no per-check history to compare against, so it fails
+            # closed as it always did. A check that ran and said it could not see
+            # everything is passed by id below and judged against the baseline,
+            # because otherwise the gate could not pass on any real estate: the
+            # routine gaps (an export without every profile parameter, say) are
+            # present on essentially every upload, and blocking on them made
+            # "cannot assess" the only answer this gate ever gave.
+            degraded=bool(coverage_reasons),
+            degrading_now=release_gate.degrading_detail(fair_findings),
+            degrading_at_baseline=baseline_coverage,
+            # Only the manifest's reasons. The descriptions of the degrading
+            # findings used to be concatenated in here too; now that they are
+            # judged by id against the baseline, repeating four hundred
+            # characters of routine export gaps would bury the sentence that
+            # says a module did not run.
+            degraded_detail=" ".join(coverage_reasons).strip(),
             assessed_checks=assessed_checks)
 
         print(release_gate.render(result))
