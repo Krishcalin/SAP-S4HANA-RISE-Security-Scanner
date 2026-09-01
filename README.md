@@ -227,6 +227,14 @@ cannot support. A clean result and an unasked question look identical on a page.
   magnitude. Supply what a breach costs you and it prices the cost per event;
   supply how often SAP here is actually probed and it annualises. Half the
   calculation gets you half the answer, clearly labelled.
+- **When the model and the customer disagree, the estate decides.** If the
+  model expects more loss events than the organisation has seen, the report
+  says which side is more likely to be wrong — from the logging and
+  monitoring findings the scan already produced. With the Security Audit Log
+  switched off it says the silence is a statement about the monitoring rather
+  than about the attacker; with logging in good order it says the modelled
+  frequency is the more likely error. Neither verdict moves the number: it is
+  a disclosure, not a correction.
 - **"How many incidents have you had?" cannot set the frequency.** An
   organisation with no logging answers zero, truthfully, and would be told it
   was the safest — by a tool whose own findings say its logging is off.

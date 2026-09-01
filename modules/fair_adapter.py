@@ -563,7 +563,8 @@ def run(findings: List[Dict[str, Any]], priorities: List[Any],
     # argue with and one they can only accept or reject.
     from .fair_frequency_model import cross_check as _cross_check
     cross = _cross_check(frequency_calibration,
-                         sum(s.get("mean_lef", 0.0) for s in asis["scenarios"]))
+                         sum(s.get("mean_lef", 0.0) for s in asis["scenarios"]),
+                         built["detection"])
 
     if not frequency_calibration.applied:
         for portfolio in (asis["portfolio"], target["portfolio"]):

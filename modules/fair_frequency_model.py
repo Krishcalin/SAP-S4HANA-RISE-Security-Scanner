@@ -163,14 +163,45 @@ def apply_to_scenario(scenario: Dict[str, Any],
     return out
 
 
-def cross_check(calibration: Calibration, modelled_lef: float) -> Optional[str]:
+def blind(detection: Optional[Dict[str, Any]]) -> bool:
+    """Whether this estate could have seen an attack it did not report.
+
+    Reads the detection posture the quantification ALREADY computes — the
+    logging, monitoring and incident-response findings, bucketed by
+    `data/fair_scenarios.json` and scored by their worst severity. A second
+    measure of "can they see anything" would be a second thing to disagree
+    with the loss multiplier that is derived from the same findings.
+
+    CRITICAL or HIGH is the line because that is where the shipped catalogue
+    puts a real dwell penalty: at CRITICAL the loss multiplier is 1.35, which
+    is IBM's own >200-day-lifecycle figure. An estate carrying that is not one
+    whose silence means anything.
+    """
+    worst = str((detection or {}).get("worst_severity") or "").upper()
+    return worst in ("CRITICAL", "HIGH")
+
+
+def cross_check(calibration: Calibration, modelled_lef: float,
+                detection: Optional[Dict[str, Any]] = None) -> Optional[str]:
     """Does the modelled event rate square with what the customer has seen?
 
     Returns a sentence when the two disagree materially, and None when they do
-    not or when there is nothing to compare. Deliberately not a correction: an
-    incident count is a count of what was DETECTED, so a model above it may be
-    right and the monitoring wrong. Saying so is worth more than silently
-    moving the number to agree with the weaker measurement.
+    not or when there is nothing to compare.
+
+    IT ANSWERS THE QUESTION RATHER THAN ASKING IT. The first version of this
+    said "either the modelled frequency is too high, or events are occurring
+    and are not being detected — the logging findings in this report say which
+    is more likely", and left the reader to go and look them up. The scan has
+    already read them. On the reference estate the Security Audit Log is off
+    and HANA auditing is disabled, so "we have seen almost nothing" is a
+    statement about the monitoring and not about the attacker, and the tool
+    knew that while printing a hedge.
+
+    STILL NOT A CORRECTION. Nothing here moves a figure, and an incident count
+    never has: `calibrate` scales on observed CONTACT alone, so a customer
+    reporting no incidents cannot pull their own risk down. That is the whole
+    reason an incident count is admitted at all — it is safe to hear precisely
+    because it is not believed.
     """
     incidents = calibration.get("incidents_3y")
     if incidents is None or modelled_lef <= 0:
@@ -182,14 +213,36 @@ def cross_check(calibration: Calibration, modelled_lef: float) -> Optional[str]:
     # on the true rate. A model expecting more than that is not merely higher
     # than what was seen — it disagrees with what was seen, at a confidence
     # worth a sentence. Below it the two are compatible and silence is correct.
+    unseeing = blind(detection)
     if observed_per_year <= 0 and modelled_lef > RULE_OF_THREE_BOUND:
-        return ("This model expects %.1f loss events a year; the organisation "
-                "reports none in three years. Either the modelled frequency is "
-                "too high for this estate, or events are occurring and not "
-                "being detected — the logging findings in this report say which "
-                "is more likely." % modelled_lef)
+        if unseeing:
+            return ("This model expects %.1f loss events a year and the "
+                    "organisation reports none in three years — but this estate "
+                    "could not have seen them. Its own logging and monitoring "
+                    "findings are open at %s severity, so the absence of "
+                    "reported incidents is a statement about the monitoring "
+                    "rather than about the attacker, and is not evidence that "
+                    "the modelled frequency is too high."
+                    % (modelled_lef, _worst(detection)))
+        return ("This model expects %.1f loss events a year and the "
+                "organisation reports none in three years. Its logging and "
+                "monitoring carry no significant findings, so events at that "
+                "rate would most likely have been seen — which points at the "
+                "modelled frequency being too high for this estate."
+                % modelled_lef)
     if observed_per_year > 0 and modelled_lef > observed_per_year * 5:
+        if unseeing:
+            return ("This model expects %.1f loss events a year against %.1f "
+                    "reported, and this estate's logging and monitoring are "
+                    "open at %s severity — so the reported figure is a floor "
+                    "rather than a measurement."
+                    % (modelled_lef, observed_per_year, _worst(detection)))
         return ("This model expects %.1f loss events a year against %.1f "
-                "observed. A gap that size is worth resolving before the figure "
+                "reported by an estate whose monitoring carries no significant "
+                "findings. A gap that size is worth resolving before the figure "
                 "is quoted." % (modelled_lef, observed_per_year))
     return None
+
+
+def _worst(detection: Optional[Dict[str, Any]]) -> str:
+    return str((detection or {}).get("worst_severity") or "unknown").upper()

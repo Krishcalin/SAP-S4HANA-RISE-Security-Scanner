@@ -462,7 +462,11 @@ def test_a_zero_incident_count_is_reported_as_a_disagreement():
                      frequency_answers={"sap_security_incidents_3y": 0}
                      )["summary"]
     said = summary["frequency_cross_check"] or ""
-    assert "not being detected" in said, said
+    # It ANSWERS the disagreement rather than handing it back. This
+    # estate's logging is open at CRITICAL, so its silence is a
+    # statement about the monitoring.
+    assert "could not have seen them" in said, said
+    assert "not evidence that the modelled frequency is too high" in said
 
 
 def test_the_cross_check_still_fires_once_the_rate_is_supplied():
@@ -483,7 +487,7 @@ def test_the_cross_check_still_fires_once_the_rate_is_supplied():
                                         "sap_security_incidents_3y": 0}
                      )["summary"]
     assert summary["portfolio"]["ale_p90"] > 0          # the figure is reported
-    assert "not being detected" in (summary["frequency_cross_check"] or "")
+    assert "could not have seen them" in (summary["frequency_cross_check"] or "")
 
 
 def test_a_quiet_estate_and_a_quiet_customer_do_not_disagree():
@@ -528,3 +532,48 @@ def test_only_contact_frequency_moves():
     assert out["probability_of_action"] == scenario["probability_of_action"]
     # and the caller's dict was not mutated underneath it
     assert scenario["contact_frequency"]["baseline"]["likely"] == 2.0
+
+
+def test_the_same_disagreement_the_other_way_round():
+    """AN ESTATE THAT CAN SEE, AND STILL SAW NOTHING.
+
+    Identical arithmetic — a model above the rule-of-three bound against a
+    customer reporting nothing — and the opposite verdict, because the evidence
+    is opposite. Without this pair the test above passes on a function that
+    always blames the monitoring.
+    """
+    from modules import fair_frequency_model as ffm
+    calibration = ffm.calibrate({"sap_security_incidents_3y": 0})
+
+    seeing = ffm.cross_check(calibration, 4.0,
+                             {"worst_severity": "LOW", "count": 1})
+    assert "would most likely have been seen" in seeing
+    assert "modelled frequency being too high" in seeing
+
+    unseeing = ffm.cross_check(calibration, 4.0,
+                               {"worst_severity": "CRITICAL", "count": 14})
+    assert "could not have seen them" in unseeing
+
+
+def test_where_the_line_between_seeing_and_blind_sits():
+    from modules import fair_frequency_model as ffm
+    assert ffm.blind(None) is False
+    assert ffm.blind({}) is False
+    assert ffm.blind({"worst_severity": "MEDIUM"}) is False
+    assert ffm.blind({"worst_severity": "HIGH"}) is True
+    assert ffm.blind({"worst_severity": "CRITICAL"}) is True
+
+
+def test_an_incident_count_can_never_lower_the_risk_figure():
+    """The guarantee that makes it safe to ask the question at all.
+
+    A customer reporting no incidents must not be able to talk their own
+    exposure down, least of all on an estate that could not have seen one.
+    `calibrate` scales on observed CONTACT and nothing else.
+    """
+    from modules import fair_frequency_model as ffm
+    none_seen = ffm.calibrate({"observed_contacts_per_year": 5,
+                               "sap_security_incidents_3y": 0})
+    many_seen = ffm.calibrate({"observed_contacts_per_year": 5,
+                               "sap_security_incidents_3y": 12})
+    assert none_seen["scale"] == many_seen["scale"]
