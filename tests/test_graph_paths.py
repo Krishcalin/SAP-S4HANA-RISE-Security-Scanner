@@ -444,11 +444,23 @@ def _price(conn, landscape_id, scenario, ale_mean, applied=True):
     import json
     run = db_one(conn, "INSERT INTO scan_run (landscape_id, status) "
                        "VALUES (%s,'complete') RETURNING id", (landscape_id,))
+
+    # THE SHAPE server/crq.py ACTUALLY WRITES, which is two rows.
+    #
+    # `loss_model` is a property of the RUN and is stored once, on the portfolio
+    # row whose scenario_id is NULL. An earlier version of this helper put it on
+    # the per-scenario row because that is where the query looked for it — so the
+    # test asserted the query against a shape nothing produces, and the gate
+    # could never open on a real deployment while every test passed. Found by
+    # loading a real estate, not by reading the code.
     conn.execute(
         "INSERT INTO crq_result (scan_run_id, scenario_id, ale_mean, ale_p90, "
-        "detail) VALUES (%s,%s,%s,%s,%s)",
-        (run, scenario, ale_mean, ale_mean * 2,
+        "detail) VALUES (%s, NULL, %s, %s, %s)",
+        (run, ale_mean, ale_mean * 2,
          json.dumps({"loss_model": {"applied": applied}})))
+    conn.execute(
+        "INSERT INTO crq_result (scan_run_id, scenario_id, ale_mean, ale_p90) "
+        "VALUES (%s,%s,%s,%s)", (run, scenario, ale_mean, ale_mean * 2))
     return run
 
 

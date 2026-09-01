@@ -425,12 +425,21 @@ def chokepoints(scope: Optional[Sequence[int]], limit: int = 15,
         priced AS (
             SELECT DISTINCT ON (c.scenario_id)
                    c.scenario_id, c.ale_mean, c.ale_p90,
-                   -- Carried so the console can apply `isPriced` rather than a
-                   -- null check, exactly as the paths screen does. A row written
-                   -- before the loss model existed has ale_mean populated from
-                   -- the catalogue's illustrative company, and a null check
-                   -- would put that on screen as the customer's money.
-                   c.detail -> 'loss_model' AS loss_model
+                   -- FROM THE RUN'S PORTFOLIO ROW, not from this one.
+                   --
+                   -- Whether the customer priced the business is a property of
+                   -- the RUN, and server/crq.py stores it once, on the row whose
+                   -- scenario_id is NULL. Reading `c.detail` here instead found
+                   -- nothing on every real row ever written, so the gate could
+                   -- never open and no chokepoint could ever carry a figure.
+                   -- It passed its tests because the fixture wrote the field
+                   -- where this query looked for it.
+                   --
+                   -- Read rather than duplicated per scenario: two places to
+                   -- record one fact is two places for it to disagree.
+                   (SELECT pf.detail -> 'loss_model' FROM crq_result pf
+                     WHERE pf.scan_run_id = c.scan_run_id
+                       AND pf.scenario_id IS NULL) AS loss_model
             FROM crq_result c
             JOIN scan_run r ON r.id = c.scan_run_id
             WHERE c.scenario_id IS NOT NULL AND r.status = 'complete'
