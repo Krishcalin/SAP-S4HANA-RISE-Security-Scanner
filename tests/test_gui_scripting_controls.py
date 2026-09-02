@@ -23,8 +23,7 @@ if str(ROOT) not in sys.path:
 
 from modules.baseline_params import BaselineParamAuditor                # noqa: E402
 
-CONTROLS = [name for name, _hardened, _why
-            in BaselineParamAuditor.GUI_SCRIPTING_CONTROLS]
+CONTROLS = [row[0] for row in BaselineParamAuditor.GUI_SCRIPTING_CONTROLS]
 
 
 def fired(params):
@@ -39,10 +38,11 @@ def scripting(on=True, **controls):
     return params
 
 
-HARDENED = {"sapgui/user_scripting_force_notification": "TRUE",
-            "sapgui/user_scripting_disable_recording": "TRUE",
-            "sapgui/user_scripting_per_user": "TRUE",
-            "sapgui/nwbc_scripting": "FALSE"}
+#: Derived from the control set rather than restated, so a control added to
+#: the module cannot silently drop out of the "everything hardened" case.
+HARDENED = {name: ("TRUE" if hardened else "FALSE")
+            for name, hardened, _item, _why
+            in BaselineParamAuditor.GUI_SCRIPTING_CONTROLS}
 
 
 # ── the feature switch decides whether any of this matters ─────────────────
@@ -93,10 +93,10 @@ def test_a_control_read_and_wrong_outranks_one_merely_unread():
     assert any("not in the export" in i for i in finding["affected_items"])
 
 
-@pytest.mark.parametrize("name, hardened_truthy, _why",
+@pytest.mark.parametrize("name, hardened_truthy, _item, _why",
                          BaselineParamAuditor.GUI_SCRIPTING_CONTROLS,
                          ids=[c[0] for c in BaselineParamAuditor.GUI_SCRIPTING_CONTROLS])
-def test_each_control_is_reported_on_its_own(name, hardened_truthy, _why):
+def test_each_control_is_reported_on_its_own(name, hardened_truthy, _item, _why):
     """One wrong control is enough, and the finding names that one."""
     wrong = "FALSE" if hardened_truthy else "TRUE"
     params = scripting(**dict(HARDENED, **{name: wrong}))
@@ -104,42 +104,57 @@ def test_each_control_is_reported_on_its_own(name, hardened_truthy, _why):
     assert finding["severity"] == "HIGH"
     assert [i for i in finding["affected_items"] if i.startswith(name)]
     assert len(finding["affected_items"]) == 1, (
-        "the other three are hardened and must not be listed")
+        "the others are hardened and must not be listed")
 
 
 def test_the_direction_is_not_uniform():
-    """Three of these are hardened when TRUE and nwbc_scripting when FALSE.
-    A check that applied one direction to all four would report a correctly
-    configured system."""
-    truthy = {n for n, h, _ in BaselineParamAuditor.GUI_SCRIPTING_CONTROLS if h}
-    falsy = {n for n, h, _ in BaselineParamAuditor.GUI_SCRIPTING_CONTROLS if not h}
+    """Most are hardened when TRUE and nwbc_scripting when FALSE. A check that
+    applied one direction to all of them would report a correctly configured
+    system, and SAP's own policy states the directions separately."""
+    truthy = {r[0] for r in BaselineParamAuditor.GUI_SCRIPTING_CONTROLS if r[1]}
+    falsy = {r[0] for r in BaselineParamAuditor.GUI_SCRIPTING_CONTROLS if not r[1]}
     assert truthy and falsy
     assert "sapgui/nwbc_scripting" in falsy
 
 
-# ── the gap that was recorded rather than guessed ──────────────────────────
+# ── the gap that was recorded, and then closed by sourcing it ─────────────
 
-def test_the_unsourced_parameters_are_named_and_not_checked():
-    """SAP's baseline names dynp/checkskip1screen and dynp/confirmskip1screen
-    under USRCTR-A, which is good provenance for them MATTERING. It does not
-    give the required value, and nothing else in this repository does — the
-    predicates live in the policy XML inside SAP's baseline archive, which this
-    repository pins the state of without vendoring.
+SOURCED = {
+    "dynp/checkskip1screen": ("ALL", "USRCTR-A_a.1"),
+    "dynp/confirmskip1screen": ("ALL", "USRCTR-A_a.2"),
+}
 
-    Guessing the value is the failure this product exists to avoid. The gap is
-    recorded in the module so somebody can close it, rather than left looking
-    like coverage.
+
+@pytest.mark.parametrize("name, expected_and_item", sorted(SOURCED.items()))
+def test_the_recorded_gap_was_closed_by_reading_sap_not_by_guessing(
+        name, expected_and_item):
+    """These two were held out of every check with the reason written down:
+    SAP's baseline named them, nothing here had their required VALUE, and
+    guessing is the failure this product exists to avoid.
+
+    The value came from SAP's own policy XML in the end —
+    SAP-samples/frun-csa-policies-best-practices, Apache-2.0 and public, the
+    same repository `data/sap_baseline_requirements.json` is derived from.
+
+    AND THE GUESS WOULD HAVE BEEN WRONG. Every instinct said these were
+    booleans and that ON was the hardened state. SAP's compliant value is
+    `ALL`. A rule written on the instinct would have reported a correctly
+    configured system as non-compliant, quietly, on every estate.
     """
-    unsourced = BaselineParamAuditor._UNSOURCED_USER_CONTROL_PARAMS
-    assert "dynp/checkskip1screen" in unsourced
-    assert "dynp/confirmskip1screen" in unsourced
-    for name in unsourced:
-        assert name not in CONTROLS, (
-            "%s moved into a checked set without its predicate being sourced"
-            % name)
-        # And no rule anywhere silently started asserting a value for it.
-        got = fired({name: "OFF", "sapgui/user_scripting": "FALSE"})
-        assert not [c for c in got if name in str(got[c].get("affected_items"))], (
-            "something now reports on %s; if its predicate has been sourced, "
-            "move it out of _UNSOURCED_USER_CONTROL_PARAMS and delete this "
-            "branch of the test" % name)
+    from modules.security_params import SecurityParamAuditor
+    expected, item = expected_and_item
+    rule = SecurityParamAuditor({}).effective_rules()[name]
+    assert rule["expected"] == expected
+    assert rule["op"] == "=="
+    assert any(item in ref for ref in rule["refs"]), (
+        "the rule must cite the SAP check item its value came from, so the "
+        "next reader can tell a transcription from a judgement")
+
+
+def test_no_scripting_control_is_asserted_without_a_sap_check_item():
+    """Same rule for the set BASELINE-004B reads. The first version derived
+    each direction from the parameter's name; that was right, and "turned out
+    to be right" is not a provenance."""
+    for name, _hardened, item, _buys in BaselineParamAuditor.GUI_SCRIPTING_CONTROLS:
+        assert item.startswith("SCRIPT-A_"), (
+            "%s carries no SAP check item id" % name)

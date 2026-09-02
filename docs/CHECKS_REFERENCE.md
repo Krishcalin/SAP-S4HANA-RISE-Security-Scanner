@@ -6,7 +6,7 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**464** check ids are written as literals in `modules/`, across **38** modules. A further **344** are built at runtime from shipped rule tables, giving **808** in total.
+**464** check ids are written as literals in `modules/`, across **38** modules. A further **351** are built at runtime from shipped rule tables, giving **815** in total.
 
 Each check is published with **what it reads** and **which SAP Security Baseline requirement it answers** — the two things that make a catalogue auditable rather than a number. A competitor publishing a count and no itemised list is making a claim; this is a claim somebody else can check.
 
@@ -25,7 +25,7 @@ Every check below carries the SAP Security Baseline requirement it answers, wher
 - **28 of 28** requirements that are IN SCOPE for this product are addressed by at least one check here.
 - **10 of 38** published requirements are out of scope, because they are for a stack this product does not read. They are named below, not dropped: the denominator has to be honest in both directions, and a reader comparing 28 against 38 has no way to know that.
 - **0** in-scope requirements are not addressed at all. They are listed below rather than summarised away.
-- **535 of 808** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
+- **540 of 815** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
 
 > ⚠️ These are CHECK ITEMS in the CSA policies, not the 'control points' counted in the Baseline document — the widely-quoted 214 (69/92/53) is that other unit. The two do not reconcile; do not publish a percentage of one against the other.
 
@@ -824,11 +824,11 @@ Examples: `WDISP-001`, `WDISP-002`, `WDISP-003`, `WDISP-004`, `WDISP-005`, `WDIS
 
 Transcribed from SAP's WEBDISP_ALL baseline policies (2ODISCL, 2ONETENC). `WDISP-COV-001` is a fixed id and appears in the literal table.
 
-### `PARAM-<parameter name>` — 79
+### `PARAM-<parameter name>` — 86
 
 Source: `modules/security_params.py — BASELINE + ECS_RULES`
 
-SAP Baseline: `CHANGE-A`, `FILE-A`, `NETCF-A`, `NETENC-A`, `PWDPOL-A`, `RFCGW-A`, `SCRIPT-A`, `USRCTR-A` — 68 of 79 answer none, which for this family is expected rather than a gap.
+SAP Baseline: `CHANGE-A`, `FILE-A`, `NETCF-A`, `NETENC-A`, `PWDPOL-A`, `RFCGW-A`, `SCRIPT-A`, `USRCTR-A` — 73 of 86 answer none, which for this family is expected rather than a gap.
 
 Examples: `PARAM-abap/ext_debugging_possible`, `PARAM-abap/path_normalization`, `PARAM-auth/check/calltransaction`, `PARAM-auth/no_check_in_some_cases`, `PARAM-auth/object_disabling_active`, `PARAM-auth/rfc_authority_check`
 

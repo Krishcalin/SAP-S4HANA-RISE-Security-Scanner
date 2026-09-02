@@ -426,48 +426,37 @@ class BaselineParamAuditor(BaseAuditor):
                 scope="object")
 
     #: The controls that make enabled GUI scripting survivable, and which way
-    #: each one points. Every direction here is read off the parameter's OWN
-    #: NAME rather than asserted from a value this repository cannot source:
-    #: "force_notification" on is the hardened state, "disable_recording" on is
-    #: the hardened state, and a scripting switch off is hardened. That is why
-    #: these four are here and `dynp/checkskip1screen` is not — see
-    #: `_UNSOURCED_USER_CONTROL_PARAMS` below.
+    #: each one points.
     #:
-    #: (parameter, hardened when truthy, what it buys)
+    #: TRANSCRIBED FROM SAP'S OWN POLICY, not read off the parameter names.
+    #: The first version of this derived each direction from what the name said
+    #: — "force_notification" on is hardened, and so on — which was defensible
+    #: and turned out to be right, but "turned out to be right" is not a
+    #: provenance. SAP's policy 3ASCRIPT (requirement SCRIPT-A) states each
+    #: compliant value directly, and its check-item ids are cited below.
+    #:
+    #: Reading it corrected two things. `sapgui/user_scripting_per_user` is in
+    #: SAP's policy — an earlier note here said it was not, and it was taken
+    #: from BASELINE-004's remediation prose instead. And SAP names a fifth
+    #: control, `sapgui/user_scripting_set_readonly`, which nothing here had.
+    #:
+    #: (parameter, hardened when truthy, SAP check item, what it buys)
     GUI_SCRIPTING_CONTROLS = (
-        ("sapgui/user_scripting_force_notification", True,
+        ("sapgui/user_scripting_force_notification", True, "SCRIPT-A_a.4",
          "the user is told a script is driving their session, so an unattended "
          "session being replayed is visible to whoever is sitting at it"),
-        ("sapgui/user_scripting_disable_recording", True,
+        ("sapgui/user_scripting_disable_recording", True, "SCRIPT-A_a.3",
          "a script cannot be recorded from a live session, which is how one is "
          "usually built in the first place"),
-        ("sapgui/user_scripting_per_user", True,
+        ("sapgui/user_scripting_per_user", True, "SCRIPT-A_a.5",
          "scripting is restricted to named users rather than everyone who can "
          "log on"),
-        ("sapgui/nwbc_scripting", False,
+        ("sapgui/user_scripting_set_readonly", True, "SCRIPT-A_a.6",
+         "a script may read the session but not act in it, which removes the "
+         "half that matters most"),
+        ("sapgui/nwbc_scripting", False, "SCRIPT-A_a.1",
          "the same scripting API is not additionally exposed through the "
          "NetWeaver Business Client"),
-    )
-
-    #: Named by SAP's own Security Baseline under requirement USRCTR-A, and
-    #: NOT CHECKED HERE, deliberately.
-    #:
-    #: `data/sap_baseline_requirements.json` gives the parameter names and, for
-    #: the second one, SAP's own note reference — that is good provenance for
-    #: the parameters MATTERING. It does not give the required VALUE, and
-    #: nothing else in this repository does either: the predicates live in the
-    #: policy XML inside SAP's Security Baseline archive, which
-    #: `tools/build_sap_notes_catalogue.py` knows how to parse and which this
-    #: repository pins the state of without vendoring.
-    #:
-    #: Guessing the value is the failure mode this product exists to avoid, so
-    #: the gap is recorded here where somebody can close it rather than left
-    #: looking like coverage. To close it: obtain the baseline archive, read the
-    #: USRCTR-A policy's check items, and transcribe the predicate the way
-    #: `abap/path_normalization` was.
-    _UNSOURCED_USER_CONTROL_PARAMS = (
-        "dynp/checkskip1screen",
-        "dynp/confirmskip1screen",       # SAP note 1956086, per SAP's baseline
     )
 
     def check_gui_scripting_controls(self):
@@ -496,15 +485,16 @@ class BaselineParamAuditor(BaseAuditor):
             return
         weak, unread = [], []
         objects = []
-        for name, hardened_truthy, buys in self.GUI_SCRIPTING_CONTROLS:
+        for name, hardened_truthy, item, buys in self.GUI_SCRIPTING_CONTROLS:
             value = self._p(name)
             if value is None:
-                unread.append("%s: not in the export — %s" % (name, buys))
+                unread.append("%s: not in the export — %s (SAP %s)"
+                              % (name, buys, item))
                 continue
             ok = self._truthy(value) if hardened_truthy else not self._truthy(value)
             if ok:
                 continue
-            weak.append("%s = %s — %s" % (name, value, buys))
+            weak.append("%s = %s — %s (SAP %s)" % (name, value, buys, item))
             objects.append(self._param_object(name))
         if not weak and not unread:
             return

@@ -70,6 +70,19 @@ LEGACY_ONLY_COMPLIANT = {
     # it; `on` is the fixture's choice rather than a claim about a mandated
     # value, because the note does not mandate this parameter at all.
     "abap/path_normalization": "on",
+    # These seven are NOT the fixture's choice. Each value is SAP's own
+    # `<compliant>` predicate from the CSA policy XML in
+    # SAP-samples/frun-csa-policies-best-practices, transcribed with its check
+    # item id in the rule's `refs`. The note does not mandate any of them, so
+    # they belong here rather than in PARAMS — but unlike the entries above,
+    # the value is SAP's rather than ours.
+    "dynp/checkskip1screen": "ALL",           # USRCTR-A_a.1
+    "dynp/confirmskip1screen": "ALL",         # USRCTR-A_a.2
+    "rdisp/vbdelete": "0",                    # USRCTR-A_f
+    "gw/monitor": "1",                        # RFCGW-A_e
+    "rsau/log_peer_address": "1",             # AUDIT-A_a.3p
+    "wdisp/add_xforwardedfor_header": "TRUE",  # NETCF-A_g2
+    "ms/admin_port": "0",                     # MSGSRV-A_c
 }
 
 

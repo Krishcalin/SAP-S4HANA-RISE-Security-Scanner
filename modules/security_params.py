@@ -1192,6 +1192,124 @@ class SecurityParamAuditor(BaseAuditor):
     # UNVERIFIED: SAP Notes 68048, 2416093, 1408081, 510007, 2191612 and every
     # "CIS SAP Benchmark n.n.n" string below.
     BASELINE = {
+        # ── TRANSCRIBED FROM SAP'S OWN POLICIES, NOT CHOSEN HERE ────────────
+        #
+        # The seven rules below carry SAP's `<compliant>` predicate verbatim in
+        # their `refs`, read out of the CSA policy XML in
+        # SAP-samples/frun-csa-policies-best-practices (Apache-2.0, public).
+        # That repository is the same one `data/sap_baseline_requirements.json`
+        # is derived from; the derivation deliberately kept requirement names
+        # and dropped the predicates, because SAP's are SQL against Focused
+        # Run's configuration database and are not executable here. The
+        # COMPARISON VALUE inside them is transcribable even though the SQL is
+        # not, which is what these entries do — exactly as
+        # `abap/path_normalization` already did from policy 2AFILE.
+        #
+        # ONE OF THEM IS WHY THIS WAS WORTH DOING RATHER THAN GUESSING.
+        # `dynp/checkskip1screen` is not a boolean: SAP's compliant value is
+        # `ALL`. Every instinct said "ON", and a rule written on that instinct
+        # would have reported a correctly configured system.
+        "dynp/checkskip1screen": {
+            "expected": "ALL", "op": "==",
+            "severity": "MEDIUM", "category": "Security Parameters",
+            "desc": ("Skipping a transaction's initial screen can bypass the "
+                     "authorization check bound to it. This parameter decides "
+                     "for which cases the check is still performed, and SAP's "
+                     "baseline requires it to cover ALL of them."),
+            "fix": ("Set dynp/checkskip1screen = ALL in the instance profile. "
+                    "SAP's requirement USRCTR-A tests exactly this value."),
+            "refs": ["SAP Security Baseline USRCTR-A",
+                     "SAP policy 2AUSRCTR check USRCTR-A_a.1 — "
+                     "NAME = 'dynp/checkskip1screen' and VALUE = 'ALL'"],
+        },
+        "dynp/confirmskip1screen": {
+            "expected": "ALL", "op": "==",
+            "severity": "MEDIUM", "category": "Security Parameters",
+            "desc": ("The confirmation counterpart of dynp/checkskip1screen. "
+                     "SAP's baseline requires it to cover ALL cases."),
+            "fix": ("Set dynp/confirmskip1screen = ALL in the instance "
+                    "profile. SAP's requirement USRCTR-A tests exactly this."),
+            "refs": ["SAP Security Baseline USRCTR-A",
+                     "SAP Note 1956086 (cited by SAP's own baseline)",
+                     "SAP policy 2AUSRCTR check USRCTR-A_a.2 — "
+                     "NAME = 'dynp/confirmskip1screen' and VALUE = 'ALL'"],
+        },
+        "rdisp/vbdelete": {
+            "expected": "0", "op": "==",
+            "severity": "MEDIUM", "category": "Security Parameters",
+            "desc": ("Days after which incomplete update records are deleted "
+                     "at startup. Non-zero discards update records — and the "
+                     "evidence of what they were doing — without anybody "
+                     "seeing them."),
+            "fix": ("Set rdisp/vbdelete = 0 so update records are retained "
+                    "for investigation rather than aged out automatically."),
+            "refs": ["SAP Security Baseline USRCTR-A",
+                     "SAP policy 2AUSRCTR check USRCTR-A_f — "
+                     "NAME = 'rdisp/vbdelete' and VALUE = '0'"],
+        },
+        "gw/monitor": {
+            "expected": "1", "op": "==",
+            "severity": "MEDIUM", "category": "Security Parameters",
+            "desc": ("Controls who may administer the RFC gateway. Value 1 "
+                     "permits monitoring from the local host only; higher "
+                     "values allow remote gateway administration, which is "
+                     "administration of the channel every RFC arrives on."),
+            "fix": ("Set gw/monitor = 1 so gateway administration is local "
+                    "only."),
+            "refs": ["SAP Security Baseline RFCGW-A",
+                     "SAP policy check RFCGW-A_e — "
+                     "NAME = 'gw/monitor' and VALUE = '1'"],
+        },
+        "rsau/log_peer_address": {
+            "expected": "1", "op": "==",
+            "severity": "MEDIUM", "category": "Security Parameters",
+            "desc": ("Whether the security audit log records the peer network "
+                     "address. Without it an audited event names the user and "
+                     "not where they came from, which is the half that "
+                     "distinguishes a compromised session from a normal one."),
+            "fix": ("Set rsau/log_peer_address = 1 so audit records carry the "
+                    "originating address."),
+            "refs": ["SAP Security Baseline AUDIT-A",
+                     "SAP policy check AUDIT-A_a.3p — "
+                     "NAME = 'rsau/log_peer_address' and VALUE = '1'"],
+        },
+        "wdisp/add_xforwardedfor_header": {
+            # Comma-separated STRING, not a list: `_evaluate_rule` splits it.
+            "expected": "1,true,TRUE", "op": "in",
+            "severity": "MEDIUM", "category": "Security Parameters",
+            "desc": ("Whether the Web Dispatcher adds the X-Forwarded-For "
+                     "header. Without it every request reaching the backend "
+                     "appears to originate from the dispatcher, so the backend "
+                     "audit log cannot attribute anything to a real client."),
+            "fix": ("Set wdisp/add_xforwardedfor_header = TRUE so the "
+                    "originating address survives the hop."),
+            "refs": ["SAP Security Baseline NETCF-A",
+                     "SAP policy check NETCF-A_g2 — "
+                     "NAME = 'wdisp/add_xforwardedfor_header' and "
+                     "VALUE in ('1','true','TRUE')"],
+        },
+        "ms/admin_port": {
+            "expected": "0", "op": "==",
+            "severity": "MEDIUM", "category": "Security Parameters",
+            "desc": ("The message server's administration port. SAP's baseline "
+                     "requires it closed; an open one exposes message server "
+                     "administration, which controls how application servers "
+                     "find each other."),
+            "fix": ("Set ms/admin_port = 0 to close the administration port."),
+            "refs": ["SAP Security Baseline MSGSRV-A",
+                     "SAP policy check MSGSRV-A_c — "
+                     "NAME = 'ms/admin_port' and lpad(VALUE, 4, '0') <= '0000'"],
+        },
+        #
+        # TWO OF SAP'S NINE ARE DELIBERATELY NOT PORTED, and the reason is that
+        # their predicate is a presence test rather than a value test:
+        # `login/disable_password_logon` asks `length(VALUE) >= '1'` and
+        # `ms/HTTP/logging_0` asks `VALUE like '%'`, which any value satisfies.
+        # Both mean "this is set to something", which `check_missing_critical_params`
+        # already answers — and answers better, because it only judges absence
+        # where the export declares itself complete. Porting them as value rules
+        # would assert a threshold neither SAP nor this file has.
+        #
         # --- Directory traversal ---
         "abap/path_normalization": {
             # SAP'S OWN PREDICATE, NOT A GUESS AT ONE. Policy `2AFILE.xml`,
