@@ -8,7 +8,7 @@
 Every logical source the scanner can read, what it enables, and whether
 [`EXPORT_GUIDE.md`](EXPORT_GUIDE.md) tells you how to produce it.
 
-**136 logical sources, all of them with a written procedure** in the export
+**137 logical sources, all of them with a written procedure** in the export
 guide. This table is the regression detector for that: add a source to the loader
 without writing its procedure and it appears here as *not yet written*.
 
@@ -128,6 +128,7 @@ clean — see chapter 13 of the architecture guide.
 | `saprouttab` | `saprouttab.csv`, `route_permission.csv` | `system_trust` | documented · not obtainable in RISE |
 | `security_audit_log` | `security_audit_log.csv`, `sm19_filters.csv` | `ecs_config_items`, `log_monitoring`, `log_review` | documented |
 | `security_params` | `security_params.csv`, `rsparam.csv`, `profile_params.csv` | `abap_authorizations`, `baseline_params`, `crypto_posture`, `data_protection`, `log_monitoring`, `security_params`, `snc_posture`, `system_trust` | documented |
+| `security_policies` | `security_policies.csv`, `secpol.csv`, `secpolattr.csv` | `security_params` | documented |
 | `sensitive_fields` | `sensitive_fields.csv`, `pii_fields.csv` | `data_protection` | documented |
 | `siem_config` | `siem_config.json` | `log_monitoring` | documented |
 | `snc_config` | `snc_config.csv` | `crypto_posture` | documented |
@@ -149,7 +150,7 @@ clean — see chapter 13 of the architecture guide.
 | `ucon_rfc_state` | `ucon_rfc_state.csv`, `ucon_rfc.csv`, `uconcockpit.csv`, `ucon_phase_tool.csv` | `ucon_exposure` | documented |
 | `user_groups` | `user_groups.csv` | `iam_advanced` | documented |
 | `user_roles` | `user_roles.csv`, `agr_users.csv` | `abap_authorizations`, `access_risk_analysis`, `iam_advanced`, `role_governance`, `user_auth_audit` | documented |
-| `users` | `users.csv` | `basis_job_command`, `iam_advanced`, `user_auth_audit` | documented |
+| `users` | `users.csv` | `basis_job_command`, `iam_advanced`, `security_params`, `user_auth_audit` | documented |
 | `vendor_bank` | `vendor_bank.csv`, `but0bk.csv`, `lfbk.csv` | `vendor_master` | documented |
 | `vendor_master` | `vendor_master.csv`, `but000.csv`, `lfa1.csv` | `vendor_master` | documented |
 | `webdisp_params` | `webdisp_params.csv`, `webdisp_profile.csv`, `web_dispatcher_params.csv`, `sapwebdisp_pfl.csv` | `webdisp_security` | documented |

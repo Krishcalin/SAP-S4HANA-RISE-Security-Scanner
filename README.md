@@ -10,7 +10,7 @@
 <p align="center">
   <a href="https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner/actions/workflows/tests.yml"><img src="https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner/actions/workflows/tests.yml/badge.svg" alt="tests"/></a>
   <img src="https://img.shields.io/badge/python-3.8%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python 3.8+"/>
-  <img src="https://img.shields.io/badge/checks-803%20in%2038%20modules-red?style=flat-square" alt="803 checks in 38 modules"/>
+  <img src="https://img.shields.io/badge/checks-806%20in%2038%20modules-red?style=flat-square" alt="806 checks in 38 modules"/>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT licensed"/>
 </p>
 
@@ -66,7 +66,7 @@ Python packages.
 
 ## What it checks
 
-**803 checks across 38 modules.** Every one is listed, with what it reads and
+**806 checks across 38 modules.** Every one is listed, with what it reads and
 which SAP baseline requirement it answers, in
 **[docs/CHECKS_REFERENCE.md](docs/CHECKS_REFERENCE.md)** — a file generated from
 the code, so it cannot drift from what actually runs.
@@ -95,7 +95,7 @@ Cyber System at all; that determination is CIP-002's, and the customer's.
 
 ## What you feed it
 
-136 different export sources, all of them files a Basis or security team can
+137 different export sources, all of them files a Basis or security team can
 produce with standard SAP transactions.
 
 - **[docs/EXPORT_GUIDE.md](docs/EXPORT_GUIDE.md)** — how to produce each one

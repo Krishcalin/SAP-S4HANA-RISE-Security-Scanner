@@ -76,6 +76,14 @@ class DataLoader:
     # Mapping of logical names to expected filenames
     FILE_MAP = {
         "users":             ["users.csv"],
+        # SECPOL. A security policy assigned to a user OVERRIDES the instance
+        # profile parameter for that user, so the profile alone does not settle
+        # the password policy — see SECPOL-001/002 in security_params.py. SAP's
+        # own Security Baseline reads this store (AUTH_SECURITY_POLICY) for
+        # requirement PWDPOL-A alongside ABAP_INSTANCE_PAHI; this product read
+        # only the latter.
+        "security_policies": ["security_policies.csv", "secpol.csv",
+                              "secpolattr.csv"],
         "user_roles":        ["user_roles.csv", "agr_users.csv"],
         "profiles":          ["profiles.csv", "usr04.csv"],
         "auth_objects":      ["auth_objects.csv"],

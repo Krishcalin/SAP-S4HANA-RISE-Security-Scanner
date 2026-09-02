@@ -813,6 +813,12 @@
       "state": "yes",
       "how": "SE16/SE16N on TOBJ, or SU21; object definitions are static SAP content, so no customer-specific authorisation is involved",
       "basis": "application_layer"
+    },
+    "security_policies": {
+      "state": "yes",
+      "how": "Transaction SECPOL; SE16/SE16N on SECPOLA (policies) and SECPOLATTR (attributes). The assignment is USR02-SECURITY_POLICY, in the users export.",
+      "note": "Customer-owned, which is the point of the check that reads it. The instance password parameters it overrides are `read_only` under RISE because SAP executes parameter maintenance — so a customer who cannot raise login/min_password_lng themselves CAN create a security policy that lowers it for the accounts they choose, without a ticket and without SAP seeing it.",
+      "basis": "section_3"
     }
   }
 }

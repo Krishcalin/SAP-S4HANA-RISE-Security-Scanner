@@ -162,6 +162,8 @@ The findings that carry the flag today:
 | `HOTNEWS-010` | `sap_hotnews` | exposure could not be established against the installed releases |
 | `HOTNEWS-COVERAGE` | `sap_hotnews` | the note catalogue is a curated subset, not the full patch history |
 | `PARAM-MISSING-OTHER` | `security_params` | parameters absent from an export nobody declared complete |
+| `SECPOL-002` | `security_params` | **undescribed** — add it to DESCRIPTIONS in tools/build_gate_reference.py |
+| `SECPOL-003` | `security_params` | **undescribed** — add it to DESCRIPTIONS in tools/build_gate_reference.py |
 | `STDUSR-COV-001` | `system_trust` | **undescribed** — add it to DESCRIPTIONS in tools/build_gate_reference.py |
 | `UCON-COV-001` | `ucon_exposure` | **undescribed** — add it to DESCRIPTIONS in tools/build_gate_reference.py |
 | `VBM-DATA-001` | `vendor_master` | the vendor / bank master export carried no usable rows |

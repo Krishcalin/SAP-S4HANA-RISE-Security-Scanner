@@ -1415,7 +1415,7 @@ They are recognised, listed in the scan output with the reason, and skipped:
 | `Parameters`, `http`, `servlet_jsp`, `com.sap.security.core.ume.service`, `AUTH_ROLE_USER` | **Java** AS / Web Dispatcher stores. SAP's Java stack has a store literally named `Parameters`; translating it into `security_params` would score Java settings against ABAP profile-parameter thresholds. |
 | `HDB_*` | HANA. Technical HANA configuration is SAP-operated under RISE (§4). |
 | `AUTH_COMB_USER`, `AUTH_COMB_ROLE` | SAP's critical-authorisation *combination* content. Our checks read `AGR_1251` authorisation values, and we could not confirm whether these stores carry the rules or the matches. |
-| `AUTH_SECURITY_POLICY` | Per-client security policies. Their attribute names are not the instance profile parameters `security_params` holds; merging them would score a policy attribute against a parameter threshold. |
+| `AUTH_SECURITY_POLICY` | Per-client security policies (SECPOL). **Now assessed** — supply them as `security_policies.csv` (below). This store itself is still not translated from a Focused Run / Cloud ALM export because nothing here has verified its column names; the direct export is the supported route. |
 | `GLOBAL`, `SAP_KERNEL`, `COMP_LEVEL`, `TRANSPORT_TOOL`, `TDDAT`, `ABAP_SACF_INFO`, `USER_PASSWD_HASH_USAGE` | No logical source consumes them yet. `ABAP_UCON_HTTP_WHITE_LIST` left this list when `ucon_http_allowlist` was added — it now translates. |
 
 ### Known limitations
@@ -1772,6 +1772,34 @@ A modification made under a note correction is routine. One with no note and no
 reason is both a security question and an upgrade liability, and the two are the
 same finding because the mechanism is the same: SAP ships a fix, the modification
 adjustment reverses it, and nobody notices until the next scan.
+
+### Security policies (`security_policies.csv`, `secpol.csv`)
+**Source:** transaction `SECPOL`, or tables `SECPOLA` (the policies) and
+`SECPOLATTR` (their attributes). Under Focused Run / Cloud ALM the same content
+is the `AUTH_SECURITY_POLICY` configuration store.
+
+```
+Required: NAME (or POLICY / POLICY_NAME / SECURITY_POLICY), ATTRIBUTE (or ATTR /
+          ATTRIBUTE_NAME / PARAMETER), VALUE (or ATTR_VALUE / LOW)
+```
+
+**Why this export changes what the password findings mean.** A security policy
+assigned to a user *overrides* the corresponding instance profile parameter for
+that user. `login/min_password_lng = 12` and a policy setting six are both true
+at once, and only the policy governs whoever holds it. Without this export, every
+`PARAM-login/*` verdict in the report describes the default policy only — and
+`SECPOL-002` will say so rather than let the profile stand as evidence for users
+it does not govern.
+
+**Export the assignment too.** Add `SECURITY_POLICY` (USR02) as a column on
+`users.csv`. It is optional, and without it the findings can name the weakened
+policy but not the accounts holding it — which is usually the question being
+asked.
+
+One attribute is worth exporting even though nothing scores it: SAP's own
+baseline reads `USER_PASSWD_HASH_USAGE` for the same requirement, which reports
+whether downward-compatible password hashes still exist. This product does not
+read that store yet, and no finding here should be taken as covering it.
 
 ### Development authorization in production (`dev_access_prod.csv`)
 **Source:** the same extract as `auth_objects.csv`, **taken in the production

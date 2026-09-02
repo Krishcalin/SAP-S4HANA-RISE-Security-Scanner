@@ -62,6 +62,9 @@ TEAM_BY_PREFIX: List[Tuple[str, str]] = [
     ("GRC-", "identity"),
     ("S4AUTHZ-", "authorizations"),
     ("PARAM-", "basis"),
+    # Same ground as PARAM-: a security policy is the per-user override of the
+    # instance password parameters, and the team that owns one owns the other.
+    ("SECPOL-", "basis"),
     ("BASELINE-", "basis"),
     ("TRUST-", "basis"),
     ("JOBCMD-", "basis"),

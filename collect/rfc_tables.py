@@ -42,10 +42,17 @@ EXTRACTS: List[Dict[str, Any]] = [
         "table": "USR02",
         "columns": {"BNAME": "BNAME", "USTYP": "USTYP", "UFLAG": "UFLAG",
                     "TRDAT": "TRDAT", "ERDAT": "ERDAT",
-                    "PWDCHGDATE": "PWDCHGDATE", "CLASS": "CLASS"},
+                    "PWDCHGDATE": "PWDCHGDATE", "CLASS": "CLASS",
+                    "SECURITY_POLICY": "SECURITY_POLICY"},
         "note": "User master. PWDCHGDATE exists from ECC 6.0; on an older release "
                 "the field is absent and the extract drops that column rather "
-                "than failing, which the manifest records.",
+                "than failing, which the manifest records. SECURITY_POLICY is "
+                "the SECPOL assigned to the user, and it is what makes the "
+                "password parameters conditional: a policy OVERRIDES the "
+                "instance profile for whoever holds it, so without this column "
+                "SECPOL-001 can name a weakened policy but not the accounts on "
+                "it. Present from NetWeaver 7.31; on an older release it is "
+                "absent and dropped in the same way as PWDCHGDATE.",
     },
     {
         "source": "profiles",

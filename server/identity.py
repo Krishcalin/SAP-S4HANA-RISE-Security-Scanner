@@ -63,6 +63,11 @@ _UPPERCASE_TYPES = frozenset({
     "auth_object", "auth_field", "tcode", "program", "report", "table", "function_module",
     "package", "job", "os_command", "hana_user", "hana_role", "hana_privilege",
     "transport", "transport_request", "message_server", "gateway", "parameter_name",
+    # SECPOL name. Upper-cased like every other SAP identifier here, and
+    # deliberately its own type rather than `parameter_name`: a security policy
+    # OVERRIDES a profile parameter, so filing both under one type would merge
+    # the override and the thing it overrides into a single graph node.
+    "security_policy",
     "idoc_port", "idoc_partner",
     # SE06 system-change-option scopes: SAP namespaces ("/CUST/") and software
     # components ("SAP", "HOME", "LOCAL"). Both are upper-case SAP identifiers.

@@ -107,6 +107,18 @@ UNMAPPED_STORES = {
         "global audit settings, not filter slots — merging them into audit_config "
         "would inflate the filter count and mask 'no audit filters configured'. "
         "AUDIT_CONFIGURATION_SLOT is translated instead.",
+    "AUTH_SECURITY_POLICY":
+        "per-client security policies (SECPOL). NOT because they do not matter — "
+        "a policy OVERRIDES the instance profile parameter for every user it is "
+        "assigned to, and SECPOL-001/002 in security_params.py assess exactly "
+        "that from the direct `security_policies` export. The reason recorded "
+        "here previously was that 'merging the two would score a policy "
+        "attribute against a parameter threshold': true, and an argument "
+        "against MERGING them, which was then read as a reason to assess "
+        "neither. What is genuinely missing is THIS STORE's own column names, "
+        "which nothing in this repository has verified. Translating it on a "
+        "guess is the failure this table exists to prevent, so it stays a "
+        "recognised refusal — supply security_policies.csv directly instead.",
     "AUTH_PROFILE_USER_CHANGE_DOC":
         "profile-assignment change documents; our change_documents source is "
         "CDHDR-shaped and the two do not line up field for field.",
@@ -117,10 +129,6 @@ UNMAPPED_STORES = {
         "matches. Mapping it would be a guess.",
     "AUTH_COMB_ROLE":
         "as AUTH_COMB_USER, on the role side.",
-    "AUTH_SECURITY_POLICY":
-        "per-client security policies (SECPOL). Their attribute names differ from "
-        "the instance profile parameters security_params holds; merging the two "
-        "would score a policy attribute against a parameter threshold.",
     "COMP_LEVEL":
         "software component / support-package levels. No logical source yet; "
         "applied_notes is note status, which is not the same thing.",

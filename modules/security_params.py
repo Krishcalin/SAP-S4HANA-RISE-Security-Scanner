@@ -1471,7 +1471,271 @@ class SecurityParamAuditor(BaseAuditor):
     def run_all_checks(self) -> List[Dict[str, Any]]:
         self.check_params_against_baseline()
         self.check_missing_critical_params()
+        self.check_security_policies()
+        self.check_unassessed_policy_attributes()
         return self.findings
+
+    # ------------------------------------------------- security policies (SECPOL)
+    #: Security-policy attribute -> the instance profile parameter it overrides,
+    #: and which direction is WEAKER.
+    #:
+    #: PROVENANCE, PLAINLY. SAP names most policy attributes after the parameter
+    #: they override, and the pairs below follow that naming. They have NOT been
+    #: verified against SAP documentation by this work, so they are
+    #: [UNVERIFIED] in the same register `hana_db_security` uses — with one
+    #: consequence that makes the risk acceptable: an attribute named wrongly
+    #: here simply never matches an exported row, so the check stays silent
+    #: rather than reporting something false. Attributes the export carries and
+    #: this map does not know are NOT dropped; SECPOL-003 lists them.
+    #:
+    #: `"min"` means a HIGHER number is stricter, so the policy is weaker when
+    #: its value is BELOW the profile's. `"max"` is the reverse.
+    POLICY_ATTRIBUTE_PARAMETERS = {
+        "MIN_PASSWORD_LENGTH": ("login/min_password_lng", "min"),
+        "MIN_PASSWORD_DIGITS": ("login/min_password_digits", "min"),
+        "MIN_PASSWORD_LETTERS": ("login/min_password_letters", "min"),
+        "MIN_PASSWORD_LOWERCASE": ("login/min_password_lowercase", "min"),
+        "MIN_PASSWORD_UPPERCASE": ("login/min_password_uppercase", "min"),
+        "MIN_PASSWORD_SPECIALS": ("login/min_password_specials", "min"),
+        "MIN_PASSWORD_DIFFERENCE": ("login/min_password_diff", "min"),
+        "PASSWORD_HISTORY_SIZE": ("login/password_history_size", "min"),
+        "MAX_FAILED_PASSWORD_LOGON_ATTEMPTS": ("login/fails_to_user_lock", "max"),
+        "PASSWORD_CHANGE_INTERVAL": ("login/password_expiration_time", "max"),
+        "MAX_IDLE_TIME_INITIAL_PASSWORD": ("login/password_max_idle_initial", "max"),
+        "MAX_IDLE_TIME_PRODUCTIVE_PASSWORD": ("login/password_max_idle_productive",
+                                              "max"),
+    }
+
+    def _policy_rows(self):
+        """(policy, attribute, value) from the security-policy export."""
+        for row in (self.data.get("security_policies") or []):
+            if not isinstance(row, dict):
+                continue
+            policy = str(row.get("NAME", row.get("POLICY",
+                         row.get("SECURITY_POLICY",
+                         row.get("POLICY_NAME", ""))))).strip()
+            attribute = str(row.get("ATTRIBUTE", row.get("ATTR",
+                            row.get("ATTRIBUTE_NAME",
+                            row.get("PARAMETER", ""))))).strip().upper()
+            value = str(row.get("VALUE", row.get("ATTR_VALUE",
+                        row.get("LOW", "")))).strip()
+            if policy and attribute:
+                yield policy, attribute, value
+
+    def _assigned_policies(self):
+        """{policy: [user, ...]} from the users export, where it names one."""
+        assigned = {}
+        for row in (self.data.get("users") or []):
+            if not isinstance(row, dict):
+                continue
+            policy = str(row.get("SECURITY_POLICY", row.get("PWDPOLICY",
+                         row.get("SECPOL", "")))).strip()
+            user = str(row.get("BNAME", row.get("USERNAME",
+                       row.get("USER", "")))).strip()
+            if policy and user:
+                assigned.setdefault(policy, []).append(user)
+        return assigned
+
+    def check_security_policies(self):
+        """HIGH: a security policy weakens a password rule the profile sets.
+
+        THE PROFILE IS NOT THE POLICY. A security policy assigned to a user
+        overrides the corresponding instance parameter FOR THAT USER, so
+        `login/min_password_lng = 12` and a policy setting six are both true at
+        once and only the second one applies to whoever holds the policy. Every
+        `PARAM-login/*` finding in this module reads the profile, so a system
+        whose administrators sit on a weakened policy reports a hardened
+        password configuration.
+
+        This is SAP's own reading of the requirement rather than an invention:
+        its Security Baseline reads AUTH_SECURITY_POLICY for PWDPOL-A alongside
+        ABAP_INSTANCE_PAHI, and this product read only the second.
+
+        THE TWO ARE COMPARED, NOT MERGED. An earlier note in
+        `cloudalm_import.py` declined this store because "merging the two would
+        score a policy attribute against a parameter threshold" — correct, and
+        the reason nothing here applies a baseline threshold to a policy value.
+        What is reported is only the relation between the two: where the policy
+        is the weaker of the pair, in its own units, quoting both.
+        """
+        rows = list(self._policy_rows())
+        if not rows:
+            return
+        params = self._param_lookup(self.data.get("security_params"))
+        if not params:
+            return          # nothing to be weaker THAN; SECPOL-003 still lists them
+        assigned = self._assigned_policies()
+        offenders, objects = [], []
+        for policy, attribute, value in rows:
+            pair = self.POLICY_ATTRIBUTE_PARAMETERS.get(attribute)
+            if not pair:
+                continue
+            param_name, direction = pair
+            profile = params.get(param_name)
+            if profile is None:
+                continue
+            try:
+                policy_value, profile_value = int(float(value)), int(float(profile))
+            except (TypeError, ValueError):
+                continue
+            # ZERO IS NOT THE STRICTEST VALUE, IT IS NO LIMIT AT ALL. On a
+            # "max" attribute SAP reads 0 as unbounded — a
+            # PASSWORD_CHANGE_INTERVAL of 0 means the password never expires,
+            # which is the weakest setting available and compares as smaller
+            # than every real interval. Taken literally, a policy setting 0
+            # against a profile of 180 looked five months stricter.
+            #
+            # Applied only to "max": on a "min" attribute 0 already IS the
+            # weakest value and needs no special reading.
+            if direction == "max":
+                policy_value = float("inf") if policy_value == 0 else policy_value
+                profile_value = float("inf") if profile_value == 0 else profile_value
+            weaker = (policy_value < profile_value if direction == "min"
+                      else policy_value > profile_value)
+            if not weaker:
+                continue
+            holders = assigned.get(policy) or []
+            who = ("%d user(s): %s" % (len(holders), ", ".join(sorted(holders)[:10]))
+                   if holders else
+                   "holders not shown — the users export carries no "
+                   "SECURITY_POLICY column")
+            def shown(raw):
+                return "0 (no limit)" if direction == "max" and int(raw) == 0 else raw
+
+            offenders.append(
+                "policy %s sets %s = %s, weaker than %s = %s (%s)"
+                % (policy, attribute, shown(int(float(value))), param_name,
+                   shown(int(float(profile))), who))
+            for obj in ({"type": "security_policy", "name": policy,
+                         "qualifier": "attribute=%s" % attribute},
+                        {"type": "parameter_name", "name": param_name}):
+                if obj not in objects:
+                    objects.append(obj)
+        if not offenders:
+            return
+        self.finding(
+            check_id="SECPOL-001",
+            title="Security policies weaken the instance password parameters",
+            severity=self.SEVERITY_HIGH,
+            category="Password Policy",
+            description=(
+                "%d security-policy attribute(s) are set weaker than the "
+                "instance profile parameter they override. A security policy "
+                "applies to every user it is assigned to and takes precedence "
+                "over the profile, so the profile values reported elsewhere in "
+                "this scan are not the rules those accounts are actually held "
+                "to. Each line below quotes both values; neither is scored "
+                "against the other's threshold."
+                % len(offenders)
+            ),
+            affected_items=offenders,
+            remediation=(
+                "1. In SU01 / transaction SECPOL, review each policy named "
+                "below and raise the attribute to at least the profile "
+                "value.\n"
+                "2. Establish which accounts hold the policy (USR02 "
+                "SECURITY_POLICY) and whether the weakening was deliberate — "
+                "policies are commonly created to EXEMPT service accounts from "
+                "expiry, which is a different decision from weakening length "
+                "or complexity.\n"
+                "3. Where a policy must stay weaker, record it as an accepted "
+                "exception with an owner, and keep it off interactive users."
+            ),
+            references=[
+                "SAP Security Baseline Template — requirement PWDPOL-A, "
+                "config store AUTH_SECURITY_POLICY",
+                "SAP Help — Security Policies (SECPOL)",
+            ],
+            affected_objects=objects,
+            # One finding over every weakened attribute. Raising one back to the
+            # profile value must shrink the finding, not retire it and restart
+            # the age of the rest.
+            scope="aggregate",
+        )
+
+    def check_unassessed_policy_attributes(self):
+        """The half of this surface the product cannot yet judge, said out loud.
+
+        Two states are reported here and they are different:
+
+        * The users export names security policies and no policy export was
+          supplied. Every password finding in this scan then describes a
+          profile that those users do not obey, and nothing else in the report
+          says so. This carries `degrades_coverage`.
+        * A policy export was supplied carrying attributes
+          POLICY_ATTRIBUTE_PARAMETERS does not know. They are listed rather
+          than dropped: an attribute this product cannot map is an open
+          question, and a silently ignored one is indistinguishable from a
+          compliant one.
+        """
+        policies = self.data.get("security_policies")
+        assigned = self._assigned_policies()
+        if not policies:
+            if not assigned:
+                return          # no evidence policies are in use at all
+            users = sum(len(v) for v in assigned.values())
+            self.finding(
+                check_id="SECPOL-002",
+                title="Security policies are in use but were not exported",
+                severity=self.SEVERITY_INFO,
+                category="Password Policy",
+                description=(
+                    "The users export assigns %d user(s) to %d named security "
+                    "policy/policies, and no security-policy export was "
+                    "supplied. A policy overrides the instance password "
+                    "parameters for the users holding it, so the "
+                    "password-policy verdicts elsewhere in this scan describe "
+                    "rules those accounts may not be subject to. This is not a "
+                    "finding against the system; it is this scan declining to "
+                    "let a hardened profile stand as evidence for users it "
+                    "does not govern."
+                    % (users, len(assigned))
+                ),
+                affected_items=sorted(
+                    "policy %s — %d user(s)" % (p, len(u))
+                    for p, u in assigned.items()),
+                remediation=(
+                    "Export the security policies and their attributes "
+                    "(SECPOLA / SECPOLATTR, or the AUTH_SECURITY_POLICY "
+                    "configuration store) as security_policies.csv and re-run. "
+                    "See docs/EXPORT_GUIDE.md."
+                ),
+                references=["SAP Security Baseline Template — requirement "
+                            "PWDPOL-A, config store AUTH_SECURITY_POLICY"],
+                details={"degrades_coverage": True},
+                scope="aggregate",
+            )
+            return
+        unknown = sorted({attribute for _p, attribute, _v in self._policy_rows()
+                          if attribute not in self.POLICY_ATTRIBUTE_PARAMETERS})
+        if not unknown:
+            return
+        self.finding(
+            check_id="SECPOL-003",
+            title="Security-policy attributes this scan did not assess",
+            severity=self.SEVERITY_INFO,
+            category="Password Policy",
+            description=(
+                "%d attribute(s) in the supplied security policies are not in "
+                "this product's attribute map, so nothing was concluded about "
+                "them. They are listed because a silently ignored attribute "
+                "and a compliant one look identical in a report. Several of "
+                "them govern real controls — logon restrictions and password "
+                "change behaviour among them — and each is worth reading by "
+                "hand until it is mapped."
+                % len(unknown)
+            ),
+            affected_items=unknown,
+            remediation=(
+                "Review these attributes against your own password standard. "
+                "If one should be assessed automatically, add it to "
+                "SecurityParamAuditor.POLICY_ATTRIBUTE_PARAMETERS with the "
+                "profile parameter it overrides."
+            ),
+            references=["SAP Help — Security Policies (SECPOL)"],
+            details={"degrades_coverage": True},
+            scope="aggregate",
+        )
 
     def check_params_against_baseline(self):
         """Compare each exported parameter against the security baseline."""
