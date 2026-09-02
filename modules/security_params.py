@@ -1590,6 +1590,7 @@ class SecurityParamAuditor(BaseAuditor):
         self.check_params_against_baseline()
         self.check_missing_critical_params()
         self.check_security_policies()
+        self.check_security_policy_administration()
         self.check_unassessed_policy_attributes()
         self.check_password_hash_residue()
         return self.findings
@@ -1946,6 +1947,130 @@ class SecurityParamAuditor(BaseAuditor):
             # profile value must shrink the finding, not retire it and restart
             # the age of the rest.
             scope="aggregate",
+        )
+
+    #: The two authorization objects transaction SECPOL is guarded by.
+    #:
+    #: S_SECPOL is checked during maintenance of the POLICIES themselves;
+    #: S_SECPOL_A governs the VALUES that may be assigned to a policy's
+    #: attributes. Two objects because they are two different powers: writing a
+    #: policy, and deciding what a policy is allowed to say.
+    SECPOL_ADMIN_OBJECTS = {
+        "S_SECPOL": "maintain the security policies themselves",
+        "S_SECPOL_A": "define the values a policy attribute may be assigned",
+    }
+
+    #: Activities that CHANGE something. 03 (display) is deliberately absent —
+    #: reading the policy list is not the power this check is about, and
+    #: reporting a display-only auditor beside somebody who can rewrite the
+    #: password rules would flatten the distinction the finding exists to draw.
+    SECPOL_WRITE_ACTIVITIES = ("01", "02", "06", "07", "*")
+
+    def check_security_policy_administration(self):
+        """HIGH: who can write a security policy, which SECPOL-001 cannot see.
+
+        SECPOL-001 reports that a policy is weaker than the instance parameter
+        it overrides. It says nothing about who put it that way or who can do
+        it again, and those are the same question asked forward instead of
+        backward: a policy corrected today is corrected until the next person
+        with S_SECPOL decides otherwise.
+
+        THIS MATTERS MORE UNDER RISE THAN ANYWHERE ELSE, and the reason is
+        already recorded in `data/rise_reachability.json`. The `login/*`
+        parameters a policy overrides are `read_only` there — SAP operates
+        parameter maintenance, so the customer cannot raise
+        `login/min_password_lng` without a service request. Security policies
+        are customer-owned. So a holder of S_SECPOL can lower, for the accounts
+        they choose, a control the customer is not permitted to raise, without
+        a ticket and without SAP seeing it.
+        """
+        rows = self.data.get("auth_objects")
+        if not rows:
+            return
+        holders = {}
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            obj = str(row.get("OBJECT", row.get("AUTH_OBJECT", ""))).strip().upper()
+            if obj not in self.SECPOL_ADMIN_OBJECTS:
+                continue
+            user = str(row.get("UNAME", row.get("BNAME",
+                       row.get("USERNAME", "")))).strip()
+            if not user:
+                continue
+            field = str(row.get("FIELD", row.get("AUTH_FIELD", ""))).strip().upper()
+            value = str(row.get("VALUE", row.get("AUTH_VALUE", ""))).strip()
+            # ACTVT is the field that decides write versus read. A row naming a
+            # different field carries no activity, and is counted as a grant of
+            # the object rather than judged as one.
+            if field and field != "ACTVT":
+                continue
+            if field == "ACTVT" and value not in self.SECPOL_WRITE_ACTIVITIES:
+                continue
+            holders.setdefault((user, obj), set()).add(value or "not stated")
+        if not holders:
+            return
+        items, objects = [], []
+        for (user, obj), values in sorted(holders.items()):
+            items.append("%s ← %s (ACTVT %s) — can %s"
+                         % (user, obj, ", ".join(sorted(values)),
+                            self.SECPOL_ADMIN_OBJECTS[obj]))
+            for entry in ({"type": "user", "name": user},
+                          {"type": "auth_object", "name": obj}):
+                if entry not in objects:
+                    objects.append(entry)
+        people = sorted({user for user, _obj in holders})
+        self.finding(
+            check_id="SECPOL-004",
+            title="Security policy administration is not restricted",
+            severity=self.SEVERITY_HIGH,
+            category="Password Policy",
+            description=(
+                "%d account(s) can write security policies. Transaction SECPOL "
+                "is guarded by two authorization objects — S_SECPOL for "
+                "maintaining the policies themselves, S_SECPOL_A for defining "
+                "the values their attributes may take — and a holder of either "
+                "can change the password rules that apply to whoever the policy "
+                "is assigned to.\n\n"
+                "This is the forward half of SECPOL-001. That finding reports "
+                "that a policy is weaker than the instance parameter it "
+                "overrides; this one reports who can make that true again after "
+                "it is corrected.\n\n"
+                "Under RISE the asymmetry is sharper. The login/* parameters a "
+                "policy overrides are SAP-operated: the customer cannot raise "
+                "login/min_password_lng without a service request. Security "
+                "policies are the customer's own. So these accounts can lower, "
+                "for the users they choose, a control they are not permitted to "
+                "raise — with no ticket and nothing for SAP to review."
+                % len(people)
+            ),
+            affected_items=items,
+            remediation=(
+                "1. Reduce the list to the named administrators who genuinely "
+                "own password policy. It is a small number in almost every "
+                "estate, and it is rarely the number this finding reports.\n"
+                "2. Separate the two objects where you can. S_SECPOL_A decides "
+                "what a policy MAY say and changes far less often than the "
+                "policies themselves; it does not need the same holders.\n"
+                "3. Check the display-only case is genuinely display-only — "
+                "this finding deliberately excludes ACTVT 03, so anyone listed "
+                "here holds a change activity, not a read.\n"
+                "4. Audit SECPOL changes. A policy edit is a change to the "
+                "password rules for every user holding it and should be "
+                "reviewable after the fact.\n"
+                "5. Re-read SECPOL-001 afterwards: correcting a weak policy "
+                "while leaving its authorship open re-opens the same gap."
+            ),
+            references=[
+                "SAP Help — Security Policies (SECPOL); authorization objects "
+                "S_SECPOL and S_SECPOL_A",
+                "SAP Security Baseline Template — requirement PWDPOL-A",
+            ],
+            affected_objects=objects,
+            # One finding over the administrator set. Removing one holder must
+            # shrink it rather than retire it and restart the age of the rest.
+            scope="aggregate",
+            details={"holders": len(people)},
         )
 
     def check_unassessed_policy_attributes(self):

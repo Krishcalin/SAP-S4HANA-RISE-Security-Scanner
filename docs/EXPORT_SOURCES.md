@@ -26,7 +26,7 @@ clean — see chapter 13 of the architecture guide.
 | `ara_ruleset` | `ara_ruleset.json`, `sod_ruleset_custom.json` | `access_risk_analysis` | documented |
 | `audit_config` | `audit_config.csv`, `sm19.csv` | `ecs_config_items`, `log_monitoring`, `log_review`, `network_services` | documented |
 | `auth_object_catalogue` | `auth_object_catalogue.csv`, `auth_object_catalog.csv`, `tobj.csv` | — | documented |
-| `auth_objects` | `auth_objects.csv` | `code_transport`, `iam_advanced`, `user_auth_audit` | documented |
+| `auth_objects` | `auth_objects.csv` | `code_transport`, `iam_advanced`, `security_params`, `user_auth_audit` | documented |
 | `background_job_steps` | `background_job_steps.csv`, `tbtcp.csv`, `job_steps.csv` | `basis_job_command` | documented |
 | `background_jobs` | `background_jobs.csv`, `tbtco.csv`, `sm37_jobs.csv` | `basis_job_command`, `resilience_posture` | documented |
 | `backup_catalog` | `backup_catalog.csv`, `backups.csv`, `db13.csv`, `backup_history.csv` | `resilience_posture` | documented |
