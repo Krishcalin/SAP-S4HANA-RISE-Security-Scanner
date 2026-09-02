@@ -1473,6 +1473,7 @@ class SecurityParamAuditor(BaseAuditor):
         self.check_missing_critical_params()
         self.check_security_policies()
         self.check_unassessed_policy_attributes()
+        self.check_password_hash_residue()
         return self.findings
 
     # ------------------------------------------------- security policies (SECPOL)
@@ -1535,6 +1536,182 @@ class SecurityParamAuditor(BaseAuditor):
             if policy and user:
                 assigned.setdefault(policy, []).append(user)
         return assigned
+
+    # --------------------------------------------- password hash residue (USR02)
+    #: Which USR02 hash column each CODVN generation writes, and whether it is
+    #: still fit to hold a password.
+    #:
+    #: [UNVERIFIED] in the register `hana_db_security` uses: the CODVN letters
+    #: below are this file's working knowledge of SAP's generations, not a
+    #: transcription from SAP documentation. The failure mode is the safe one —
+    #: a letter named wrongly matches no exported row and the check stays quiet
+    #: rather than reporting something false — and PWDHASH-001 also reads the
+    #: hash COLUMNS directly, which do not depend on this map at all.
+    WEAK_HASH_COLUMNS = {
+        "BCODE": "CODVN A/B — the 8-character, case-insensitive hash. Crackable "
+                 "exhaustively; the practical work is minutes, not years.",
+        "PASSCODE": "CODVN D/E/F/G — unsalted SHA-1 over the password. Fast to "
+                    "attack with commodity hardware and rainbow-friendly for "
+                    "common passwords.",
+    }
+    CURRENT_HASH_COLUMNS = ("PWDSALTEDHASH",)
+    WEAK_CODVN = ("A", "B", "D", "E", "F", "G")
+
+    #: The parameter that stops NEW downward-compatible hashes being written.
+    #: It does not remove the ones already in the table, which is the whole
+    #: reason PWDHASH-001 exists.
+    DOWNWARD_COMPAT_PARAM = "login/password_downwards_compatibility"
+
+    @staticmethod
+    def _hash_present(value) -> bool:
+        """Is a hash recorded here?
+
+        NEVER RETURNS THE VALUE, AND NOTHING IN THIS MODULE RENDERS ONE. The
+        export that answers this question may legitimately carry the hash
+        columns themselves, so a finding that quoted its evidence the way every
+        other check here does would copy password hashes into the report, the
+        database and the PDF — turning a scan of the problem into a second copy
+        of it. Presence is the whole of what is needed, so presence is the whole
+        of what is read.
+        """
+        text = str(value or "").strip()
+        if not text:
+            return False
+        return text.upper() not in ("0", "FALSE", "NO", "N", "NONE", "NULL", "-")
+
+    def _hash_rows(self):
+        """(user, weak columns present, where) for each exported row."""
+        for row in (self.data.get("password_hashes") or []):
+            if not isinstance(row, dict):
+                continue
+            user = str(row.get("BNAME", row.get("USER", row.get("USERNAME",
+                       row.get("UNAME", ""))))).strip()
+            if not user:
+                continue
+            where = str(row.get("TABLE", row.get("SOURCE", ""))).strip().upper()
+            weak = []
+            for column in self.WEAK_HASH_COLUMNS:
+                # Either the raw column, or an explicit presence flag beside it.
+                if (self._hash_present(row.get(column))
+                        or self._hash_present(row.get(column + "_EXISTS"))
+                        or self._hash_present(row.get(column + "_PRESENT"))):
+                    weak.append(column)
+            codvn = str(row.get("CODVN", "")).strip().upper()
+            if codvn and codvn in self.WEAK_CODVN and not weak:
+                weak.append("CODVN %s" % codvn)
+            if weak:
+                yield user, weak, (where or "USR02")
+
+    def check_password_hash_residue(self):
+        """HIGH: downward-compatible password hashes still exist.
+
+        THE PARAMETER AND THE TABLE ARE DIFFERENT QUESTIONS, and this product
+        only ever asked the first. `login/password_downwards_compatibility`
+        governs whether SAP writes the old BCODE and PASSCODE hashes when a
+        password is set. It does nothing to the ones already written: those sit
+        in USR02 — and in USH02, the password history — until every affected
+        user changes their password, or the columns are cleared deliberately.
+
+        So an estate that turned the parameter down years ago and never
+        followed through has `PARAM-login/password_downwards_compatibility`
+        passing, a hardened length policy, and a table full of hashes that a
+        laptop can crack. The report showed the first two.
+
+        This is SAP's own reading rather than an invention: its Security
+        Baseline reads USER_PASSWD_HASH_USAGE for requirement PWDPOL-A
+        alongside the profile parameters and the security policies.
+        """
+        rows = list(self._hash_rows())
+        if not rows:
+            return
+        by_kind = {}
+        users = set()
+        for user, weak, where in rows:
+            users.add(user)
+            for kind in weak:
+                by_kind.setdefault(kind, set()).add((user, where))
+        items, objects = [], []
+        for kind in sorted(by_kind):
+            holders = sorted(by_kind[kind])
+            note = self.WEAK_HASH_COLUMNS.get(kind, "")
+            items.append("%s — %d user(s)%s%s"
+                         % (kind, len(holders),
+                            " (incl. password history USH02)"
+                            if any(w == "USH02" for _u, w in holders) else "",
+                            ": " + note if note else ""))
+            for user, _where in holders[:50]:
+                obj = {"type": "user", "name": user}
+                if obj not in objects:
+                    objects.append(obj)
+        params = self._param_lookup(self.data.get("security_params"))
+        setting = params.get(self.DOWNWARD_COMPAT_PARAM) if params else None
+        if setting is not None:
+            items.append(
+                "%s = %s — governs whether NEW downward-compatible hashes are "
+                "written; it does not remove the rows above"
+                % (self.DOWNWARD_COMPAT_PARAM, setting))
+        self.finding(
+            check_id="PWDHASH-001",
+            title="Downward-compatible password hashes still present",
+            severity=self.SEVERITY_HIGH,
+            category="Password Policy",
+            description=(
+                "%d user(s) still have a weak password hash recorded. These are "
+                "the downward-compatible generations SAP kept for older "
+                "clients: an unsalted, case-insensitive or SHA-1 digest that "
+                "commodity hardware recovers in minutes. Anyone who can read "
+                "USR02 or USH02 — a table-display authorisation, a database "
+                "copy, a system refresh into a lower-tier system — recovers the "
+                "passwords themselves, and the minimum length and complexity "
+                "rules reported elsewhere in this scan do not apply to an "
+                "offline attack on a hash that is already in hand."
+                % len(users)
+            ),
+            affected_items=items,
+            remediation=(
+                "1. Confirm %s is set so no new weak hashes are written. That "
+                "is necessary and not sufficient — it does not touch existing "
+                "rows.\n"
+                "2. Clear the residue: report CLEANUP_PASSWORD_HASH_VALUES "
+                "removes the obsolete hash values from USR02 and USH02.\n"
+                "3. Force a password change for the affected accounts so a "
+                "current-generation hash replaces what was removed.\n"
+                "4. Restrict table access to USR02 and USH02 — S_TABU_DIS on "
+                "the relevant authorisation group is what stands between a "
+                "read and an offline attack.\n"
+                "5. Treat any existing system copy or database backup taken "
+                "before the cleanup as still carrying the weak hashes."
+                % self.DOWNWARD_COMPAT_PARAM
+            ),
+            references=[
+                "SAP Security Baseline Template — requirement PWDPOL-A, "
+                "config store USER_PASSWD_HASH_USAGE",
+                "SAP Help — report CLEANUP_PASSWORD_HASH_VALUES",
+            ],
+            affected_objects=objects,
+            # One finding over the whole residue. Cleaning up part of it must
+            # shrink the finding rather than retire it and reset the age of what
+            # is left.
+            scope="aggregate",
+            details={"users": len(users)},
+        )
+
+    # NO COVERAGE FINDING FOR THE ABSENT EXPORT, and the reason is the
+    # codebase's own, asserted in four separate tests: "an absent optional
+    # input is not degraded coverage — if it armed the gate, every scan that
+    # omits one input would fail and the gate's degraded signal would be worth
+    # nothing."
+    #
+    # A first draft added PWDHASH-002 for the state that genuinely misleads: the
+    # parameter set compliantly, the residue never looked at, and a clean
+    # report. That state is real, but `password_hashes` is an OPTIONAL input and
+    # firing on its absence would put a degraded-coverage finding on every
+    # existing scan, which is the failure mode above rather than a fix for this
+    # one. The connection is made where it costs nothing instead: PWDHASH-001
+    # declares the source, so the coverage manifest already shows the check as
+    # unevaluated when the export is missing, and both docs/EXPORT_GUIDE.md and
+    # the PARAM-login/password_downwards_compatibility page say plainly that the
+    # parameter governs what is WRITTEN and not what is already stored.
 
     def check_security_policies(self):
         """HIGH: a security policy weakens a password rule the profile sets.

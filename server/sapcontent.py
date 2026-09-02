@@ -228,6 +228,11 @@ CHECK_TO_REQUIREMENT: Dict[str, str] = {
     "CODE-CLIENT": "CHANGE-A",
     "CODE-TMS": "CHANGE-A",
     "HOTNEWS-": "SECUPD-A",
+    # PWDPOL-A, not STDUSR-A. SAP reads three config stores for that
+    # requirement and the hash residue is the third; routing it to the standard-
+    # user family would file it under the wrong control.
+    "PWDHASH": "PWDPOL-A",
+    "SECPOL": "PWDPOL-A",
     "HANADB-USER": "STDUSR-H",
     "HANADB-PRIV": "CRITAU-H",
     "HANADB-AUDIT": "AUDIT-H",

@@ -65,6 +65,8 @@ TEAM_BY_PREFIX: List[Tuple[str, str]] = [
     # Same ground as PARAM-: a security policy is the per-user override of the
     # instance password parameters, and the team that owns one owns the other.
     ("SECPOL-", "basis"),
+    # Password hash residue in USR02/USH02 — same password surface, same team.
+    ("PWDHASH-", "basis"),
     ("BASELINE-", "basis"),
     ("TRUST-", "basis"),
     ("JOBCMD-", "basis"),

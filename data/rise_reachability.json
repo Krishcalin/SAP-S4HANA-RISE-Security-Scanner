@@ -819,6 +819,12 @@
       "how": "Transaction SECPOL; SE16/SE16N on SECPOLA (policies) and SECPOLATTR (attributes). The assignment is USR02-SECURITY_POLICY, in the users export.",
       "note": "Customer-owned, which is the point of the check that reads it. The instance password parameters it overrides are `read_only` under RISE because SAP executes parameter maintenance — so a customer who cannot raise login/min_password_lng themselves CAN create a security policy that lowers it for the accounts they choose, without a ticket and without SAP seeing it.",
       "basis": "section_3"
+    },
+    "password_hashes": {
+      "state": "yes",
+      "how": "SE16/SE16N on USR02 and USH02, or report RSUSR003 / the security audit reports. Export PRESENCE FLAGS ONLY — never the hash columns themselves.",
+      "note": "Customer-readable, and the remediation is customer-executable too: CLEANUP_PASSWORD_HASH_VALUES is an ABAP report, not a Basis parameter change, so unlike the login/* parameters it overrides no service request is needed to fix what this finds.",
+      "basis": "section_3"
     }
   }
 }

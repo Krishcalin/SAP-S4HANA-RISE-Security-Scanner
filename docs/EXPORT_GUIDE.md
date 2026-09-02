@@ -1773,6 +1773,33 @@ reason is both a security question and an upgrade liability, and the two are the
 same finding because the mechanism is the same: SAP ships a fix, the modification
 adjustment reverses it, and nobody notices until the next scan.
 
+### Password hash usage (`password_hashes.csv`)
+**Source:** `USR02` and `USH02` (the password history). Under Focused Run /
+Cloud ALM the same content is the `USER_PASSWD_HASH_USAGE` configuration store.
+
+> **Export presence, never the hash.** The columns below are FLAGS. Do not
+> export `BCODE`, `PASSCODE` or `PWDSALTEDHASH` themselves: a password hash in a
+> CSV is a password hash in an email attachment, a ticket and a report. This
+> product reads presence only and will never render a hash value it was given —
+> but the safest hash is the one that never left the system.
+
+```
+Required: BNAME
+Presence: BCODE_EXISTS, PASSCODE_EXISTS, PWDSALTEDHASH_EXISTS   (X / blank)
+      or: CODVN                                                 (the generation)
+Optional: TABLE (USR02 or USH02 — the history is missed by anybody who cleans
+          only the current table)
+```
+
+**Why this is a separate question from the parameter.**
+`login/password_downwards_compatibility` decides whether SAP *writes* the
+obsolete BCODE and PASSCODE forms. It does not remove the ones already written.
+Those stay until each user changes their password or the values are cleared with
+`CLEANUP_PASSWORD_HASH_VALUES`. Without this export the scan can confirm the
+parameter and say nothing about the residue, and the coverage manifest will
+show `PWDHASH-001` as unevaluated rather than passed. A fixed parameter is not
+a clean table.
+
 ### Security policies (`security_policies.csv`, `secpol.csv`)
 **Source:** transaction `SECPOL`, or tables `SECPOLA` (the policies) and
 `SECPOLATTR` (their attributes). Under Focused Run / Cloud ALM the same content
@@ -1796,10 +1823,9 @@ it does not govern.
 policy but not the accounts holding it — which is usually the question being
 asked.
 
-One attribute is worth exporting even though nothing scores it: SAP's own
-baseline reads `USER_PASSWD_HASH_USAGE` for the same requirement, which reports
-whether downward-compatible password hashes still exist. This product does not
-read that store yet, and no finding here should be taken as covering it.
+SAP reads a third store for this same requirement — `USER_PASSWD_HASH_USAGE`,
+the downward-compatible hash residue. That one **is** now read; see
+`password_hashes.csv` above.
 
 ### Development authorization in production (`dev_access_prod.csv`)
 **Source:** the same extract as `auth_objects.csv`, **taken in the production

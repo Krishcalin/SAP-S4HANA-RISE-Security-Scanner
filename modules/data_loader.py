@@ -84,6 +84,13 @@ class DataLoader:
         # only the latter.
         "security_policies": ["security_policies.csv", "secpol.csv",
                               "secpolattr.csv"],
+        # Which password hash CODE VERSIONS still exist per user. The third
+        # store SAP's Security Baseline reads for PWDPOL-A, after
+        # ABAP_INSTANCE_PAHI and AUTH_SECURITY_POLICY. Presence only — see the
+        # redaction note on `_hash_rows` in security_params.py; this product
+        # never renders a hash value it was given.
+        "password_hashes": ["password_hashes.csv", "user_passwd_hash_usage.csv",
+                            "usr02_hashes.csv"],
         "user_roles":        ["user_roles.csv", "agr_users.csv"],
         "profiles":          ["profiles.csv", "usr04.csv"],
         "auth_objects":      ["auth_objects.csv"],
