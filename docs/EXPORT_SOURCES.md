@@ -123,7 +123,7 @@ clean — see chapter 13 of the architecture guide.
 | `role_expiry` | `role_expiry.csv`, `agr_users_validity.csv` | `iam_advanced` | documented |
 | `role_profiles` | `role_profiles.csv`, `agr_1016.csv` | `role_governance` | documented |
 | `role_tcodes` | `role_tcodes.csv`, `agr_1251.csv` | `iam_advanced` | documented |
-| `sap_kernel` | `sap_kernel.csv`, `kernel_version.csv`, `disp_work.csv` | — | documented |
+| `sap_kernel` | `sap_kernel.csv`, `kernel_version.csv`, `disp_work.csv` | `sap_hotnews` | documented |
 | `sap_modifications` | `sap_modifications.csv`, `se95.csv`, `modifications.csv` | `code_transport` | documented |
 | `sap_security_notes` | `sap_security_notes.json`, `hotnews_catalog.json` | `sap_hotnews` | documented |
 | `saprouttab` | `saprouttab.csv`, `route_permission.csv` | `system_trust` | documented · not obtainable in RISE |

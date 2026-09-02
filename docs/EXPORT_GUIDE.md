@@ -1954,11 +1954,19 @@ KERN_PATCHLEVEL,0410
 ```
 
 **The smallest file in this guide, and one of the most consequential.** SAP's own
-note policies consult the kernel in 602 check items, and 62 security notes cannot
-be answered from any other export — including kernel notes at CVSS 9.9. This
-source was once measured as unlocking a single note and left unbuilt on that
-basis; the measurement was taken against a 43-note catalogue rather than against
-SAP's published record, and the denominator was wrong.
+note policies consult the kernel in 602 check items. Re-measured against the
+shipped catalogue: **74 notes carry a kernel fix level, 60 of them can be
+answered from no other export, and the highest scores CVSS 10.0.**
+
+It is read now — `HOTNEWS-013` compares the installed patch level against the
+one SAP publishes, exactly as it already did for the HANA revision. On the
+bundled corpus, supplying this file takes that finding from 162 determined notes
+to 218, ten of them at CVSS 9.0 or above.
+
+*It was once measured as unlocking a single note and left unbuilt on that basis;
+that measurement was taken against a 43-note catalogue rather than against SAP's
+published record, and the denominator was wrong. The file kept being asked for
+here while nothing read it, which is worse than not asking — this closes it.*
 
 Take it from the **same instance** the rest of the export came from. A landscape
 running several application servers can carry different kernel patch levels on

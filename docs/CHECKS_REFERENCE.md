@@ -687,7 +687,7 @@ Reads: `btp_role_collection_mappings`, `business_role_catalogs`, `business_role_
 
 ### `sap_hotnews` — 16 checks
 
-Reads: `applied_notes`, `hana_version`, `role_auth_values`, `sap_security_notes`, `system_component` — the sources the MODULE consumes; an individual check below reads some subset of them.
+Reads: `applied_notes`, `hana_version`, `role_auth_values`, `sap_kernel`, `sap_security_notes`, `system_component` — the sources the MODULE consumes; an individual check below reads some subset of them.
 
 | Check | Severity | Title | SAP Baseline |
 |---|---|---|---|

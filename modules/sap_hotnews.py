@@ -1038,6 +1038,77 @@ class SapHotNewsAuditor(BaseAuditor):
             out.append(int(digits))
         return tuple(out)
 
+    def _installed_kernel(self):
+        """(release, patch level) of the installed kernel, or None.
+
+        Accepts the `NAME`/`VALUE` shape SAP's own config store uses — the two
+        rows are `KERN_REL` and `KERN_PATCHLEVEL` — which is also what
+        `disp+work -v` and *System → Status* give when transcribed. A patch
+        level is read for its digits only: SAP writes it zero-padded (`0410`)
+        and a customer transcribing by hand rarely does.
+        """
+        release = patch = None
+        for row in (self.data.get("sap_kernel") or []):
+            if not isinstance(row, dict):
+                continue
+            keys = {str(k).strip().upper(): v for k, v in row.items()}
+            name = str(keys.get("NAME", keys.get("PARAMETER", ""))).strip().upper()
+            value = str(keys.get("VALUE", "")).strip()
+            if not value:
+                continue
+            if name in ("KERN_REL", "RELEASE", "KERNEL_RELEASE"):
+                release = value
+            elif name in ("KERN_PATCHLEVEL", "PATCHLEVEL", "PATCH_LEVEL",
+                          "KERNEL_PATCH"):
+                digits = "".join(c for c in value if c.isdigit())
+                if digits:
+                    patch = int(digits)
+        if release and patch is not None:
+            return release, patch
+        return None
+
+    @staticmethod
+    def _kernel_release_matches(published: str, installed: str) -> bool:
+        """Does SAP's published release string cover the installed one?
+
+        SAP writes most of them exactly (`753_REL`) and some with a trailing
+        wildcard (`722%`), which covers the EXT variants of the same line. The
+        wildcard is honoured rather than compared literally — treating `722%`
+        as a release name nothing matches would silently drop the 32 notes
+        published that way.
+        """
+        published = (published or "").strip().upper()
+        installed = (installed or "").strip().upper()
+        if not published or not installed:
+            return False
+        if published.endswith("%"):
+            return installed.startswith(published[:-1])
+        return published == installed
+
+    def _kernel_verdict(self, record: Dict[str, Any], installed):
+        """Is the installed kernel below this note's fix? With evidence.
+
+        The kernel half of `_hana_verdict`, and the same discipline: a release
+        SAP's list does not mention returns UNKNOWN rather than "fixed". A
+        kernel line SAP never published a fix for is not a line the fix is
+        absent from — it is a question this product cannot answer, and the two
+        must not collapse into the reassuring one.
+        """
+        levels = record.get("kernel_fix") or []
+        if not levels or not installed:
+            return None, []
+        release, patch = installed
+        for row in levels:
+            published, minimum = row.get("release"), row.get("min_patch")
+            if minimum is None or not self._kernel_release_matches(published, release):
+                continue
+            if patch < int(minimum):
+                return "below", ["kernel %s is at patch %d; the fix is in patch %d"
+                                 % (release, patch, int(minimum))]
+            return "fixed", ["kernel %s at patch %d" % (release, patch)]
+        # The installed kernel line is not one SAP's list mentions.
+        return None, []
+
     def _hana_verdict(self, record: Dict[str, Any], installed: str):
         """Is the installed HANA revision below this note's fix? With evidence."""
         levels = record.get("hana_fix") or []
@@ -1081,6 +1152,16 @@ class SapHotNewsAuditor(BaseAuditor):
             record, self._installed_hana())
         if hana_state:
             return hana_state, hana_evidence
+
+        # The kernel half. 74 notes in SAP's catalogue carry a kernel fix and 60
+        # of them can be answered from no other export — the docstring above
+        # said so, named `sap_kernel` as the way to widen this check, and the
+        # export guide has asked customers for the file all along. Nothing read
+        # it, so those notes were never examined.
+        kernel_state, kernel_evidence = self._kernel_verdict(
+            record, self._installed_kernel())
+        if kernel_state:
+            return kernel_state, kernel_evidence
 
         levels = record.get("fix_levels") or []
         if not levels:
@@ -1217,7 +1298,7 @@ class SapHotNewsAuditor(BaseAuditor):
             return cached
         installed = self._installed_levels()
         settled = {}
-        if installed or self._installed_hana():
+        if installed or self._installed_hana() or self._installed_kernel():
             for note, record in self._sap_catalogue().items():
                 if note in present:
                     continue
