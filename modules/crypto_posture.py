@@ -190,6 +190,37 @@ class CryptoPostureAuditor(BaseAuditor):
                 references=["SAP Note 2300507 — HSTS Configuration"],
             )
 
+    #: Purposes that name themselves as NOT production. Everything else counts.
+    #:
+    #: THIS USED TO BE THE OTHER WAY ROUND and the inversion is the fix. The
+    #: test asked whether the purpose contained one of PROD, SSL, HTTPS, SNC or
+    #: SERVER — an allowlist of TRANSPORT purposes — so a self-signed
+    #: certificate whose purpose was "SSO", "SAML Signing", "Logon Ticket" or
+    #: "Client Auth" matched nothing and was never reported. Those are the
+    #: certificates that authenticate identity: a self-signed SAML signing
+    #: certificate means no relying party can tell a genuine assertion from a
+    #: forged one, which is a worse outcome than an unverifiable web server.
+    #: The bundled corpus has carried exactly that row — SSO_Signing_Cert,
+    #: issuer SSO_Signing_Cert, purpose SSO — for as long as the check existed,
+    #: and the check said nothing about it.
+    #:
+    #: An unrecognised purpose now reads as production, which is the direction
+    #: this product errs in everywhere else: an unknown value must not resolve
+    #: to the reassuring answer on its own.
+    NON_PRODUCTION_PURPOSES = (
+        "TEST", "DEV", "SANDBOX", "SCRATCH", "DEMO", "TRAINING", "POC",
+        "QAS", "QUALITY", "STAGING", "LAB",
+    )
+
+    def _is_production_purpose(self, purpose) -> bool:
+        """Is this certificate used somewhere that matters?
+
+        Reads a stated non-production purpose as the only reason to stay quiet.
+        A purpose the export does not state cannot exonerate a certificate.
+        """
+        upper = str(purpose or "").upper()
+        return not any(marker in upper for marker in self.NON_PRODUCTION_PURPOSES)
+
     def check_certificate_inventory(self):
         """Audit certificate inventory for expiry, weak keys, and management gaps."""
         certs = self.data.get("certificate_inventory")
@@ -230,7 +261,15 @@ class CryptoPostureAuditor(BaseAuditor):
             if expiry:
                 parsed = self._parse_date(expiry)
                 if parsed:
-                    days_left = (parsed - now).days
+                    # DATES, NOT TIMESTAMPS. `parsed` is midnight on the
+                    # expiry day and `now` carries the time of the scan, so
+                    # subtracting them truncated toward zero: a certificate
+                    # valid until TOMORROW gave days_left == 0 for any scan run
+                    # after midnight, and was reported "EXPIRED 0d ago" — at
+                    # CRITICAL, about a certificate that still works. The last
+                    # day of validity is a day of warning, not a failure that
+                    # has already happened.
+                    days_left = (parsed.date() - now.date()).days
                     if days_left <= 0:
                         expired.append(f"{label} — EXPIRED {abs(days_left)}d ago ({expiry})")
                         if cert:
@@ -261,8 +300,7 @@ class CryptoPostureAuditor(BaseAuditor):
                 issuer_upper = str(issuer).upper()
                 name_upper = str(name).upper()
                 if issuer_upper == name_upper or "SELF" in issuer_upper:
-                    purpose_upper = str(purpose).upper()
-                    if any(p in purpose_upper for p in ["PROD", "SSL", "HTTPS", "SNC", "SERVER"]):
+                    if self._is_production_purpose(purpose):
                         self_signed_prod.append(f"{label} — issuer: self-signed")
                         if cert:
                             self_signed_objs.append({"type": "certificate", "name": cert})

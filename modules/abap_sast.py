@@ -205,6 +205,30 @@ _NAMESPACE_HOSTS: Tuple[str, ...] = (tuple(_NAMESPACE_HOSTS_VERIFIED)
 _DCL_FULL_ACCESS = r"\bGRANT\s+SELECT\s+ON\s+[\w./]+\s*(?:REDEFINITION\s*)?$"
 
 PATTERN_FIXES: Dict[str, str] = {
+    #: F0. ABAP-BTP-003 could not fire on JSON, which is three of the five files
+    #: it is applied to.
+    #:
+    #: The vendored pattern asked for the key word, then optional whitespace,
+    #: then a colon: `(?:password|secret|key|token|credential)\s*:\s*...`.
+    #: That is YAML's shape. JSON quotes its keys, so what actually sits between
+    #: the word and the colon is a closing quote —
+    #:
+    #:     "clientsecret": "s3cr3t-value"
+    #:                 ^ the pattern stops here
+    #:
+    #: and the rule matched nothing. `_RULES_BY_LANGUAGE` maps both `json` and
+    #: `yaml` to ALL_BTP_CONFIG_RULES, and `DESCRIPTOR_NAMES` is
+    #: manifest.json, xs-app.json, xs-security.json, mta.yaml, mta.yml — so the
+    #: rule was reading the right files, including the one where a hard-coded
+    #: client secret actually lives, and could not report what it found there.
+    #:
+    #: One optional quote before the colon. The value half is unchanged, so the
+    #: `${...}` placeholder exclusion that keeps environment references out of
+    #: the findings still applies.
+    "ABAP-BTP-003":
+        r"""(?:password|secret|key|token|credential)["']?\s*:\s*"""
+        r"""['"]?[^\s'"${}]{8,}['"]?""",
+
     "ABAP-CDS-002": _DCL_FULL_ACCESS,
     # `(?:DES|3DES|TRIPLE.?DES)\b` has no LEADING boundary, so the `des` in
     # `lv_modes` and `lt_codes` matched and reported HIGH "DES encryption".

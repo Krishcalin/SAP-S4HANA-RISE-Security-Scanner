@@ -900,7 +900,8 @@ def runtime_check_families() -> List[Dict[str, Any]]:
     success line. A family that cannot be resolved must break the run. Silence
     here would restore precisely the undercount this function exists to end.
     """
-    from modules.abap_sast import (ALL_ABAP_SAST_RULES, ALL_BTP_CONFIG_RULES,
+    from modules.abap_sast import (RETIRED_RULES,
+                                   ALL_ABAP_SAST_RULES, ALL_BTP_CONFIG_RULES,
                                    ALL_JS_RULES, CROSS_ARTIFACT_RULES)
     from modules.access_risk_analysis import AccessRiskAnalysisAuditor
     from modules.atc_import import AtcImportAuditor
@@ -957,10 +958,20 @@ def runtime_check_families() -> List[Dict[str, Any]]:
             # is a plausible-looking number.
             "module": "abap_sast",
             "pattern": "ABAP-<rule id>",
+            # RETIRED_RULES ARE NOT CHECKS. `abap_sast` skips them at scan
+            # time ("if rid in RULE_HANDLED_IN_ENGINE or rid in
+            # RETIRED_RULES: continue"), so a retired rule cannot produce a
+            # finding on any estate, by design. Counting it here put a check
+            # that will never fire into the denominator every coverage figure
+            # is measured against — and then into the unproven list, where it
+            # looked like a rule nobody had got round to testing rather than
+            # one deliberately withdrawn. ABAP-XSS-006 sat there for exactly
+            # that reason.
             "ids": sorted(set(_ids(ALL_ABAP_SAST_RULES, "id")
                               + _ids(ALL_JS_RULES, "id")
                               + _ids(ALL_BTP_CONFIG_RULES, "id")
-                              + _ids(CROSS_ARTIFACT_RULES, "id"))),
+                              + _ids(CROSS_ARTIFACT_RULES, "id"))
+                          - set(RETIRED_RULES)),
             "source": ("modules/abap_sast.py — ALL_ABAP_SAST_RULES (%d) + "
                        "ALL_JS_RULES (%d) + ALL_BTP_CONFIG_RULES (%d) + "
                        "CROSS_ARTIFACT_RULES (%d)"

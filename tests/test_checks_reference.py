@@ -69,9 +69,17 @@ def test_the_abap_family_covers_every_rule_table():
     against the tables rather than a number so a fifth table cannot be added
     without this failing."""
     from modules.abap_sast import (ALL_ABAP_SAST_RULES, ALL_BTP_CONFIG_RULES,
-                                   ALL_JS_RULES, CROSS_ARTIFACT_RULES)
+                                   ALL_JS_RULES, CROSS_ARTIFACT_RULES,
+                                   RETIRED_RULES)
+    # MINUS THE RETIRED ONES. `abap_sast` skips RETIRED_RULES at scan time, so a
+    # retired rule cannot produce a finding on any estate and is not a check —
+    # counting it inflated the denominator every coverage figure is measured
+    # against. Subtracting rather than dropping the assertion keeps what this
+    # test is actually for: a fifth rule table cannot be added without it
+    # failing.
     expected = (len(ALL_ABAP_SAST_RULES) + len(ALL_JS_RULES)
-                + len(ALL_BTP_CONFIG_RULES) + len(CROSS_ARTIFACT_RULES))
+                + len(ALL_BTP_CONFIG_RULES) + len(CROSS_ARTIFACT_RULES)
+                - len(RETIRED_RULES))
     abap = [f for f in gen.collect_dynamic_families()
             if f["pattern"].startswith("ABAP-")][0]
     assert abap["count"] == expected
