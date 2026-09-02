@@ -63,11 +63,29 @@ def test_every_construction_exclusion_states_its_reason():
 
 
 def test_every_family_named_in_the_table_exists_in_the_catalogue():
+    """The unproven-by-family table must name only real families.
+
+    AN EMPTY TABLE IS NOW A LEGITIMATE STATE and was not when this was written:
+    everything in the catalogue is proven, so there is no row to write. The
+    assertion used to be a bare `assert named`, which turned reaching that state
+    into a failure — the same shape as a test that forbids the vocabulary of its
+    own rule.
+
+    Emptiness is still not accepted blindly, because a broken regex here would
+    look identical. It is accepted only when the document's own headline says
+    nothing is unproven, which is the fact the table is derived from.
+    """
+    text = DOC.read_text(encoding="utf-8")
     catalogue = set(coverage.check_catalogue())
     families = {c.rsplit("-", 1)[0] for c in catalogue}
-    named = re.findall(r"^\| `([A-Z0-9-]+)` \| \d+ \| \d+ \|$",
-                       DOC.read_text(encoding="utf-8"), re.M)
-    assert named, "no family rows found in the document"
+    named = re.findall(r"^\| `([A-Z0-9-]+)` \| \d+ \| \d+ \|$", text, re.M)
+    if not named:
+        proven, total = re.search(r"\*\*(\d+) of (\d+)\*\*", text).groups()
+        assert proven == total, (
+            "the family table is empty but %s of %s are proven — so rows are "
+            "missing rather than unnecessary, and the regex above or the "
+            "builder has broken" % (proven, total))
+        return
     assert not [f for f in named if f not in families]
 
 

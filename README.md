@@ -10,7 +10,7 @@
 <p align="center">
   <a href="https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner/actions/workflows/tests.yml"><img src="https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner/actions/workflows/tests.yml/badge.svg" alt="tests"/></a>
   <img src="https://img.shields.io/badge/python-3.8%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python 3.8+"/>
-  <img src="https://img.shields.io/badge/checks-807%20in%2038%20modules-red?style=flat-square" alt="807 checks in 38 modules"/>
+  <img src="https://img.shields.io/badge/checks-808%20in%2038%20modules-red?style=flat-square" alt="808 checks in 38 modules"/>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT licensed"/>
 </p>
 
@@ -66,7 +66,7 @@ Python packages.
 
 ## What it checks
 
-**807 checks across 38 modules.** Every one is listed, with what it reads and
+**808 checks across 38 modules.** Every one is listed, with what it reads and
 which SAP baseline requirement it answers, in
 **[docs/CHECKS_REFERENCE.md](docs/CHECKS_REFERENCE.md)** — a file generated from
 the code, so it cannot drift from what actually runs.

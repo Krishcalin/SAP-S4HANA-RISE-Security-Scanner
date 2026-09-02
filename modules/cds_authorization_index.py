@@ -349,13 +349,27 @@ def _finding(check_id: str, name: str, severity: str, category: str, file: str,
 
 
 def cross_artifact_findings(index: CdsAuthorizationIndex) -> List[Dict[str, Any]]:
-    """Everything that can only be seen by reading more than one file."""
-    if index.dcl_is_missing_entirely():
-        return []                      # the caller reports this as coverage
+    """Everything that can only be seen by reading more than one file.
 
+    THE DCL GUARD APPLIES TO THE VIEW CHECK AND NOTHING ELSE. It used to return
+    an empty list for the whole function, which was right about ABAP-CDS-003 and
+    wrong about the other two: `dcl_is_missing_entirely()` asks whether the
+    ACCESS CONTROLS were exported, and a RAP behaviour definition states its own
+    authorization inside itself. It needs no DCL file to be readable and says
+    nothing about one.
+
+    The cost was a package of behaviour definitions with no CDS access controls
+    — a perfectly ordinary shape — reporting no RAP findings at all, and a
+    coverage notice about VIEW protection instead, which is not what was
+    missing. Adding one unrelated `.asdcls` file to such a tree made
+    ABAP-RAP-005 appear; that is how it was found.
+    """
     out: List[Dict[str, Any]] = []
 
-    for view in index.unprotected_views():
+    # Skipped, not the function: see above. The caller reports this as coverage.
+    views = [] if index.dcl_is_missing_entirely() else index.unprotected_views()
+
+    for view in views:
         stated = ("no @AccessControl.authorizationCheck annotation, so the "
                   "default #CHECK applies"
                   if view["annotation"] is None

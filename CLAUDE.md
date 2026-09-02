@@ -61,7 +61,7 @@ product became client-server**, deliberately and one-way. It has NOT been relaxe
 
 Background and the full plan: [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md),
 [`docs/BUILD_ROADMAP.md`](docs/BUILD_ROADMAP.md).
-- **807 checks across 38 audit modules.** Measure, never estimate — and know which number you
+- **808 checks across 38 audit modules.** Measure, never estimate — and know which number you
   are quoting. `modules/` holds 70 files, of which **36 emit findings**; the other 34 are rule
   tables, loaders, importers and report writers. Those 33 are exactly `sap_scanner.py`'s
   `--modules` choices. Check IDs: **363** are written as literals, and **621** exist once the

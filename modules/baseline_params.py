@@ -87,6 +87,7 @@ class BaselineParamAuditor(BaseAuditor):
         self.check_no_check_in_some_cases()
         self.check_snc_accept_insecure()
         self.check_gui_scripting()
+        self.check_gui_scripting_controls()
         self.check_password_downwards_compat()
         self.check_protected_webmethods()
         self.check_gateway_acl_mode()
@@ -423,6 +424,124 @@ class BaselineParamAuditor(BaseAuditor):
                 # several graph nodes for one parameter.
                 affected_objects=[self._param_object("sapgui/user_scripting")],
                 scope="object")
+
+    #: The controls that make enabled GUI scripting survivable, and which way
+    #: each one points. Every direction here is read off the parameter's OWN
+    #: NAME rather than asserted from a value this repository cannot source:
+    #: "force_notification" on is the hardened state, "disable_recording" on is
+    #: the hardened state, and a scripting switch off is hardened. That is why
+    #: these four are here and `dynp/checkskip1screen` is not — see
+    #: `_UNSOURCED_USER_CONTROL_PARAMS` below.
+    #:
+    #: (parameter, hardened when truthy, what it buys)
+    GUI_SCRIPTING_CONTROLS = (
+        ("sapgui/user_scripting_force_notification", True,
+         "the user is told a script is driving their session, so an unattended "
+         "session being replayed is visible to whoever is sitting at it"),
+        ("sapgui/user_scripting_disable_recording", True,
+         "a script cannot be recorded from a live session, which is how one is "
+         "usually built in the first place"),
+        ("sapgui/user_scripting_per_user", True,
+         "scripting is restricted to named users rather than everyone who can "
+         "log on"),
+        ("sapgui/nwbc_scripting", False,
+         "the same scripting API is not additionally exposed through the "
+         "NetWeaver Business Client"),
+    )
+
+    #: Named by SAP's own Security Baseline under requirement USRCTR-A, and
+    #: NOT CHECKED HERE, deliberately.
+    #:
+    #: `data/sap_baseline_requirements.json` gives the parameter names and, for
+    #: the second one, SAP's own note reference — that is good provenance for
+    #: the parameters MATTERING. It does not give the required VALUE, and
+    #: nothing else in this repository does either: the predicates live in the
+    #: policy XML inside SAP's Security Baseline archive, which
+    #: `tools/build_sap_notes_catalogue.py` knows how to parse and which this
+    #: repository pins the state of without vendoring.
+    #:
+    #: Guessing the value is the failure mode this product exists to avoid, so
+    #: the gap is recorded here where somebody can close it rather than left
+    #: looking like coverage. To close it: obtain the baseline archive, read the
+    #: USRCTR-A policy's check items, and transcribe the predicate the way
+    #: `abap/path_normalization` was.
+    _UNSOURCED_USER_CONTROL_PARAMS = (
+        "dynp/checkskip1screen",
+        "dynp/confirmskip1screen",       # SAP note 1956086, per SAP's baseline
+    )
+
+    def check_gui_scripting_controls(self):
+        """HIGH: scripting is on and the controls that make it survivable are not.
+
+        BASELINE-004 reports that `sapgui/user_scripting` is enabled, and its
+        own remediation says "if enabled, restrict via
+        sapgui/user_scripting_per_user and disable notification suppression" —
+        advice about four other parameters that nothing in this product then
+        looked at. A system that took the advice and a system that ignored it
+        produced the same report.
+
+        SILENT WHEN SCRIPTING IS OFF. These parameters govern how scripting
+        behaves; with the API disabled they decide nothing, and reporting them
+        on every system would put four findings on the majority to describe the
+        minority that enabled it.
+
+        A control the export does not mention is reported as not established
+        rather than as disabled. The distinction matters more here than usual:
+        three of these four default to the LESS protective value, so "not set"
+        is genuinely bad news — but it is bad news this scan inferred rather
+        than read, and it says which it is doing.
+        """
+        enabled = self._p("sapgui/user_scripting")
+        if enabled is None or not self._truthy(enabled):
+            return
+        weak, unread = [], []
+        objects = []
+        for name, hardened_truthy, buys in self.GUI_SCRIPTING_CONTROLS:
+            value = self._p(name)
+            if value is None:
+                unread.append("%s: not in the export — %s" % (name, buys))
+                continue
+            ok = self._truthy(value) if hardened_truthy else not self._truthy(value)
+            if ok:
+                continue
+            weak.append("%s = %s — %s" % (name, value, buys))
+            objects.append(self._param_object(name))
+        if not weak and not unread:
+            return
+        self._flag(
+            "BASELINE-004B",
+            "SAP GUI Scripting is enabled and its compensating controls are not set",
+            self.SEVERITY_HIGH if weak else self.SEVERITY_MEDIUM,
+            "sapgui/user_scripting is enabled, so the SAP GUI Scripting API can "
+            "drive a signed-in session programmatically. That is a supported "
+            "automation feature and switching it off is not always possible — "
+            "which is exactly why the controls around it carry the weight. "
+            "%d of them %s. Scripting with none of these in place is the ability "
+            "to replay a user's session, read what they can read, and do it "
+            "without them noticing."
+            % (len(weak) + len(unread),
+               "are set to the less protective value" if weak
+               else "could not be read from the export"),
+            weak + unread,
+            "1. Set sapgui/user_scripting_force_notification and "
+            "sapgui/user_scripting_disable_recording so scripting is visible and "
+            "not recordable.\n"
+            "2. Set sapgui/user_scripting_per_user and grant it deliberately, so "
+            "scripting is not available to everyone who can log on.\n"
+            "3. Set sapgui/nwbc_scripting off unless the Business Client "
+            "genuinely needs it.\n"
+            "4. Where a control is listed as not in the export, read it with "
+            "RZ11 before treating it as set — this scan did not.\n"
+            "5. Reconsider whether sapgui/user_scripting needs to be on at all; "
+            "BASELINE-004 covers that question.",
+            ["SAP Security Baseline — SAP GUI Scripting",
+             "SAP Note 480149 (introduces sapgui/user_scripting)",
+             "SAP Note 692245 (server-side scripting security options)"],
+            affected_objects=objects or None,
+            # One finding over the control set around a single feature. Setting
+            # one of them must shrink it, not retire it and restart the age of
+            # the rest.
+            scope="aggregate")
 
     def check_password_downwards_compat(self):
         v = self._p("login/password_downwards_compatibility")

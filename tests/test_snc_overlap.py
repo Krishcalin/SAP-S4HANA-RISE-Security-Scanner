@@ -573,6 +573,17 @@ def test_no_unverified_sap_note_number_entered_the_three_modules():
     permitted |= {"93254", "1023437", "1439348", "1408081", "1690662",   # baseline_params
                   "480149", "692245",                                    # baseline_params
                   "510007", "2300507", "1848999"}                        # crypto_posture
+    # SAP'S OWN PUBLISHED RECORD IS VERIFICATION, and this is where that belongs
+    # rather than in a growing list of hand-added exceptions.
+    # `data/sap_baseline_requirements.json` is derived from SAP's public policy
+    # repository under Apache-2.0, so a note number it states is sourced by
+    # definition — citing one is the opposite of the failure this guard exists
+    # to catch. Added when BASELINE-004B's neighbouring comment cited note
+    # 1956086, which SAP's own baseline names beside `dynp/confirmskip1screen`.
+    permitted |= set(re.findall(
+        r"[Nn]ote\s+(\d{3,8})",
+        (ROOT / "data" / "sap_baseline_requirements.json").read_text(
+            encoding="utf-8")))
     cited = set()
     for name in ("crypto_posture.py", "baseline_params.py", "snc_posture.py"):
         cited |= set(re.findall(r"[Nn]ote\s+(\d{3,8})",
