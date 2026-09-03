@@ -49,6 +49,7 @@ class SystemTrustAuditor(BaseAuditor):
 
     def run_all_checks(self) -> List[Dict[str, Any]]:
         self._params = self._param_index()
+        self._param_sets = self._param_value_sets()
         # standard users
         self.check_sapstar_autologon()
         self.check_default_passwords()
@@ -81,8 +82,55 @@ class SystemTrustAuditor(BaseAuditor):
                 idx[name] = value
         return idx
 
+    def _param_value_sets(self) -> Dict[str, List[str]]:
+        """name -> every distinct value the export gave, in order.
+
+        WHY THE SINGLE-VALUE INDEX ABOVE IS NOT ENOUGH. It keeps the LAST row for
+        a name, so where an export carries a parameter twice the verdict was
+        decided by which row the exporter happened to write last. That is not a
+        hypothetical shape: a profile parameter can genuinely differ per
+        application server, so an RSPARAM taken across instances carries two
+        values and BOTH are live, and a merged DEFAULT.PFL and instance profile
+        carries the override beside the default.
+
+        Found by the row-order invariant rather than by reading: reversing the
+        rows of an export flipped `STDUSR-001` -- SAP*'s kernel emergency user,
+        CRITICAL -- from reported to silent. The same defect had already been
+        fixed twice in `security_params`, and this module has its own copy of the
+        lookup, so it kept the bug after both fixes.
+        """
+        sets: Dict[str, List[str]] = {}
+        for row in (self.data.get("security_params") or []):
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("NAME", row.get("PARAMETER", row.get("PARAM", "")))).strip().lower()
+            value = str(row.get("VALUE", row.get("PARAM_VALUE", row.get("VAL", "")))).strip()
+            if not name:
+                continue
+            seen = sets.setdefault(name, [])
+            if value not in seen:
+                seen.append(value)
+        return sets
+
     def _param(self, name: str) -> Optional[str]:
         return self._params.get(name.lower())
+
+    def _param_all(self, name: str) -> List[str]:
+        """Every value exported for this parameter; empty when it is absent."""
+        return self._param_sets.get(name.lower(), [])
+
+    def _unsafe_param(self, name: str, unsafe) -> Optional[str]:
+        """The first exported value this check considers unsafe, or None.
+
+        A rule that any live application server fails is a rule the estate
+        fails, so the check fires on the worst value the export carries rather
+        than on whichever one survived the lookup. Returns the offending value
+        so the finding quotes what is actually wrong.
+        """
+        for value in self._param_all(name):
+            if unsafe(value):
+                return value
+        return None
 
     def _local_sid(self) -> str:
         """SID of THIS (trusting) system, when the caller's baseline names it.
@@ -109,8 +157,9 @@ class SystemTrustAuditor(BaseAuditor):
     # =============================================================  STANDARD USERS
     def check_sapstar_autologon(self):
         """login/no_automatic_user_sapstar = 0 → SAP* kernel emergency user usable."""
-        val = self._param("login/no_automatic_user_sapstar")
-        if val is not None and val.strip() == "0":
+        val = self._unsafe_param("login/no_automatic_user_sapstar",
+                                 lambda v: v.strip() == "0")
+        if val is not None:
             self.finding(
                 check_id="STDUSR-001",
                 title="SAP* kernel emergency-user auto-logon is enabled",
@@ -447,8 +496,8 @@ class SystemTrustAuditor(BaseAuditor):
         """rfc/selftrust = 1, or a RFCSYSACL row trusting the local SID."""
         offenders = []
         objects = []
-        val = self._param("rfc/selftrust")
-        if val is not None and val.strip() == "1":
+        val = self._unsafe_param("rfc/selftrust", lambda v: v.strip() == "1")
+        if val is not None:
             offenders.append("rfc/selftrust = 1")
             objects.append({"type": "parameter_name", "name": "rfc/selftrust",
                             "qualifier": val.strip()})
@@ -490,8 +539,10 @@ class SystemTrustAuditor(BaseAuditor):
         """Legacy trust ticket method still allowed (not migrated to 2020 method)."""
         offenders = []
         objects = []
-        val = self._param("rfc/allowoldticket4tt")
-        if val is not None and str(val).strip().lower() in ("yes", "1", "true"):
+        val = self._unsafe_param(
+            "rfc/allowoldticket4tt",
+            lambda v: str(v).strip().lower() in ("yes", "1", "true"))
+        if val is not None:
             offenders.append("rfc/allowoldticket4tt = yes (legacy trust tickets accepted)")
             # No qualifier: the check accepts yes/1/true, so pinning the exported spelling
             # would split one parameter into three graph nodes.
@@ -632,14 +683,16 @@ class SystemTrustAuditor(BaseAuditor):
         """Message server internal/external port not separated, or monitoring exposed."""
         offenders = []
         objects = []
-        internal = self._param("rdisp/msserv_internal")
-        if internal is not None and internal.strip() == "0":
+        internal = self._unsafe_param("rdisp/msserv_internal",
+                                      lambda v: v.strip() == "0")
+        if internal is not None:
             offenders.append("rdisp/msserv_internal = 0 (no dedicated internal port — external "
                              "clients can reach the internal message-server channel)")
             objects.append({"type": "parameter_name", "name": "rdisp/msserv_internal",
                             "qualifier": internal.strip()})
-        monitor = self._param("ms/monitor")
-        if monitor is not None and monitor.strip() not in ("0", ""):
+        monitor = self._unsafe_param("ms/monitor",
+                                     lambda v: v.strip() not in ("0", ""))
+        if monitor is not None:
             offenders.append(f"ms/monitor = {monitor} (external message-server administration allowed)")
             # No qualifier: any non-zero value trips this, so the value must not enter the
             # node key or a 1 -> 2 change would look like a different object.
@@ -674,8 +727,8 @@ class SystemTrustAuditor(BaseAuditor):
 
     def check_ucon_allowlist(self):
         """UCON RFC allowlist not active → external RFC surface unrestricted."""
-        val = self._param("ucon/rfc/active")
-        if val is not None and val.strip() != "1":
+        val = self._unsafe_param("ucon/rfc/active", lambda v: v.strip() != "1")
+        if val is not None:
             self.finding(
                 check_id="TRUST-007",
                 title="UCON RFC allowlist is not active",
@@ -705,11 +758,19 @@ class SystemTrustAuditor(BaseAuditor):
 
     def check_gateway_proxy_acl(self):
         """gw/prxy_info unset → gateway proxy ACL defaults to allow-all."""
-        val = self._param("gw/prxy_info")
-        acl_mode = self._param("gw/acl_mode_proxy")
+        val = self._unsafe_param("gw/prxy_info", lambda v: v.strip() == "")
         # modern kernels with gw/acl_mode_proxy=1 auto-secure an empty prxyinfo
-        if (val is not None and val.strip() == ""
-                and (acl_mode is None or acl_mode.strip() != "1")):
+        #
+        # THE COMPOUND ONE, AND THE ONLY SITE WHERE THE TWO SIDES READ
+        # DIFFERENTLY. The empty prxy_info is the exposure, so any exported copy
+        # that is empty counts. The acl_mode is the MITIGATION, so it excuses the
+        # exposure only if EVERY exported copy of it says 1 -- one instance
+        # running the old default is one instance that is still open, and taking
+        # the reassuring copy here would reintroduce the fail-open the rest of
+        # this change removes.
+        acl_values = self._param_all("gw/acl_mode_proxy")
+        acl_secures = bool(acl_values) and all(v.strip() == "1" for v in acl_values)
+        if val is not None and not acl_secures:
             self.finding(
                 check_id="TRUST-008",
                 title="RFC Gateway proxy ACL (gw/prxy_info) not configured",
