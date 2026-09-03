@@ -1593,6 +1593,7 @@ class SecurityParamAuditor(BaseAuditor):
         self.check_security_policy_administration()
         self.check_unassessed_policy_attributes()
         self.check_password_hash_residue()
+        self.check_conflicting_parameter_values()
         return self.findings
 
     # ------------------------------------------------- security policies (SECPOL)
@@ -2073,6 +2074,115 @@ class SecurityParamAuditor(BaseAuditor):
             details={"holders": len(people)},
         )
 
+    def check_conflicting_parameter_values(self):
+        """A parameter the export gave more than one value for.
+
+        WHAT THIS IS NOT: a complaint about a malformed file. Two ordinary,
+        correct exports produce this shape. RSPARAM taken across application
+        servers carries a genuinely different value per server, because a
+        profile parameter can differ per instance and every one of those values
+        is live. DEFAULT.PFL merged with an instance profile carries the
+        instance override beside the default it overrides, and there SAP's own
+        precedence decides which applies.
+
+        THE CSV CANNOT SAY WHICH CASE IT IS, and the two have opposite readings:
+        in the first, the weak value is a real exposure on a real server; in the
+        second, it may be a value nothing uses. So this reports the ambiguity
+        rather than resolving it, and `check_params_against_baseline` judges
+        every value in the meantime -- fail-closed, because a rule any live
+        server fails is a rule the estate fails.
+
+        WHY IT IS INFO AND CARRIES `degrades_coverage`. The non-compliance, if
+        there is one, is already reported as its own PARAM-* finding at its own
+        severity. What is left over here is a question this product cannot
+        answer from the evidence supplied, and an unanswered question is exactly
+        what `degrades_coverage` exists to make visible.
+        """
+        conflicts = self.param_conflicts(self.data.get("security_params"))
+        if not conflicts:
+            return
+
+        # ONLY WHERE THE DISAGREEMENT CHANGES AN ANSWER.
+        #
+        # Measured on the export that prompted this: two parameters appeared
+        # twice with differing text, and only one of them mattered.
+        # `login/no_automatic_user_sapstar` came as 0 and 1 — one fails the rule
+        # and the other passes, so which is in force decides whether a CRITICAL
+        # is real. `rfc/allowoldticket4tt` came as "yes" and "1", which are two
+        # spellings that this scan judges identically: both fail, the verdict is
+        # the same either way, and there is nothing for a reader to resolve.
+        #
+        # THE ALTERNATIVE WAS TO TEACH THE COMPARISON THAT "yes" MEANS 1. That
+        # is an SAP fact this repository has no source for, and inventing one to
+        # quieten a message would be the same fabrication the provenance rules
+        # forbid. Asking whether the verdict moves needs no such claim: it uses
+        # the rules already shipped, and it is right about "yes"/"1" without
+        # ever knowing what they mean.
+        #
+        # A parameter no rule judges is silent for the same reason. This scan
+        # reached no conclusion about it, and a duplicate cannot unsettle a
+        # conclusion that was never reached; saying so would be noise, and noise
+        # gets filtered out along with the signal.
+        rules = self.effective_rules()
+        by_name = {name.lower(): rule for name, rule in rules.items()}
+        material = {}
+        for name, values in conflicts.items():
+            rule = by_name.get(name)
+            if rule is None:
+                continue
+            if len({self._rule_passes(rule, v) for v in values}) > 1:
+                material[name] = values
+        if not material:
+            return
+        conflicts = material
+        self.finding(
+            check_id="PARAM-EXPORT-CONFLICT",
+            title="Parameters exported with more than one value",
+            severity=self.SEVERITY_INFO,
+            # EXPORT INTEGRITY, NOT PASSWORD POLICY, though this module is full
+            # of the latter. What is being reported is that the evidence
+            # disagrees with itself, which is a statement ABOUT the export and
+            # not about the SAP system -- the same reason the domain taxonomy
+            # keeps Export Integrity outside the twelve domains and asks the
+            # reader to take it before them. Filing it under a control category
+            # would put an evidence problem into that category's count.
+            category="Export Integrity",
+            description=(
+                "%d parameter(s) appear more than once in the supplied "
+                "parameter export with values this scan judges differently: one "
+                "copy passes its rule and another fails it, so which copy is in "
+                "force decides whether the finding beside this one is real. A "
+                "profile parameter can legitimately differ per application "
+                "server, and a merged DEFAULT.PFL and instance profile "
+                "legitimately carries both the default and the override — the "
+                "export does not say which of those this is, and the two read "
+                "oppositely. Until it is resolved, every rule was applied to "
+                "every value the export carries rather than to whichever row "
+                "came last, so a weaker value cannot pass unnoticed because of "
+                "the order the file happened to be written in. Parameters that "
+                "appear twice in ways that change no verdict are not listed."
+                % len(conflicts)
+            ),
+            affected_items=sorted(
+                "%s = %s" % (name, " / ".join(values))
+                for name, values in conflicts.items()),
+            affected_objects=[{"type": "parameter_name", "name": name}
+                              for name in sorted(conflicts)],
+            remediation=(
+                "Establish which value is in force. If the export covers "
+                "several application servers, compare RZ11 on each: a parameter "
+                "that differs between instances means the weaker rule applies to "
+                "anyone who logs on to that server. If the export merges "
+                "DEFAULT.PFL with an instance profile, re-export the effective "
+                "values only (RSPARAM prints the running value per instance) so "
+                "the scan judges what is actually in force."
+            ),
+            references=["SAP Note 3250501 — profile parameters in ECS/RISE"],
+            details={"degrades_coverage": True,
+                     "conflicting": {k: v for k, v in sorted(conflicts.items())}},
+            scope="aggregate",
+        )
+
     def check_unassessed_policy_attributes(self):
         """The half of this surface the product cannot yet judge, said out loud.
 
@@ -2188,6 +2298,7 @@ class SecurityParamAuditor(BaseAuditor):
         # that word for the SAP Note reference on a rule, and two meanings of one
         # name in one file is how the wrong one gets read.
         value_source = self.param_provenance(params)
+        value_sets = self.param_values(params)
 
         for param_name, rule in self.effective_rules().items():
             # Allow baseline overrides
@@ -2200,8 +2311,37 @@ class SecurityParamAuditor(BaseAuditor):
             if actual_value is None:
                 continue  # Will be caught by missing params check
 
-            if self._rule_passes(rule, actual_value):
+            # EVERY VALUE THE EXPORT GAVE, NOT THE LAST ROW WINS.
+            #
+            # `param_lookup` keeps one value per name. Where an export carries a
+            # parameter twice -- which happens for two ordinary reasons, an
+            # RSPARAM taken across application servers that genuinely differ, and
+            # a DEFAULT.PFL merged with an instance profile -- judging only the
+            # survivor made the verdict depend on CSV row order. Measured: the
+            # same export with the two rows swapped reported
+            # `login/no_automatic_user_sapstar` (SAP* auto-logon, CRITICAL) as
+            # safe or unsafe purely by which row came last.
+            #
+            # A duplicate is not corruption to be resolved. If two servers really
+            # do carry different values, both are live and the weaker one is
+            # what an attacker uses, so a rule that any value fails is a rule the
+            # estate fails. PARAM-EXPORT-CONFLICT discloses the ambiguity
+            # separately; this decides the verdict, and it never decides it in
+            # the reassuring direction by accident.
+            candidates = value_sets.get(param_name.lower()) or [actual_value]
+            failing = [v for v in candidates if not self._rule_passes(rule, v)]
+            if not failing:
                 continue
+
+            # IDENTITY MUST NOT MOVE JUST BECAUSE A DUPLICATE APPEARED. Where the
+            # value `param_lookup` chose is itself failing, keep it: that is the
+            # finding that already exists, and swapping the representative would
+            # retire it and raise a fresh one with a reset age. Only when the
+            # chosen value passes and a duplicate fails is a new representative
+            # needed, and then it is picked by sort rather than by row order so
+            # the same export always yields the same finding.
+            actual_value = (actual_value if actual_value in failing
+                            else sorted(failing)[0])
 
             # One finding per non-compliant parameter, and the parameter IS the
             # defect — identity must include it, or every PARAM-* finding would
@@ -2222,6 +2362,14 @@ class SecurityParamAuditor(BaseAuditor):
             shown = (f"{param_name} = {actual_value} (kernel default; not set in "
                      f"any profile)" if at_default
                      else f"{param_name} = {actual_value}")
+            # Say so on the finding itself. A reader who checks one application
+            # server against this and finds the compliant value would otherwise
+            # conclude the report is wrong, when what it is reporting is that
+            # some OTHER server is not.
+            if len(candidates) > 1:
+                others = ", ".join(v for v in candidates if v != actual_value)
+                shown += (f" — the export also gives this parameter as {others}; "
+                          f"judged against every value it carries")
             self.finding(
                 check_id=f"PARAM-{param_name}",
                 title=f"Parameter {param_name} non-compliant",

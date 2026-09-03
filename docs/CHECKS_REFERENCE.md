@@ -6,13 +6,13 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**467** check ids are written as literals in `modules/`, across **38** modules. A further **351** are built at runtime from shipped rule tables, giving **818** in total.
+**468** check ids are written as literals in `modules/`, across **38** modules. A further **351** are built at runtime from shipped rule tables, giving **819** in total.
 
 Each check is published with **what it reads** and **which SAP Security Baseline requirement it answers** — the two things that make a catalogue auditable rather than a number. A competitor publishing a count and no itemised list is making a claim; this is a claim somebody else can check.
 
 ## What this file does not claim
 
-**62 of the 467 titles and 31 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**62 of the 468 titles and 31 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -25,7 +25,7 @@ Every check below carries the SAP Security Baseline requirement it answers, wher
 - **28 of 28** requirements that are IN SCOPE for this product are addressed by at least one check here.
 - **10 of 38** published requirements are out of scope, because they are for a stack this product does not read. They are named below, not dropped: the denominator has to be honest in both directions, and a reader comparing 28 against 38 has no way to know that.
 - **0** in-scope requirements are not addressed at all. They are listed below rather than summarised away.
-- **541 of 818** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
+- **542 of 819** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
 
 > ⚠️ These are CHECK ITEMS in the CSA policies, not the 'control points' counted in the Baseline document — the widely-quoted 214 (69/92/53) is that other unit. The two do not reconcile; do not publish a percentage of one against the other.
 
@@ -711,15 +711,16 @@ Reads: `applied_notes`, `hana_version`, `role_auth_values`, `sap_kernel`, `sap_s
 | `HOTNEWS-014` | *varies* — CRITICAL or HIGH | Note recorded as applied, but the fix it needs is not installed | `SECUPD-A` |
 | `HOTNEWS-COVERAGE` | INFO | SAP note check ran against a curated subset, not the full patch history | `SECUPD-A` |
 
-### `security_params` — 8 checks
+### `security_params` — 9 checks
 
-Category: Password Policy, Security Parameters
+Category: Export Integrity, Password Policy, Security Parameters
 
 Reads: `auth_objects`, `password_hashes`, `security_params`, `security_policies`, `users` — the sources the MODULE consumes; an individual check below reads some subset of them.
 
 | Check | Severity | Title | SAP Baseline |
 |---|---|---|---|
 | `PARAM-000` | HIGH | No security parameters data available | — |
+| `PARAM-EXPORT-CONFLICT` | INFO | Parameters exported with more than one value | — |
 | `PARAM-MISSING` | HIGH | Critical security parameters not found in export | — |
 | `PARAM-MISSING-OTHER` | INFO | Further security parameters not found in export | — |
 | `PWDHASH-001` | HIGH | Downward-compatible password hashes still present | `PWDPOL-A` |

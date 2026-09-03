@@ -149,6 +149,49 @@ class BaseAuditor:
         return lookup
 
     @staticmethod
+    def param_values(params: Any) -> Dict[str, List[str]]:
+        """parameter name (lowercased) -> every distinct value the export gave.
+
+        WHY ONE VALUE WAS NOT ENOUGH. `param_lookup` keeps the LAST row for a
+        name, which is fine while names are unique and is a fail-open when they
+        are not: an export carrying `login/no_automatic_user_sapstar` as both 0
+        and 1 is judged compliant or non-compliant according to which row the
+        exporter happened to write last. Row order in a CSV is arbitrary, so a
+        CRITICAL was being reported or suppressed by accident.
+
+        AND THE DUPLICATE IS NOT AN ERROR. A profile parameter can genuinely
+        differ per application server, so an RSPARAM export taken across
+        instances legitimately carries two values and BOTH are live -- whoever
+        logs on to the weaker server gets the weaker rule. A merged DEFAULT.PFL
+        and instance profile produces the same shape for a different reason.
+        The file cannot say which case it is, so the caller judges every value
+        rather than picking one, and the ambiguity is disclosed.
+
+        Order is preserved so a caller can still prefer the value `param_lookup`
+        would have returned, which keeps a finding's identity stable when the
+        duplicate changes nothing about the verdict.
+        """
+        out: Dict[str, List[str]] = {}
+        if not isinstance(params, (list, tuple)):
+            return out
+        for row in params:
+            if not isinstance(row, dict):
+                continue
+            single = BaseAuditor.param_lookup([row])
+            for name, value in single.items():
+                seen = out.setdefault(name, [])
+                if value not in seen:
+                    seen.append(value)
+        return out
+
+    @staticmethod
+    def param_conflicts(params: Any) -> Dict[str, List[str]]:
+        """Only the parameters the export gave more than one value for."""
+        return {name: values
+                for name, values in BaseAuditor.param_values(params).items()
+                if len(values) > 1}
+
+    @staticmethod
     def param_provenance(params: Any) -> Dict[str, str]:
         """parameter name -> how its effective value was arrived at.
 

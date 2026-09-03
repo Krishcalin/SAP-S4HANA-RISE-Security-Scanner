@@ -162,6 +162,7 @@ The findings that carry the flag today:
 | `MDC-PAY-002` | `master_data_changes` | bank changes were found and no payment-run export was supplied, so whether any were paid was never tested |
 | `HOTNEWS-010` | `sap_hotnews` | exposure could not be established against the installed releases |
 | `HOTNEWS-COVERAGE` | `sap_hotnews` | the note catalogue is a curated subset, not the full patch history |
+| `PARAM-EXPORT-CONFLICT` | `security_params` | **undescribed** — add it to DESCRIPTIONS in tools/build_gate_reference.py |
 | `PARAM-MISSING-OTHER` | `security_params` | parameters absent from an export nobody declared complete |
 | `SECPOL-002` | `security_params` | **undescribed** — add it to DESCRIPTIONS in tools/build_gate_reference.py |
 | `SECPOL-003` | `security_params` | **undescribed** — add it to DESCRIPTIONS in tools/build_gate_reference.py |
