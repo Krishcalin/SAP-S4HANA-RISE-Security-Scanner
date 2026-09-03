@@ -162,4 +162,9 @@ def test_both_findings_appear_together_when_both_apply():
     with estate(role_auth_values__csv=TRUNCATED_UTF32,
                 users__csv=CSV.replace("Z_R", "Z_R\xdc").encode("latin-1")) as d:
         data, _ = load(d)
-    assert set(findings(data)) == {"EXPORT-001", "EXPORT-002"}
+    # SUPERSET, NOT EQUALITY. This test is about the two ENCODING findings
+    # co-occurring. EXPORT-003 also fires here, and correctly: the fixture
+    # writes an AGR_1251-shaped file (AGR_NAME,OBJECT,AUTH,...) into users.csv,
+    # so that export genuinely carries no user-name column. Asserting equality
+    # made an unrelated third finding read as a regression in these two.
+    assert {"EXPORT-001", "EXPORT-002"} <= set(findings(data))

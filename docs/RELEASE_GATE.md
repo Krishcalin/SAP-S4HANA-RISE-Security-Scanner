@@ -157,6 +157,7 @@ The findings that carry the flag today:
 | `CAPX-COV-001` | `cap_xsuaa` | `--cap-src` unreadable, or a descriptor or CDS construct that would not parse |
 | `CSA-COV-001` | `cloudalm_verdicts` | a CSA results export was supplied and no row in it named a policy |
 | `CSA-SAP-002` | `cloudalm_verdicts` | SAP Cloud ALM could not evaluate some policies, so its silence on them is not a pass |
+| `EXPORT-003` | `export_integrity` | **undescribed** — add it to DESCRIPTIONS in tools/build_gate_reference.py |
 | `HANADB-AUDIT-005` | `hana_db_security` | **undescribed** — add it to DESCRIPTIONS in tools/build_gate_reference.py |
 | `MDC-PAY-002` | `master_data_changes` | bank changes were found and no payment-run export was supplied, so whether any were paid was never tested |
 | `HOTNEWS-010` | `sap_hotnews` | exposure could not be established against the installed releases |

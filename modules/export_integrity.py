@@ -40,6 +40,32 @@ about encodings. That much is a correctness fix. The finding here is the other
 half: a customer who supplied a file needs to be told it did not arrive, and
 being quietly counted among the sources they did not send does not tell them.
 
+A THIRD CAUSE, WITH THE SAME OUTCOME
+------------------------------------
+The two states above are about whether the BYTES could be read. A file can
+decode perfectly, parse into rows, be counted among the sources the customer
+supplied - and still be useless, because the column its consumers join on is not
+in it. Excel drops a column when somebody deletes what looks like an empty one;
+a hand-built extract omits a field nobody thought mattered; a report variant is
+saved with a narrower layout.
+
+The outcome is identical to the encoding failure this module was built for, and
+it was measured the same way. Dropping ONE column from the sample estate:
+
+    security_params.csv   NAME       58 checks stop firing
+    security_params.csv   VALUE      53
+    role_auth_values.csv  OBJECT     30
+    role_auth_values.csv  FIELD      28
+    role_auth_values.csv  AGR_NAME   27
+    role_auth_values.csv  LOW        27
+    user_roles.csv        AGR_NAME    9   (every segregation-of-duties finding)
+
+In each case the scan completed, the report was produced, the coverage manifest
+counted the file as SUPPLIED, and nothing anywhere said a column was missing.
+`REQUIRED_COLUMNS` below is that measurement written down: every entry earns its
+place by a counted number of checks that go silent without it, and the test
+re-runs the drop to prove the number is still true.
+
 FALLBACK DECODING IS REPORTED SEPARATELY, AND ON PURPOSE
 --------------------------------------------------------
 cp1252 decodes any byte sequence at all and never raises. That makes it a useful
@@ -63,12 +89,130 @@ class ExportIntegrityAuditor(BaseAuditor):
     #: attempt, which is the ordinary case and produces no findings at all.
     UNREADABLE_KEY = "_unreadable_sources"
 
+    #: source -> [(accepted spellings, what it is, checks lost without it)]
+    #:
+    #: THE SPELLINGS ARE THE READERS', NOT THIS MODULE'S. Where the consumers
+    #: share a vocabulary it is imported rather than restated - a check that
+    #: rejected a column `security_params` happily reads would be a false alarm
+    #: on a valid export, which is a worse failure than the silence it replaces.
+    #:
+    #: The counts come from dropping each column from the sample estate and
+    #: re-running every auditor. `tests/test_export_missing_columns.py` repeats
+    #: that measurement, so an entry whose cost falls to zero fails rather than
+    #: lingering as a claim nobody rechecked.
+    REQUIRED_COLUMNS = {
+        "security_params": [
+            (BaseAuditor.PARAM_NAME_COLUMNS, "the parameter name", 58),
+            (BaseAuditor.PARAM_VALUE_COLUMNS, "the parameter value", 53),
+        ],
+        "role_auth_values": [
+            (("OBJECT", "AUTH_OBJECT"), "the authorization object", 30),
+            (("FIELD", "FIELD_NAME"), "the authorization field", 28),
+            (("AGR_NAME", "ROLE", "AGR"), "the role name", 27),
+            (("LOW", "VALUE", "VON"), "the authorization value", 27),
+        ],
+        "user_roles": [
+            (("AGR_NAME", "ROLE", "AGR"), "the role name", 9),
+            (("UNAME", "USER", "BNAME", "USERNAME"), "the user name", 8),
+        ],
+        "hana_granted_privileges": [
+            (("PRIVILEGE", "PRIVILEGE_NAME", "SYSTEM_PRIVILEGE"),
+             "the privilege", 6),
+        ],
+        "users": [
+            (("BNAME", "USERNAME", "NAME"), "the user name", 3),
+        ],
+    }
+
     def run_all_checks(self) -> List[Dict[str, Any]]:
         self.findings = []
         record = self.data.get(self.UNREADABLE_KEY) or {}
         self._emit_unreadable(record)
         self._emit_fallback_decoding(record)
+        self._emit_missing_columns()
         return self.findings
+
+    # ------------------------------------------------------------------ #
+    def _emit_missing_columns(self) -> None:
+        """A file that parsed into rows and lost a column its readers need.
+
+        ONLY WHERE THERE ARE ROWS TO LOOK AT. An absent source is already
+        handled everywhere - the value is None and every consumer self-skips -
+        and a source that is present and EMPTY is a real answer this module has
+        no business second-guessing. Columns can only be judged where a row
+        exists to carry them.
+        """
+        missing = []
+        for source, requirements in sorted(self.REQUIRED_COLUMNS.items()):
+            rows = self.data.get(source)
+            if not isinstance(rows, (list, tuple)) or not rows:
+                continue
+            present = set()
+            for row in rows[:20]:
+                if isinstance(row, dict):
+                    present.update(str(k).strip().upper() for k in row)
+            if not present:
+                continue
+            for spellings, what, cost in requirements:
+                if any(s.upper() in present for s in spellings):
+                    continue
+                missing.append({"source": source, "what": what, "cost": cost,
+                                "accepted": list(spellings),
+                                "found": sorted(present)[:12]})
+        if not missing:
+            return
+        total = sum(m["cost"] for m in missing)
+        items = [
+            "%s.csv is missing %s - no column named %s. %d check(s) cannot run. "
+            "Columns found: %s"
+            % (m["source"], m["what"], " or ".join(m["accepted"]), m["cost"],
+               ", ".join(m["found"]))
+            for m in sorted(missing, key=lambda m: -m["cost"])
+        ]
+        self.finding(
+            check_id="EXPORT-003",
+            title="A supplied export is missing a column its checks read",
+            severity=self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=(
+                "%d export(s) parsed into rows and were counted among the "
+                "sources you supplied, but do not carry a column the checks "
+                "that read them join on. Roughly %d check(s) therefore produced "
+                "no finding - not because the estate is clean, but because the "
+                "question could not be asked.\n\n"
+                "This is the same failure as an export that will not decode, "
+                "reached by a different route: the file opens, the rows parse, "
+                "the coverage manifest says it arrived, and the report is "
+                "quieter than the estate deserves. It happens when a column is "
+                "deleted in a spreadsheet, when a hand-built extract omits a "
+                "field nobody thought mattered, or when a report variant is "
+                "saved with a narrower layout.\n\n"
+                "The spellings listed as accepted are the readers' own "
+                "vocabulary, not a stricter one invented here - any one of them "
+                "is enough."
+                % (len(missing), total)
+            ),
+            affected_items=items,
+            remediation=(
+                "1. Re-export each file listed with the missing column "
+                "included. docs/EXPORT_GUIDE.md gives the required columns per "
+                "export and every spelling that is accepted.\n"
+                "2. Check how the file was produced. A column deleted in a "
+                "spreadsheet is the usual cause, and it will recur on the next "
+                "export unless the step that drops it is found.\n"
+                "3. Do not read the affected checks as passing in this report. "
+                "They did not run.\n"
+                "4. Re-run the scan afterwards and compare the finding count - "
+                "it should rise by roughly the number stated above."
+            ),
+            references=["docs/EXPORT_GUIDE.md - required columns per export"],
+            # A coverage statement, not a defect in the estate: the gate must
+            # not return green on a scan that could not ask the question.
+            details={"degrades_coverage": True,
+                     "sources": sorted({m["source"] for m in missing}),
+                     "checks_not_run": total},
+            scope="aggregate",
+        )
 
     # ------------------------------------------------------------------ #
     def _emit_unreadable(self, record: Dict[str, Any]) -> None:
