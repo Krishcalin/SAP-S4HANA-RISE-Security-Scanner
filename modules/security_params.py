@@ -1861,6 +1861,7 @@ class SecurityParamAuditor(BaseAuditor):
         params = self._param_lookup(self.data.get("security_params"))
         if not params:
             return          # nothing to be weaker THAN; SECPOL-003 still lists them
+        param_sets = self.param_values(self.data.get("security_params"))
         assigned = self._assigned_policies()
         offenders, objects = [], []
         for policy, attribute, value in rows:
@@ -1868,7 +1869,25 @@ class SecurityParamAuditor(BaseAuditor):
             if not pair:
                 continue
             param_name, direction = pair
-            profile = params.get(param_name)
+            # THE STRONGEST PROFILE VALUE, NOT THE LAST ROW.
+            #
+            # This check asks whether a policy is weaker than the profile it
+            # overrides, and it took the profile side from a map that keeps one
+            # value per name. Where an export carries the parameter twice --
+            # several application servers, or a merged DEFAULT.PFL -- the answer
+            # moved with CSV row order, and it moved in the direction that hides
+            # the finding: compare a policy of 8 against the weaker copy (6) and
+            # it is not weaker than anything, so nothing is reported, while on
+            # the server running 15 that policy really is a downgrade for
+            # everyone holding it.
+            #
+            # Unlike `param_lookup`, this code knows which way the parameter
+            # points, so it can pick correctly rather than merely disclose:
+            # compare against the strongest value the export offers, because a
+            # policy weaker than ANY live profile setting is a downgrade
+            # somewhere.
+            profile = self._strongest(param_sets.get(param_name), direction,
+                                      params.get(param_name))
             if profile is None:
                 continue
             try:
@@ -2074,6 +2093,33 @@ class SecurityParamAuditor(BaseAuditor):
             details={"holders": len(people)},
         )
 
+    @staticmethod
+    def _strongest(values: Any, direction: str, fallback: Any) -> Any:
+        """The strictest of the values an export gave for one parameter.
+
+        `direction` is the attribute's own, from POLICY_ATTRIBUTE_PARAMETERS:
+        "min" means a larger number is stricter (minimum password length), "max"
+        means a smaller one is (password change interval) -- and on a "max"
+        attribute SAP reads 0 as no limit at all, which is the weakest setting
+        rather than the strictest, the same reading the comparison below uses.
+
+        Falls back to the caller's single value whenever the values are absent or
+        not numeric, so a non-numeric export behaves exactly as it did before.
+        """
+        if not values:
+            return fallback
+        numeric = []
+        for raw in values:
+            try:
+                numeric.append((int(float(raw)), raw))
+            except (TypeError, ValueError):
+                return fallback
+        if direction == "max":
+            # 0 is unbounded, so it can never be the strictest.
+            real = [pair for pair in numeric if pair[0] != 0]
+            return min(real)[1] if real else numeric[0][1]
+        return max(numeric)[1]
+
     def check_conflicting_parameter_values(self):
         """A parameter the export gave more than one value for.
 
@@ -2119,22 +2165,44 @@ class SecurityParamAuditor(BaseAuditor):
         # the rules already shipped, and it is right about "yes"/"1" without
         # ever knowing what they mean.
         #
-        # A parameter no rule judges is silent for the same reason. This scan
-        # reached no conclusion about it, and a duplicate cannot unsettle a
-        # conclusion that was never reached; saying so would be noise, and noise
-        # gets filtered out along with the signal.
+        # EVERY CONFLICT IS LISTED, AND THE ONES THAT MOVE A VERDICT SAY SO.
+        #
+        # Two earlier versions of this got the filter wrong in opposite ways and
+        # both are worth recording, because the second looked principled.
+        #
+        # The first stayed silent unless a rule IN THIS MODULE judged the values
+        # differently. That silenced `rfc/allowoldticket4tt = "yes" / "1"`, which
+        # was the intent -- two spellings this module scores identically -- but
+        # it also silenced anything `effective_rules` has no rule for, and
+        # `effective_rules` is THIS MODULE's rule set rather than the product's.
+        # `baseline_params` judges `login/password_hash_algorithm` and more
+        # through its own copy of the same last-row-wins map; `snc_posture`
+        # judges the SNC parameters. A parameter this module ignores is not a
+        # parameter nothing depends on.
+        #
+        # The second asked instead whether the disagreement could be PROVED
+        # harmless, which sounds stronger and is not: the proof was still drawn
+        # from this module's rules alone. `login/password_hash_algorithm` fails
+        # the rule here on both an SHA-1 and an iSSHA-512 spelling, so it is
+        # "provably harmless" here while `baseline_params` -- which is the module
+        # that actually reads the algorithm -- would score them oppositely. A
+        # proof that only covers one consumer is not a proof.
+        #
+        # There is no third filter to reach for, because nothing in this module
+        # can enumerate what every other check does with a value. So the list is
+        # complete and the ANNOTATION carries the signal: a reader gets one INFO
+        # line either way, and the entries that change an answer here are marked
+        # as such. Erring toward listing costs a line about two spellings of the
+        # same setting; erring toward silence costs a verdict nobody was told
+        # rested on row order.
         rules = self.effective_rules()
         by_name = {name.lower(): rule for name, rule in rules.items()}
-        material = {}
-        for name, values in conflicts.items():
-            rule = by_name.get(name)
-            if rule is None:
-                continue
-            if len({self._rule_passes(rule, v) for v in values}) > 1:
-                material[name] = values
-        if not material:
-            return
-        conflicts = material
+        moves_verdict = {
+            name for name, values in conflicts.items()
+            if (by_name.get(name) is not None
+                and len({self._rule_passes(by_name[name], v)
+                         for v in values}) > 1)
+        }
         self.finding(
             check_id="PARAM-EXPORT-CONFLICT",
             title="Parameters exported with more than one value",
@@ -2149,22 +2217,32 @@ class SecurityParamAuditor(BaseAuditor):
             category="Export Integrity",
             description=(
                 "%d parameter(s) appear more than once in the supplied "
-                "parameter export with values this scan judges differently: one "
-                "copy passes its rule and another fails it, so which copy is in "
-                "force decides whether the finding beside this one is real. A "
-                "profile parameter can legitimately differ per application "
-                "server, and a merged DEFAULT.PFL and instance profile "
-                "legitimately carries both the default and the override — the "
-                "export does not say which of those this is, and the two read "
-                "oppositely. Until it is resolved, every rule was applied to "
-                "every value the export carries rather than to whichever row "
-                "came last, so a weaker value cannot pass unnoticed because of "
-                "the order the file happened to be written in. Parameters that "
-                "appear twice in ways that change no verdict are not listed."
+                "parameter export, each time with a different value. A profile "
+                "parameter can legitimately differ per application server — and "
+                "then every value is live, so the weakest is the one that "
+                "governs whoever logs on to that server — while a merged "
+                "DEFAULT.PFL and instance profile legitimately carries the "
+                "override beside the default it overrides, where SAP's "
+                "precedence decides and the weaker value may govern nothing. "
+                "The export does not say which of those this is, and the two "
+                "read oppositely.\n\n"
+                "Until it is resolved, this module applied every rule to every "
+                "value the export carries rather than to whichever row came "
+                "last, so a weaker value cannot pass unnoticed because of the "
+                "order the file happened to be written in. Checks in other "
+                "modules that read a single value per parameter have no such "
+                "protection, which is the other reason every one of these is "
+                "listed rather than only the ones that move a verdict here.\n\n"
+                "Entries marked as changing a verdict are the ones where one "
+                "copy passes this module's rule and another fails it. The rest "
+                "may still matter: this module cannot see what checks elsewhere "
+                "make of a value."
                 % len(conflicts)
             ),
             affected_items=sorted(
-                "%s = %s" % (name, " / ".join(values))
+                "%s = %s%s" % (name, " / ".join(values),
+                               "  — changes a verdict in this scan"
+                               if name in moves_verdict else "")
                 for name, values in conflicts.items()),
             affected_objects=[{"type": "parameter_name", "name": name}
                               for name in sorted(conflicts)],

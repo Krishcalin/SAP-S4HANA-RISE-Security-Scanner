@@ -49,8 +49,11 @@ def rows(name, *values):
     return [{"NAME": name, "VALUE": v} for v in values]
 
 
-def run(param_rows):
-    return SecurityParamAuditor({"security_params": param_rows}).run_all_checks()
+def run(param_rows, policies=None):
+    data = {"security_params": param_rows}
+    if policies:
+        data["security_policies"] = policies
+    return SecurityParamAuditor(data).run_all_checks()
 
 
 def ids(findings):
@@ -143,29 +146,108 @@ def test_no_conflict_finding_when_the_export_is_unambiguous():
     assert "PARAM-EXPORT-CONFLICT" not in ids(run(rows(LNG, STRONG)))
 
 
-def test_a_duplicate_that_changes_no_verdict_is_not_disclosed():
-    """Measured on the export that prompted this work: it carried TWO repeated
-    parameters and only one of them mattered. `rfc/allowoldticket4tt` came as
-    "yes" and as "1" — two spellings the shipped rules judge identically, both
-    failing — so there is nothing for a reader to resolve and saying so would be
-    noise.
+def test_a_duplicate_that_changes_no_verdict_here_is_listed_but_not_marked():
+    """Measured on the export that prompted this: it carried TWO repeated
+    parameters. `rfc/allowoldticket4tt` came as "yes" and as "1", two spellings
+    this module scores identically — both failing — so nothing in THIS scan
+    turns on which is in force.
 
-    The alternative was to teach the comparison that "yes" means 1. That is an
-    SAP fact this repository has no source for, and inventing one to quieten a
-    message is the fabrication the provenance rules forbid. Asking whether the
-    verdict moves is right about "yes"/"1" without knowing what they mean.
+    It is still listed, because "nothing in this scan" is not "nothing". The
+    honest limit of what this module can say is that ITS verdict does not move,
+    and the annotation says exactly that much rather than implying the duplicate
+    is harmless everywhere.
+
+    Note what is deliberately NOT done: teaching the comparison that "yes" means
+    1. That is an SAP fact this repository has no source for, and inventing one
+    to quieten a message is the fabrication the provenance rules forbid.
     """
     findings = run(rows("rfc/allowoldticket4tt", "yes", "1"))
-    assert "PARAM-EXPORT-CONFLICT" not in ids(findings)
+    disclosure = next(f for f in findings
+                      if f["check_id"] == "PARAM-EXPORT-CONFLICT")
+    item, = [i for i in disclosure["affected_items"]
+             if "allowoldticket4tt" in i]
+    assert "changes a verdict" not in item, item
     # ...and the parameter itself is still judged non-compliant, on both values.
     assert "PARAM-rfc/allowoldticket4tt" in ids(findings)
 
 
-def test_a_parameter_no_rule_judges_is_not_disclosed():
-    """This scan concluded nothing about it, and a duplicate cannot unsettle a
-    conclusion that was never reached."""
-    assert "PARAM-EXPORT-CONFLICT" not in ids(
-        run(rows("some/unjudged_parameter", "a", "b")))
+def test_a_duplicate_that_does_change_a_verdict_is_marked():
+    findings = run(rows(SAPSTAR, "0", "1"))
+    disclosure = next(f for f in findings
+                      if f["check_id"] == "PARAM-EXPORT-CONFLICT")
+    item, = disclosure["affected_items"]
+    assert "changes a verdict" in item, item
+
+
+def test_a_parameter_this_module_cannot_judge_is_still_disclosed():
+    """SILENCE REQUIRES PROOF, and the first version of this had it backwards.
+
+    It stayed quiet for anything `effective_rules` had no rule for, reasoning
+    that the scan concluded nothing about the parameter so a duplicate could
+    unsettle nothing. `effective_rules` is THIS MODULE's rule set, not the
+    product's: `baseline_params` judges `login/password_hash_algorithm` and more
+    besides, `snc_posture` judges the SNC parameters, and all of them read the
+    same last-row-wins map. A parameter this module ignores is not a parameter
+    nothing depends on.
+    """
+    assert "PARAM-EXPORT-CONFLICT" in ids(
+        run(rows("login/password_hash_algorithm", "encoding=RFC2307, algorithm=SHA-1",
+                 "encoding=RFC2307, algorithm=iSSHA-512")))
+
+
+# --------------------------------------------------------------------------- #
+#  SECPOL-001: the profile side of the comparison                             #
+# --------------------------------------------------------------------------- #
+
+def policy(name, attribute, value):
+    return {"NAME": name, "ATTRIBUTE": attribute, "VALUE": str(value)}
+
+
+@pytest.mark.parametrize("order", [(STRONG, WEAK), (WEAK, STRONG)])
+def test_a_policy_weaker_than_any_live_profile_value_is_reported(order):
+    """THE SECOND FAIL-OPEN, and the one the first commit did not close.
+
+    SECPOL-001 asks whether a security policy is weaker than the profile it
+    overrides, and took the profile side from the same last-row-wins map. A
+    policy of 8 against an export carrying both 15 and 6 was reported or not
+    according to row order -- and the silent direction is the wrong one: on the
+    server running 15, that policy really is a downgrade for everyone holding
+    it.
+    """
+    findings = run(rows(LNG, *order),
+                   policies=[policy("Z_SVC", "MIN_PASSWORD_LENGTH", 8)])
+    assert "SECPOL-001" in ids(findings), (
+        "a policy setting 8 is weaker than the profile's %s, and was missed "
+        "because the export also carried %s" % (STRONG, WEAK))
+
+
+def test_the_profile_side_quotes_the_value_it_compared_against():
+    finding = next(f for f in run(rows(LNG, WEAK, STRONG),
+                                  policies=[policy("Z_SVC",
+                                                   "MIN_PASSWORD_LENGTH", 8)])
+                   if f["check_id"] == "SECPOL-001")
+    assert STRONG in " ".join(finding["affected_items"])
+
+
+def test_a_policy_stronger_than_every_profile_value_is_not_reported():
+    """Fail-closed must not become fail-noisy."""
+    assert "SECPOL-001" not in ids(
+        run(rows(LNG, WEAK, STRONG),
+            policies=[policy("Z_STRICT", "MIN_PASSWORD_LENGTH", 20)]))
+
+
+def test_strongest_reads_zero_on_a_max_attribute_as_no_limit():
+    """0 on a "max" attribute is unbounded — the weakest setting available, not
+    the strictest — which is the same reading the comparison itself uses."""
+    assert SecurityParamAuditor._strongest(["0", "90"], "max", "0") == "90"
+    assert SecurityParamAuditor._strongest(["180", "90"], "max", "180") == "90"
+    assert SecurityParamAuditor._strongest(["8", "15"], "min", "8") == "15"
+
+
+def test_strongest_falls_back_when_the_values_are_not_numeric():
+    """A non-numeric export must behave exactly as it did before."""
+    assert SecurityParamAuditor._strongest(["ALL", "SOME"], "min", "ALL") == "ALL"
+    assert SecurityParamAuditor._strongest(None, "min", "12") == "12"
 
 
 # --------------------------------------------------------------------------- #
