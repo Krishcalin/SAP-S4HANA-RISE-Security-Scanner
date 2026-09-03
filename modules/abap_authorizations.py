@@ -19,6 +19,7 @@ Data sources:
   - security_params.csv   → (optional) profile parameters, for auth/object_disabling_active
 """
 
+import re
 from typing import Dict, List, Any, Optional
 from modules.base_auditor import BaseAuditor
 
@@ -59,9 +60,19 @@ class AbapAuthorizationAuditor(BaseAuditor):
 
     def run_all_checks(self) -> List[Dict[str, Any]]:
         self._instances = self._build_instances()
+        self._user_by_role = self._user_map()
+
+        # BEFORE THE AGR_1251 GUARD, deliberately. A parameter transaction is a
+        # property of the transaction DEFINITION, not of any role, and TSTCP
+        # settles it on its own — putting this after the guard would make the
+        # check depend on an export it does not read. It is placed AFTER
+        # `_build_instances` all the same, because role data is what lets it say
+        # which roles reach the underlying transaction only through this one;
+        # that enrichment is optional and silently absent without AGR_1251.
+        self.check_parameter_transactions()
+
         if self._instances is None:
             return self.findings  # no AGR_1251 export → module self-skips
-        self._user_by_role = self._user_map()
 
         self.check_debug_replace()
         self.check_trusted_rfc_acl()
@@ -202,6 +213,141 @@ class AbapAuthorizationAuditor(BaseAuditor):
                      description=description, affected_items=offenders, remediation=remediation,
                      references=references, details=details or {},
                      affected_objects=self._dedupe(objects or []), scope="aggregate")
+
+    # =========================================== parameter transactions (TSTCP)
+    def _parameter_transactions(self):
+        """(tcode, target, screen_skipped, param) for each parameter transaction.
+
+        SAP writes the PARAM string of a parameter transaction as the called
+        transaction prefixed by a mode:
+
+            /*SE16 DATABROWSE-TABLENAME=USR02;   first screen SKIPPED
+            /NSE16 DATABROWSE-TABLENAME=USR02;   first screen NOT skipped
+
+        The difference is the whole check. With `/*` the entry screen never
+        appears and the pre-filled table is the only one reachable — the
+        transaction grants exactly what its author intended. With `/N` the entry
+        screen appears WITH the value pre-filled, and the user can type over it.
+        """
+        pattern = re.compile(r"^\s*/(\*|[Nn])([A-Za-z0-9_/]{2,20})\s*(.*)$")
+        for row in (self.data.get("parameter_transactions") or []):
+            if not isinstance(row, dict):
+                continue
+            tcode = str(row.get("TCODE", row.get("TCOD",
+                        row.get("TRANSACTION", "")))).strip()
+            param = str(row.get("PARAM", row.get("PARAMS",
+                        row.get("PARAMETER", "")))).strip()
+            if not tcode or not param:
+                continue
+            match = pattern.match(param)
+            if not match:
+                continue
+            mode, target, rest = match.groups()
+            yield tcode, target.upper(), mode == "*", rest.strip()
+
+    def _roles_granting(self, tcode: str):
+        """Roles whose S_TCODE covers this transaction code."""
+        if not getattr(self, "_instances", None):
+            return []
+        out = []
+        for inst in self._objects("S_TCODE"):
+            if self._covers(self._field(inst, "TCD"), tcode):
+                out.append(inst["role"])
+        return sorted(set(out))
+
+    def check_parameter_transactions(self):
+        """HIGH: a Z transaction that is SE16 with the entry screen still open.
+
+        A parameter transaction runs an existing transaction with screen fields
+        pre-filled. Defined over SE16 or SM30 with a table name filled in and
+        the first screen SKIPPED, it is a deliberate, narrow grant: the user
+        reaches that table and no other. Defined with the first screen NOT
+        skipped, the entry screen appears with the table pre-filled and the user
+        types over it.
+
+        WHAT THAT DEFEATS IS THE TRANSACTION-LEVEL CONTROL, and that is the one
+        most estates lean on. `check_sensitive_tcodes` reports a role granting
+        SE16 by name; it cannot see a role granting Z_VENDOR_LIST, which is SE16
+        wearing a different name. The role looks unremarkable in PFCG, in SUIM,
+        and in this product's own role review.
+
+        IT IS NOT UNRESTRICTED TABLE ACCESS, and the finding does not say it is.
+        S_TABU_DIS and S_TABU_NAM still apply to whatever table the user
+        substitutes. The exposure is the combination — a broad table
+        authorization group, which AUTH-011 reports separately, plus a
+        transaction nobody recognised as SE16.
+        """
+        risky, objs = [], []
+        for tcode, target, skipped, rest in self._parameter_transactions():
+            if target not in self.CRITICAL_TCODES or skipped:
+                continue
+            granting = self._roles_granting(tcode)
+            direct = {r for r in granting if r in self._roles_granting(target)}
+            indirect = [r for r in granting if r not in direct]
+            holders = sorted({u for r in granting
+                              for u in (self._user_by_role.get(r) or [])})
+            label = ("%s → /N%s (%s)%s%s"
+                     % (tcode, target, self.CRITICAL_TCODES[target],
+                        " pre-filled: %s" % rest[:60] if rest else "",
+                        ""))
+            if granting:
+                label += " — %d role(s)" % len(granting)
+                if indirect:
+                    label += (", %d of which do not grant %s directly"
+                              % (len(indirect), target))
+                if holders:
+                    label += ", %d user(s)" % len(holders)
+            risky.append(label)
+            self._add_tcode_objects(objs, tcode, target, granting)
+        self._emit(
+            # AUTH-017, not -016: that id is `check_icf_destination`. It was
+            # missed on the first pass because this module passes the id
+            # POSITIONALLY to `_emit`, so a grep for `check_id="AUTH-..."`
+            # returns one hit for sixteen ids.
+            "AUTH-017",
+            "Parameter transaction reaches a critical transaction with its entry "
+            "screen still open",
+            self.SEVERITY_HIGH,
+            "%d parameter transaction(s) call a critical transaction with the "
+            "first screen NOT skipped. A parameter transaction runs an existing "
+            "transaction with screen fields pre-filled; skipping the first "
+            "screen makes that a narrow grant — the pre-filled value is the "
+            "only one reachable. Leaving it open shows the user the entry "
+            "screen with the value filled in, and they can type over it.\n\n"
+            "What that defeats is the transaction-level control. A role review "
+            "sees Z_VENDOR_LIST and not SE16, so the check in this module that "
+            "reports roles granting SE16 by name cannot see these at all.\n\n"
+            "This is not unrestricted table access: S_TABU_DIS and S_TABU_NAM "
+            "still apply to whatever the user substitutes. The exposure is the "
+            "combination of a broad table authorization group and a transaction "
+            "nobody recognised as SE16."
+            % len(risky),
+            risky,
+            "1. For each transaction, decide whether the entry screen needs to "
+            "be open at all. In SE93 the 'Skip initial screen' box is what "
+            "turns a wide grant into a narrow one, and it is usually simply "
+            "unticked rather than deliberately left open.\n"
+            "2. Where the screen must stay open, treat the Z transaction as "
+            "equivalent to the transaction it calls and restrict it the same "
+            "way — the roles listed are the ones to review.\n"
+            "3. Check S_TABU_DIS breadth for the roles involved: the "
+            "substitution only reaches tables the user is already authorised "
+            "for, so a narrow authorization group blunts this considerably.\n"
+            "4. Re-run RSUSR002 or SUIM against the Z transaction, not only "
+            "against SE16 — searching for the underlying transaction will not "
+            "find these holders.",
+            ["SAP transaction SE93 — parameter transactions",
+             "Table TSTCP — transaction parameters",
+             "JFR-C/SAP-Security-Audit — weak parameter transactions"],
+            details={"parameter_transactions": len(risky)},
+            objects=objs)
+
+    def _add_tcode_objects(self, objs, tcode, target, roles):
+        for entry in ([{"type": "tcode", "name": tcode},
+                       {"type": "tcode", "name": target}]
+                      + [{"type": "role", "name": r} for r in roles[:50]]):
+            if entry not in objs:
+                objs.append(entry)
 
     # ==================================================================  CRITICAL
     def check_debug_replace(self):

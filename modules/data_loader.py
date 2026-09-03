@@ -84,6 +84,11 @@ class DataLoader:
         # only the latter.
         "security_policies": ["security_policies.csv", "secpol.csv",
                               "secpolattr.csv"],
+        # TSTCP: the PARAM string of every PARAMETER transaction — a transaction
+        # defined as another transaction with screen fields pre-filled. It is
+        # what makes a Z transaction able to reach SE16 without S_TCODE for
+        # SE16, which no role review shows. See AUTH-016.
+        "parameter_transactions": ["parameter_transactions.csv", "tstcp.csv"],
         # Which password hash CODE VERSIONS still exist per user. The third
         # store SAP's Security Baseline reads for PWDPOL-A, after
         # ABAP_INSTANCE_PAHI and AUTH_SECURITY_POLICY. Presence only — see the

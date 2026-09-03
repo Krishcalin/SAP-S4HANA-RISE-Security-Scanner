@@ -1773,6 +1773,32 @@ reason is both a security question and an upgrade liability, and the two are the
 same finding because the mechanism is the same: SAP ships a fix, the modification
 adjustment reverses it, and nobody notices until the next scan.
 
+### Parameter transactions (`parameter_transactions.csv`, `tstcp.csv`)
+**Source:** table `TSTCP` — one row per parameter transaction. SE16 on TSTCP, or
+SE93 one transaction at a time if the table is not readable.
+
+```
+Required: TCODE (or TCOD), PARAM (or PARAMS / PARAMETER)
+```
+
+```
+TCODE,PARAM
+Z_VEND_LIST,/*SE16 DATABROWSE-TABLENAME=LFA1;
+Z_TBL_MAINT,/NSM30 VIEWNAME=V_T001;
+```
+
+**Export the PARAM string exactly, leading slash included.** The first two
+characters are the finding: `/*` means the transaction skips its initial screen
+and the pre-filled table is the only one reachable; `/N` means the screen opens
+with the value filled in and the user can type over it. A transcription that
+drops the prefix turns a check into a guess, and `AUTH-017` will simply not
+recognise the row.
+
+Worth supplying even where `role_auth_values.csv` is not: the finding stands on
+TSTCP alone. With the role export it additionally reports how many granting
+roles do not carry the underlying transaction directly, which is the half that
+says whether the indirection is doing any work.
+
 ### Password hash usage (`password_hashes.csv`)
 **Source:** `USR02` and `USH02` (the password history). Under Focused Run /
 Cloud ALM the same content is the `USER_PASSWD_HASH_USAGE` configuration store.

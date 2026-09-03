@@ -825,6 +825,12 @@
       "how": "SE16/SE16N on USR02 and USH02, or report RSUSR003 / the security audit reports. Export PRESENCE FLAGS ONLY — never the hash columns themselves.",
       "note": "Customer-readable, and the remediation is customer-executable too: CLEANUP_PASSWORD_HASH_VALUES is an ABAP report, not a Basis parameter change, so unlike the login/* parameters it overrides no service request is needed to fix what this finds.",
       "basis": "section_3"
+    },
+    "parameter_transactions": {
+      "state": "yes",
+      "how": "SE16 on table TSTCP, or SE93 per transaction. Two columns are enough: TCODE and PARAM.",
+      "note": "Customer-side in both directions: the transactions are the customer's own Z objects and SE93 is where they are corrected, so unlike the profile parameters this needs no service request.",
+      "basis": "section_3"
     }
   }
 }
