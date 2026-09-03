@@ -478,7 +478,25 @@ def list_findings(scope: Optional[Sequence[int]], system_id: Optional[int] = Non
                                       WHEN 'P3' THEN 2 WHEN 'P4' THEN 3 ELSE 4 END,
                  CASE f.severity WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1
                                  WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 ELSE 4 END,
-                 f.first_seen_at
+                 f.first_seen_at,
+                 -- THE UNIQUE TIEBREAK, WITHOUT WHICH PAGING SILENTLY LOSES ROWS.
+                 -- Every finding an ingest creates gets the same `first_seen_at`,
+                 -- so the three keys above tie across most of the estate. A tied
+                 -- ORDER BY leaves the row order unspecified, and Postgres is
+                 -- free to answer page 2 in a different order than it answered
+                 -- page 1 -- so a row served on page 1 comes back again on page
+                 -- 2 and some other row is served on neither.
+                 --
+                 -- Measured on a 397-finding estate before this line existed:
+                 -- eight pages returned 397 rows of which 27 were duplicates,
+                 -- and 27 findings -- including a HIGH -- appeared on no page at
+                 -- all. The total said 397 and the reader could reach 370. This
+                 -- is why `total` cannot be trusted as evidence that paging
+                 -- works: both numbers were right and the list was still wrong.
+                 --
+                 -- `rank_key` already tiebreaks on id and its comment says that
+                 -- is "the same tiebreak list_findings uses". It now is.
+                 f.id
         LIMIT %s OFFSET %s
         """, params + [PAGE_SIZE, (page - 1) * PAGE_SIZE])
 
