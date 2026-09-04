@@ -473,6 +473,96 @@ def path_actors(path_id: int, scope: Optional[Sequence[int]]
     }
 
 
+def finding_neighbourhood(finding_id: int, scope: Optional[Sequence[int]]
+                          ) -> Dict[str, Any]:
+    """What the graph joins to the objects this finding names.
+
+    THE SECOND CONSUMER, and the one that finally reads `grants_authorization`.
+    `path_actors` walks only edges that START at an account, so the 14
+    role -> auth_object edges — the largest single kind in the graph — were
+    still read by nothing. A finding about a role is exactly where they belong:
+    the reader is looking at Z_BASIS_SUPER and wants to know who holds it and
+    what it grants.
+
+    TWO LISTS, NOT ONE CHAIN, and the separation is the point.
+    `data/graph_edges.json` says it outright: AUTH-002 evidences user -> role
+    and role -> auth_object, and does NOT evidence user -> auth_object, because
+    that is the transitive closure and asserting it would state as observed what
+    is only implied. So `held_by` and `grants` are returned as two separate
+    one-hop answers. Joining them into "these users have S_RFCACL" would be a
+    claim the export does not support, and it is precisely the claim this shape
+    of data invites.
+
+    Scope is checked by reading the finding first, so a caller who cannot see
+    the finding learns nothing about its neighbourhood either.
+    """
+    from server import queries
+
+    finding = queries.get_finding(finding_id, scope)
+    if finding is None:
+        return {"held_by": [], "grants": [], "within": [], "objects": 0,
+                "edges_available": None}
+
+    subject = finding.get("subject") or finding.get("affected_objects")
+    if isinstance(subject, str):
+        try:
+            subject = json.loads(subject)
+        except ValueError:
+            subject = None
+
+    keys = set()
+    if subject:
+        for node in identity.extract_nodes([{"affected_objects": subject}],
+                                           default_system=finding.get("sid")):
+            keys.add(node["key"])
+
+    total_edges = db.one(
+        "SELECT count(*) AS n FROM graph_edge WHERE landscape_id = %s",
+        (finding["landscape_id"],))["n"]
+    if not keys:
+        return {"held_by": [], "grants": [], "within": [], "objects": 0,
+                "edges_available": total_edges}
+
+    rows = db.query(
+        """
+        SELECT e.type AS edge_type, e.provenance, e.check_id,
+               src.name AS src, src.type AS src_type, src.node_key AS src_key,
+               dst.name AS dst, dst.type AS dst_type, dst.node_key AS dst_key
+        FROM graph_edge e
+        JOIN graph_node src ON src.id = e.from_node
+        JOIN graph_node dst ON dst.id = e.to_node
+        WHERE e.landscape_id = %s
+          AND (src.node_key = ANY(%s) OR dst.node_key = ANY(%s))
+        ORDER BY e.type, src.name, dst.name
+        """, (finding["landscape_id"], sorted(keys), sorted(keys)))
+
+    held_by, grants, within = [], [], []
+    for row in rows:
+        entry = {"edge_type": row["edge_type"], "provenance": row["provenance"],
+                 "check_id": row["check_id"]}
+        inbound = row["dst_key"] in keys
+        outbound = row["src_key"] in keys
+        # BOTH ENDS ARE THIS FINDING'S OWN. Not a neighbour at all: an aggregate
+        # like USR-002 names the users AND the profiles, so its grants are
+        # internal structure rather than something the graph adds. Filing those
+        # under both "held by" and "grants" listed every one of them twice and
+        # made the finding look surrounded when it was only describing itself.
+        if inbound and outbound:
+            within.append({**entry, "from": row["src"], "from_type": row["src_type"],
+                           "to": row["dst"], "to_type": row["dst_type"]})
+        elif inbound:
+            # Something OUTSIDE this finding reaches an object it names.
+            held_by.append({**entry, "name": row["src"], "type": row["src_type"],
+                            "object": row["dst"], "object_type": row["dst_type"]})
+        elif outbound:
+            # An object this finding names reaches something outside it.
+            grants.append({**entry, "name": row["dst"], "type": row["dst_type"],
+                           "object": row["src"], "object_type": row["src_type"]})
+
+    return {"held_by": held_by, "grants": grants, "within": within,
+            "objects": len(keys), "edges_available": total_edges}
+
+
 def chokepoints(scope: Optional[Sequence[int]], limit: int = 15,
                 landscape_id: Optional[int] = None) -> List[Dict[str, Any]]:
     """Findings that sit on a CUT hop of the most open paths, and what that is worth.

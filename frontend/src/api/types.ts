@@ -277,6 +277,9 @@ export interface FindingDetail extends Omit<FindingRow,
    *  describe a PARTICULAR run, so they come from the observation, not the
    *  finding. */
   latest_details: Record<string, unknown> | null
+  /** What the attack graph joins to this finding's objects. Optional: an older
+   *  server does not send it, and an absent section is better than an empty one. */
+  graph?: FindingGraph
 }
 
 /** server/queries.py `finding_history` — finding_transition.*. */
@@ -637,6 +640,47 @@ export interface PathFinding {
 }
 
 /** server/app.py `api_path`. */
+/** One edge touching an object a finding names — `graph.finding_neighbourhood`. */
+export interface NeighbourEdge {
+  name: string
+  type: string
+  object: string
+  object_type: string
+  edge_type: string
+  provenance: string | null
+  check_id: string | null
+}
+
+/** An edge whose BOTH ends this finding already names. */
+export interface InternalEdge {
+  from: string
+  from_type: string
+  to: string
+  to_type: string
+  edge_type: string
+  provenance: string | null
+  check_id: string | null
+}
+
+/**
+ * What the graph joins to the objects a finding names.
+ *
+ * `held_by` and `grants` are two SEPARATE one-hop answers, never a chain: the
+ * edge rules are explicit that user→role and role→auth_object do not evidence
+ * user→auth_object, because that is the transitive closure and asserting it
+ * would state as observed what is only implied.
+ *
+ * `within` is edges whose both ends the finding already names — its own
+ * structure rather than something the graph adds.
+ */
+export interface FindingGraph {
+  held_by: NeighbourEdge[]
+  grants: NeighbourEdge[]
+  within: InternalEdge[]
+  objects: number
+  edges_available: number | null
+}
+
 /** One edge that puts an account on a path — `server/graph.py path_actors`. */
 export interface ActorVia {
   object: string

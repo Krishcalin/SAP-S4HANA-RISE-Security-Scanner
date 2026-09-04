@@ -4,7 +4,9 @@ import {
   ApiError, assignFinding, finding as fetchFinding, findingHistory, setFindingState,
   serviceRequest as fetchServiceRequest,
 } from '../api/client'
-import type { ServiceRequest, FindingDetail as Finding, FindingHistory } from '../api/types'
+import type {
+  ServiceRequest, FindingDetail as Finding, FindingGraph, FindingHistory,
+} from '../api/types'
 import { useSession } from '../lib/session'
 import { useTitle } from '../lib/title'
 import { CheckRef } from '../components/Refs'
@@ -523,6 +525,8 @@ ${finding.remediation ?? ''}`}
         </>
       )}
 
+      <GraphNeighbourhood graph={finding.graph} />
+
       <h2 className={H2}>History</h2>
       <div className={`${CARD} p-0 overflow-x-auto`}>
         <table className="w-full border-collapse">
@@ -819,6 +823,58 @@ function describe(e: unknown): string {
 
 const CARD = 'rounded-lg border border-cardline bg-panel p-4'
 const G2 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]'
+/**
+ * What the attack graph joins to the objects this finding names.
+ *
+ * TWO ONE-HOP ANSWERS, NEVER A CHAIN. The edge rules are explicit that
+ * user→role and role→auth_object do not evidence user→auth_object — that is the
+ * transitive closure, and asserting it would state as observed what is only
+ * implied. So "held by" and "grants" are separate lists and are never joined
+ * into a sentence about what somebody can reach.
+ *
+ * `within` is the third case and the reason this is not two lists: an aggregate
+ * finding like USR-002 names the users AND the profiles, so its own grants have
+ * both ends inside the finding. Listing those as neighbours made a finding look
+ * surrounded when it was only describing itself.
+ */
+function GraphNeighbourhood({ graph }: { graph?: FindingGraph }) {
+  if (!graph) return null
+  const { held_by, grants, within } = graph
+  if (held_by.length === 0 && grants.length === 0 && within.length === 0) {
+    return null
+  }
+  const row = (key: string, left: string, edge: string, right: string) => (
+    <tr key={key} className="hover:bg-panel2">
+      <td className={`${TD} font-mono text-[12px]`}>{left}</td>
+      <td className={`${TD} text-[12px] text-ink3`}>{edge.replace(/_/g, ' ')}</td>
+      <td className={`${TD} font-mono text-[12px]`}>{right}</td>
+    </tr>
+  )
+  return (
+    <>
+      <h2 className={H2}>Related by configuration</h2>
+      <p className="text-[12px] text-ink3 mb-2.5">
+        Relationships the export declares between the objects above and the rest
+        of the estate. Each line is a single step: they are deliberately not
+        joined together, because holding a role and that role granting an
+        authorisation do not evidence that the holder has the authorisation.
+      </p>
+      <div className={`${CARD} p-0 overflow-x-auto`}>
+        <table className="w-full border-collapse">
+          <tbody>
+            {held_by.map((e, i) =>
+              row(`h${i}`, e.name, e.edge_type, e.object))}
+            {grants.map((e, i) =>
+              row(`g${i}`, e.object, e.edge_type, e.name))}
+            {within.map((e, i) =>
+              row(`w${i}`, e.from, e.edge_type, e.to))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
 const H2 = 'text-[15px] font-semibold mt-[26px] mb-2.5'
 const KV = 'grid [grid-template-columns:auto_1fr] gap-y-1.5 gap-x-4 m-0'
 const DT = 'text-[12px] text-ink3'

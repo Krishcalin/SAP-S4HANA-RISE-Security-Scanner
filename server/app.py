@@ -955,6 +955,13 @@ def api_finding(finding_id: int, user: Dict[str, Any] = Depends(current_user)):
         # Distinguishing them would let a scoped user enumerate ids in landscapes
         # they cannot see.
         raise HTTPException(status_code=404, detail="not found")
+    # WHAT ELSE THE GRAPH JOINS TO THIS FINDING'S OBJECTS. A reader looking at a
+    # role wants to know who holds it and what it grants, and neither is in the
+    # finding row. Returned as two separate one-hop lists rather than a chain:
+    # the edge rules are explicit that user -> role and role -> auth_object do
+    # not evidence user -> auth_object.
+    finding["graph"] = graph.finding_neighbourhood(finding_id,
+                                                   auth.scope_for(user))
     return finding
 
 
