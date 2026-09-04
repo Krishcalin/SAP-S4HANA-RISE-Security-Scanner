@@ -439,6 +439,28 @@ def cmd_scan(args: argparse.Namespace) -> int:
     if edges.get("missing_node"):
         print(f"  {edges['missing_node']} edge(s) skipped: an endpoint was not a "
               f"known node.")
+    # WHAT THE GRAPH IS FOR, WHICH IS CURRENTLY NOTHING.
+    #
+    # Every line above describes the graph with real care — how an edge was
+    # evidenced, why `used` may be low, which relationships were declined — and
+    # a reader finishing them concludes the product built an attack graph and is
+    # reasoning over it. It built one. Nothing reads it: `graph_node` and
+    # `graph_edge` are written here and selected nowhere else, and
+    # `attack_path.closed_by_edge` — the column whose name says an edge can
+    # close a path — is only ever set to NULL.
+    #
+    # The attack paths and chokepoints on the console come from the shipped
+    # templates matched against FINDINGS, and would be identical if this graph
+    # were empty. Printing the counts without saying so is a confident number
+    # standing where a capability is not, which is the exact failure this
+    # product exists to report in other people's tools.
+    #
+    # `tests/test_graph_is_not_consumed.py` removes this line automatically —
+    # by failing — on the day something starts reading the graph.
+    if result.get("nodes") or edges.get("stored"):
+        print("         recorded for later use: nothing reads this graph yet. "
+              "The attack paths and chokepoints in the console come from the "
+              "path templates matched against findings, not from traversing it.")
     print(f"  new {diff.get('new',0)} · persisting {diff.get('persisting',0)} · "
           f"resolved {diff.get('resolved',0)} · regressed {diff.get('regressed',0)}")
     # WHAT THIS RUN DECLINED TO SAY, on the same line of sight as what it said.
