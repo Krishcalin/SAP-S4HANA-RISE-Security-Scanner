@@ -825,7 +825,7 @@ def scan_directory(data_dir: Path, landscape_id: int, system_id: Optional[int],
             from server.enrich import destination_hosts, enrich
             supplied = {k for k, v in data.items() if v}
             enrichment = enrich(findings, deployment_mode, supplied,
-                                destination_hosts(data))
+                                destination_hosts(data), data=data)
 
             diff = store_run(conn, run_id, landscape_id, system_id, findings,
                              default_sid, default_client, enrichment,

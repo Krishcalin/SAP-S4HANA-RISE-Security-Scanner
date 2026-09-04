@@ -63,7 +63,8 @@ from modules.rise_ownership import (           # noqa: F401  (re-export)
 
 def enrich(findings: List[Dict[str, Any]], deployment_mode: str = "on_prem",
            supplied_sources: Optional[set] = None,
-           dest_hosts: Optional[Dict[str, str]] = None) -> Dict[str, Dict[str, Any]]:
+           dest_hosts: Optional[Dict[str, str]] = None,
+           data: Optional[Dict[str, Any]] = None) -> Dict[str, Dict[str, Any]]:
     """Compute priority, team, owner and SLA for a run's findings.
 
     Returns a mapping keyed by `id(finding)` so the caller can look each one up
@@ -82,6 +83,20 @@ def enrich(findings: List[Dict[str, Any]], deployment_mode: str = "on_prem",
         log.exception("risk prioritiser unavailable; findings will have no tier")
         prioritizer = None
 
+    # WHICH ACCOUNTS ARE ACTUALLY IN USE, read once for the whole run.
+    #
+    # `logon_events` is already ingested and already decides whether a graph edge
+    # is `used` or merely `configured`. The same evidence answers a bigger
+    # question one level up — which of several thousand config findings are about
+    # accounts somebody is actually logging on as — and `server/activity.py`
+    # keeps the three states apart. Absent `data` (the upload path carries
+    # findings, not sources) every verdict is `unassessed`, which is the truth
+    # there rather than a degradation.
+    from server import activity as activity_mod
+    from server.edges import active_users, observed_users
+    active = active_users(data)
+    observed = observed_users(data)
+
     for f in findings:
         cid = (f.get("check_id") or "").upper()
         entry: Dict[str, Any] = {
@@ -91,9 +106,21 @@ def enrich(findings: List[Dict[str, Any]], deployment_mode: str = "on_prem",
             "owning_team": team_for(cid),
         }
 
+        verdict = activity_mod.classify(f, active, observed)
+        if verdict is not None:
+            entry["account_activity"] = verdict
+
         if prioritizer is not None:
             try:
-                res = prioritizer.assess(f)
+                # A COPY, because this function does not mutate the auditor's
+                # dicts — the same objects reach the report renderers, and
+                # quietly adding keys here has bitten before. The prioritiser
+                # reads evidence out of `details`, exactly as it already does
+                # for the code-reachability verdict.
+                res = prioritizer.assess(
+                    {**f, "details": {**(f.get("details") or {}),
+                                      "account_activity": verdict}}
+                    if verdict is not None else f)
                 entry["priority_tier"] = res.tier
                 entry["priority_score"] = int(getattr(res, "score", 0) or 0)
                 entry["priority_factors"] = list(getattr(res, "factors", ()) or ())

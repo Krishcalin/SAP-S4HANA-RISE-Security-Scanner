@@ -185,6 +185,29 @@ class RiskPrioritizer:
             boost(14, "HotNews / Security Note", "fixes a top-severity SAP vulnerability (Priority 1/High)")
         if privileged:
             boost(14, "Known privileged path", "default credentials / critical authorization / trust abuse")
+
+        # ── Is anybody actually using the account this is about? ─────────────
+        #
+        # Every finding here is derived from configuration, so the list says
+        # what COULD be abused and nothing about what is live. `logon_events` is
+        # already ingested and already decides whether a graph edge is `used`;
+        # `server/activity.py` applies the same evidence to findings.
+        #
+        # IT RAISES AND NEVER LOWERS. Boosting what is demonstrably in use is
+        # safe. Damping what looks quiet is not: a 30-day window is one
+        # break-glass procedure away from being wrong, and a firefighter account
+        # is dormant by design. So `quiet` earns no points in either direction
+        # and is carried for the reader instead — the console shows it, and
+        # nothing is pushed down the queue on the strength of a short window.
+        #
+        # `unassessed` is likewise worth nothing, and that is the whole reason
+        # the three states are kept apart: scoring it as quiet would turn a
+        # missing export into a reassurance.
+        activity = (f.get("details") or {}).get("account_activity") or {}
+        if activity.get("state") == "active":
+            boost(10, "Account in use",
+                  "the account this is about logged on in the exported window — "
+                  + str(activity.get("reason") or ""))
         if exposed and is_code:
             boost(12, "Reachable code",
                   "referenced or recently executed — an attacker can get to it: "
