@@ -439,28 +439,31 @@ def cmd_scan(args: argparse.Namespace) -> int:
     if edges.get("missing_node"):
         print(f"  {edges['missing_node']} edge(s) skipped: an endpoint was not a "
               f"known node.")
-    # WHAT THE GRAPH IS FOR, WHICH IS CURRENTLY NOTHING.
+    # WHAT THE GRAPH IS FOR, STATED BECAUSE THE COUNTS ALONE IMPLY MORE.
     #
     # Every line above describes the graph with real care — how an edge was
     # evidenced, why `used` may be low, which relationships were declined — and
-    # a reader finishing them concludes the product built an attack graph and is
-    # reasoning over it. It built one. Nothing reads it: `graph_node` and
-    # `graph_edge` are written here and selected nowhere else, and
-    # `attack_path.closed_by_edge` — the column whose name says an edge can
-    # close a path — is only ever set to NULL.
+    # a reader finishing them concludes the product reasons over an attack
+    # graph. For a long time it did not: `graph_node` and `graph_edge` were
+    # written here and selected nowhere, and the earlier version of this line
+    # said so.
     #
-    # The attack paths and chokepoints on the console come from the shipped
-    # templates matched against FINDINGS, and would be identical if this graph
-    # were empty. Printing the counts without saying so is a confident number
-    # standing where a capability is not, which is the exact failure this
-    # product exists to report in other people's tools.
+    # `graph.path_actors` now reads it, so the line says what it feeds instead.
+    # The boundary matters and is stated rather than blurred: the paths and
+    # chokepoints THEMSELVES are still the shipped templates matched against
+    # findings, and would be identical if the graph were empty. What the graph
+    # adds is the half a template cannot express — a hop names the checks that
+    # evidence it, never the accounts, so only the edges can say who holds the
+    # privileges the route depends on.
     #
-    # `tests/test_graph_is_not_consumed.py` removes this line automatically —
-    # by failing — on the day something starts reading the graph.
+    # `tests/test_graph_is_not_consumed.py` keeps this sentence tied to the
+    # code: it fails if the claim and the readers ever disagree, in either
+    # direction.
     if result.get("nodes") or edges.get("stored"):
-        print("         recorded for later use: nothing reads this graph yet. "
-              "The attack paths and chokepoints in the console come from the "
-              "path templates matched against findings, not from traversing it.")
+        print("         read by the path pages, to name the accounts whose "
+              "privileges put them on a path. The paths and chokepoints "
+              "themselves still come from the templates matched against "
+              "findings rather than from traversing this graph.")
     print(f"  new {diff.get('new',0)} · persisting {diff.get('persisting',0)} · "
           f"resolved {diff.get('resolved',0)} · regressed {diff.get('regressed',0)}")
     # WHAT THIS RUN DECLINED TO SAY, on the same line of sight as what it said.

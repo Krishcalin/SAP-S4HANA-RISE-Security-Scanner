@@ -1107,8 +1107,14 @@ def api_path(path_id: int, user: Dict[str, Any] = Depends(current_user)):
         raise HTTPException(404, "not found")
     cut_ids = sorted({fid for hop in (path["detail"].get("hops") or [])
                       if hop.get("is_cut") for fid in hop.get("finding_ids", [])})
+    # WHO IS STANDING ON THIS PATH, which the hops cannot say. A hop names the
+    # CHECKS that evidence it, never the accounts, so the template describes a
+    # route without describing who can take it. `path_actors` walks one edge
+    # back from the objects this path's findings name — the first thing in the
+    # product to read the attack graph rather than only write it.
     return {"path": path, "findings": graph.path_findings(path_id),
-            "cut_ids": cut_ids}
+            "cut_ids": cut_ids,
+            "actors": graph.path_actors(path_id, scope)}
 
 
 @app.get("/api/runs/{run_id}/diff")

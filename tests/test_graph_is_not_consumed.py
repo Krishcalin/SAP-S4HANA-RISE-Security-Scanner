@@ -1,26 +1,23 @@
-"""The scan prints graph statistics. It must also say what they are for.
+"""The scan prints graph statistics. What it says about them must stay true.
 
-MEASURED, NOT ASSUMED. On a 404-finding estate the ingest reports 939 graph
-nodes and 15 edges, and the console then serves 23 attack paths and 151
-chokepoints. Those numbers look like a graph being traversed and are not:
-`graph_node` and `graph_edge` are written by `server/ingest.py` and SELECTed
-nowhere else, and `attack_path.closed_by_edge` -- the column whose name says an
-edge can close a path -- is only ever set to NULL. The paths come from
-`data/attack_paths.json` matched against FINDINGS, and would be identical if the
-graph were empty.
+THIS FILE HAS ALREADY DONE ITS JOB ONCE. It was written when nothing read the
+graph: `graph_node` and `graph_edge` were written by `server/ingest.py` and
+selected nowhere, while the scan described each edge's provenance in careful
+detail — so a reader concluded the product reasoned over an attack graph that it
+only stored. The scan was made to say "nothing reads this graph yet", and this
+test tied that sentence to the code rather than merely asserting its presence.
 
-WHY THAT NEEDED SAYING OUT LOUD. The CLI describes the graph with real care --
-how each edge was evidenced, why `used` may be low, which relationships were
-declined as ambiguous. A reader finishing those lines concludes the product is
-reasoning over an attack graph. A confident number standing where a capability
-is not is the exact failure this product exists to report in other people's
-tools, and it was in our own output.
+Then `graph.path_actors` landed and the test FAILED, which is exactly what it
+was for: a disclaimer left behind after it stops being true is worse than never
+having written one. The sentence now describes what the graph feeds, and the
+same assertions hold it to the new reality.
 
-THIS TEST IS THE PART THAT KEEPS IT HONEST IN BOTH DIRECTIONS. It does not
-merely assert the sentence is present. It checks the sentence against the code:
-while nothing reads the graph, the disclaimer must be there; the day something
-starts reading it, this fails and the disclaimer must go. A note like that,
-left behind after it stops being true, is worse than never having written it.
+THE BOUNDARY IS THE PART WORTH PROTECTING. Attack paths and chokepoints are
+still the shipped templates matched against FINDINGS, and would be identical if
+the graph were empty. What the graph adds is the half a template cannot express:
+a hop names the checks that evidence it, never the accounts, so only the edges
+can say who holds the privileges the route depends on. Claiming more than that
+would be the original failure in a new costume.
 """
 from __future__ import annotations
 
@@ -39,8 +36,9 @@ SERVER = ROOT / "server"
 #: rows before they are stored.
 WRITERS = {"ingest.py", "migrations.py", "edges.py"}
 
-#: The claim the CLI makes while the graph is unread.
-DISCLAIMER = "nothing reads this graph yet"
+#: The claim the CLI made while the graph was unread. It must not survive a
+#: reader existing.
+STALE_CLAIM = "nothing reads this graph yet"
 
 READ = re.compile(r"\b(FROM|JOIN)\s+graph_(node|edge)\b", re.IGNORECASE)
 
@@ -59,24 +57,43 @@ def graph_readers() -> dict:
     return found
 
 
-def test_the_cli_says_the_graph_is_unread_while_it_is_unread():
+def test_the_scan_does_not_claim_the_graph_is_unread_once_it_is_read():
     readers = graph_readers()
     cli = (SERVER / "cli.py").read_text(encoding="utf-8")
     if readers:
-        assert DISCLAIMER not in cli, (
-            "Something now reads the graph (%s), so the scan output must stop "
-            "saying nothing does. Remove the line and describe what it feeds."
+        assert STALE_CLAIM not in cli, (
+            "%s now reads the graph, so the scan must stop saying nothing does."
             % ", ".join(readers))
     else:
-        assert DISCLAIMER in cli, (
-            "The scan prints graph node and edge counts, and nothing in server/ "
+        assert STALE_CLAIM in cli, (
+            "The scan prints graph node and edge counts and nothing in server/ "
             "reads those tables. Without a line saying so, the counts read as a "
             "capability the product does not have.")
 
 
+def test_the_scan_says_what_the_graph_feeds():
+    """A count with no stated purpose is what started this. Whatever the state,
+    the graph block has to end in a sentence about what the numbers are for."""
+    cli = (SERVER / "cli.py").read_text(encoding="utf-8")
+    assert re.search(r"read by the path pages|nothing reads this graph yet", cli), (
+        "the scan prints graph statistics and no longer says what they are for")
+
+
+def test_the_claim_names_the_boundary_it_must_not_cross():
+    """Paths and chokepoints are template-matched against findings. If the scan
+    ever implies the graph produces THEM, it is overclaiming again — which is
+    the failure this whole file exists to prevent."""
+    cli = (SERVER / "cli.py").read_text(encoding="utf-8")
+    if STALE_CLAIM in cli:
+        return                     # nothing is read; the other tests cover it
+    assert "templates matched against" in cli, (
+        "the scan says the graph is read but no longer says where its "
+        "contribution stops; paths and chokepoints still come from templates")
+
+
 def test_the_writers_list_is_not_quietly_covering_a_reader():
     """`ingest.py` is exempt because it WRITES the graph. If it ever grows a
-    read that feeds a verdict, the exemption hides exactly what this test is
+    read that feeds a verdict, the exemption hides exactly what this file is
     for -- so the one read it is allowed to have is pinned here."""
     ingest = (SERVER / "ingest.py").read_text(encoding="utf-8")
     reads = [line.strip() for line in ingest.splitlines() if READ.search(line)]
@@ -91,12 +108,14 @@ def test_the_writers_list_is_not_quietly_covering_a_reader():
 
 
 def test_closed_by_edge_is_still_never_populated():
-    """The column names the design that was intended -- an edge closing an
-    attack path -- and is only ever written as NULL. If that changes, edges are
-    feeding a verdict and the disclaimer above is wrong."""
+    """The column names a design that was intended and never built -- an edge
+    closing an attack path. `path_actors` does not populate it, and while it
+    stays NULL no path's OPEN/CLOSED state depends on the graph. If that
+    changes, the boundary described above has moved and the scan's wording has
+    to move with it."""
     graph = (SERVER / "graph.py").read_text(encoding="utf-8")
     assignments = re.findall(r"closed_by_edge\s*=\s*([^\s,\"']+)", graph)
     assert assignments, "closed_by_edge is no longer written at all"
     assert set(assignments) == {"NULL"}, (
-        "closed_by_edge is now set to something other than NULL (%s), so edges "
-        "close paths and the graph IS consumed." % sorted(set(assignments)))
+        "closed_by_edge is now set to something other than NULL (%s), so the "
+        "graph decides whether a path is open." % sorted(set(assignments)))

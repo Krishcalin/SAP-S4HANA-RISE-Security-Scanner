@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { ApiError, path as fetchPath } from '../api/client'
-import type { PathFinding, PathHop, PathView, RemediationOwner } from '../api/types'
+import type {
+  PathActors, PathFinding, PathHop, PathView, RemediationOwner,
+} from '../api/types'
 import { useTitle } from '../lib/title'
 import { money } from './Risk'
 import { isPriced } from '../lib/pricing'
@@ -102,6 +104,91 @@ export function PathDetail() {
       {failure && <div className="banner banner-bad">{failure}</div>}
       {!failure && view === null && <p className="text-[13px] text-ink3">Loading…</p>}
       {view !== null && <Body view={view} />}
+    </>
+  )
+}
+
+/**
+ * Who the configuration puts on this path.
+ *
+ * The hops name the CHECKS that evidence them and never the accounts, so this
+ * is the one thing on the screen that the path templates cannot produce — it
+ * comes from the attack graph, by walking one privilege edge back from the
+ * objects the path's findings name.
+ *
+ * THE WORDING IS THE FEATURE. An edge is derived from configuration, so this
+ * says these accounts HOLD the privileges the route depends on, never that any
+ * of them used it. `used` on an edge means only that the account logged on in
+ * the exported window, which evidences the account is live — so it is rendered
+ * as "signed in recently" and not as anything about this path.
+ *
+ * An empty list is two different things and they must not draw alike: a path
+ * whose objects no edge reaches says nothing about the estate, while a path the
+ * graph does reach and finds nobody on is a real answer. `reachable_objects`
+ * separates them.
+ */
+function ActorsSection({ actors }: { actors?: PathActors }) {
+  if (!actors) return null
+  const { actors: rows, reachable_objects, objects_on_path, edges_available } = actors
+
+  if (rows.length === 0) {
+    return (
+      <>
+        <h2 className={H2}>Who holds these privileges</h2>
+        <p className="text-[13px] text-ink2 mb-4">
+          {edges_available === 0
+            ? 'No relationships have been derived for this landscape yet, so nobody can be named either way.'
+            : reachable_objects === 0
+              ? 'The graph reaches none of the objects on this path, so this is not an answer about who can take it — it is the absence of one.'
+              : 'No account holds a privilege the graph connects to this path.'}
+        </p>
+      </>
+    )
+  }
+
+  return (
+    <>
+      <h2 className={H2}>Who holds these privileges</h2>
+      <p className="text-[12px] text-ink3 mb-2.5">
+        Held by configuration, not observed in use: an edge records what the
+        export says is granted, never that this route was taken.
+        {typeof objects_on_path === 'number' && (
+          <> The graph reaches {reachable_objects} of the {objects_on_path}{' '}
+            object{objects_on_path === 1 ? '' : 's'} on this path.</>
+        )}
+      </p>
+      <div className={TABLE_CARD}>
+        <table className="w-full border-collapse">
+          <thead>
+            <tr>
+              <th className={`${TH} w-[180px]`}>Account</th>
+              <th className={TH}>Holds</th>
+              <th className={`${TH} w-[150px]`}>Account activity</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((a) => (
+              <tr key={a.actor} className="hover:bg-panel2">
+                <td className={`${TD} font-mono`}>{a.actor}</td>
+                <td className={TD}>
+                  {a.via.map((v, i) => (
+                    <span key={`${v.object}-${v.edge_type}-${i}`}
+                          className="block text-[12px]">
+                      <span className="text-ink3">{v.edge_type.replace(/_/g, ' ')}</span>{' '}
+                      <span className="font-mono">{v.object}</span>
+                    </span>
+                  ))}
+                </td>
+                <td className={`${TD} text-[12px] text-ink2`}>
+                  {a.any_used
+                    ? 'signed in during the exported window'
+                    : 'no logon evidence either way'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </>
   )
 }
@@ -275,8 +362,10 @@ function Body({ view }: { view: PathView }) {
         </div>
       </div>
 
+      <ActorsSection actors={view.actors} />
+
       <h2 className={H2}>All evidence</h2>
-      <div className={TABLE_CARD}>
+      <div className={TABLE_CARD} data-evidence>
         <table className="w-full border-collapse">
           <thead>
             <tr>

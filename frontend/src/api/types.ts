@@ -637,11 +637,48 @@ export interface PathFinding {
 }
 
 /** server/app.py `api_path`. */
+/** One edge that puts an account on a path — `server/graph.py path_actors`. */
+export interface ActorVia {
+  object: string
+  object_type: string
+  edge_type: string
+  /** 'used' means the account logged on in the exported window. It never means
+   *  this role or destination was invoked — no configuration export shows that. */
+  provenance: string | null
+  check_id: string | null
+}
+
+export interface PathActor {
+  actor: string
+  actor_type: string
+  via: ActorVia[]
+  any_used: boolean
+}
+
+/**
+ * Who the CONFIGURATION puts on this path.
+ *
+ * The hops name checks, never accounts, so the templates cannot answer this;
+ * the graph can, by walking one `holds_role` / `holds_profile` /
+ * `can_use_destination` edge back from the objects the path's findings name.
+ *
+ * `reachable_objects` of `objects_on_path` is how much of the path the graph
+ * could speak to at all — an empty `actors` on a path the graph does not reach
+ * is not "nobody can do this", and the two must not render alike.
+ */
+export interface PathActors {
+  actors: PathActor[]
+  edges_available: number | null
+  reachable_objects: number
+  objects_on_path?: number
+}
+
 export interface PathView {
   path: AttackPath
   findings: PathFinding[]
   /** Findings sitting on a cut hop — the mitigate-vs-additional split. */
   cut_ids: number[]
+  actors?: PathActors
 }
 
 // ── financial risk (FAIR) ───────────────────────────────────────────────────

@@ -45,7 +45,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from psycopg.types.json import Jsonb
 
-from server import db
+from server import db, identity
 
 log = logging.getLogger(__name__)
 
@@ -352,6 +352,117 @@ def path_findings(path_id: int) -> List[Dict[str, Any]]:
         WHERE apf.path_id = %s
         ORDER BY f.severity, f.check_id
         """, (path_id,))
+
+
+#: Edge kinds that put an ACCOUNT on a path. Each names a privilege a user
+#: holds, so walking one backwards from an object the path depends on answers
+#: "who is standing here". `grants_authorization` is deliberately absent: it runs
+#: role -> auth_object and its source is not an account.
+_ACTOR_EDGES = ("holds_role", "holds_profile", "can_use_destination")
+
+
+def path_actors(path_id: int, scope: Optional[Sequence[int]]
+                ) -> Dict[str, Any]:
+    """The accounts whose configuration puts them on this path.
+
+    THE FIRST THING THAT READS THE GRAPH. Until this existed, `graph_node` and
+    `graph_edge` were written by every ingest and selected by nothing, and the
+    scan said so out loud.
+
+    A path is a chain of hops evidenced by CHECKS. "Caller can arrive as any
+    user (AUTH-002)" names a check, never an account, so the templates
+    structurally cannot say who is able to walk the route they describe. The
+    graph can: it holds `user -holds_role-> role`, `user -holds_profile->
+    profile` and `user -can_use_destination-> destination`, so taking the
+    objects this path's findings name and walking one actor edge backwards
+    yields the accounts the configuration places on it.
+
+    WHAT THIS CLAIMS, in the same terms `data/graph_edges.json` sets for every
+    edge: that the configuration GRANTS these accounts the privileges the path
+    depends on. Not that any of them walked it, and not that the route was ever
+    exercised — every edge is `derived_from_config`. `provenance` is carried
+    through unchanged rather than summarised, so a `used` edge still means only
+    that the account logged on in the exported window, which evidences that the
+    ACCOUNT is live rather than that it invoked this role or destination.
+
+    Absence is reported as absence. `edges_available` distinguishes "this path
+    touches no object any edge reaches" from "the graph holds no edges at all",
+    because a bare empty list reads as "nobody can do this" and only one of
+    those two situations says anything about the estate.
+    """
+    path = get_path(path_id, scope)
+    if path is None:
+        return {"actors": [], "edges_available": None, "reachable_objects": 0}
+
+    findings = db.query(
+        """
+        SELECT f.subject, s.sid
+        FROM attack_path_finding apf
+        JOIN finding f ON f.id = apf.finding_id
+        LEFT JOIN sap_system s ON s.id = f.system_id
+        WHERE apf.path_id = %s
+        """, (path_id,))
+
+    # Keyed exactly as ingest keyed them, by reusing the extractor that wrote
+    # the nodes. Re-deriving the key format here is how the two halves drift.
+    keys = set()
+    for row in findings:
+        subject = row.get("subject")
+        if isinstance(subject, str):
+            try:
+                subject = json.loads(subject)
+            except ValueError:
+                continue
+        if not subject:
+            continue
+        for node in identity.extract_nodes([{"affected_objects": subject}],
+                                           default_system=row.get("sid")):
+            keys.add(node["key"])
+
+    total_edges = db.one(
+        "SELECT count(*) AS n FROM graph_edge WHERE landscape_id = %s",
+        (path["landscape_id"],))["n"]
+    if not keys:
+        return {"actors": [], "edges_available": total_edges,
+                "reachable_objects": 0}
+
+    rows = db.query(
+        f"""
+        SELECT src.name AS actor, src.type AS actor_type,
+               dst.name AS object, dst.type AS object_type,
+               e.type AS edge_type, e.provenance, e.check_id
+        FROM graph_edge e
+        JOIN graph_node src ON src.id = e.from_node
+        JOIN graph_node dst ON dst.id = e.to_node
+        WHERE e.landscape_id = %s
+          AND dst.node_key = ANY(%s)
+          AND e.type = ANY(%s)
+        ORDER BY src.name, dst.name
+        """, (path["landscape_id"], sorted(keys), list(_ACTOR_EDGES)))
+
+    actors: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        entry = actors.setdefault(row["actor"], {
+            "actor": row["actor"], "actor_type": row["actor_type"],
+            "via": [], "any_used": False,
+        })
+        entry["via"].append({
+            "object": row["object"], "object_type": row["object_type"],
+            "edge_type": row["edge_type"], "provenance": row["provenance"],
+            "check_id": row["check_id"],
+        })
+        if row["provenance"] == "used":
+            entry["any_used"] = True
+
+    return {
+        "actors": sorted(actors.values(), key=lambda a: a["actor"]),
+        "edges_available": total_edges,
+        # How much of the path the graph could speak to at all. A path whose
+        # objects no edge reaches is not a path nobody can walk; it is a path
+        # this graph has nothing to say about, and the two must not render alike.
+        "reachable_objects": len({r["object"] for r in rows}),
+        "objects_on_path": len(keys),
+    }
 
 
 def chokepoints(scope: Optional[Sequence[int]], limit: int = 15,
