@@ -21,6 +21,20 @@
       "why": "USR-002 reports users holding SAP_ALL, SAP_NEW or S_A.SYSTEM, and the assignment IS the finding. A profile is not a role — in SAP a role generates a profile and the two are separate objects — so this is its own edge type rather than a second spelling of holds_role. The check declares the pairing in `relations`, so which user holds which profile is evidence here rather than inference."
     },
     {
+      "check_prefix": "HANADB-PRIV-",
+      "from_type": "hana_user",
+      "to_type": "hana_privilege",
+      "edge_type": "holds_hana_privilege",
+      "why": "A HANA system privilege granted to a database user is the database half of the same relationship holds_profile describes on the ABAP side, and the checks in this family exist to report exactly that grant. `check_system_privileges` already carried the comment 'a grant is an edge: both ends become graph nodes' — both ends did, and which end went with which did not, so the database estate contributed no privilege edges at all until the pairing could be declared."
+    },
+    {
+      "check_prefix": "HANADB-ROLE-001",
+      "from_type": "hana_user",
+      "to_type": "hana_role",
+      "edge_type": "holds_hana_role",
+      "why": "The same relationship one level up: a predefined HANA role granted to a database user. Separate from holds_hana_privilege because a role and a privilege are separate objects in HANA, and one edge type spanning both would lose which of the two was actually granted."
+    },
+    {
       "check_prefix": "AUTH-",
       "from_type": "user",
       "to_type": "role",

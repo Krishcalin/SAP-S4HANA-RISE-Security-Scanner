@@ -255,6 +255,34 @@ class HanaDbSecurityAuditor(BaseAuditor):
         if obj not in objects:
             objects.append(obj)
 
+    @staticmethod
+    def _add_grant(relations: List[Dict[str, Any]], grantee: Any,
+                   to_type: str, name: Any, qualifier: Any = None) -> None:
+        """Record WHICH holder holds WHICH privilege or role, de-duplicated.
+
+        `check_system_privileges` already carried the comment "a grant is an
+        edge: both ends become graph nodes" — and both ends did, while which end
+        went with which did not, because `affected_objects` is flat. The graph
+        then saw a list of HANA users and a list of privileges with no way to
+        pair them, declined to guess, and the entire database half of the estate
+        produced no privilege edges.
+
+        Skips an incomplete pair for the same reason `_add_obj` skips a nameless
+        object: half a relationship is not a relationship, and inventing the
+        other half would put a grant into the attack graph that nobody made.
+        """
+        g = "" if grantee is None else str(grantee).strip()
+        n = "" if name is None else str(name).strip()
+        if not g or not n:
+            return
+        target: Dict[str, Any] = {"type": to_type, "name": n}
+        q = "" if qualifier is None else str(qualifier).strip()
+        if q:
+            target["qualifier"] = q
+        entry = {"from": {"type": "hana_user", "name": g}, "to": target}
+        if entry not in relations:
+            relations.append(entry)
+
     def _param_index(self):
         """Build {(file, section, key_lower): value} from hana_parameters.csv."""
         rows = self.data.get("hana_parameters") or []
@@ -648,6 +676,8 @@ class HanaDbSecurityAuditor(BaseAuditor):
         crit, high = [], []
         crit_objects: List[Dict[str, Any]] = []
         high_objects: List[Dict[str, Any]] = []
+        crit_grants: List[Dict[str, Any]] = []
+        high_grants: List[Dict[str, Any]] = []
         for grantee, gtype, priv, obj, _ in self._iter_priv_rows():
             gu = grantee.upper()
             if gu in ("PUBLIC",) or gu in self.TECHNICAL_USERS or gu.startswith("_SYS"):
@@ -657,13 +687,16 @@ class HanaDbSecurityAuditor(BaseAuditor):
             if priv in self.CRITICAL_SYSTEM_PRIVS:
                 crit.append(f"{grantee} ← {priv}")
                 # A grant is an edge: both ends become graph nodes, as in the
-                # user -> profile modelling the identity tests use.
+                # user -> profile modelling the identity tests use — and the
+                # pairing is declared too, so the edge can actually be drawn.
                 self._add_obj(crit_objects, "hana_user", grantee)
                 self._add_obj(crit_objects, "hana_privilege", priv)
+                self._add_grant(crit_grants, grantee, "hana_privilege", priv)
             elif priv in self.HIGH_SYSTEM_PRIVS:
                 high.append(f"{grantee} ← {priv}")
                 self._add_obj(high_objects, "hana_user", grantee)
                 self._add_obj(high_objects, "hana_privilege", priv)
+                self._add_grant(high_grants, grantee, "hana_privilege", priv)
         if crit:
             self.finding(
                 check_id="HANADB-PRIV-002",
@@ -687,6 +720,7 @@ class HanaDbSecurityAuditor(BaseAuditor):
                     "SAP HANA Security Guide — System Privileges",
                 ],
                 affected_objects=crit_objects,
+                relations=crit_grants,
                 # Every critical direct grant in the system rolls up into this ONE
                 # finding. Revoking DATA ADMIN from one user while another keeps USER
                 # ADMIN must leave the finding standing with its age intact, so the
@@ -711,6 +745,7 @@ class HanaDbSecurityAuditor(BaseAuditor):
                 ),
                 references=["SAP HANA Security Guide — System Privileges"],
                 affected_objects=high_objects,
+                relations=high_grants,
                 # Same rollup as HANADB-PRIV-002, one severity band down.
                 scope="aggregate",
             )
@@ -1034,6 +1069,7 @@ class HanaDbSecurityAuditor(BaseAuditor):
             return
         offenders = []
         objects: List[Dict[str, Any]] = []
+        grants: List[Dict[str, Any]] = []
         for grantee, gtype, priv, obj, grantable in self._iter_priv_rows():
             gu = grantee.upper()
             if gu in self.TECHNICAL_USERS or gu.startswith("_SYS"):
@@ -1045,6 +1081,7 @@ class HanaDbSecurityAuditor(BaseAuditor):
                 # and pinning it onto the node would fork DATA ADMIN into two graph
                 # nodes that HANADB-PRIV-002 and this check could never share.
                 self._add_obj(objects, "hana_privilege", priv)
+                self._add_grant(grants, grantee, "hana_privilege", priv)
         if offenders:
             self.finding(
                 check_id="HANADB-PRIV-004",
@@ -1063,6 +1100,7 @@ class HanaDbSecurityAuditor(BaseAuditor):
                 ),
                 references=["SAP HANA Security Guide — Granting Privileges"],
                 affected_objects=objects,
+                relations=grants,
                 # One finding over the delegated-grant population; re-granting one
                 # privilege without the admin option must shrink it, not churn it.
                 scope="aggregate",
@@ -1121,6 +1159,11 @@ class HanaDbSecurityAuditor(BaseAuditor):
             return
         offenders = []
         objects: List[Dict[str, Any]] = []
+        # WHICH USER HOLDS WHICH ROLE, kept as well as flattened. The two ends
+        # are in hand together on every iteration; without this the graph sees
+        # three users and three roles and cannot tell which grant is which, so
+        # the HANA half of the estate contributes no privilege edges at all.
+        relations: List[Dict[str, Any]] = []
         for row in roles:
             grantee = str(row.get("GRANTEE", row.get("USER_NAME", ""))).strip()
             role = str(row.get("ROLE_NAME", row.get("ROLE", ""))).strip()
@@ -1133,6 +1176,9 @@ class HanaDbSecurityAuditor(BaseAuditor):
                 offenders.append(f"{grantee} ← role {role}")
                 self._add_obj(objects, "hana_user", grantee)
                 self._add_obj(objects, "hana_role", role)
+                relations.append(
+                    {"from": {"type": "hana_user", "name": grantee},
+                     "to": {"type": "hana_role", "name": role}})
         if offenders:
             self.finding(
                 check_id="HANADB-ROLE-001",
@@ -1155,6 +1201,7 @@ class HanaDbSecurityAuditor(BaseAuditor):
                     "SAP HANA Security Guide — Predefined Roles",
                 ],
                 affected_objects=objects,
+                relations=relations,
                 # One finding over every powerful-role grant. Revoking
                 # SAP_INTERNAL_HANA_SUPPORT after a support case must shrink this
                 # finding, leaving the remaining grants' age untouched.
@@ -1604,6 +1651,7 @@ class HanaDbSecurityAuditor(BaseAuditor):
             return
         offenders = []
         objects: List[Dict[str, Any]] = []
+        grants: List[Dict[str, Any]] = []
         for grantee, gtype, priv, obj, _ in self._iter_priv_rows():
             gu = grantee.upper()
             if gu.startswith("_SYS") or gu == "SYS":
@@ -1618,6 +1666,8 @@ class HanaDbSecurityAuditor(BaseAuditor):
                 # is no field that says which — typing it would be a guess.
                 self._add_obj(objects, "hana_privilege", priv,
                               f"on={obj}" if obj else None)
+                self._add_grant(grants, grantee, "hana_privilege", priv,
+                                f"on={obj}" if obj else None)
         if offenders:
             self.finding(
                 check_id="HANADB-PRIV-006",
@@ -1652,6 +1702,7 @@ class HanaDbSecurityAuditor(BaseAuditor):
                     "SAP HANA SQLScript Reference — Debugging",
                 ],
                 affected_objects=objects,
+                relations=grants,
                 # One finding over every debug grant found. Revoking DEBUG from one user
                 # while another still holds ATTACH DEBUGGER must shrink this finding
                 # rather than close it and open a fresh, zero-age one.

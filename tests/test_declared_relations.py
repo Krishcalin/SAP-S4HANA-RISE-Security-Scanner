@@ -189,6 +189,81 @@ def test_holds_role_can_now_actually_be_produced():
 #  The rules file                                                              #
 # --------------------------------------------------------------------------- #
 
+# --------------------------------------------------------------------------- #
+#  The database half of the estate                                             #
+# --------------------------------------------------------------------------- #
+
+def hana(rows_key, rows):
+    from modules.hana_db_security import HanaDbSecurityAuditor
+    return {f["check_id"]: f
+            for f in HanaDbSecurityAuditor({rows_key: rows}, {}, {}
+                                           ).run_all_checks()}
+
+
+def test_hana_privilege_grants_declare_who_holds_what():
+    """`check_system_privileges` already said in a comment that a grant is an
+    edge and that both ends become graph nodes. Both ends did; which end went
+    with which did not, so the entire database estate produced no privilege
+    edges."""
+    got = hana("hana_granted_privileges", [
+        {"GRANTEE": "J_SMITH", "GRANTEE_TYPE": "USER",
+         "PRIVILEGE": "DATA ADMIN", "IS_GRANTABLE": "FALSE"},
+        {"GRANTEE": "CONTRACTOR1", "GRANTEE_TYPE": "USER",
+         "PRIVILEGE": "USER ADMIN", "IS_GRANTABLE": "FALSE"},
+    ])
+    fired = [f for cid, f in got.items() if cid.startswith("HANADB-PRIV-")
+             and f.get("relations")]
+    assert fired, "no HANA privilege finding declared its grants"
+    pairs = {(r["from"]["name"], r["to"]["name"])
+             for f in fired for r in f["relations"]}
+    assert ("J_SMITH", "DATA ADMIN") in pairs, pairs
+
+
+def test_hana_role_grants_declare_who_holds_what():
+    got = hana("hana_granted_roles", [
+        {"GRANTEE": "J_SMITH", "ROLE_NAME": "SAP_INTERNAL_HANA_SUPPORT"},
+        {"GRANTEE": "CONTRACTOR1", "ROLE_NAME": "CONTENT_ADMIN"},
+    ])
+    assert "HANADB-ROLE-001" in got
+    pairs = {(r["from"]["name"], r["to"]["name"])
+             for r in got["HANADB-ROLE-001"]["relations"]}
+    assert pairs == {("J_SMITH", "SAP_INTERNAL_HANA_SUPPORT"),
+                     ("CONTRACTOR1", "CONTENT_ADMIN")}
+
+
+def test_hana_grants_become_edges():
+    edges, _ = extract_edges([finding(
+        "HANADB-ROLE-001",
+        [obj("hana_user", "J_SMITH"), obj("hana_user", "CONTRACTOR1"),
+         obj("hana_role", "CONTENT_ADMIN"), obj("hana_role", "MODELING")],
+        relations=[rel("hana_user", "J_SMITH", "hana_role", "CONTENT_ADMIN"),
+                   rel("hana_user", "CONTRACTOR1", "hana_role", "MODELING")])],
+        default_system="PRD")
+    assert {e["type"] for e in edges} == {"holds_hana_role"}
+    assert len(edges) == 2
+
+
+def test_an_incomplete_grant_is_skipped_rather_than_half_recorded():
+    """Half a relationship is not a relationship, and inventing the other half
+    would put a grant into the graph that nobody made."""
+    from modules.hana_db_security import HanaDbSecurityAuditor
+    out = []
+    HanaDbSecurityAuditor._add_grant(out, "", "hana_role", "CONTENT_ADMIN")
+    HanaDbSecurityAuditor._add_grant(out, "J_SMITH", "hana_role", None)
+    assert out == []
+    HanaDbSecurityAuditor._add_grant(out, "J_SMITH", "hana_role", "CONTENT_ADMIN")
+    HanaDbSecurityAuditor._add_grant(out, "J_SMITH", "hana_role", "CONTENT_ADMIN")
+    assert len(out) == 1, "duplicate grants must collapse"
+
+
+def test_a_hana_role_and_a_hana_privilege_are_not_the_same_edge():
+    """They are separate objects in HANA, and one edge type spanning both would
+    lose which of the two was actually granted."""
+    rules = {(r["from_type"], r["to_type"]): r["edge_type"] for r in load_rules()}
+    assert rules[("hana_user", "hana_role")] == "holds_hana_role"
+    assert rules[("hana_user", "hana_privilege")] == "holds_hana_privilege"
+
+
 def test_every_rule_still_explains_itself():
     """`why` is what stops the rules file becoming a pile of type pairs nobody
     can audit."""

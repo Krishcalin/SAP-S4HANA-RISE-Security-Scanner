@@ -49,7 +49,10 @@ def test_actor_edges_are_the_ones_whose_source_is_an_account():
     rules = {r["edge_type"]: r for r in load_rules()}
     for edge_type in graph._ACTOR_EDGES:
         assert edge_type in rules, "%s is not an edge any rule produces" % edge_type
-        assert rules[edge_type]["from_type"] in ("user", "btp_user"), (
+        # An account is something somebody logs on as. `hana_user` counts: a
+        # database user is an account, and on a RISE landscape the database half
+        # of the estate is not the smaller half of "who is standing here".
+        assert rules[edge_type]["from_type"] in ("user", "btp_user", "hana_user"), (
             "%s does not start at an account, so walking it backwards does not "
             "answer 'who is standing here'" % edge_type)
 

@@ -358,7 +358,14 @@ def path_findings(path_id: int) -> List[Dict[str, Any]]:
 #: holds, so walking one backwards from an object the path depends on answers
 #: "who is standing here". `grants_authorization` is deliberately absent: it runs
 #: role -> auth_object and its source is not an account.
-_ACTOR_EDGES = ("holds_role", "holds_profile", "can_use_destination")
+#:
+#: The HANA pair are here because a database user is an account somebody can log
+#: on as, and a path that reaches a HANA privilege is walkable by whoever holds
+#: it. Keeping them out would answer "who is standing here" with the ABAP half
+#: of the estate only, which on a RISE landscape is the smaller half of the
+#: question.
+_ACTOR_EDGES = ("holds_role", "holds_profile", "can_use_destination",
+                "holds_hana_privilege", "holds_hana_role")
 
 
 def path_actors(path_id: int, scope: Optional[Sequence[int]]
