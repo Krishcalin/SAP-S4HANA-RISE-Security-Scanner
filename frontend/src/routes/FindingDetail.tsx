@@ -525,6 +525,8 @@ ${finding.remediation ?? ''}`}
         </>
       )}
 
+      <WhyThisRanks finding={finding} />
+
       <GraphNeighbourhood graph={finding.graph} />
 
       <h2 className={H2}>History</h2>
@@ -823,6 +825,57 @@ function describe(e: unknown): string {
 
 const CARD = 'rounded-lg border border-cardline bg-panel p-4'
 const G2 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]'
+/**
+ * Why this finding ranks where it does.
+ *
+ * `priority_factors` has been stored as jsonb since the prioritiser landed, and
+ * its own type comment says it is "kept as data so a screen can show WHY a
+ * finding ranks where it does. Explainability is the product." No screen showed
+ * it: the tier appeared as a bare badge, with the rationale hidden in a
+ * title attribute on the findings list. A tier nobody can interrogate is the
+ * confident-number-without-a-reason this product objects to elsewhere.
+ *
+ * The points are shown because their SIZE is the argument — "actively exploited
+ * +25" beside "account in use +10" says which evidence did the work. They are
+ * never negative today: the prioritiser raises on evidence and does not lower on
+ * its absence.
+ */
+function WhyThisRanks({ finding }: { finding: Finding }) {
+  const factors = finding.priority_factors ?? []
+  if (factors.length === 0) return null
+  return (
+    <>
+      <h2 className={H2}>
+        Why this is {finding.priority_tier ?? 'ranked'}
+      </h2>
+      <div className={`${CARD} p-0 overflow-x-auto`}>
+        <table className="w-full border-collapse">
+          <tbody>
+            {factors.map((factor, i) => (
+              <tr key={`${factor.label}-${i}`} className="hover:bg-panel2">
+                <td className={`${TD} w-[190px] font-[550]`}>{factor.label}</td>
+                <td className={`${TD} text-[12px] text-ink2`}>{factor.detail}</td>
+                <td className={`${TD} w-[64px] text-right font-mono tabular-nums`}>
+                  {factor.points > 0 ? `+${factor.points}` : factor.points}
+                </td>
+              </tr>
+            ))}
+            {finding.priority_score !== null && (
+              <tr>
+                <td className={`${TD} font-[650]`}>Score</td>
+                <td className={TD} />
+                <td className={`${TD} text-right font-mono tabular-nums font-[650]`}>
+                  {finding.priority_score}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
 /**
  * What the attack graph joins to the objects this finding names.
  *

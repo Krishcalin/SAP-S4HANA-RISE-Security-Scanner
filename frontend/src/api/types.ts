@@ -176,6 +176,19 @@ export interface Landscape {
 // ── findings ────────────────────────────────────────────────────────────────
 /** One row of server/queries.py `list_findings`: finding.* plus the check
  *  catalogue join and three derived columns. */
+/**
+ * One reason a finding ranks where it does — `modules/risk_prioritizer.py`.
+ *
+ * `points` is signed by construction and, today, never negative: the prioritiser
+ * raises on evidence and does not lower on its absence, because "nothing was
+ * observed" is not the same as "nothing happens".
+ */
+export interface PriorityFactor {
+  label: string
+  detail: string
+  points: number
+}
+
 export interface FindingRow {
   id: number
   landscape_id: number
@@ -194,7 +207,7 @@ export interface FindingRow {
   priority_score: number | null
   /** The prioritiser's named factors — kept as data so a screen can show WHY a
    *  finding ranks where it does. Explainability is the product. */
-  priority_factors: unknown[]
+  priority_factors: PriorityFactor[]
   priority_rationale: string | null
   state: FindingState
   remediation_owner: RemediationOwner
