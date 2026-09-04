@@ -127,12 +127,51 @@ describe('the five worst in each domain', () => {
     // One problem on six systems is one risk — and the reader still has to
     // know it is six.
     topRisks.mockResolvedValue(view([
-      domain({ shown: [risk({ instances: 6, systems: ['PRD', 'D01', 'T01', 'Q01'] })] }),
+      domain({ shown: [risk({ instances: 6, system_count: 6,
+                              systems: ['PRD', 'D01', 'T01', 'Q01', 'S01', 'X01'] })] }),
     ]))
     draw()
     expect(await screen.findByText(/6 systems: PRD, D01, T01/)).toBeInTheDocument()
-    expect(screen.getByText(/\+1/)).toBeInTheDocument()
+    expect(screen.getByText(/\+3/)).toBeInTheDocument()
   })
+
+  it('counts systems, not findings', async () => {
+    // THIS TEST USED TO ASSERT THE BUG. Its fixture said instances: 6 with four
+    // SIDs and expected "6 systems", because `instances` counts FINDINGS: one
+    // system with two clients gives two findings on one SID, and two systems in
+    // different landscapes can share a SID. Measured on an eight-system estate,
+    // the screen read "9 systems" while naming eight.
+    topRisks.mockResolvedValue(view([
+      domain({ shown: [risk({ instances: 6, system_count: 4,
+                              systems: ['PRD', 'D01', 'T01', 'Q01'] })] }),
+    ]))
+    draw()
+    expect(await screen.findByText(/4 systems \(6 findings\)/)).toBeInTheDocument()
+    expect(screen.queryByText(/6 systems/)).not.toBeInTheDocument()
+  })
+
+  it('counts the unnamed remainder off the system total, not the name list',
+    async () => {
+      // Two systems sharing a SID contribute one name, so "+N" taken from the
+      // name list left the reader adding 3 and 5 and getting 8 beside a stated 9.
+      topRisks.mockResolvedValue(view([
+        domain({ shown: [risk({ instances: 9, system_count: 9,
+                                systems: ['PRD', 'D01', 'T01', 'Q01', 'S01',
+                                          'X01', 'Y01', 'Z01'] })] }),
+      ]))
+      draw()
+      await screen.findByText(/9 systems/)
+      expect(screen.getByText(/\+6/)).toBeInTheDocument()
+    })
+
+  it('falls back to the name list when an older server sends no count',
+    async () => {
+      topRisks.mockResolvedValue(view([
+        domain({ shown: [risk({ instances: 2, systems: ['PRD', 'D01'] })] }),
+      ]))
+      draw()
+      expect(await screen.findByText(/2 systems: PRD, D01/)).toBeInTheDocument()
+    })
 
   it('says nothing of the sort when every domain was assessed', async () => {
     // A caveat that is always on is a caveat nobody reads.

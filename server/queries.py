@@ -969,9 +969,26 @@ def _distinct_risks(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     out: List[Dict[str, Any]] = []
     seen: Dict[str, Dict[str, Any]] = {}
+    ids: Dict[str, set] = {}
     for row in rows:
         check = str(row.get("check_id") or "")
         system = row.get("sid")
+        # HOW MANY SYSTEMS, COUNTED ON THE SYSTEM AND NOT ON ITS NAME.
+        #
+        # `systems` is the DISPLAY list and is keyed by SID, which is what a
+        # reader recognises. It is not a count: two systems can share a SID —
+        # the same SID recorded in two landscapes — and one system carries
+        # several clients, so a check firing in client 100 and 200 is two
+        # findings on one SID. Counting the display list therefore understates,
+        # and counting `instances` (which counts FINDINGS) overstates.
+        #
+        # Found on an eight-system estate, where AUTH-001 read "9 instances
+        # across 8 systems" and the screen rendered "9 systems" while naming
+        # eight. Both numbers were right about something and neither was right
+        # about systems.
+        holder = ids.setdefault(check, set())
+        if row.get("system_id") is not None:
+            holder.add(row["system_id"])
         if check in seen:
             entry = seen[check]
             entry["instances"] += 1
@@ -983,6 +1000,11 @@ def _distinct_risks(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         entry["systems"] = [system] if system else []
         seen[check] = entry
         out.append(entry)
+    for entry in out:
+        # Falls back to the display list where the rows carry no system id, so
+        # a caller that does not select it is no worse off than before.
+        entry["system_count"] = (len(ids.get(entry["check_id"]) or ())
+                                 or len(entry["systems"]))
     return out
 
 
@@ -1085,6 +1107,10 @@ def findings_for_domains(scope: Optional[Sequence[int]]) -> List[Dict[str, Any]]
         # above it.
         "SELECT f.id, f.check_id, f.severity, f.priority_tier, "
         "       f.priority_score, f.state, cd.category, cd.title, "
+        # The system ITSELF, not only the name it goes by. `_distinct_risks`
+        # counts systems on this: a SID is a display label that two systems can
+        # share across landscapes, and one system carries several clients.
+        "       f.system_id, "
         "       s.sid, s.client AS system_client "
         "FROM finding f "
         "JOIN check_definition cd ON cd.check_id = f.check_id "

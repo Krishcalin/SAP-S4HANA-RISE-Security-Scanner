@@ -1431,10 +1431,17 @@ export interface TopRisk {
   title: string
   sid: string | null
   system_client: string | null
-  /** How many systems this same check fires on, and which. Five rows of the
-   *  same risk are not five risks. */
+  /** How many FINDINGS this same check produced. Five rows of the same risk
+   *  are not five risks — but this is not a system count either: one system
+   *  with two clients gives two findings on one SID. */
   instances: number
+  /** The SIDs, for display. Two systems in different landscapes can share one,
+   *  so the length of this is not a system count either. */
   systems: string[]
+  /** How many systems, counted on the system rather than on its name. Optional:
+   *  an older server does not send it and the caller falls back to
+   *  `systems.length`. */
+  system_count?: number
 }
 
 export interface TopRisksView {

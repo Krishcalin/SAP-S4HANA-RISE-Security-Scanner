@@ -64,10 +64,29 @@ function Row({ risk }: { risk: TopRiskDomain['shown'][number] }) {
         <span className="block text-[11px] text-ink3 font-mono truncate">
           {risk.check_id}
           {/* The systems it lands on, because one problem on six systems is
-              one risk — and the reader still has to know it is six. */}
+              one risk — and the reader still has to know it is six.
+
+              SIX SYSTEMS, NOT SIX FINDINGS. This said `{instances} systems`,
+              and `instances` counts findings: a check firing in two clients of
+              one system, or on two systems that share a SID across landscapes,
+              made the label overstate. Measured on an eight-system estate it
+              read "9 systems" while naming eight. `system_count` counts the
+              systems; `instances` is shown beside it only when the two differ,
+              because that difference is itself worth seeing. */}
           {risk.instances > 1
-            ? <> · {risk.instances} systems: {risk.systems.slice(0, 3).join(', ')}
-                {risk.systems.length > 3 && ` +${risk.systems.length - 3}`}</>
+            ? <> · {risk.system_count ?? risk.systems.length} system
+                {(risk.system_count ?? risk.systems.length) === 1 ? '' : 's'}
+                {risk.instances !== (risk.system_count ?? risk.systems.length)
+                  && ` (${risk.instances} findings)`}
+                : {risk.systems.slice(0, 3).join(', ')}
+                {/* "and N more" counted off the authoritative total, not off
+                    the name list. Two systems sharing a SID contribute one
+                    name, so "DEV, DV2, PR2 +5" beside "9 systems" left the
+                    reader adding 3 and 5 and getting 8. */}
+                {(risk.system_count ?? risk.systems.length)
+                   > Math.min(3, risk.systems.length)
+                  && ` +${(risk.system_count ?? risk.systems.length)
+                          - Math.min(3, risk.systems.length)}`}</>
             : risk.sid && <> · {risk.sid}{risk.system_client ? `/${risk.system_client}` : ''}</>}
         </span>
       </span>
