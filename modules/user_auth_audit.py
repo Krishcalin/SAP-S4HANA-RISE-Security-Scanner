@@ -617,6 +617,16 @@ class UserAuthAuditor(BaseAuditor):
 
         affected = []
         object_pairs = []
+        # WHICH USER HOLDS WHICH PROFILE, kept rather than flattened away.
+        #
+        # `object_pairs` below is built one (user, profile) at a time and then
+        # handed over as a FLAT list, because that is all `affected_objects`
+        # can carry. The graph extractor then sees three users and three
+        # profiles, cannot tell which holds which, and correctly declines to
+        # guess — so the single most important privilege relationship in SAP,
+        # who holds SAP_ALL, produced no edge at all. The pairing was never
+        # unknown here; it was discarded one line after being computed.
+        relations = []
         for row in profiles:
             profile = self._field(row, "PROFILE", "AGR_NAME").upper()
             uname = self._field(row, "BNAME", "USERNAME")
@@ -624,6 +634,8 @@ class UserAuthAuditor(BaseAuditor):
                 if crit == profile or crit in profile:
                     affected.append(f"{uname} → {profile}")
                     object_pairs.extend((("user", uname), ("profile", profile)))
+                    relations.append({"from": {"type": "user", "name": uname},
+                                      "to": {"type": "profile", "name": profile}})
 
         if affected:
             self.finding(
@@ -642,6 +654,7 @@ class UserAuthAuditor(BaseAuditor):
                 # brand-new one, resetting its age while eleven users stay exposed.
                 # The users and profiles still ride along as graph nodes.
                 affected_objects=self._objects(object_pairs),
+                relations=relations,
                 scope="aggregate",
                 remediation=(
                     "Remove all SAP_ALL/SAP_NEW/S_A.SYSTEM assignments. "

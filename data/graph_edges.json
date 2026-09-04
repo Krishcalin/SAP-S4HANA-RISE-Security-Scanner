@@ -5,6 +5,7 @@
     "what_an_edge_claims": "That two objects named by ONE finding stand in the stated relationship, because the check that produced the finding is about that relationship. Nothing here is traversed, reached or validated: every edge is written with confidence 'derived_from_config' and the console repeats it.",
     "what_an_edge_never_claims": "That THIS relationship was exercised. An edge from a user carries provenance 'used' when the logon export shows that user logging on successfully in the window, which evidences that the ACCOUNT is live — not that it invoked this role or destination, which no configuration export could show. Without a logon export every edge is 'configured', recording that nobody looked at activity rather than that nothing is active.",
     "the_pairing_rule": "A finding lists its objects FLAT. AUTH-002 names one role, one authorization object and two users, and which user holds which role is visible only in the display string. So an edge is emitted ONLY where the pairing is unambiguous — one side names exactly one object of its type — and where both sides are plural the finding is declined and counted. Reading the pairing out of affected_items would resurrect the 'display' basis this product retired.",
+    "how_a_module_escapes_the_pairing_rule": "By declaring it. A finding may carry `relations` — explicit {from, to} pairs — and where it does, those pairs are used as evidence and the ambiguity question never arises. Measured before this existed: 42 of the 76 findings naming two object types named both sides plural and were declined, which is most of the reason a 939-node graph held 15 edges. The pairing was usually not unknown to the module, only unrepresentable: check_critical_profiles built a list it called `object_pairs` and flattened it one line later. A module still says only WHICH objects relate; what the relationship is called stays here, so declaring relations cannot invent edge vocabulary.",
     "why_not_the_transitive_edge": "AUTH-002 evidences user->role and role->auth_object. It does NOT evidence a user->auth_object edge: that is the transitive closure, and asserting it as an edge would state as observed what is only implied.",
     "sources": [
       "server/schema.sql — graph_edge, whose provenance/confidence/owner columns this fills",
@@ -12,6 +13,13 @@
     ]
   },
   "rules": [
+    {
+      "check_prefix": "USR-002",
+      "from_type": "user",
+      "to_type": "profile",
+      "edge_type": "holds_profile",
+      "why": "USR-002 reports users holding SAP_ALL, SAP_NEW or S_A.SYSTEM, and the assignment IS the finding. A profile is not a role — in SAP a role generates a profile and the two are separate objects — so this is its own edge type rather than a second spelling of holds_role. The check declares the pairing in `relations`, so which user holds which profile is evidence here rather than inference."
+    },
     {
       "check_prefix": "AUTH-",
       "from_type": "user",

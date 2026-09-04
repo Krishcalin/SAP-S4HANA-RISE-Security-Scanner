@@ -294,6 +294,74 @@ def _edge_owner(rule: Dict[str, Any], to_key: str, deployment_mode: str,
         name, dest_hosts.get(name.upper(), ""), deployment_mode)
 
 
+def _add_edge(edges: Dict[Tuple[str, str, str], Dict[str, Any]],
+              source: str, target: str, rule: Dict[str, Any],
+              check_id: str, active: Optional[Set[str]],
+              deployment_mode: str,
+              dest_hosts: Optional[Dict[str, str]]) -> None:
+    """Record one edge, merging with an identical edge from another check.
+
+    Extracted so the declared-pairing path and the inferred path build edges
+    identically. Two ways of constructing an edge would eventually disagree
+    about provenance or owner, and the disagreement would be invisible: both
+    produce a row.
+    """
+    if source == target:
+        return                # a self-edge is never a relationship
+    key = (source, target, rule["edge_type"])
+    edge = edges.get(key)
+    if edge is None:
+        edge = {
+            "from_key": source,
+            "to_key": target,
+            "type": rule["edge_type"],
+            "check_id": check_id,
+            "provenance": _provenance(rule, source, active),
+            "confidence": "derived_from_config",
+            "owner": _edge_owner(rule, target, deployment_mode, dest_hosts),
+            "check_ids": [],
+        }
+        edges[key] = edge
+    if check_id and check_id not in edge["check_ids"]:
+        edge["check_ids"].append(check_id)
+
+
+def _declared_pairs(finding: Dict[str, Any], default_system: Optional[str]
+                    ) -> Dict[Tuple[str, str], List[Tuple[str, str]]]:
+    """`{(from_type, to_type): [(from_key, to_key), ...]}` a finding DECLARED.
+
+    From the finding's optional `relations` — see `BaseAuditor.finding`. Keyed
+    through the same `AffectedObject` coercion the flat path uses, because an
+    edge whose end is keyed differently from the node table is an edge to
+    nothing, and a declared pair is no more exempt from that than an inferred
+    one.
+
+    A malformed entry is skipped rather than raising: a module getting one pair
+    wrong must not cost the run every other edge.
+    """
+    out: Dict[Tuple[str, str], List[Tuple[str, str]]] = defaultdict(list)
+    for raw in (finding.get("relations") or ()):
+        if not isinstance(raw, dict):
+            continue
+        try:
+            src = AffectedObject.coerce(raw.get("from"))
+            dst = AffectedObject.coerce(raw.get("to"))
+        except (IdentityError, AttributeError, TypeError):
+            continue
+        pair = []
+        for obj in (src, dst):
+            if (obj.system is None and default_system
+                    and obj.type not in _CLOUD_SCOPED_TYPES):
+                obj = AffectedObject(obj.type, obj.name, default_system,
+                                     obj.client, obj.qualifier)
+            pair.append(obj)
+        key = (pair[0].type, pair[1].type)
+        entry = (pair[0].key(), pair[1].key())
+        if entry not in out[key]:
+            out[key].append(entry)
+    return out
+
+
 def extract_edges(findings: Iterable[Dict[str, Any]],
                   default_system: Optional[str] = None,
                   rules: Optional[List[Dict[str, Any]]] = None,
@@ -336,7 +404,25 @@ def extract_edges(findings: Iterable[Dict[str, Any]],
             continue
         stats["findings_seen"] += 1
         by_type = _objects_by_type(finding, default_system)
+        declared = _declared_pairs(finding, default_system)
         for rule in applicable:
+            # WHAT THE FINDING SAID, BEFORE WHAT CAN BE INFERRED FROM IT.
+            #
+            # A module that knows which user holds which profile can now say so
+            # (see `relations` on BaseAuditor.finding). Where it has, the pairing
+            # is evidence rather than inference, so it is used as-is and the
+            # ambiguity question below never arises — three declared pairs among
+            # three users and three profiles are three edges, not nine and not
+            # zero.
+            pairs = declared.get((rule.get("from_type"), rule.get("to_type")))
+            if pairs:
+                stats["rules_applied"] += 1
+                stats["from_declared"] = stats.get("from_declared", 0) + len(pairs)
+                for source, target in pairs:
+                    _add_edge(edges, source, target, rule, check_id, active,
+                              deployment_mode, dest_hosts)
+                continue
+
             sources = by_type.get(rule.get("from_type"), [])
             targets = by_type.get(rule.get("to_type"), [])
             if not sources or not targets:
@@ -344,30 +430,15 @@ def extract_edges(findings: Iterable[Dict[str, Any]],
             if len(sources) > 1 and len(targets) > 1:
                 # The finding evidences the relationship without evidencing
                 # WHICH. Counted rather than guessed — see the module docstring.
+                # A module can lift its own findings out of this branch by
+                # declaring `relations`.
                 stats["declined_ambiguous"] += 1
                 continue
             stats["rules_applied"] += 1
             for source in sources:
                 for target in targets:
-                    if source == target:
-                        continue      # a self-edge is never a relationship
-                    key = (source, target, rule["edge_type"])
-                    edge = edges.get(key)
-                    if edge is None:
-                        edge = {
-                            "from_key": source,
-                            "to_key": target,
-                            "type": rule["edge_type"],
-                            "check_id": check_id,
-                            "provenance": _provenance(rule, source, active),
-                            "confidence": "derived_from_config",
-                            "owner": _edge_owner(rule, target,
-                                                 deployment_mode, dest_hosts),
-                            "check_ids": [],
-                        }
-                        edges[key] = edge
-                    if check_id and check_id not in edge["check_ids"]:
-                        edge["check_ids"].append(check_id)
+                    _add_edge(edges, source, target, rule, check_id, active,
+                              deployment_mode, dest_hosts)
 
     out = []
     edge_users: Set[str] = set()

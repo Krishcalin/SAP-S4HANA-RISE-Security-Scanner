@@ -320,6 +320,34 @@ class AdvancedIamAuditor(BaseAuditor):
         """
         return cls._objects(pair for row in rows for pair in row)
 
+    @staticmethod
+    def _row_relations(rows) -> List[Dict[str, Any]]:
+        """The same rows as `_row_objects`, keeping WHICH end goes with which.
+
+        `_row_objects` flattens each row's two ends into one list, and the graph
+        extractor then sees fifty users and fifty roles with no way to tell which
+        assignment is which — so it declines to guess and the assignments produce
+        no edges at all. The rows here are already pairs: `row_objs` is built as
+        ``(("user", user), ("role", role))`` precisely because, as the comment
+        there says, a role assignment has no name of its own and the two ends of
+        it do.
+
+        Slice the SAME rows the display list and `_row_objects` were given, for
+        the same reason they slice together: edges that described assignments the
+        report does not show would be evidence the reader cannot check.
+        """
+        out = []
+        for row in rows:
+            pairs = list(row)
+            if len(pairs) != 2:
+                continue          # only a two-ended row states a relationship
+            (from_type, from_name), (to_type, to_name) = pairs
+            if not from_name or not to_name:
+                continue
+            out.append({"from": {"type": from_type, "name": from_name},
+                        "to": {"type": to_type, "name": to_name}})
+        return out
+
     # ════════════════════════════════════════════════════════════════
     #  SOD-*: Segregation of Duties Conflict Detection
     # ════════════════════════════════════════════════════════════════
@@ -953,6 +981,7 @@ class AdvancedIamAuditor(BaseAuditor):
                 # its age every run and make MTTR permanently wrong. Same [:100] slice
                 # as the display list so the nodes match the evidence shown.
                 affected_objects=self._row_objects(no_expiry_objs[:100]),
+                relations=self._row_relations(no_expiry_objs[:100]),
                 scope="aggregate",
                 remediation=(
                     "Set validity end dates on all role assignments. "
@@ -979,6 +1008,7 @@ class AdvancedIamAuditor(BaseAuditor):
                 # Aggregate over the stale-assignment backlog; same [:50] slice as the
                 # display list.
                 affected_objects=self._row_objects(expired_active_objs[:50]),
+                relations=self._row_relations(expired_active_objs[:50]),
                 scope="aggregate",
                 remediation=(
                     "Run report PRGN_COMPRESS_TIMES to clean up expired role assignments. "
@@ -1003,6 +1033,7 @@ class AdvancedIamAuditor(BaseAuditor):
                 # Aggregate over every over-long assignment; same [:50] slice as the
                 # display list.
                 affected_objects=self._row_objects(long_validity_objs[:50]),
+                relations=self._row_relations(long_validity_objs[:50]),
                 scope="aggregate",
                 remediation=(
                     f"Reduce validity periods to {max_validity_days} days maximum. "

@@ -476,6 +476,7 @@ class BaseAuditor:
         scope: str = None,
         system: str = None,
         client: str = None,
+        relations: List[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Create a standardized finding dict.
 
@@ -526,6 +527,33 @@ class BaseAuditor:
         `system` / `client` let a finding override the run's defaults — a cross-system
         trust finding belongs to the system it is *about*, not to the one whose export
         happened to reveal it.
+
+        `relations` says WHICH of the named objects relate to each other, as a list of
+        ``{"from": {...}, "to": {...}}`` pairs using the same object shape as
+        `affected_objects`.
+
+        WHY IT HAD TO EXIST. `affected_objects` is flat, so a finding that names three
+        users and three profiles evidences THAT they relate without evidencing WHICH —
+        and `server/edges.py` correctly declines to guess, counting the finding as
+        ambiguous rather than inventing nine edges where three are true. Measured on a
+        404-finding estate: 42 of the 76 findings naming two object types were declined
+        that way, which is most of the reason a 939-node graph holds 15 edges.
+
+        The knowledge was not missing, it was discarded. `check_critical_profiles`
+        builds a list it calls `object_pairs`, one (user, profile) at a time, then
+        flattens it because the contract had nowhere to put the pairing. This is that
+        place.
+
+        A module says only which objects relate. What the relationship is CALLED stays
+        in `data/graph_edges.json`, whose own header says adding an edge kind is a data
+        change rather than a code change — so a module cannot invent edge vocabulary by
+        writing a new string here.
+
+        It takes no part in identity: `fingerprint_finding` reads `subject` /
+        `affected_objects`, `scope` and system only, so declaring relations can never
+        retire a finding and raise a fresh one. Objects named here should also appear
+        in `affected_objects`, since that is what creates the graph NODES an edge needs
+        at both ends.
         """
         f = {
             "check_id": check_id,
@@ -540,6 +568,11 @@ class BaseAuditor:
             "details": details or {},
             "timestamp": datetime.datetime.now().isoformat(),
         }
+        # Only when the module declared some: an empty list on every finding would
+        # be indistinguishable, to a reader of stored JSON, from a module that
+        # tried and found none.
+        if relations:
+            f["relations"] = relations
         # Standards mapping, attached HERE so it reaches every one of the 673
         # checks from one place rather than being remembered per module. It
         # always carries `basis` — "cwe", "family" or None — because a mapping
