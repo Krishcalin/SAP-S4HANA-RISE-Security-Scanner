@@ -98,6 +98,11 @@ class S4BusinessAuthzAuditor(BaseAuditor):
             return
         offenders = []
         objects: List[Dict[str, Any]] = []
+        # ...and WHICH user holds WHICH template. The finding names several of
+        # each, so without this the graph cannot pair them and a
+        # SAP_BR_ADMINISTRATOR grant — about as consequential as an assignment
+        # gets — produces no edge at all.
+        relations: List[Dict[str, Any]] = []
         for row in self._rows(rows):
             role = self._get(row, "BUSINESS_ROLE", "ROLE", "AGR_NAME", "ROLE_ID").upper()
             user = self._get(row, "USER", "USER_ID", "BNAME", "USERNAME")
@@ -107,6 +112,11 @@ class S4BusinessAuthzAuditor(BaseAuditor):
                 # and the business user holding it.
                 self._add_object(objects, "role", role)
                 self._add_object(objects, "user", user)
+                # A row with no user names a role nobody holds; half a grant is
+                # not a grant, so it is left out rather than half-recorded.
+                if user:
+                    relations.append({"from": {"type": "user", "name": user},
+                                      "to": {"type": "role", "name": role}})
         if offenders:
             self.finding(
                 check_id="S4AUTHZ-001",
@@ -128,6 +138,7 @@ class S4BusinessAuthzAuditor(BaseAuditor):
                 # thing it is about, and claiming one would make the console's
                 # "structural" label untrue.
                 affected_objects=objects,
+                relations=relations,
                 scope="aggregate",
                 remediation=(
                     "Remove SAP_BR_ADMINISTRATOR* from business users. Build purpose-specific "

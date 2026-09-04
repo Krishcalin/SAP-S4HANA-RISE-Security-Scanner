@@ -365,7 +365,8 @@ def path_findings(path_id: int) -> List[Dict[str, Any]]:
 #: of the estate only, which on a RISE landscape is the smaller half of the
 #: question.
 _ACTOR_EDGES = ("holds_role", "holds_profile", "can_use_destination",
-                "holds_hana_privilege", "holds_hana_role")
+                "holds_hana_privilege", "holds_hana_role",
+                "holds_role_collection")
 
 
 def path_actors(path_id: int, scope: Optional[Sequence[int]]

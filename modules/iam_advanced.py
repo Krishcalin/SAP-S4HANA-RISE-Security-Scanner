@@ -1136,6 +1136,10 @@ class AdvancedIamAuditor(BaseAuditor):
 
         btp_admins = []
         btp_admin_objs = []
+        # One user to many collections, so `_row_relations` (which pairs the two
+        # ends of a two-ended row) does not fit: each row here is a fan-out and
+        # every arm of it is a real grant.
+        btp_admin_rels: List[Dict[str, Any]] = []
         for user in btp_user_list:
             if not isinstance(user, dict):
                 continue
@@ -1155,6 +1159,11 @@ class AdvancedIamAuditor(BaseAuditor):
                         [("btp_user", uid)]
                         + [("role_collection", str(r)) for r in admin_roles]
                     )
+                    if uid:
+                        btp_admin_rels.extend(
+                            {"from": {"type": "btp_user", "name": uid},
+                             "to": {"type": "role_collection", "name": str(r)}}
+                            for r in admin_roles)
 
         if btp_only:
             self.finding(
@@ -1224,6 +1233,7 @@ class AdvancedIamAuditor(BaseAuditor):
                 # Aggregate over every BTP admin holder; revoking one collection from
                 # one user leaves the over-privileged population, and the finding.
                 affected_objects=self._row_objects(btp_admin_objs),
+                relations=btp_admin_rels,
                 scope="aggregate",
                 remediation=(
                     "Review all BTP admin assignments using principle of least privilege. "

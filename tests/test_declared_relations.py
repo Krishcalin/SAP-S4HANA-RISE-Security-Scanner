@@ -264,6 +264,72 @@ def test_a_hana_role_and_a_hana_privilege_are_not_the_same_edge():
     assert rules[("hana_user", "hana_privilege")] == "holds_hana_privilege"
 
 
+# --------------------------------------------------------------------------- #
+#  The cloud halves: S/4HANA business roles and BTP role collections           #
+# --------------------------------------------------------------------------- #
+
+def test_a_business_role_template_grant_is_declared():
+    from modules.s4_business_authz import S4BusinessAuthzAuditor
+    data = {"business_roles": [
+        {"USER": "JSMITH", "BUSINESS_ROLE": "SAP_BR_ADMINISTRATOR"},
+        {"USER": "MWILSON", "BUSINESS_ROLE": "SAP_BR_ADMINISTRATOR_MDG"}]}
+    got = [f for f in S4BusinessAuthzAuditor(data, {}, {}).run_all_checks()
+           if f["check_id"] == "S4AUTHZ-001"]
+    assert got, "S4AUTHZ-001 did not fire on two super-admin assignments"
+    pairs = {(r["from"]["name"], r["to"]["name"]) for r in got[0]["relations"]}
+    assert pairs == {("JSMITH", "SAP_BR_ADMINISTRATOR"),
+                     ("MWILSON", "SAP_BR_ADMINISTRATOR_MDG")}
+
+
+def test_a_business_role_row_with_no_user_declares_nothing():
+    """The display list falls back to "?" for a missing user. Half a grant is
+    not a grant, and "?" as an identity would merge every unnamed row."""
+    from modules.s4_business_authz import S4BusinessAuthzAuditor
+    data = {"business_roles": [{"BUSINESS_ROLE": "SAP_BR_ADMINISTRATOR"}]}
+    got = [f for f in S4BusinessAuthzAuditor(data, {}, {}).run_all_checks()
+           if f["check_id"] == "S4AUTHZ-001"]
+    assert got, "the finding should still fire — the role is assigned to somebody"
+    assert not got[0].get("relations")
+
+
+def test_a_business_role_grant_uses_the_same_edge_as_a_pfcg_role():
+    """SAP_BR_ADMINISTRATOR held by a user is a role assignment however it was
+    exported. A second edge type would split one relationship across two
+    vocabularies."""
+    edges, _ = extract_edges([finding(
+        "S4AUTHZ-001",
+        [obj("user", "JSMITH"), obj("user", "MWILSON"),
+         obj("role", "SAP_BR_ADMINISTRATOR"), obj("role", "Z_OTHER")],
+        relations=[rel("user", "JSMITH", "role", "SAP_BR_ADMINISTRATOR")])],
+        default_system="PRD")
+    assert {e["type"] for e in edges} == {"holds_role"}
+
+
+def test_btp_role_collections_are_declared_per_arm_of_the_fan_out():
+    """One BTP user holding four collections is four grants, not one."""
+    from modules.iam_advanced import AdvancedIamAuditor
+    # The check compares the two estates, so it needs both sides supplied —
+    # with one absent it returns rather than reporting a one-sided answer.
+    data = {"users": [{"BNAME": "JSMITH"}],
+            "btp_users": [{"userName": "ext@partner.com",
+                           "roleCollections": ["Subaccount_Admin",
+                                               "Security_Admin"]}]}
+    got = [f for f in AdvancedIamAuditor(data, {}, {}).run_all_checks()
+           if f["check_id"] == "IAM-XID-003"]
+    assert got, "IAM-XID-003 did not fire"
+    pairs = {(r["from"]["name"], r["to"]["name"]) for r in got[0]["relations"]}
+    assert pairs == {("ext@partner.com", "Subaccount_Admin"),
+                     ("ext@partner.com", "Security_Admin")}
+
+
+def test_a_role_collection_is_not_a_pfcg_role():
+    """A BTP role collection is case-sensitive and can share a spelling with a
+    PFCG role. The check already types them apart; the edges must too."""
+    rules = {(r["from_type"], r["to_type"]): r["edge_type"] for r in load_rules()}
+    assert rules[("btp_user", "role_collection")] == "holds_role_collection"
+    assert rules[("user", "role")] == "holds_role"
+
+
 def test_every_rule_still_explains_itself():
     """`why` is what stops the rules file becoming a pile of type pairs nobody
     can audit."""

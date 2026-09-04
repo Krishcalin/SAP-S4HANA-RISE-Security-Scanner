@@ -21,6 +21,20 @@
       "why": "USR-002 reports users holding SAP_ALL, SAP_NEW or S_A.SYSTEM, and the assignment IS the finding. A profile is not a role — in SAP a role generates a profile and the two are separate objects — so this is its own edge type rather than a second spelling of holds_role. The check declares the pairing in `relations`, so which user holds which profile is evidence here rather than inference."
     },
     {
+      "check_prefix": "S4AUTHZ-001",
+      "from_type": "user",
+      "to_type": "role",
+      "edge_type": "holds_role",
+      "why": "A super-admin business-role template assigned to a business user is the same relationship the AUTH- and IAM-EXP- rules describe, reached through the S/4HANA business-role export rather than PFCG. Same edge type deliberately: SAP_BR_ADMINISTRATOR held by a user is a role assignment, and giving it a second name would split one relationship across two vocabularies."
+    },
+    {
+      "check_prefix": "IAM-XID-003",
+      "from_type": "btp_user",
+      "to_type": "role_collection",
+      "edge_type": "holds_role_collection",
+      "why": "A BTP role collection granted to a subaccount user is the platform's own privilege assignment, and this check exists to report the administrative ones. Not holds_role: a role collection is a BTP object with case-sensitive naming, and conflating it with a PFCG role would merge two different objects that can share a spelling — the same reason the check types them separately."
+    },
+    {
       "check_prefix": "HANADB-PRIV-",
       "from_type": "hana_user",
       "to_type": "hana_privilege",
