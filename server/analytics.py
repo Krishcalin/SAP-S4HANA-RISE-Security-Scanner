@@ -398,7 +398,23 @@ def _score_rows(observed: Dict[str, int], failing: Dict[str, int],
         per_category[category] = max(per_category.get(category, 0), n)
 
     out: List[Dict[str, Any]] = []
-    for category, known in sorted(per_category.items()):
+    # SORTED ON A KEY THAT TOLERATES A CATEGORY-LESS CHECK.
+    #
+    # `check_definition.category` is nullable with no default, so a module that
+    # emits a finding without one produces a NULL row — and a bare
+    # `sorted(per_category.items())` then raises TypeError comparing None with
+    # str, which 500s this whole screen for the landscape. Found when a shared
+    # test database happened to hold 50 such rows; the same shape is reachable
+    # in production from one check emitting no category.
+    #
+    # The uncategorised group is KEPT, not dropped. Dropping it would quietly
+    # remove those checks from a pass-rate denominator, which is the failure
+    # this screen already goes to some trouble to avoid two paragraphs below.
+    # Where it ENDS UP is not decided here: `out.sort` at the end of this
+    # function re-orders everything by pass rate, worst first. This key exists
+    # only so the loop can run at all.
+    for category, known in sorted(per_category.items(),
+                                  key=lambda kv: (kv[0] is None, kv[0] or "")):
         n_observed = observed.get(category, 0)
         # THIS SCREEN READS UNKNOWN DIFFERENTLY FROM EVERY OTHER CALLER, and the
         # difference is deliberate rather than drift.
