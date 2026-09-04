@@ -21,6 +21,27 @@
       "why": "USR-002 reports users holding SAP_ALL, SAP_NEW or S_A.SYSTEM, and the assignment IS the finding. A profile is not a role — in SAP a role generates a profile and the two are separate objects — so this is its own edge type rather than a second spelling of holds_role. The check declares the pairing in `relations`, so which user holds which profile is evidence here rather than inference."
     },
     {
+      "check_prefix": "JOBCMD-JOB-",
+      "from_type": "job",
+      "to_type": "user",
+      "edge_type": "runs_as",
+      "why": "An armed background job executes its steps with the step user's authorisations (TBTCP-AUTHCKNAM). `check_job_privileged_step_user` already said what this is for: 'the job->user edge is what makes \"this armed job runs as DDIC\" derivable'. The direction is the job's, not the user's — the job borrows the identity, the user does not reach for the job — so this is NOT an actor edge and `path_actors` does not walk it."
+    },
+    {
+      "check_prefix": "JOBCMD-JOB-003",
+      "from_type": "job",
+      "to_type": "program",
+      "edge_type": "runs_program",
+      "why": "An armed job step names the ABAP program it executes (TBTCP-PROGNAME), and RSBDCOS0 in that position is the OS bridge that bypasses the SM69 allowlist entirely. Emitted as a second edge FROM THE JOB rather than as the chain the check's own comment sketches: 'job -> program -> user' reads as though the program runs as the step user, and nothing in the export says that — the job runs the program and the job runs as the user."
+    },
+    {
+      "check_prefix": "JOBCMD-JOB-005",
+      "from_type": "user",
+      "to_type": "job",
+      "edge_type": "schedules",
+      "why": "The scheduler named in SDLUNAME arranged for the job to run. Kept separate from runs_as deliberately: together the two edges say a lower-privileged scheduler gets code executed under a stronger identity, which is exactly what the check reports — but as two facts a reader joins, never as a scheduler->step-user edge. That edge would read as 'this account can act as that one', a conclusion rather than something the export states, and the same transitive claim why_not_the_transitive_edge already refuses."
+    },
+    {
       "check_prefix": "S4AUTHZ-001",
       "from_type": "user",
       "to_type": "role",

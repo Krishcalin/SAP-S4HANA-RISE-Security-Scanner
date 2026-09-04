@@ -330,6 +330,76 @@ def test_a_role_collection_is_not_a_pfcg_role():
     assert rules[("user", "role")] == "holds_role"
 
 
+# --------------------------------------------------------------------------- #
+#  Background jobs: the first edges that do NOT start at an account            #
+# --------------------------------------------------------------------------- #
+
+def jobs(steps, headers=None, **rest):
+    from modules.basis_job_command import BasisJobCommandAuditor
+    data = {"background_job_steps": steps,
+            "background_jobs": headers or [], **rest}
+    return {f["check_id"]: f
+            for f in BasisJobCommandAuditor(data, {}, {}).run_all_checks()}
+
+
+def test_a_job_declares_the_identity_it_runs_as():
+    """`check_job_privileged_step_user` already said what this is for: 'the
+    job->user edge is what makes "this armed job runs as DDIC" derivable'."""
+    got = jobs([{"JOBNAME": "JOB_FI_CLOSE", "JOBCOUNT": "1",
+                 "AUTHCKNAM": "DDIC", "PROGNAME": "ZFI_CLOSE"},
+                {"JOBNAME": "JOB_MASS_UPD", "JOBCOUNT": "2",
+                 "AUTHCKNAM": "SAP*", "PROGNAME": "ZMASS"}])
+    fired = [f for cid, f in got.items()
+             if cid.startswith("JOBCMD-JOB-001") and f.get("relations")]
+    assert fired, "no job finding declared what it runs as"
+    pairs = {(r["from"]["name"], r["to"]["name"])
+             for f in fired for r in f["relations"]}
+    assert ("JOB_FI_CLOSE", "DDIC") in pairs, pairs
+
+
+def test_runs_as_points_from_the_job_and_is_not_an_actor_edge():
+    """The job borrows the identity; the user does not reach for the job. So
+    `path_actors` must not walk it — answering "who is standing here" with
+    somebody a job impersonates would be a different claim entirely."""
+    from server import graph
+    rules = {r["edge_type"]: r for r in load_rules()}
+    assert rules["runs_as"]["from_type"] == "job"
+    assert "runs_as" not in graph._ACTOR_EDGES
+
+
+def test_identity_borrowing_is_two_edges_and_never_one():
+    """A low-privileged scheduler getting code run as a powerful step user is
+    the finding. Declaring scheduler -> step user directly would read as "this
+    account can act as that one" — a conclusion the reader should draw from two
+    facts, not a relationship the export states."""
+    got = jobs([{"JOBNAME": "JOB_X", "JOBCOUNT": "1",
+                 "AUTHCKNAM": "DDIC", "SDLUNAME": "JSMITH"}])
+    assert "JOBCMD-JOB-005" in got, got.keys()
+    rels = got["JOBCMD-JOB-005"]["relations"]
+    kinds = {(r["from"]["type"], r["to"]["type"]) for r in rels}
+    assert ("user", "job") in kinds and ("job", "user") in kinds
+    # ...and never the shortcut.
+    assert not [r for r in rels
+                if r["from"]["type"] == "user" and r["to"]["type"] == "user"], (
+        "a scheduler -> step user edge was declared: that is the transitive "
+        "claim the rules file refuses")
+
+
+def test_the_os_bridge_is_two_edges_from_the_job():
+    """The check's comment sketches "job -> program -> user", which reads as
+    though the program runs as the step user. It does not: the job runs the
+    program AND runs as the user."""
+    got = jobs([{"JOBNAME": "JOB_OS", "JOBCOUNT": "1",
+                 "PROGNAME": "RSBDCOS0", "AUTHCKNAM": "DDIC"}])
+    assert "JOBCMD-JOB-003" in got, got.keys()
+    rels = got["JOBCMD-JOB-003"]["relations"]
+    assert {(r["from"]["type"], r["to"]["type"]) for r in rels} == {
+        ("job", "program"), ("job", "user")}
+    assert not [r for r in rels if r["from"]["type"] == "program"], (
+        "an edge was declared FROM the program, which nothing in the export "
+        "supports")
+
+
 def test_every_rule_still_explains_itself():
     """`why` is what stops the rules file becoming a pile of type pairs nobody
     can audit."""

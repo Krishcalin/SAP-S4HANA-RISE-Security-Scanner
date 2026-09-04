@@ -383,6 +383,7 @@ class BasisJobCommandAuditor(BaseAuditor):
     # --------------------------------------------------------------- JOB checks
     def check_job_privileged_step_user(self):
         crit, high = [], []
+        crit_rels, high_rels = [], []
         crit_objs, high_objs = [], []
         for label, step, _h in self._armed_steps():
             user = self._get(step, "AUTHCKNAM", "STEP_USER", "BTCUSER", "AUTH_USER")
@@ -398,12 +399,18 @@ class BasisJobCommandAuditor(BaseAuditor):
                     crit_objs.append({"type": "job", "name": label})
                 if user:
                     crit_objs.append({"type": "user", "name": user})
+                if label and user:
+                    crit_rels.append({"from": {"type": "job", "name": label},
+                                      "to": {"type": "user", "name": user}})
             elif cls == "standard":
                 high.append(f"{label} — step user {user}")
                 if label:
                     high_objs.append({"type": "job", "name": label})
                 if user:
                     high_objs.append({"type": "user", "name": user})
+                if label and user:
+                    high_rels.append({"from": {"type": "job", "name": label},
+                                      "to": {"type": "user", "name": user}})
         if crit:
             self.finding(
                 check_id="JOBCMD-JOB-001",
@@ -422,6 +429,7 @@ class BasisJobCommandAuditor(BaseAuditor):
                 # Aggregate: re-planning one job onto a technical user must not retire
                 # this finding and re-raise it with a zeroed age while others remain.
                 affected_objects=crit_objs,
+                relations=crit_rels,
                 scope="aggregate",
                 remediation=(
                     "Reassign these jobs to a dedicated, least-privilege background (type B / "
@@ -447,6 +455,7 @@ class BasisJobCommandAuditor(BaseAuditor):
                 affected_items=high,
                 # Aggregate, for the same reason as JOBCMD-JOB-001.
                 affected_objects=high_objs,
+                relations=high_rels,
                 scope="aggregate",
                 remediation=(
                     "Move these jobs to a purpose-built least-privilege background user; lock the "
@@ -519,6 +528,7 @@ class BasisJobCommandAuditor(BaseAuditor):
     def check_job_os_report(self):
         offenders = []
         objects = []
+        relations = []
         for label, step, _h in self._armed_steps():
             prog = self._get(step, "PROGNAME", "REPORT", "ABAP_PROGRAM").upper()
             user = self._get(step, "AUTHCKNAM", "STEP_USER", "BTCUSER")
@@ -541,6 +551,18 @@ class BasisJobCommandAuditor(BaseAuditor):
                     objects.append({"type": "program", "name": prog})
                 if user:
                     objects.append({"type": "user", "name": user})
+                # TWO EDGES FROM THE JOB, not the chain the comment above
+                # sketches. "job -> program -> user" reads as though the program
+                # runs as the user; it does not — the JOB runs the program AND
+                # runs as the user, and the program is one of its steps. Drawing
+                # it as a chain would put a relationship between RSBDCOS0 and the
+                # step user that nothing in the export states.
+                if label and prog:
+                    relations.append({"from": {"type": "job", "name": label},
+                                      "to": {"type": "program", "name": prog}})
+                if label and user:
+                    relations.append({"from": {"type": "job", "name": label},
+                                      "to": {"type": "user", "name": user}})
         if offenders:
             self.finding(
                 check_id="JOBCMD-JOB-003",
@@ -558,6 +580,7 @@ class BasisJobCommandAuditor(BaseAuditor):
                 # Aggregate: unscheduling one RSBDCOS0 job while another remains must not
                 # reset this finding's clock.
                 affected_objects=objects,
+                relations=relations,
                 scope="aggregate",
                 remediation=(
                     "Remove RSBDCOS0 from scheduled jobs and restrict authorization to run it; "
@@ -572,6 +595,7 @@ class BasisJobCommandAuditor(BaseAuditor):
     def check_job_stale_step_user(self):
         offenders = []
         objects = []
+        relations = []
         for label, step, _h in self._armed_steps():
             user = self._get(step, "AUTHCKNAM", "STEP_USER", "BTCUSER").upper()
             if not user:
@@ -599,6 +623,9 @@ class BasisJobCommandAuditor(BaseAuditor):
                     objects.append({"type": "job", "name": label})
                 if user:
                     objects.append({"type": "user", "name": user})
+                if label and user:
+                    relations.append({"from": {"type": "job", "name": label},
+                                      "to": {"type": "user", "name": user}})
         if offenders:
             self.finding(
                 check_id="JOBCMD-JOB-004",
@@ -615,6 +642,7 @@ class BasisJobCommandAuditor(BaseAuditor):
                 affected_items=offenders,
                 # Aggregate: a job-hygiene backlog. Fixing one job step user shortens it.
                 affected_objects=objects,
+                relations=relations,
                 scope="aggregate",
                 remediation=(
                     "Re-plan affected jobs onto a valid, unlocked, least-privilege system (type B) "
@@ -627,6 +655,7 @@ class BasisJobCommandAuditor(BaseAuditor):
     def check_job_identity_borrow(self):
         offenders = []
         objects = []
+        relations = []
         for label, step, header in self._armed_steps():
             user = self._get(step, "AUTHCKNAM", "STEP_USER", "BTCUSER").upper()
             sched = self._get(step, "SDLUNAME", "SCHEDULER", "CREATOR").upper() or \
@@ -640,6 +669,20 @@ class BasisJobCommandAuditor(BaseAuditor):
                     objects.append({"type": "job", "name": label})
                 objects.append({"type": "user", "name": user})
                 objects.append({"type": "user", "name": sched})
+                # THE BORROWING, AS TWO STEPS RATHER THAN ONE. The scheduler
+                # schedules the job; the job runs as the step user. Declaring a
+                # scheduler -> step user edge instead would be the transitive
+                # claim `data/graph_edges.json` refuses elsewhere — it reads as
+                # "this account can act as that one", which is the CONCLUSION a
+                # reader should draw for themselves from two facts, not a
+                # relationship the export states.
+                if label:
+                    relations.append(
+                        {"from": {"type": "user", "name": sched},
+                         "to": {"type": "job", "name": label}})
+                    relations.append(
+                        {"from": {"type": "job", "name": label},
+                         "to": {"type": "user", "name": user}})
         if offenders:
             self.finding(
                 check_id="JOBCMD-JOB-005",
@@ -656,6 +699,7 @@ class BasisJobCommandAuditor(BaseAuditor):
                 # Aggregate: the set of borrowing relationships. Correcting one job's step
                 # user must not orphan the finding's history for the rest.
                 affected_objects=objects,
+                relations=relations,
                 scope="aggregate",
                 remediation=(
                     "Ensure the step user reflects the least privilege actually required and that "
