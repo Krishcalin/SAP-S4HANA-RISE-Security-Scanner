@@ -75,10 +75,16 @@ access analysis.
 | **"Twice the SAP Security Baseline"** | The implied ~275 baseline figure is unverified in both directions. We now hold the actual SAP baseline (v2.6: 27 requirement families, ~55 requirement-technology IDs, 54 `[Critical]` markers) and **it is not structured as ~275 discrete checks** — so the 2× comparison is comparing unlike units. |
 | **Their own Buyer's Guide contains ZERO numeric capability claims** | Retrieved and read (10.6 MB, 13 pages). No 550, no 900, no 8,000. **[evidence]** Their own buyer-facing document avoids the numbers their press releases use. |
 
-> **Positioning consequence.** The honest comparison is **~323 published-and-auditable vs 550
-> asserted-and-unverifiable.** Publishing our full check catalogue — ID, what it reads, which
-> standard clause it satisfies — converts a perceived count deficit into a transparency advantage
-> no incumbent currently offers. It is the cheapest positioning move available to us.
+> **Positioning consequence.** The honest comparison is **819 published-and-auditable vs 550
+> asserted-and-unverifiable** — and the weight is on the adjectives, not the numbers. Our catalogue
+> is itemised: every check has an ID, says what it reads and which standard clause it satisfies.
+> Theirs is a figure. Do **not** turn that into "we have more checks than they do": the row above
+> already makes the argument against comparing unlike units, and it applies to us as well. Nobody
+> outside either company can say whether one of their checks is one of ours, and a count war is
+> the one contest an incumbent with a marketing budget always wins.
+>
+> Publishing the catalogue is the cheapest positioning move available to us, and it is an
+> advantage no incumbent currently offers whatever the counts happen to be.
 >
 > When a prospect quotes 550 at us, the fair and effective response is to ask what it counts. They
 > cannot answer that from any public source either.

@@ -604,7 +604,7 @@ zones per system at upload time**. A small input that upgrades every path in thi
 
 **Do not say:** "we're easier to deploy" (a baseline SKU claims scan-within-hours zero-footprint
 SaaS) · "we track remediation over time" (both incumbents ship it; the free tool claims it) ·
-"we have 323 checks" (nobody publishes a catalogue; volume wars are unwinnable) · "the platform incumbent doesn't
+"we have 819 checks" (nobody publishes a catalogue; volume wars are unwinnable) · "the platform incumbent doesn't
 have X" (their docs are gated; state absence of evidence) · any false-positive percentage
 (unfalsifiable, and reviewers will contradict whatever we claim).
 

@@ -40,7 +40,7 @@ again.
 > appears in any customer-facing artifact or is used to tag a check. Two IDs cited in earlier
 > research are absent from v7-2026 entirely: `TO_NWABAP_1.1.19` and `BASIC_1.2.30`.
 >
-> This matters because the obvious next move — tagging each of our ~323 checks with the R&R task
+> This matters because the obvious next move — tagging each of our 819 checks with the R&R task
 > it discharges, so the report answers *"why am I paying you when I pay SAP?"* with SAP's own
 > classification — is a **good idea executed on unsafe data.** Do it, after eye-verification.
 > Shipping wrong contract citations is precisely the SAP-identifier credibility failure this
@@ -424,16 +424,23 @@ combination lists, already in CSV, the exact format our loader reads.
 ## 4. Scoping our 23 modules against RISE
 
 > **The table below is the scoping AS IT WAS REASONED, on 2026-08-05, when there were
-> 23 modules. There are now 33.** It is kept because the *justifications* are the
+> 23 modules. There are now 38.** It is kept because the *justifications* are the
 > value here — each verdict is argued from §2 and §3 of this document, and that
 > reasoning does not expire when a module is added.
 >
 > **The live verdict for every module is `RISE_MODULE_SCOPE` in
 > [`modules/coverage.py`](../modules/coverage.py)**, which the scanner actually
-> reads and which a test holds to cover all 33 auditors with no gaps. Where this
-> table and that map disagree, the map is right. Do not re-derive a verdict from
-> this table for a module added after the date above — derive it from §2 and §3
-> and record it in the map.
+> reads. Where this table and that map disagree, the map is right. Do not
+> re-derive a verdict from this table for a module added after the date above —
+> derive it from §2 and §3 and record it in the map.
+>
+> The map carries 36 of the 38. The two it does not are `export_integrity` and
+> `ruleset_coverage`, and they are left out on purpose: the first asks whether the
+> customer's own export files could be read, the second asks how much of the
+> estate our own segregation-of-duties ruleset can see. Neither audits the SAP
+> system, so neither has a contractual owner to record. `tests/test_rise_module_scope.py`
+> holds that split — every other auditor must have a verdict, and a new module
+> either gets one or has to argue in writing that it belongs with those two.
 
 Verdicts: **IN SCOPE** (customer-owned and actionable) · **PARTIAL / SPLIT** (mixed ownership, or
 read-only) · **OUT** (SAP-operated; suppress or mark not-applicable) · **INFORMATIONAL** (real

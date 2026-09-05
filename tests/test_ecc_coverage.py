@@ -1,6 +1,6 @@
 """The ECC coverage measurement, locked so the published number cannot drift.
 
-`docs/ECC_COVERAGE.md` publishes a claim — fourteen of thirty auditors produce
+`docs/ECC_COVERAGE.md` publishes a claim — thirteen of thirty-eight auditors produce
 identical findings on an ECC export — and a published number that nothing checks
 is a number that quietly stops being true. These tests re-run the measurement and
 fail if the answer moves, which is the point: if a change genuinely improves ECC
@@ -43,7 +43,7 @@ def measured():
 #  The published claim                                                        #
 # --------------------------------------------------------------------------- #
 
-def test_fourteen_auditors_are_identical_on_ecc(measured):
+def test_thirteen_auditors_are_identical_on_ecc(measured):
     """THE NUMBER docs/ECC_COVERAGE.md PUBLISHES.
 
     "Identical to the full sample" is the operational meaning of the plan's
@@ -86,12 +86,14 @@ def test_fourteen_auditors_are_identical_on_ecc(measured):
 
 
 def test_twentyfive_auditors_produce_something_on_ecc(measured):
-    """The other honest number. Seven modules run degraded and are still worth
-    running, which the parity count alone hides."""
+    """The other honest number. Twelve modules produce findings without being at
+    parity — eleven return fewer than the full sample and one (`sap_hotnews`)
+    returns more, because an older kernel is exposed to more published notes.
+    All twelve are worth running, which the parity count alone hides."""
     ecc, _ = measured
     producing = [m for m, r in ecc.items() if r["findings"] > 0]
     assert len(producing) == 25, \
-        f"moved to {len(producing)} of 32: {sorted(producing)}"
+        f"moved to {len(producing)} of 38: {sorted(producing)}"
 
 
 def test_no_auditor_errors_on_the_ecc_fixture(measured):
@@ -232,8 +234,22 @@ def test_the_tiers_are_disjoint_and_cover_only_known_sources():
 
 def test_the_published_document_states_the_number_it_measured():
     """The document and the test must agree. If one is edited without the other,
-    the repository publishes a claim its own suite contradicts."""
+    the repository publishes a claim its own suite contradicts.
+
+    THE DENOMINATOR IS CHECKED TOO, and it is the half that actually drifted.
+    This test pinned 13 and 25 and nothing else, so the auditor count went 30 →
+    33 → 34 → 38 while the table went on saying "of 34" — and the prose beside it
+    settled on a third figure again ("fourteen of thirty-three"). A numerator
+    without its denominator is not a measurement, and a table headed by the wrong
+    one understates coverage by four auditors while looking precise."""
     doc = (ROOT / "docs" / "ECC_COVERAGE.md").read_text(encoding="utf-8")
     assert "| **13** |" in doc, \
         "docs/ECC_COVERAGE.md no longer states 13; update it and the test together"
     assert "**25**" in doc
+    assert "| of 38 |" in doc, (
+        "docs/ECC_COVERAGE.md does not head its table with the current auditor "
+        "count. Re-measure with tests/measure_ecc_coverage.py and update both.")
+    # The prose above the table restates the parity figure in words, and that is
+    # where the last drift lived.
+    assert "thirteen of thirty-eight" in doc, \
+        "the prose in docs/ECC_COVERAGE.md disagrees with its own table"

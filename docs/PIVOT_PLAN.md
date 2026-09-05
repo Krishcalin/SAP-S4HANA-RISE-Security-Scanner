@@ -12,9 +12,9 @@
 >   catalogue), `rfc` (users, roles, authorisations) and `btp` (platform REST
 >   APIs + Cloud Connector). It was the *last* phase in the coverage plan and
 >   was built early.
-> - **The ECC axis is measured, not estimated**: 15 of 33 auditors produce
->   identical findings on an ECC export, and 22 produce something. See
->   [ECC_COVERAGE.md](ECC_COVERAGE.md).
+> - **The ECC axis is measured, not estimated**: 13 of 38 auditors produce
+>   identical findings on an ECC export, and 25 produce something. Re-measured
+>   2026-09-05. See [ECC_COVERAGE.md](ECC_COVERAGE.md).
 > - **Release gating, the tenant model and the schema-upgrade CI job have all
 >   landed.** See [DECISIONS.md](DECISIONS.md) for D1–D8 and what each one changed.
 >

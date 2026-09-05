@@ -123,6 +123,8 @@ next: Supply btp_security_settings, audit_config, client_settings —
 Sources your contract does not let you produce are named separately rather than
 recommended, so nobody spends a week chasing a file RISE will never give them.
 
+The console shows the same ranking on the run page, as a table.
+
 ---
 
 ## Common options
@@ -208,6 +210,15 @@ the contract, nothing where the baseline states a rule rather than a value,
 nothing for a grant whose object the export does not identify — and it says how
 many findings it could not write a change for, so 39 changes are never mistaken
 for a complete remedy.
+
+**It says which export to go and get next.** The run page lists what each module
+could not read, and then orders it. On one partial upload, supplying the user
+list on its own would let 21 more checks run and `saprouttab` would let one — so
+you know which trip to Basis is worth making. Two numbers are kept apart: what a
+file unlocks by itself, and what still waits on a second file that is also
+missing. Adding them together would promise for one upload what takes two.
+Sources your contract does not let you produce are listed as the reason a gap
+exists, not as a job for someone.
 
 **It says what it takes to close a scenario, not just what is worst.** A single
 finding almost never severs a whole scenario — a real estate has four to six

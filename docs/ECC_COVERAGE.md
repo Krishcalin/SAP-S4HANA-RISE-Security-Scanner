@@ -12,8 +12,8 @@ Phase 3.
 auditors produced findings on the ECC fixture **identical** to what they produced
 on the full sample — the estimate the plan rested on, confirmed on its own terms.
 
-**The number has since moved to fourteen of thirty-three, and neither move was
-the estimate being wrong.** The product grew, in two different ways.
+**The number is now thirteen of thirty-eight, and no move along the way was the
+estimate being wrong.** The product grew, in two different ways.
 
 Two auditors were added that ECC *can* feed — `master_data_changes` and
 `vendor_master` — and with them ECC-native sources the original fixture had no
@@ -49,23 +49,40 @@ the least interesting reason available.
 
 The estimate was conservative, not mistaken.
 
-| | of 34 |
+Re-measured on 2026-09-05 against all 38 auditors, by running both fixtures
+through `tests/measure_ecc_coverage.py` and diffing them module by module.
+
+| | of 38 |
 |---|---:|
 | identical to the full sample — *"runs with no code change"* | **13** |
-| produce findings, but fewer than with full data | 7 |
-| **produce findings at all** | **22** |
+| produce findings, but fewer than with full data | 11 |
+| produce **more** than with full data (`sap_hotnews`) | 1 |
+| **produce findings at all** | **25** |
 | cannot exist on ECC (no HANA, Fiori, BTP, CDS, S/4 business roles) | 6 |
-| optional tooling — could run if the customer exports it (GRC, FI config) | 2 |
+| optional tooling — could run if the customer exports it (GRC, FI, Cloud ALM) | 3 |
 | no file inputs (`abap_sast` reads `--abap-src`) | 1 |
-| silent even with full data | 2 |
+| degraded and silent on this fixture | 2 |
+| silent because the evidence was clean (`export_integrity`) | 1 |
 
-The number is not the whole story, so two more are published beside it. **25** of
-34** produce something useful — the seven "partial" modules are degraded and
-still worth running. Which number is right depends on what "runs" is taken to
-mean, and this table exists so that nobody has to guess. The per-module table
-below is regenerated from the measurement rather than maintained by hand, because
-the first version of it had already drifted from the code by the time a second
-module was added.
+The parity number is not the whole story, so the second one is published beside
+it: **25 of 38 produce findings at all.** Twelve of those are not at parity —
+eleven return fewer findings than the full sample and one returns more — and they
+are still worth running. Which number is right depends on what "runs" is taken to
+mean, and this table exists so that nobody has to guess.
+
+`sap_hotnews` returning *more* on ECC is the correct answer, not a fault. Its
+exposure checks compare the installed component release against the
+affected-version lists SAP publishes with each CVE, and the ECC fixture is
+SAP_BASIS 750 with no S4CORE against the sample's 755 with S4CORE 105 — an older
+kernel is exposed to more published notes.
+
+`export_integrity` is silent for the best possible reason: every file in the ECC
+fixture decoded cleanly. It is counted apart from the modules that had nothing to
+read, because a silent evidence check is a pass and a skipped one is not.
+
+The per-module table below is regenerated from the measurement rather than
+maintained by hand, because the first version of it had already drifted from the
+code by the time a second module was added.
 
 ## How the fixture was decided, and when
 
