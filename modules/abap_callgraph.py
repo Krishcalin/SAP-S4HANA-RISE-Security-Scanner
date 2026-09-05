@@ -14,32 +14,53 @@ A grade that is always the same value is decoration. This module is what lets it
 carry information again, by answering the question the seeding assumes away:
 *does anything actually pass this parameter something the caller controls?*
 
-WHAT IT IS NOT
---------------
-It is not a whole-program call graph. It sees ONE artefact, because that is the
-unit the scanner is handed and the unit `#NOSEC`, line numbers and every existing
-verdict already work in. A caller in another include or another class is
-invisible here, and the rules below are written so that invisibility can never
-produce a false clean.
+ONE ARTEFACT OR THE WHOLE TREE
+------------------------------
+`CallGraph(statements)` reads one file; `add_artefact` folds in more and
+`tree_wide=True` says every file has been added. The distinction is not
+bookkeeping — it changes what may be concluded.
+
+One artefact answers nothing about class-based code. Measured on
+`sample_data/abap_src`, every method parameter came back `NO_CALLER`, because a
+class's callers live in other files by construction, and class-based ABAP is most
+modern ABAP. It also changes what "nothing calls this" means: in one file that is
+unremarkable, and over the customer's whole custom-code base it means nothing
+they wrote reaches it.
 
 THE THREE ANSWERS, AND WHY THE THIRD IS NOT A CLEAN BILL
 --------------------------------------------------------
 ``CALLER_TAINTED``   a visible call passes an actual that is not a literal.
 ``LITERAL_ONLY``     every visible call passes a literal or a constant.
-``NO_CALLER``        no call to this procedure appears in this artefact.
+``NO_CALLER``        nothing visible calls it, or a call that might reach it
+                     could not be resolved to it.
 
-Only `LITERAL_ONLY` is evidence of anything safe, and even then only for a FORM.
-A FORM is file-local in every codebase anyone actually writes: `PERFORM` can name
-an external program, but the form is deprecated, rare, and would show up in the
-calling artefact rather than this one. So for a FORM the visible callers are the
-callers.
+Only `LITERAL_ONLY` is evidence of anything safe, and only where ABAP itself
+guarantees the visible callers are ALL the callers. That is `_clearable`, and it
+is the language's rule rather than a heuristic:
 
-A METHOD or a FUNCTION is the opposite. A public method is called by whatever
-imports the class; a function module with the RFC flag is callable from another
-system entirely. "No caller in this file" is the NORMAL state for both, and for a
-remote-enabled function module it is precisely the dangerous one. So callers can
-only ever ADD evidence for those two — `LITERAL_ONLY` and `NO_CALLER` leave the
-conservative seed exactly where it was.
+    FORM        file-local in every codebase anyone writes
+    PRIVATE     only from inside its class — one artefact holds every caller
+    PROTECTED   its class and its subclasses, which need the whole tree
+    PUBLIC      anything that imports the class, including code never exported
+    FUNCTION    another system entirely, if it carries the RFC flag
+
+`by_public_literal` and `priv_literal` in `tests/fixtures/abap_tree` are the pair
+that makes this a rule: identical evidence, and only one of them may be
+downgraded.
+
+RESOLUTION IS BY CLASS, NOT BY NAME
+-----------------------------------
+`run`, `execute` and `get_data` are each defined dozens of times in a real
+custom-code base. Resolving a call by bare name across a tree would make almost
+every method ambiguous, and the tree graph would answer LESS than the
+per-artefact one it replaced. Receivers are typed from `TYPE REF TO`, `NEW`,
+`me->` and `zcl_x=>`; local types are per artefact and never carried between
+files, because `lo_worker` in two files is two variables.
+
+A receiver that cannot be typed leaves the call UNQUALIFIED. Such a call is
+offered to every procedure of that short name, where it may add taint and may
+never clear anything — it might reach any of them, which is a reason to be
+careful about all of them and no reason to declare one safe.
 
 A NON-LITERAL ACTUAL COUNTS AS TAINTED, WITHOUT ASKING WHETHER IT REALLY IS
 ---------------------------------------------------------------------------
@@ -59,7 +80,24 @@ reads as tainted. That is the direction to be wrong in.
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, NamedTuple, Optional, Sequence, Tuple
+
+
+class Evidence(NamedTuple):
+    """What the callers say, and enough to point a reader at the call.
+
+    A tuple rather than a bare `(verdict, line)` because a whole-tree graph puts
+    the deciding call in ANOTHER FILE: a trace step carrying only "line 20" makes
+    the reader look at line 20 of the file they are already in, which is a
+    different statement about something else entirely."""
+    verdict: str
+    line: Optional[int] = None
+    file: str = ""
+    #: The argument the caller passed, which is the variable that is actually on
+    #: that line. The callee's parameter name is not.
+    actual: str = ""
+    #: The calling statement, so the trace can show it without opening the file.
+    code: str = ""
 
 #: A visible call passes something the caller may control.
 CALLER_TAINTED = "caller_tainted"
@@ -73,6 +111,16 @@ NO_CALLER = "no_caller"
 FORM = "form"
 METHOD = "method"
 FUNCTION = "function"
+
+#: Class member visibility, which is what actually decides whether the callers we
+#: can see are all the callers there are. This is ABAP's own rule and not a
+#: heuristic: PRIVATE members are callable only from inside the class, so one
+#: artefact holds every caller; PROTECTED adds subclasses, which a whole-tree
+#: graph can see and a single-artefact one cannot; PUBLIC is callable by anything
+#: that imports the class, including code that was never in the export.
+PUBLIC = "public"
+PROTECTED = "protected"
+PRIVATE = "private"
 
 _IDENT = r"[A-Za-z_][\w/]*"
 
@@ -116,6 +164,29 @@ _TAKES_ONE_VALUE = frozenset({"default"})
 _TRAILING = frozenset({"optional", "preferred", "parameter", "resumable",
                        "read-only"})
 
+_CLASS_BLOCK = re.compile(
+    r"^\s*CLASS\s+(?P<name>%s)\s+(?P<what>DEFINITION|IMPLEMENTATION)\b" % _IDENT,
+    re.IGNORECASE)
+_ENDCLASS = re.compile(r"^\s*ENDCLASS\b", re.IGNORECASE)
+_SECTION = re.compile(r"^\s*(?P<vis>PUBLIC|PROTECTED|PRIVATE)\s+SECTION\s*$",
+                      re.IGNORECASE)
+
+#: How a local variable acquires a class, so `lo_x->run( )` can be resolved to
+#: one method rather than to every method named `run` in the estate. Without
+#: this, a tree-wide graph is WORSE than a per-artefact one: `run`, `execute` and
+#: `get_data` are defined dozens of times across a real custom-code base, and
+#: resolving by bare name would make almost every method ambiguous and therefore
+#: unanswerable.
+_TYPE_REF = re.compile(
+    r"^\s*(?:DATA|CLASS-DATA|STATICS)\s*:?\s*(?P<var>%s)\s+TYPE\s+REF\s+TO\s+"
+    r"(?P<cls>%s)" % (_IDENT, _IDENT), re.IGNORECASE)
+_NEW_ASSIGN = re.compile(
+    r"^\s*(?:DATA\s*\(\s*)?(?P<var>%s)\s*\)?\s*=\s*NEW\s+(?P<cls>%s)\s*\("
+    % (_IDENT, _IDENT), re.IGNORECASE)
+_CREATE_OBJECT = re.compile(
+    r"^\s*CREATE\s+OBJECT\s+(?P<var>%s)(?:\s+TYPE\s+(?P<cls>%s))?"
+    % (_IDENT, _IDENT), re.IGNORECASE)
+
 _PERFORM = re.compile(
     r"^\s*PERFORM\s+(?P<name>%s)(?!\s*\()(?P<rest>.*)$" % _IDENT, re.IGNORECASE)
 _CALL_FUNCTION = re.compile(
@@ -124,12 +195,16 @@ _CALL_FUNCTION = re.compile(
 _CALL_METHOD = re.compile(
     r"\bCALL\s+METHOD\s+(?:%s\s*(?:->|=>)\s*)?(?P<name>%s)(?P<rest>.*)$"
     % (_IDENT, _IDENT), re.IGNORECASE)
-#: `lo_x->run( iv_a = v )` and `zcl_x=>run( iv_a = v )`. The receiver is dropped:
-#: this module resolves by NAME, because an artefact that defines `run` once is
-#: the overwhelmingly common case and tracking object identity would be a type
-#: analysis, not a call graph.
+#: `lo_x->run( iv_a = v )` and `zcl_x=>run( iv_a = v )`.
+#:
+#: THE RECEIVER IS KEPT. It used to be dropped and calls resolved by bare name,
+#: which is defensible inside one artefact and wrong across a tree: `run`,
+#: `execute` and `get_data` are defined dozens of times in a real custom-code
+#: base, so bare-name resolution would make nearly every method ambiguous and the
+#: whole-tree graph would answer less than the per-artefact one it replaced.
 _METHOD_CALL = re.compile(
-    r"(?:%s)\s*(?:->|=>)\s*(?P<name>%s)\s*\((?P<args>[^()]*)\)" % (_IDENT, _IDENT))
+    r"(?P<recv>%s)\s*(?P<arrow>->|=>)\s*(?P<name>%s)\s*\((?P<args>[^()]*)\)"
+    % (_IDENT, _IDENT))
 
 #: `p = expr` inside a call's argument list.
 _BIND = re.compile(r"(?P<formal>%s)\s*=(?!>)\s*(?P<actual>[^=]+?)(?=\s+%s\s*=(?!>)|$)"
@@ -237,37 +312,103 @@ def is_literal(actual: str) -> bool:
 class CallSite:
     """One call, and what it hands over."""
 
-    __slots__ = ("callee", "line", "positional", "named")
+    __slots__ = ("callee", "line", "positional", "named", "file",
+                 "qualified", "code")
 
     def __init__(self, callee: str, line: int,
-                 positional: Dict[str, List[str]], named: Dict[str, str]):
+                 positional: Dict[str, List[str]], named: Dict[str, str],
+                 file: str = "", qualified: bool = True, code: str = ""):
+        #: `zcl_x~run` where the receiver's class was resolved, else the bare
+        #: name. `qualified` says which, and it decides what the call may prove:
+        #: an unresolved receiver can ADD taint to every method of that name, and
+        #: can never contribute to clearing one, because we do not know which
+        #: method it actually reaches.
         self.callee = callee
         self.line = line
         self.positional = positional
         self.named = named
+        self.file = file
+        self.qualified = qualified
+        #: The calling statement as written, so a cross-file trace step can show
+        #: it without the reader opening the other artefact.
+        self.code = code
 
 
 class CallGraph:
     """Procedures and their call sites within one artefact."""
 
-    def __init__(self, statements: Sequence[object]):
-        #: name -> (kind, {section: [formal, ...]})
+    def __init__(self, statements: Optional[Sequence[object]] = None,
+                 path: str = "", tree_wide: bool = False):
+        #: key -> (kind, {section: [formal, ...]})
         self.procedures: Dict[str, Tuple[str, Dict[str, List[str]]]] = {}
         self.calls: List[CallSite] = []
-        #: A name defined more than once. Resolving by name is then a guess, so
-        #: it is not resolved at all — see `evidence_for`.
+        #: A key defined more than once. Resolving it is then a guess, so it is
+        #: not resolved at all — see `evidence_for`.
         self.ambiguous: set = set()
-        #: (proc, param) -> verdict. Safe because nothing mutates the graph after
-        #: construction, and the analyzer asks the same question many times.
-        self._evidence_cache: Dict[Tuple[str, str], Tuple[str, Optional[int]]] = {}
+        #: key -> PUBLIC / PROTECTED / PRIVATE, for class members only.
+        self.visibility: Dict[str, str] = {}
+        #: key -> the artefact that defines it, for the cross-file trace step.
+        self.defined_in: Dict[str, str] = {}
+        #: True when every artefact in the tree has been added. It is what makes
+        #: a PROTECTED member answerable (its subclasses are in the tree) and
+        #: what makes "nothing calls this" mean more than "nothing here does".
+        self.tree_wide = tree_wide
+        self._evidence_cache: Dict[Tuple[str, str], Evidence] = {}
+        if statements is not None:
+            self.add_artefact(statements, path)
 
+    def add_artefact(self, statements: Sequence[object], path: str = "") -> None:
+        """Fold one file into the graph.
+
+        Local variable types are per artefact and are NOT kept between calls: a
+        variable named `lo_worker` in two files is two variables, and carrying a
+        type across would resolve one file's call against another file's
+        declaration."""
+        self._evidence_cache.clear()
         methods_decl: Dict[str, str] = {}
+        var_class: Dict[str, str] = {}
+        cls: Optional[str] = None
+        section: Optional[str] = None
+
         for st in statements:
             text = getattr(st, "text", "") or ""
+            block = _CLASS_BLOCK.match(text)
+            if block:
+                cls = block.group("name").lower()
+                section = PUBLIC if block.group("what").upper() == "DEFINITION" else None
+                continue
+            if _ENDCLASS.match(text):
+                cls, section = None, None
+                continue
+            vis = _SECTION.match(text)
+            if vis:
+                section = vis.group("vis").lower()
+                continue
             decl = _METHODS_DECL.match(text)
             if decl:
-                methods_decl[decl.group("name").lower()] = decl.group("rest")
+                name = decl.group("name").lower()
+                methods_decl[name] = decl.group("rest")
+                if cls and section:
+                    self.visibility[self._key(cls, name)] = section
+                continue
+            # Local type map, so `lo_x->run( )` resolves to one class.
+            for pattern in (_TYPE_REF, _NEW_ASSIGN, _CREATE_OBJECT):
+                m = pattern.match(text)
+                if m and m.groupdict().get("cls"):
+                    var_class[m.group("var").lower()] = m.group("cls").lower()
+                    break
 
+        self._scan(statements, methods_decl, var_class, path)
+
+    @staticmethod
+    def _key(cls: Optional[str], name: str) -> str:
+        """`zcl_x~run`, or the bare name where no class is known."""
+        name = name.lower()
+        return "%s~%s" % (cls.lower(), name) if cls else name
+
+    def _scan(self, statements: Sequence[object], methods_decl: Dict[str, str],
+              var_class: Dict[str, str], path: str) -> None:
+        cls: Optional[str] = None
         for st in statements:
             text = (getattr(st, "text", "") or "").strip()
             if not text:
@@ -288,23 +429,32 @@ class CallGraph:
             if len(masked) != len(text):
                 masked = text
             line = getattr(st, "line", 0)
-            self._add_definition(text, methods_decl)
-            self._add_calls(text, masked, line)
+            block = _CLASS_BLOCK.match(text)
+            if block:
+                cls = block.group("name").lower()
+                continue
+            if _ENDCLASS.match(text):
+                cls = None
+                continue
+            self._add_definition(text, methods_decl, cls, path)
+            self._add_calls(text, masked, line, cls, var_class, path)
 
     # ---------------------------------------------------------------- #
     #  Building                                                         #
     # ---------------------------------------------------------------- #
 
-    def _define(self, name: str, kind: str, rest: str) -> None:
-        key = name.lower()
+    def _define(self, key: str, kind: str, rest: str, path: str) -> None:
+        key = key.lower()
         if key in self.procedures:
             self.ambiguous.add(key)
         self.procedures[key] = (kind, _formals_in(rest))
+        self.defined_in.setdefault(key, path)
 
-    def _add_definition(self, text: str, methods_decl: Dict[str, str]) -> None:
+    def _add_definition(self, text: str, methods_decl: Dict[str, str],
+                        cls: Optional[str], path: str) -> None:
         m = _FORM_DEF.match(text)
         if m:
-            self._define(m.group("name"), FORM, m.group("rest"))
+            self._define(m.group("name"), FORM, m.group("rest"), path)
             return
         m = _METHOD_DEF.match(text)
         if m:
@@ -313,19 +463,23 @@ class CallGraph:
             # the interface and is not in this artefact. The bare name is tried
             # too, because an implementing class usually declares it as well.
             rest = methods_decl.get(name) or methods_decl.get(name.split("~")[-1], "")
-            self._define(name, METHOD, rest)
+            self._define(self._key(cls, name), METHOD, rest, path)
             return
         m = _FUNCTION_DEF.match(text)
         if m:
             # A function module's signature is in its (generated) include, not
             # here. Its formals are therefore unknown and callers bind by name.
-            self._define(m.group("name"), FUNCTION, "")
+            self._define(m.group("name"), FUNCTION, "", path)
 
-    def _add_calls(self, text: str, masked: str, line: int) -> None:
+    def _add_calls(self, text: str, masked: str, line: int,
+                   cls: Optional[str], var_class: Dict[str, str],
+                   path: str) -> None:
         m = _PERFORM.match(masked)
         if m:
             pos, named = _actuals_in(m.group("rest"))
-            self.calls.append(CallSite(m.group("name").lower(), line, pos, named))
+            self.calls.append(
+                CallSite(m.group("name").lower(), line, pos, named, path,
+                         code=text))
             return
         m = _CALL_FUNCTION.search(masked)
         if m:
@@ -333,12 +487,15 @@ class CallGraph:
             # span the mask matched, which is the same span by construction.
             name = text[m.start("name"):m.end("name")]
             pos, named = _actuals_in(m.group("rest"))
-            self.calls.append(CallSite(name.lower(), line, pos, named))
+            self.calls.append(
+                CallSite(name.lower(), line, pos, named, path, code=text))
             return
         m = _CALL_METHOD.search(masked)
         if m:
             pos, named = _actuals_in(m.group("rest"))
-            self.calls.append(CallSite(m.group("name").lower(), line, pos, named))
+            self.calls.append(
+                CallSite(m.group("name").lower(), line, pos, named, path,
+                         qualified=False, code=text))
             return
         for call in _METHOD_CALL.finditer(masked):
             args = call.group("args")
@@ -349,18 +506,54 @@ class CallGraph:
                 # `lo->run( lv_x )` — a single unnamed argument binds to the one
                 # inbound parameter, which is the only case ABAP allows.
                 pos["IMPORTING"] = [args.strip()]
-            self.calls.append(CallSite(call.group("name").lower(), line, pos, named))
+            owner = self._receiver_class(call.group("recv"), call.group("arrow"),
+                                         cls, var_class)
+            name = call.group("name").lower()
+            self.calls.append(
+                CallSite(self._key(owner, name), line, pos, named, path,
+                         qualified=owner is not None, code=text))
+
+    @staticmethod
+    def _receiver_class(recv: str, arrow: str, cls: Optional[str],
+                        var_class: Dict[str, str]) -> Optional[str]:
+        """The class a call goes to, or None when it cannot be told.
+
+        `zcl_x=>m( )` names it outright. `lo->m( )` needs the local declaration,
+        and `me->m( )` is the enclosing class. Anything else — a method call on a
+        returned reference, a field symbol, an interface variable typed
+        elsewhere — is left unresolved rather than guessed, and an unresolved
+        call is never allowed to clear a parameter."""
+        recv = (recv or "").lower()
+        if arrow == "=>":
+            return recv                       # zcl_x=>m( ) or if_x=>m( )
+        if recv in ("me", "super"):
+            return cls
+        return var_class.get(recv)
 
     # ---------------------------------------------------------------- #
     #  Asking                                                           #
     # ---------------------------------------------------------------- #
 
     def callers_of(self, name: str) -> List[CallSite]:
+        """Calls that reach this procedure, resolved plus unresolved.
+
+        An UNRESOLVED call — one whose receiver could not be typed — is returned
+        for every procedure of that short name, because it might reach any of
+        them. It is marked `qualified=False`, and `evidence_for` uses that to let
+        it add taint while refusing to let it clear anything: "some call named
+        `run` passes a variable" is a reason to be careful about every `run`, and
+        no reason at all to declare one of them safe."""
         key = (name or "").lower()
         short = key.split("~")[-1]
-        return [c for c in self.calls if c.callee in (key, short)]
+        out = []
+        for c in self.calls:
+            if c.callee == key:
+                out.append(c)
+            elif not c.qualified and c.callee.split("~")[-1] == short:
+                out.append(c)
+        return out
 
-    def evidence_for(self, proc: str, param: str) -> Tuple[str, Optional[int]]:
+    def evidence_for(self, proc: str, param: str) -> Evidence:
         """What the visible callers say about one inbound parameter.
 
         Returns `(verdict, line)` where `line` is the call site that decided it,
@@ -383,18 +576,19 @@ class CallGraph:
         self._evidence_cache[cache_key] = out
         return out
 
-    def _evidence_uncached(self, proc: str, param: str) -> Tuple[str, Optional[int]]:
+    def _evidence_uncached(self, proc: str, param: str) -> Evidence:
         key = (proc or "").lower()
         if key in self.ambiguous or key not in self.procedures:
-            return NO_CALLER, None
+            return Evidence(NO_CALLER)
 
         _kind, formals = self.procedures[key]
         param = (param or "").lower()
         sites = self.callers_of(key)
         if not sites:
-            return NO_CALLER, None
+            return Evidence(NO_CALLER)
 
         saw_binding = False
+        unresolved = False
         for site in sites:
             actual = site.named.get(param)
             if actual is None:
@@ -409,22 +603,57 @@ class CallGraph:
             if actual is None:
                 continue
             saw_binding = True
+            if not site.qualified:
+                # It may or may not reach this procedure. Enough to stop us
+                # clearing it, never enough to conclude anything about it.
+                unresolved = True
+                continue
             if not is_literal(actual):
-                return CALLER_TAINTED, site.line
+                return Evidence(CALLER_TAINTED, site.line, site.file,
+                                actual.strip(), site.code)
+        if unresolved:
+            return Evidence(NO_CALLER)
         if not saw_binding:
             # Calls exist but none of them names or positions this parameter —
             # an optional argument left out, or a shape this module cannot read.
             # Not evidence of anything.
-            return NO_CALLER, None
-        return LITERAL_ONLY, sites[0].line
+            return Evidence(NO_CALLER)
+        first = sites[0]
+        return Evidence(LITERAL_ONLY, first.line, first.file, code=first.code)
 
-    def seeds_clean(self, proc: str, param: str) -> Tuple[bool, str, Optional[int]]:
+    def _clearable(self, key: str) -> bool:
+        """May a parameter of this procedure ever start the walk untainted?
+
+        Decided by who is ALLOWED to call it, which is a fact about ABAP and not
+        a guess about this codebase:
+
+          FORM       file-local in every codebase anyone writes.
+          PRIVATE    callable only from inside its class, so one artefact holds
+                     every caller there is.
+          PROTECTED  its class and its subclasses. A subclass can live in another
+                     artefact, so this is answerable from a whole-tree graph and
+                     not from a single file.
+          PUBLIC     anything that imports the class, including code that was
+                     never in the export. Never clearable.
+          FUNCTION   another system entirely, if it carries the RFC flag.
+        """
+        kind = self.procedures.get(key, (None, None))[0]
+        if kind == FORM:
+            return True
+        if kind != METHOD:
+            return False
+        vis = self.visibility.get(key)
+        if vis == PRIVATE:
+            return True
+        if vis == PROTECTED:
+            return self.tree_wide
+        return False
+
+    def seeds_clean(self, proc: str, param: str) -> Tuple[bool, Evidence]:
         """Should this parameter start the walk UNtainted?
 
-        Only ever true for a FORM whose visible callers all pass literals. A
-        METHOD or a FUNCTION keeps the conservative seed however clean its
-        visible callers look, because the ones that matter are usually not in
-        this artefact at all."""
-        verdict, line = self.evidence_for(proc, param)
-        kind = self.procedures.get((proc or "").lower(), (None, None))[0]
-        return (verdict == LITERAL_ONLY and kind == FORM), verdict, line
+        Only where every visible caller passes a literal AND the procedure's own
+        visibility means the visible callers are all the callers."""
+        ev = self.evidence_for(proc, param)
+        key = (proc or "").lower()
+        return (ev.verdict == LITERAL_ONLY and self._clearable(key)), ev

@@ -52,16 +52,17 @@ So this module keeps the patterns and changes the unit they are matched against:
 
 NONE OF THIS IS INTERPROCEDURAL DATA-FLOW ANALYSIS, and it must not be described
 as such — `docs/CVA_MERGE_PLAN.md` records "not claim interprocedural analysis"
-as a decision and it still holds. The call graph sees ONE artefact, runs no
-fixpoint, and treats any non-literal actual as tainted rather than proving that
-it is. It answers one narrow question — *does anything visible hand this
-parameter something the caller controls?* — and it is the answer to that question
-alone that separates ``confirmed`` from ``tentative``.
+as a decision and it still holds. The call graph spans the scanned tree, but it
+runs no fixpoint and treats any non-literal actual as tainted rather than proving
+that it is. It answers one narrow question — *does anything hand this parameter
+something the caller controls?* — and it is the answer to that question alone
+that separates ``confirmed`` from ``tentative``. It does not trace a value
+through a procedure; it decides where the walk starts.
 
 So this remains statement-pattern matching with taint refinement, now with
-intra-artefact call-graph awareness, and that is what it should be called in
-front of a customer. The competitors ship global data-flow analysis and this does
-not.
+call-graph awareness across the scanned tree, and that is what it should be
+called in front of a customer. The competitors ship global data-flow analysis and
+this does not.
 """
 from __future__ import annotations
 
@@ -470,6 +471,12 @@ _BLOCK_CLOSE = re.compile(
     r"^\s*(?:ENDFORM|ENDMETHOD|ENDFUNCTION|ENDMODULE)\b", re.IGNORECASE)
 
 _NOSEC = re.compile(r"#NOSEC(?P<ids>(?:\s+[A-Z0-9][A-Z0-9\-]*,?)*)", re.IGNORECASE)
+
+#: A class implementation block, for asking the call graph about a method under
+#: its own class's name rather than a bare `run` shared with the rest of the tree.
+_CLASS_IMPL = re.compile(
+    r"^\s*CLASS\s+(?P<name>[\w/]+)\s+IMPLEMENTATION\b", re.IGNORECASE)
+_ENDCLASS_LINE = re.compile(r"^\s*ENDCLASS\b", re.IGNORECASE)
 
 #: An AMDP method body is SQLScript, not ABAP, and the two disagree about `"`,
 #: `--` and the statement terminator. Entered on the method header, left on a RAW
@@ -1190,6 +1197,8 @@ class AbapSourceScanner:
         #: place. Reported beside `metadata_skipped`, because a mis-lexed file that
         #: reports as clean is the one failure this scanner must never have.
         self.lex_degraded = 0
+        #: Set by `scan_tree`; None when a single artefact was scanned directly.
+        self._tree_graph: Optional[CallGraph] = None
         #: CDS/DCL/RAP artefacts indexed across the WHOLE tree, so the questions
         #: no single file can answer — is this exposed view granted on by any
         #: role, does this behaviour declare authorization anywhere — can be
@@ -1246,6 +1255,7 @@ class AbapSourceScanner:
 
     def scan_tree(self, root: Path) -> List[Dict[str, Any]]:
         findings: List[Dict[str, Any]] = []
+        self._tree_graph = self._build_tree_graph(root)
         for path in sorted(p for p in root.rglob("*") if p.is_file()):
             name = path.name.lower()
             if name.endswith(METADATA_SUFFIXES):
@@ -1278,6 +1288,39 @@ class AbapSourceScanner:
 
         findings.extend(cross_artifact_findings(self.cds_index))
         return findings
+
+    def _build_tree_graph(self, root: Path) -> Optional[CallGraph]:
+        """One call graph over every ABAP artefact in the tree.
+
+        WHY A WHOLE PASS BEFORE THE SCAN. A per-artefact graph answers nothing
+        about class-based code: measured on `sample_data/abap_src`, every method
+        parameter came back `no_caller`, because a class's callers live in other
+        files by construction. The graph has to see the tree before it can say
+        anything about a class at all.
+
+        It also changes what "nothing calls this" means. In one file it means
+        "not here", which is unremarkable. Over the customer's whole custom-code
+        base it means nothing they wrote reaches it — either dead code or an
+        entry point something outside the export drives.
+
+        Failures are swallowed per file and never abort the scan: a call graph is
+        a refinement, and an artefact that cannot be lexed for it is one this
+        scan already reports on through `lex_degraded` and `unreadable`.
+        """
+        graph = CallGraph(tree_wide=True)
+        seen = False
+        for path in sorted(p for p in root.rglob("*") if p.is_file()):
+            if path.name.lower().endswith(METADATA_SUFFIXES):
+                continue
+            if self._language_for(path) != "abap":
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+                graph.add_artefact(split_statements(text), path.name)
+                seen = True
+            except (OSError, ValueError):                 # noqa: PERF203
+                continue
+        return graph if seen else None
 
     def scan_text(self, source: str, path: Path,
                   rules: Optional[Iterable[Dict[str, Any]]] = None
@@ -1377,11 +1420,12 @@ class AbapSourceScanner:
         # so it is asked only about ABAP. On any other language it would have
         # nothing to say and would say it slowly.
         if self.data_flow and is_abap:
-            self._refine(out, statements, source)
+            self._refine(out, statements, source, path)
         return out
 
     def _refine(self, findings: List[Dict[str, Any]],
-                statements: List[Statement], source: str) -> None:
+                statements: List[Statement], source: str,
+                path: Optional[Path] = None) -> None:
         """Ask the taint analyzer about the rules that carry a sink.
 
         A verdict is only ever ADDED — `confirmed` when tainted input reaches the
@@ -1417,7 +1461,10 @@ class AbapSourceScanner:
         # a literal. The statements carry both spellings, so the call graph is
         # built where the unmasked text is, and the masking stays where it is
         # doing its job.
-        callgraph = CallGraph(statements)
+        # The TREE graph when a whole tree was scanned, otherwise one built from
+        # this artefact alone — `scan_text` is a public entry point and must keep
+        # answering on its own.
+        callgraph = getattr(self, "_tree_graph", None) or CallGraph(statements)
 
         for finding in relevant:
             rid = finding["rule_id"]
@@ -1425,7 +1472,8 @@ class AbapSourceScanner:
             if not arg:
                 continue
             if rid not in cache:
-                cache[rid] = _analyzer_for(rid, aligned, callgraph)
+                cache[rid] = _analyzer_for(rid, aligned, callgraph,
+                                           path.name if path else "")
             analyzer = cache[rid]
             verdict = analyzer.classify_sink(arg, finding["line"])
             if verdict == analyzer.TAINTED:
@@ -1755,12 +1803,21 @@ class RiseTaintAnalyzer(TaintAnalyzer):
         r"|\b(?:USING|CHANGING)\s+([A-Za-z_][\w/]*)", re.IGNORECASE)
 
     def __init__(self, text: str, sanitizers: Iterable[str] = DEFAULT_SANITIZERS,
-                 callgraph: Optional[CallGraph] = None):
+                 callgraph: Optional[CallGraph] = None, artefact: str = ""):
         #: Who calls the procedures in this artefact, and what they pass. Optional
         #: because every existing caller constructs this class with two arguments
         #: and must keep the behaviour it has: with no graph, every inbound
         #: parameter is seeded tainted exactly as before.
         self._callgraph = callgraph
+        #: Which artefact this analyzer is reading, so a trace step for a call in
+        #: THIS file does not carry a redundant filename — that would be noise on
+        #: most traces the product prints.
+        self._artefact = artefact
+        #: Line ranges of each `CLASS x IMPLEMENTATION` block, so a METHOD header
+        #: can be asked about under its own class's name. Built here rather than
+        #: in `_apply` because the walk starts INSIDE the method — the CLASS line
+        #: is above the scope and `_apply` never sees it.
+        self._class_ranges: List[Tuple[int, int, str]] = []
         #: (procedure header line, param) -> (verdict, caller line), for the flow
         #: trace. KEYED ON THE HEADER LINE and not on the parameter name alone:
         #: two procedures in one artefact share a parameter name constantly —
@@ -1794,6 +1851,17 @@ class RiseTaintAnalyzer(TaintAnalyzer):
             decl = self._METHODS_DECL.match(line)
             if decl:
                 self._method_params[decl.group("name").lower()] = decl.group("rest")
+        open_at, open_cls = None, None
+        for idx, line in enumerate(self._code, start=1):
+            block = _CLASS_IMPL.match(line)
+            if block:
+                open_at, open_cls = idx, block.group("name").lower()
+                continue
+            if _ENDCLASS_LINE.match(line) and open_at is not None:
+                self._class_ranges.append((open_at, idx, open_cls))
+                open_at, open_cls = None, None
+        if open_at is not None:                      # unterminated, take the tail
+            self._class_ranges.append((open_at, len(self._code), open_cls))
         self._globals = self._collect_globals()
         self._scopes = self._segment_scopes()
 
@@ -1848,6 +1916,16 @@ class RiseTaintAnalyzer(TaintAnalyzer):
             out.extend(n.lower() for n in self._names_in(section.group("params")))
         return out
 
+    def _qualify(self, name: str, line_no: int) -> str:
+        """`zcl_x~run` when this header sits inside a class implementation.
+
+        The bare name is what the graph is keyed on for a FORM or a FUNCTION, and
+        what it falls back to for a method whose class could not be told."""
+        for start, end, cls in self._class_ranges:
+            if start <= line_no <= end:
+                return "%s~%s" % (cls, name.lower())
+        return name.lower()
+
     def _trace_var(self, var: str, line_no: int) -> List[Dict[str, Any]]:
         """The base trace, with the call that fed the parameter put in front of it.
 
@@ -1866,12 +1944,27 @@ class RiseTaintAnalyzer(TaintAnalyzer):
         out: List[Dict[str, Any]] = []
         for step in chain:
             name = str(step.get("var") or "").lower()
-            verdict, at = self._param_evidence.get(
-                (step.get("line"), name), (None, None))
-            if (step.get("role") == "source" and verdict == CALLER_TAINTED
-                    and at and at != step.get("line")):
-                out.append({"line": at, "role": "call", "var": name,
-                            "code": self._raw_line(at)})
+            ev = self._param_evidence.get((step.get("line"), name))
+            if (step.get("role") == "source" and ev is not None
+                    and ev.verdict == CALLER_TAINTED and ev.line
+                    and (ev.line != step.get("line") or ev.file)):
+                # `var` is the ACTUAL the caller passed, not the callee's
+                # parameter: the parameter name does not appear on the caller's
+                # line, and a trace that names it there sends the reader looking
+                # for a variable that is not in the statement they are shown.
+                #
+                # `code` comes from the call site rather than from this file's
+                # line numbers — with a whole-tree graph the caller is usually in
+                # a different artefact, where this line number means something
+                # else entirely.
+                hop: Dict[str, Any] = {
+                    "line": ev.line, "role": "call",
+                    "var": ev.actual or name,
+                    "code": ev.code or self._raw_line(ev.line),
+                }
+                if ev.file and ev.file != self._artefact:
+                    hop["file"] = ev.file
+                out.append(hop)
             out.append(step)
         return out
 
@@ -1901,8 +1994,8 @@ class RiseTaintAnalyzer(TaintAnalyzer):
     def _apply(self, code: str, state: dict, origin: dict, line_no: int) -> None:
         head = self._FORM_DECL.match(code)
         if head:
-            proc = head.group("name")
-            for name in self._inbound_params(proc, head.group("rest")):
+            proc = self._qualify(head.group("name"), line_no)
+            for name in self._inbound_params(head.group("name"), head.group("rest")):
                 # WHAT THE CALLERS SAY, where there are callers to ask.
                 #
                 # Seeding every inbound parameter tainted made the confidence
@@ -1917,11 +2010,11 @@ class RiseTaintAnalyzer(TaintAnalyzer):
                 # imports the class and a remote-enabled function module by
                 # another system, so "no caller in this file" is their normal
                 # state and, for the RFC case, the dangerous one.
-                clean, verdict, at = (False, None, None)
+                clean, evidence = False, None
                 if self._callgraph is not None:
-                    clean, verdict, at = self._callgraph.seeds_clean(proc, name)
-                if verdict is not None:
-                    self._param_evidence[(line_no, name)] = (verdict, at)
+                    clean, evidence = self._callgraph.seeds_clean(proc, name)
+                if evidence is not None:
+                    self._param_evidence[(line_no, name)] = evidence
                 if clean:
                     continue
                 self._set(name, self.TAINTED, None, line_no, state, origin)
@@ -1997,7 +2090,8 @@ class RiseTaintAnalyzer(TaintAnalyzer):
 
 
 def _analyzer_for(rule_id: str, source: str,
-                  callgraph: Optional[CallGraph] = None) -> TaintAnalyzer:
+                  callgraph: Optional[CallGraph] = None,
+                  artefact: str = "") -> TaintAnalyzer:
     """One analyzer per sink, because the accepted guards differ by sink.
 
     A table-name check does not make a column name safe and neither makes a file
@@ -2008,7 +2102,7 @@ def _analyzer_for(rule_id: str, source: str,
     twelve times would parse the same file twelve times to the same answer.
     """
     return RiseTaintAnalyzer(source, SINK_SANITIZERS.get(rule_id, DEFAULT_SANITIZERS),
-                             callgraph=callgraph)
+                             callgraph=callgraph, artefact=artefact)
 
 
 def _object_name(path: Path) -> str:

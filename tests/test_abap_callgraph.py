@@ -39,6 +39,11 @@ if str(ROOT) not in sys.path:
 
 from modules.abap_callgraph import (CALLER_TAINTED, LITERAL_ONLY,  # noqa: E402
                                     NO_CALLER, CallGraph, is_literal)
+
+#: The fixture's class. Methods are keyed on it — `run` alone is a name a real
+#: custom-code base defines dozens of times, and resolving by it across a tree
+#: would make almost every method ambiguous and therefore unanswerable.
+CLS = "zcl_interproc_worker"
 from modules.abap_sast import AbapSourceScanner, split_statements  # noqa: E402
 
 FIXTURE = ROOT / "tests" / "fixtures" / "abap" / "interproc_vulnerable.prog.abap"
@@ -66,7 +71,7 @@ def at(findings, line):
 def test_it_finds_the_procedures_and_their_kinds(graph):
     kinds = {n: k for n, (k, _f) in graph.procedures.items()}
     assert kinds["run_query"] == "form"
-    assert kinds["run"] == "method"
+    assert kinds["%s~run" % CLS] == "method"
 
 
 def test_a_forms_signature_does_not_swallow_its_types(graph):
@@ -79,32 +84,31 @@ def test_a_forms_signature_does_not_swallow_its_types(graph):
 
 def test_positional_and_named_calls_are_both_read(graph):
     callees = {c.callee for c in graph.calls}
-    assert {"run_query", "outer", "inner", "housekeeping", "run"} <= callees
+    assert {"run_query", "outer", "inner", "housekeeping"} <= callees
     perform = next(c for c in graph.calls if c.callee == "run_query")
     assert perform.positional == {"USING": ["p_carr"]}
-    method = next(c for c in graph.calls if c.callee == "run")
+    method = next(c for c in graph.calls if c.callee.endswith("~run"))
     assert method.named == {"iv_where": "p_carr"}
 
 
 @pytest.mark.parametrize("proc,param,expect", [
     ("run_query", "iv_carrid", CALLER_TAINTED),     # PERFORM ... USING p_carr
     ("inner", "iv_name", CALLER_TAINTED),           # two hops from the screen
-    ("run", "iv_where", CALLER_TAINTED),            # named method argument
+    ("%s~run" % CLS, "iv_where", CALLER_TAINTED),   # named method argument
     ("housekeeping", "iv_fixed", LITERAL_ONLY),     # PERFORM ... USING 'SFLIGHT'
-    ("literal_fed", "iv_lit", LITERAL_ONLY),        # method, literal argument
-    ("safe_run", "iv_where", NO_CALLER),            # nothing in the file calls it
+    ("%s~literal_fed" % CLS, "iv_lit", LITERAL_ONLY),
+    ("%s~safe_run" % CLS, "iv_where", NO_CALLER),   # nothing calls it
     ("orphan", "iv_orphan", NO_CALLER),             # a FORM nothing calls
 ])
 def test_what_the_callers_say(graph, proc, param, expect):
-    verdict, _line = graph.evidence_for(proc, param)
-    assert verdict == expect
+    assert graph.evidence_for(proc, param).verdict == expect
 
 
 def test_a_literal_argument_containing_an_equals_sign_is_still_one_argument(graph):
     """Read off the raw text, `_BIND` anchored on the `=` INSIDE the literal and
     reported a formal named by a word from the string, losing the real one. Call
     structure is read off the masked text for exactly this."""
-    call = next(c for c in graph.calls if c.callee == "literal_fed")
+    call = next(c for c in graph.calls if c.callee.endswith("~literal_fed"))
     assert list(call.named) == ["iv_lit"], call.named
 
 
@@ -116,22 +120,22 @@ def test_only_a_form_is_ever_cleared(graph):
     method is called by whatever imports the class, and this artefact's callers
     are not the ones that matter."""
     assert graph.seeds_clean("housekeeping", "iv_fixed")[0] is True
-    assert graph.seeds_clean("literal_fed", "iv_lit")[0] is False
-    assert graph.seeds_clean("run", "iv_where")[0] is False
-    assert graph.seeds_clean("safe_run", "iv_where")[0] is False
+    assert graph.seeds_clean("%s~literal_fed" % CLS, "iv_lit")[0] is False
+    assert graph.seeds_clean("%s~run" % CLS, "iv_where")[0] is False
+    assert graph.seeds_clean("%s~safe_run" % CLS, "iv_where")[0] is False
 
 
 def test_no_caller_visible_is_not_a_clean_bill_even_for_a_form(graph):
     """`orphan` is a FORM and nothing in this artefact performs it. That is the
     absence of evidence, not evidence of absence — an external PERFORM lives in
     the calling program, which is not the file being scanned."""
-    clean, verdict, _line = graph.seeds_clean("orphan", "iv_orphan")
-    assert verdict == NO_CALLER
+    clean, ev = graph.seeds_clean("orphan", "iv_orphan")
+    assert ev.verdict == NO_CALLER
     assert clean is False
 
 
 def test_an_unknown_procedure_changes_nothing(graph):
-    assert graph.evidence_for("does_not_exist", "iv_x") == (NO_CALLER, None)
+    assert graph.evidence_for("does_not_exist", "iv_x").verdict == NO_CALLER
     assert graph.seeds_clean("does_not_exist", "iv_x")[0] is False
 
 
@@ -143,7 +147,7 @@ def test_a_name_defined_twice_is_refused_rather_than_guessed():
            "PERFORM dup USING 'X'.\n")
     g = CallGraph(split_statements(src))
     assert "dup" in g.ambiguous
-    assert g.evidence_for("dup", "iv_a") == (NO_CALLER, None)
+    assert g.evidence_for("dup", "iv_a").verdict == NO_CALLER
 
 
 @pytest.mark.parametrize("actual,literal", [

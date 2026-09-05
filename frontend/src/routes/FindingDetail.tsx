@@ -392,9 +392,18 @@ export function FindingDetail() {
                       {arr(details['taint_flow']).map((raw, i) => {
                         const hop = obj(raw) ?? {}
                         const role = str(hop['role'])
+                        // A `file` appears only on a step that is in a DIFFERENT
+                        // artefact from the finding — a call reaching in from
+                        // another class. Without it the row reads "line 20", and
+                        // the reader looks at line 20 of the file they are
+                        // already in, which is an unrelated statement.
+                        const file = str(hop['file'])
                         return (
                           <tr key={i} className="hover:bg-panel2">
-                            <td className={`${TD} font-mono text-[12px]`}>{str(hop['line'])}</td>
+                            <td className={`${TD} font-mono text-[12px]`}>
+                              {file && <div className="text-ink3 break-all">{file}</div>}
+                              {str(hop['line'])}
+                            </td>
                             <td className={TD}>
                               {role === 'source' ? <span className="pill sev-HIGH">source</span>
                                 : role === 'sink' ? <span className="pill sev-CRITICAL">sink</span>
