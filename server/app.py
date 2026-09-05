@@ -576,6 +576,32 @@ def api_system_service_request(system_id: int,
     return drafted
 
 
+@app.get("/api/systems/{system_id}/remediation-plan")
+def api_system_remediation_plan(system_id: int,
+                                user: Dict[str, Any] = Depends(current_user)):
+    """Every change the CUSTOMER can apply on one system, as one artefact.
+
+    The mirror of the service request above, for the other half of the
+    ownership split: that one is what SAP must do, this is what you do
+    yourself. A change window works in systems, not in findings, and 48
+    per-finding packs are 48 fragments nobody assembles.
+
+    It reports what it leaves out — SAP-owned, declined, and no-pack counts —
+    because a plan that silently omits what it cannot write reads as a complete
+    remedy for the system.
+    """
+    from server import remediation
+
+    scope = auth.scope_for(user)
+    if scope is not None and system_id not in scope:
+        raise HTTPException(status_code=404, detail="not found")
+    plan = remediation.plan_for_system(system_id, scope)
+    if not plan:
+        raise HTTPException(status_code=404,
+                            detail="no open findings on this system")
+    return plan
+
+
 @app.get("/api/severing-sets")
 def api_severing_sets(user: Dict[str, Any] = Depends(current_user)):
     """Per scenario: the smallest set of fixes that leaves it no route at all.

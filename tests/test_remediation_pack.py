@@ -248,6 +248,90 @@ def test_without_the_graph_no_hana_pack_is_written():
     assert remediation.pack(row, {"within": [], "held_by": [], "grants": []}) is None
 
 
+# --------------------------------------------------------------------------- #
+#  The plan: one system, one change window                                     #
+# --------------------------------------------------------------------------- #
+
+import os                                                       # noqa: E402
+import pytest                                                   # noqa: E402
+
+pg = pytest.mark.skipif(not os.getenv("DB_DSN"),
+                        reason="set DB_DSN to a PostgreSQL 16 instance")
+
+
+@pg
+def test_a_plan_bundles_the_changes_by_kind():
+    """`servicerequest.draft_for_system` made this argument for the SAP-owned
+    half — "raising one ticket per parameter is how forty-seven true findings
+    become forty-seven ignored emails". The customer-owned half had the same
+    problem: per-finding packs are fragments nobody assembles."""
+    from server import db, remediation
+    row = db.one("SELECT system_id FROM finding WHERE system_id IS NOT NULL "
+                 "GROUP BY system_id ORDER BY count(*) DESC LIMIT 1")
+    if row is None:
+        pytest.skip("no findings with a system in this database")
+    plan = remediation.plan_for_system(row["system_id"], None)
+    assert plan is not None
+    for block in plan["blocks"]:
+        assert block["apply"], block["kind"]
+        assert block["closes"], "a block that closes no finding is not a change"
+
+
+@pg
+def test_the_plan_reports_what_it_could_not_write():
+    """A plan that silently omits the findings it cannot handle reads as a
+    complete remedy for the system, and nothing on screen says otherwise."""
+    from server import db, remediation
+    row = db.one("SELECT system_id FROM finding WHERE system_id IS NOT NULL "
+                 "GROUP BY system_id ORDER BY count(*) DESC LIMIT 1")
+    if row is None:
+        pytest.skip("no findings with a system in this database")
+    plan = remediation.plan_for_system(row["system_id"], None)
+    for key in ("sap_owned", "declined", "not_covered", "findings_considered"):
+        assert key in plan, key
+    accounted = (plan["sap_owned"] + len(plan["declined"])
+                 + plan["not_covered"])
+    assert accounted <= plan["findings_considered"]
+
+
+@pg
+def test_a_statement_reached_from_two_findings_is_written_once():
+    """The same grant is named by the privilege check and by the
+    grantable-option check. Running the REVOKE twice is noise at best and an
+    error on the second pass."""
+    from server import db, remediation
+    row = db.one("SELECT system_id FROM finding WHERE system_id IS NOT NULL "
+                 "GROUP BY system_id ORDER BY count(*) DESC LIMIT 1")
+    if row is None:
+        pytest.skip("no findings with a system in this database")
+    plan = remediation.plan_for_system(row["system_id"], None)
+    for block in plan["blocks"]:
+        assert len(block["apply"]) == len(set(block["apply"])), block["kind"]
+
+
+@pg
+def test_the_rollback_runs_in_the_opposite_order():
+    """A rollback applied in the order the changes were made is not a rollback,
+    it is the same sequence again."""
+    from server import db, remediation
+    row = db.one("SELECT system_id FROM finding WHERE system_id IS NOT NULL "
+                 "GROUP BY system_id ORDER BY count(*) DESC LIMIT 1")
+    if row is None:
+        pytest.skip("no findings with a system in this database")
+    plan = remediation.plan_for_system(row["system_id"], None)
+    for block in plan["blocks"]:
+        if len(block["rollback"]) == len(block["apply"]) > 1:
+            assert block["rollback"][0] != block["apply"][0].replace(
+                "REVOKE", "GRANT"), (
+                "the rollback appears to run in the same order as the changes")
+
+
+@pg
+def test_a_system_with_nothing_open_has_no_plan():
+    from server import remediation
+    assert remediation.plan_for_system(999999999, None) is None
+
+
 def test_a_check_this_cannot_write_a_change_for_returns_nothing():
     """Most of the catalogue, honestly. A role change needs the authorisation
     object, field and value to be safe; a REVOKE needs the grantee-privilege

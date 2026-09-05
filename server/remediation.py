@@ -26,7 +26,9 @@ and neither is guessed at here.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from server import db
+
+from typing import Any, Dict, List, Optional, Sequence
 
 #: The owner `modules/rise_ownership.py` assigns to a change the CUSTOMER makes.
 #: Read from that module rather than spelled here: the first draft of this file
@@ -266,6 +268,108 @@ def hana_pack(row: Dict[str, Any],
                   % check_id,
         "source": "",
         "caveats": caveats,
+    }
+
+
+#: The states a finding must be in to belong in a change window. `accepted` is
+#: excluded deliberately: somebody decided to tolerate it, and putting it into a
+#: script would undo that decision without asking.
+_OPEN_STATES = ("open", "submitted_to_provider")
+
+
+def plan_for_system(system_id: int,
+                    scope: Optional[Sequence[int]] = None
+                    ) -> Optional[Dict[str, Any]]:
+    """Every change the customer can apply on one system, as one artefact.
+
+    THE UNIT A CHANGE WINDOW ACTUALLY WORKS IN. `servicerequest.draft_for_system`
+    already made this argument for the SAP-owned half — "raising one ticket per
+    parameter is how forty-seven true findings become forty-seven ignored
+    emails" — and the customer-owned half had the same problem in a different
+    costume: 48 per-finding packs are 48 fragments nobody assembles.
+
+    So the profile lines arrive together, the SQL arrives together, and each
+    block names the findings it closes.
+
+    WHAT IT LEAVES OUT IS REPORTED, NOT DROPPED. A plan that silently omits the
+    findings it cannot write a change for reads as a complete remedy for the
+    system, and the reader has no way to see the difference. `not_covered` and
+    `sap_owned` carry those counts.
+    """
+    from server import graph, queries
+
+    rows = db.query(
+        """
+        SELECT f.id, f.check_id, f.severity, f.remediation_owner, f.subject,
+               s.sid,
+               (SELECT o.details FROM finding_observation o
+                 WHERE o.finding_id = f.id ORDER BY o.id DESC LIMIT 1)
+                 AS latest_details
+        FROM finding f
+        LEFT JOIN sap_system s ON s.id = f.system_id
+        WHERE f.system_id = %%s AND f.state IN (%s)
+        ORDER BY f.check_id
+        """ % ",".join(["%s"] * len(_OPEN_STATES)),
+        [system_id, *_OPEN_STATES])
+    if not rows:
+        return None
+
+    blocks: Dict[str, Dict[str, Any]] = {}
+    not_covered, sap_owned, declined = 0, 0, []
+    seen_statements: set = set()
+
+    for row in rows:
+        built = pack(row, graph.finding_neighbourhood(row["id"], scope))
+        if built is None:
+            not_covered += 1
+            continue
+        if not built.get("applicable"):
+            if str(row.get("remediation_owner") or "") != _CUSTOMER_FIXABLE:
+                sap_owned += 1
+            else:
+                declined.append({"check_id": row["check_id"],
+                                 "why": built.get("why", "")})
+            continue
+
+        block = blocks.setdefault(built["kind"], {
+            "kind": built["kind"], "where": built["where"],
+            "executable": bool(built.get("executable")),
+            "apply": [], "rollback": [], "closes": [], "caveats": [],
+        })
+        # A statement can be reached from two findings — the same grant is named
+        # by the privilege check and by the grantable-option check — and running
+        # it twice is at best noise and at worst an error on the second pass.
+        for line, undo in zip(built["apply"],
+                              built["rollback"] or [""] * len(built["apply"])):
+            if line in seen_statements:
+                continue
+            seen_statements.add(line)
+            block["apply"].append(line)
+            if undo:
+                block["rollback"].append(undo)
+        if row["check_id"] not in block["closes"]:
+            block["closes"].append(row["check_id"])
+        for caveat in built.get("caveats") or []:
+            if caveat not in block["caveats"]:
+                block["caveats"].append(caveat)
+
+    for block in blocks.values():
+        # Undo in reverse: a rollback applied in the order the changes were made
+        # is not a rollback, it is the same sequence again.
+        block["rollback"].reverse()
+
+    return {
+        "system_id": system_id,
+        "sid": rows[0].get("sid"),
+        "findings_considered": len(rows),
+        "blocks": [blocks[k] for k in sorted(blocks)],
+        "changes": sum(len(b["apply"]) for b in blocks.values()),
+        # The three ways a finding does not reach the script, kept apart because
+        # they lead to different actions: ask SAP, decide the value yourself, or
+        # nothing this tool can write.
+        "sap_owned": sap_owned,
+        "declined": declined,
+        "not_covered": not_covered,
     }
 
 
