@@ -436,6 +436,121 @@ def role_pack(row: Dict[str, Any],
     }
 
 
+USER_ROLE_ASSIGNMENT = "user_role_assignment"
+
+#: What to do to an assignment, per check, and how to put it back. Keyed on the
+#: check because the OBJECT is identical across all three — a (user, role) pair —
+#: and only the defect differs. `IAM-EXP-003` is absent on purpose; see below.
+_ASSIGNMENT_ACTION = {
+    "IAM-EXP-001": ("set a validity end date",
+                    "clear the validity end date (back to 31.12.9999)"),
+    "IAM-EXP-002": ("remove the expired assignment",
+                    "re-assign the role"),
+}
+
+
+def assignment_pack(row: Dict[str, Any],
+                    neighbourhood: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """SU01 coordinates for a role-assignment finding, or None.
+
+    THE OTHER HALF OF `role_pack`. That one fixes what a role GRANTS; this fixes
+    WHO HOLDS IT and for how long. Between them they are the two ends of an
+    authorization remediation, and they read the same graph: `role_pack` takes
+    `grants_authorization` edges (role -> auth object), this takes `holds_role`
+    (user -> role). A finding names its users and its roles as two flat lists —
+    "shorten one of these seventy assignments" is not a change — and the edges
+    are what pair them.
+
+    Not executable: SU01 is a dialog transaction, so these are steps.
+
+    WHY `IAM-EXP-003` IS DECLINED. "Role assignments with excessive validity
+    (>365d)" needs two numbers to state a change — what the validity is now, and
+    what the customer's policy allows — and the export carries neither. "Reduce
+    it" with no from and no to is the sentence-where-a-value-goes failure
+    `parameter_pack` already refuses, and the rollback could not restore a date
+    nobody recorded.
+
+    `IAM-EXP-001` is different and worth the distinction: the change is to ADD an
+    end date where the field is empty, which is unambiguous in kind. Only the
+    date is the customer's, and that is said in a caveat rather than guessed.
+    """
+    check_id = str(row.get("check_id") or "")
+    if not check_id.startswith("IAM-EXP-"):
+        return None
+    if not neighbourhood:
+        return None
+
+    pairs = [e for e in (neighbourhood.get("within") or [])
+             if e.get("edge_type") == "holds_role"
+             and str(e.get("from_type")) == "user"
+             and str(e.get("to_type")) == "role"]
+    if not pairs:
+        return None
+
+    owner = str(row.get("remediation_owner") or "").strip().lower()
+    if owner and owner != _CUSTOMER_FIXABLE:
+        return {"kind": USER_ROLE_ASSIGNMENT, "applicable": False, "owner": owner,
+                "why": "these assignments are not the customer's to change under "
+                       "the contract; raise a service request instead",
+                "apply": [], "rollback": []}
+
+    action = _ASSIGNMENT_ACTION.get(check_id)
+    if action is None:
+        return {"kind": USER_ROLE_ASSIGNMENT, "applicable": False,
+                "owner": owner or _CUSTOMER_FIXABLE,
+                "why": "this check reports that a validity period is too long, and "
+                       "the export carries neither the current period nor the "
+                       "policy maximum — so the change would have to invent both "
+                       "ends of it",
+                "apply": [], "rollback": []}
+
+    verb, undo = action
+    apply_steps, rollback_steps = [], []
+    for edge in pairs[:_MAX_STATEMENTS]:
+        user, role = edge["from"], edge["to"]
+        apply_steps.append("SU01 > %s > Roles > %s — %s" % (user, role, verb))
+        rollback_steps.append("SU01 > %s > Roles > %s — %s" % (user, role, undo))
+
+    caveats = [
+        "Review and apply through your normal change control. This tool holds "
+        "no connection to SAP and has changed nothing.",
+        # The gotcha that makes this artefact credible, and the assignment
+        # equivalent of role_pack's profile-regeneration warning.
+        "The same assignment can be maintained from either side — SU01 on the "
+        "user, or PFCG's User tab on the role. A change made in PFCG does not "
+        "reach the user master until the user comparison runs, so an assignment "
+        "edited there and not compared reads as fixed on the next scan and is not.",
+    ]
+    if check_id == "IAM-EXP-001":
+        caveats.append(
+            "The date itself is your policy's, not this tool's: the finding is "
+            "that the field is empty, and what to put in it is a decision about "
+            "how long the access should last.")
+    if check_id == "IAM-EXP-002":
+        caveats.append(
+            "The rollback re-assigns the role and cannot restore the validity "
+            "dates it had — the export records that the assignment expired, not "
+            "when it ran from. Capture the current AGR_USERS rows before removing "
+            "them if you may need to put them back exactly.")
+    if len(pairs) > _MAX_STATEMENTS:
+        caveats.append("%d of %d assignments shown."
+                       % (_MAX_STATEMENTS, len(pairs)))
+
+    return {
+        "kind": USER_ROLE_ASSIGNMENT,
+        "applicable": True,
+        "owner": owner or _CUSTOMER_FIXABLE,
+        "where": "SU01 — %s" % (row.get("sid") or "the system"),
+        "executable": False,
+        "apply": apply_steps,
+        "rollback": rollback_steps,
+        "verify": "Re-run the scan; %s closes when these assignments no longer "
+                  "report the defect." % check_id,
+        "source": "",
+        "caveats": caveats,
+    }
+
+
 #: The states a finding must be in to belong in a change window. `accepted` is
 #: excluded deliberately: somebody decided to tolerate it, and putting it into a
 #: script would undo that decision without asking.
@@ -549,4 +664,5 @@ def pack(row: Dict[str, Any],
     """
     return (parameter_pack(row)
             or hana_pack(row, neighbourhood)
-            or role_pack(row, neighbourhood))
+            or role_pack(row, neighbourhood)
+            or assignment_pack(row, neighbourhood))
