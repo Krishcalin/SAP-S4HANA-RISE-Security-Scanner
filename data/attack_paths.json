@@ -316,6 +316,7 @@
             "program",
             "function_module"
           ],
+          "min_confidence": "tentative",
           "why_cut": "Withdrawing S_LOG_COM / the external command definition removes the bridge from the application layer to the operating system.",
           "note": "Custom ABAP that builds an OS command from external input is a way this hop becomes reachable without any gateway or job misconfiguration — the code IS the mechanism. ABAP-CMDI-* comes from our own scanner, ATC-CMDI from SAP's."
         },

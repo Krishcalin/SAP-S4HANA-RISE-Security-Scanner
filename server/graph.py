@@ -57,6 +57,41 @@ TEMPLATES_PATH = Path(__file__).resolve().parents[1] / "data" / "attack_paths.js
 #: because a compensating control genuinely interrupts the step.
 _CLOSED_STATES = ("resolved", "false_positive", "mitigated")
 
+#: Evidence classes a code finding can carry, weakest first. `abap_sast` writes
+#: them into `finding.taint_confidence` through `ingest`; nothing else does.
+_CONFIDENCE_RANK = {"pattern-only": 0, "tentative": 1, "confirmed": 2}
+
+
+def _meets_confidence(finding: Dict[str, Any], minimum: Optional[str]) -> bool:
+    """Is this finding strong enough evidence for a hop that asks for `minimum`?
+
+    THE HOP MATCHED ON `check_id` ALONE, so a `pattern-only` ABAP finding
+    instantiated a path exactly as a `confirmed` one did — and hops drive
+    severing sets and choke-point ranking, which is the console saying "fix this
+    and the path is cut" on the strength of a statement pattern with no data-flow
+    evidence behind it. `docs/CVA_MERGE_PLAN.md` named this limit and deferred it
+    because the grade did not discriminate: every code finding graded
+    `confirmed`. It does now, so the predicate is worth having.
+
+    A FINDING WITH NO CONFIDENCE PASSES. Only `ABAP-*` carries one — measured on
+    the drive database, 30 confirmed and 50 pattern-only, and nothing else at
+    all. Every configuration check and every `ATC-*` import has NULL here, and a
+    hop like "OS command execution reachable" lists six ABAP checks beside eight
+    configuration ones. Treating NULL as "below the threshold" would silently
+    drop the configuration evidence and turn a tightening into a fail-closed
+    regression on the majority of the hop.
+
+    `fair_adapter._is_unevidenced` already draws this exact line: "A finding with
+    no `confidence` key ... is NOT unevidenced. Absence of the field means 'this
+    is not a SAST finding', never 'we could not tell'."
+    """
+    if not minimum:
+        return True
+    actual = finding.get("taint_confidence")
+    if not actual:
+        return True
+    return _CONFIDENCE_RANK.get(str(actual), 0) >= _CONFIDENCE_RANK.get(minimum, 0)
+
 
 def load_templates(path: Optional[Path] = None) -> Dict[str, Any]:
     with open(path or TEMPLATES_PATH, encoding="utf-8") as fh:
@@ -84,7 +119,7 @@ def _open_findings_by_check(conn, landscape_id: int) -> Dict[str, List[Dict[str,
     rows = conn.execute(
         f"""
         SELECT f.id, f.check_id, f.severity, f.system_id, f.subject,
-               f.priority_tier, s.sid, s.client, s.tier
+               f.priority_tier, f.taint_confidence, s.sid, s.client, s.tier
         FROM finding f
         LEFT JOIN sap_system s ON s.id = f.system_id
         WHERE f.landscape_id = %s
@@ -112,7 +147,14 @@ def instantiate(conn, landscape_id: int,
         satisfied_required = True
 
         for hop in path.get("hops", []):
-            evidence = [f for cid in hop.get("checks", []) for f in by_check.get(cid, ())]
+            matched = [f for cid in hop.get("checks", []) for f in by_check.get(cid, ())]
+            minimum = hop.get("min_confidence")
+            evidence = [f for f in matched if _meets_confidence(f, minimum)]
+            # COUNTED, NEVER SILENT. A hop that drops evidence and says nothing
+            # is the fail-open shape this codebase spends most of its comments
+            # on: the reader sees a shorter list and no reason for it, and a
+            # finding that WOULD have been a cut simply is not there.
+            weaker = len(matched) - len(evidence)
             present = bool(evidence)
             if hop.get("required") and not present:
                 satisfied_required = False
@@ -122,6 +164,8 @@ def instantiate(conn, landscape_id: int,
                 "is_cut": bool(hop.get("cut")),
                 "why_cut": hop.get("why_cut"),
                 "checks": hop.get("checks", []),
+                "min_confidence": minimum,
+                "excluded_as_weaker": weaker,
                 "node_types": hop.get("node_types", []),
                 # Authored commentary on the hop. Usually the reason a hop is NOT a
                 # cut — "withdrawing emergency access is not a remediation anyone
