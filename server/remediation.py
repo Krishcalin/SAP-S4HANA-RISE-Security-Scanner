@@ -86,6 +86,55 @@ def _qualified_names(row: Dict[str, Any]) -> set:
     return out
 
 
+def _qualified_subjects(row: Dict[str, Any]) -> List[tuple]:
+    """(name, qualifier) for every subject that recorded one, in order.
+
+    The pairs `platform_pack` writes from. `_qualified_names` above answers a
+    different question — WHICH names carry a qualifier, so `hana_pack` can refuse
+    them — and returns a set, so it cannot be reused here: a set loses both the
+    qualifier and the order, and the same backend appears twice in one finding
+    with two different paths.
+    """
+    import json as _json
+
+    subject = row.get("subject") or row.get("affected_objects")
+    if isinstance(subject, str):
+        try:
+            subject = _json.loads(subject)
+        except ValueError:
+            return []
+    out = []
+    for obj in (subject or ()):
+        if isinstance(obj, dict) and obj.get("name") and obj.get("qualifier"):
+            out.append((str(obj["name"]), str(obj["qualifier"])))
+    return out
+
+
+def _named_subjects(row: Dict[str, Any]) -> List[str]:
+    """Every subject name, qualifier or not, in order and without duplicates.
+
+    For the checks whose action needs no setting — an unused OAuth client is
+    deleted, an expired certificate removed — where the object's NAME is the
+    whole coordinate. Deduplicated because two subject entries for one object
+    would otherwise produce the same deletion step twice.
+    """
+    import json as _json
+
+    subject = row.get("subject") or row.get("affected_objects")
+    if isinstance(subject, str):
+        try:
+            subject = _json.loads(subject)
+        except ValueError:
+            return []
+    out: List[str] = []
+    for obj in (subject or ()):
+        if isinstance(obj, dict) and obj.get("name"):
+            name = str(obj["name"])
+            if name not in out:
+                out.append(name)
+    return out
+
+
 def _detail(row: Dict[str, Any]) -> Dict[str, Any]:
     detail = row.get("details") or row.get("latest_details") or {}
     return detail if isinstance(detail, dict) else {}
@@ -551,6 +600,201 @@ def assignment_pack(row: Dict[str, Any],
     }
 
 
+BTP_SETTING = "btp_setting"
+PLATFORM_SETTING = "platform_setting"
+
+#: Which console the change is made in, by check prefix. BTP is not one product:
+#: a Cloud Connector resource is narrowed in an on-premise admin UI, a
+#: destination in the cockpit, a queue in Event Mesh. A pack that said only "BTP"
+#: would send somebody to the wrong screen.
+_BTP_CONSOLE = {
+    "BTP-CC": "Cloud Connector admin UI — Cloud To On-Premise > Access Control",
+    "BTP-DST": "BTP cockpit — Connectivity > Destinations",
+    "BTP-EM": "BTP cockpit — Event Mesh > Queues",
+    "BTP-SB": "BTP cockpit — Instances and Subscriptions > Service Bindings",
+    "INTG-IDOC": "WE20 — partner profiles",
+    "INTG-OAUTH": "SOAUTH2 — OAuth 2.0 clients",
+    "INTG-WH": "the webhook registry of the system that publishes them",
+    "CRYPTO-CERT": "STRUST — the system PSE",
+}
+
+#: check -> (what to do, how to undo it). `%(obj)s` is the named object and
+#: `%(qual)s` the qualifier the finding recorded, which for this family IS the
+#: defect: `path=/`, `TrustAll=true`, `allowedHosts=['*']`.
+_BTP_ACTIONS = {
+    "BTP-CC-001": ("narrow %(qual)s to the specific paths your integrations use",
+                   "restore %(qual)s"),
+    "BTP-CC-002": ("remove %(qual)s, or restrict it to the sub-paths actually "
+                   "consumed",
+                   "re-add %(qual)s"),
+    "BTP-CC-004": ("replace %(qual)s with the specific hosts the subaccount needs",
+                   "restore %(qual)s"),
+    # The one with a target value rather than a coordinate: TrustAll has exactly
+    # two settings and only one of them verifies the certificate.
+    "BTP-DST-002": ("set TrustAll = false (currently %(qual)s)",
+                    "set TrustAll = true"),
+    "BTP-EM-001": ("narrow %(qual)s to the specific events this queue consumes",
+                   "restore %(qual)s"),
+    "BTP-EM-002": ("define an access policy for this queue (currently %(qual)s)",
+                   "remove the access policy"),
+    # Pure removal: an orphaned binding to a deleted instance grants nothing and
+    # needs no replacement value.
+    "BTP-SB-003": ("delete the orphaned binding (%(qual)s)",
+                   "re-create the binding"),
+
+    # ── Integration and cryptography ──────────────────────────────────────
+    # Same two shapes as above, in different consoles. The four below take no
+    # `%(qual)s` because their findings record none — the object's NAME is the
+    # whole coordinate, and the action needs no value: an unused client is
+    # deleted, an expired certificate removed. `_NO_QUALIFIER` says so, because
+    # otherwise the missing qualifier reads as a finding too thin to act on.
+    "INTG-IDOC-003": ("narrow %(qual)s to the message types this partner "
+                      "actually exchanges",
+                      "restore %(qual)s"),
+    "INTG-OAUTH-001": ("remove %(qual)s from this client, leaving only the "
+                       "scopes it calls",
+                       "restore %(qual)s"),
+    "INTG-OAUTH-003": ("delete this OAuth client — nothing has used it in the "
+                       "window the export covers",
+                       "re-create the client and re-issue its secret"),
+    "INTG-WH-004": ("delete this webhook registration",
+                    "re-register the webhook"),
+    "CRYPTO-CERT-001": ("remove this expired certificate from the trust store",
+                        "re-import the certificate"),
+    "CRYPTO-CERT-002": ("renew this certificate before it expires",
+                        "no rollback: a renewal replaces an expiring certificate "
+                        "and the old one should not be restored"),
+}
+
+#: Checks whose action names no `%(qual)s`, because the finding records none and
+#: the object's name is the whole coordinate. Kept as an explicit set rather than
+#: inferred from the template: a template that loses its `%(qual)s` in an edit
+#: would otherwise start silently accepting findings with no setting recorded.
+_NO_QUALIFIER = frozenset({
+    "INTG-OAUTH-003", "INTG-WH-004", "CRYPTO-CERT-001", "CRYPTO-CERT-002",
+})
+
+#: Examined and refused, with the reason. Separate from "no pack at all" because
+#: a reader looking for a fix is better served by "this one is a decision, and
+#: here is why" than by silence.
+_BTP_DECLINED = {
+    "BTP-DST-001": "moving off basic authentication means choosing what to move "
+                   "TO — OAuth, a client certificate, a principal-propagation "
+                   "flow — and which one fits is a design decision about the "
+                   "integration, not a setting this tool can name",
+    "BTP-CPI-002": "the same choice as BTP-DST-001, on the Integration Suite side",
+    "BTP-CPI-004": "an iFlow with no sender authentication needs an authentication "
+                   "mechanism chosen for it, and which one depends on who calls it",
+    "BTP-MIG-001": "moving an application from XSUAA to IAS is a migration with a "
+                   "cutover, not a property to set",
+    "INTG-WS-001": "exposing a BAPI over basic authentication is fixed by choosing "
+                   "a stronger mechanism, and which one depends on what calls it",
+    "INTG-WS-003": "the same choice, for a web service endpoint with no "
+                   "authentication at all",
+    "INTG-OAUTH-002": "the password grant is deprecated, and moving off it means "
+                      "choosing the flow that replaces it — authorization code, "
+                      "client credentials — which is a decision about the client",
+}
+
+
+def platform_pack(row: Dict[str, Any],
+             neighbourhood: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    """The BTP-side change for a platform finding, or None.
+
+    THE QUALIFIER IS THE DEFECT HERE, which is what makes this family writable at
+    all and is the opposite of `hana_pack`, where a qualifier meant the object
+    could not be typed and the statement had to be refused. A Cloud Connector
+    backend mapped at `path=/` and a destination carrying `TrustAll=true` both
+    name the exact thing to change in the exact place to change it.
+
+    NO GRAPH NEEDED, and that is the difference from the other three packs. A
+    role change needs a (role, object) pair and an assignment needs a (user,
+    role) pair, so both read edges. Here the object and its defect are one
+    subject entry — `{"name": "S4H_Production", "qualifier": "path=/"}` — so the
+    finding is sufficient on its own.
+
+    NOT EXECUTABLE. Every one of these is a form in an admin console.
+    """
+    check_id = str(row.get("check_id") or "")
+    if not check_id.startswith(("BTP-", "INTG-", "CRYPTO-")):
+        return None
+    kind = BTP_SETTING if check_id.startswith("BTP-") else PLATFORM_SETTING
+
+    owner = str(row.get("remediation_owner") or "").strip().lower()
+    if owner and owner != _CUSTOMER_FIXABLE:
+        return {"kind": kind, "applicable": False, "owner": owner,
+                "why": "this is not the customer's to change under the contract; "
+                       "raise a service request instead",
+                "apply": [], "rollback": []}
+
+    if check_id in _BTP_DECLINED:
+        return {"kind": kind, "applicable": False,
+                "owner": owner or _CUSTOMER_FIXABLE,
+                "why": _BTP_DECLINED[check_id], "apply": [], "rollback": []}
+
+    action = _BTP_ACTIONS.get(check_id)
+    if action is None:
+        return None
+
+    if check_id in _NO_QUALIFIER:
+        # The object's name is the whole coordinate. `_qualified_subjects` would
+        # return nothing here and the guard below would decline a finding that is
+        # perfectly actionable.
+        targets = [(n, "") for n in _named_subjects(row)]
+    else:
+        targets = _qualified_subjects(row)
+    if not targets:
+        # The check is one we can write for, and THIS finding did not record the
+        # qualifier — so there is no defect to name. Declining beats emitting
+        # "narrow  to the specific paths", which is the blank-where-the-value-goes
+        # failure `parameter_pack` refuses.
+        return {"kind": kind, "applicable": False,
+                "owner": owner or _CUSTOMER_FIXABLE,
+                "why": "this finding records no setting for the objects it names, "
+                       "so there is nothing precise to change",
+                "apply": [], "rollback": []}
+
+    verb, undo = action
+    where = _BTP_CONSOLE.get(check_id.rsplit("-", 1)[0], "BTP cockpit")
+    apply_steps, rollback_steps = [], []
+    for name, qual in targets[:_MAX_STATEMENTS]:
+        fields = {"obj": name, "qual": qual}
+        apply_steps.append("%s — %s" % (name, verb % fields))
+        rollback_steps.append("%s — %s" % (name, undo % fields))
+
+    caveats = [
+        "Review and apply through your normal change control. This tool holds "
+        "no connection to SAP and has changed nothing.",
+    ]
+    if check_id.startswith("BTP-CC"):
+        caveats.append(
+            "A Cloud Connector resource change takes effect immediately for new "
+            "requests and does not disturb established connections, so an "
+            "integration that is currently working can start failing without an "
+            "obvious cause. Narrow one backend at a time and watch it.")
+    if check_id.startswith(("BTP-DST", "BTP-SB")):
+        caveats.append(
+            "Destinations and bindings are read at application start in some "
+            "runtimes and per request in others; confirm which applies before "
+            "assuming a change has taken effect.")
+    if len(targets) > _MAX_STATEMENTS:
+        caveats.append("%d of %d shown." % (_MAX_STATEMENTS, len(targets)))
+
+    return {
+        "kind": kind,
+        "applicable": True,
+        "owner": owner or _CUSTOMER_FIXABLE,
+        "where": where,
+        "executable": False,
+        "apply": apply_steps,
+        "rollback": rollback_steps,
+        "verify": "Re-run the scan; %s closes when these settings no longer "
+                  "report the defect." % check_id,
+        "source": "",
+        "caveats": caveats,
+    }
+
+
 #: The states a finding must be in to belong in a change window. `accepted` is
 #: excluded deliberately: somebody decided to tolerate it, and putting it into a
 #: script would undo that decision without asking.
@@ -665,4 +909,5 @@ def pack(row: Dict[str, Any],
     return (parameter_pack(row)
             or hana_pack(row, neighbourhood)
             or role_pack(row, neighbourhood)
-            or assignment_pack(row, neighbourhood))
+            or assignment_pack(row, neighbourhood)
+            or platform_pack(row, neighbourhood))
