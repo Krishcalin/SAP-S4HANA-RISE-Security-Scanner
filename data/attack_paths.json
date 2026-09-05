@@ -1246,6 +1246,7 @@
           "name": "Nothing checks the caller's authority",
           "required": false,
           "cut": true,
+          "min_confidence": "tentative",
           "checks": [
             "ATC-AUTHCHK",
             "CODE-INJ-002",

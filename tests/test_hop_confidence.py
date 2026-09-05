@@ -201,6 +201,59 @@ def test_the_rce_hop_asks_for_more_than_a_pattern_match():
         "has stopped being a cut, revisit whether it still earns the predicate")
 
 
+def test_the_required_injectable_defect_hop_does_NOT_carry_it():
+    """Measured, and the reason it is absent is the interesting half.
+
+    SAPPATH-15's "Custom code carries an injectable defect" hop is `required`,
+    and on the drive landscape the predicate excludes NOTHING from it — its
+    evidence is ATC imports (no confidence at all) and confirmed ABAP findings.
+    So it buys no precision, and being required it is the one hop where a weaker
+    estate could lose the whole path rather than have its cut set trimmed.
+
+    "Downgrade, never hide" is the contract `_refine` already runs on. Trimming a
+    cut set downgrades a claim; removing a path hides one."""
+    templates = graph.load_templates()
+    hop = next(h for p in templates["paths"] if p["id"] == "SAPPATH-15"
+               for h in p.get("hops", [])
+               if h["name"] == "Custom code carries an injectable defect")
+    assert hop.get("required") is True
+    assert "min_confidence" not in hop, (
+        "the required hop gained the predicate. Measured on the drive landscape "
+        "it excluded nothing, and a landscape whose only evidence there is "
+        "pattern-only would lose SAPPATH-15 entirely rather than lose two cuts.")
+
+
+def test_the_optional_authority_hop_does_carry_it():
+    """The same path's OPTIONAL cut hop, where the predicate excluded 2 findings
+    and cannot remove a path however weak the evidence gets."""
+    templates = graph.load_templates()
+    hop = next(h for p in templates["paths"] if p["id"] == "SAPPATH-15"
+               for h in p.get("hops", [])
+               if h["name"] == "Nothing checks the caller's authority")
+    assert hop.get("required") is False
+    assert hop.get("cut") is True
+    assert hop.get("min_confidence") == "tentative"
+
+
+def test_every_hop_carrying_the_predicate_is_optional_or_has_other_evidence():
+    """The rule the two decisions above amount to, stated once so a third
+    application has to satisfy it: a REQUIRED hop whose checks are all code may
+    not carry the predicate, because there is then nothing left to hold the path
+    up when the code evidence is excluded."""
+    templates = graph.load_templates()
+    for path in templates["paths"]:
+        for hop in path.get("hops", []):
+            if not hop.get("min_confidence"):
+                continue
+            checks = hop.get("checks", [])
+            all_code = checks and all(
+                c.startswith(("ABAP-", "ATC-")) for c in checks)
+            assert not (hop.get("required") and all_code), (
+                "%s / %s is required and its evidence is entirely code checks, so "
+                "raising the bar there can remove the path rather than trim it"
+                % (path["id"], hop["name"]))
+
+
 def test_the_predicate_is_part_of_the_fingerprint():
     """Not a pure content change, and the product already says so: stored paths
     carry the fingerprint they were derived under, and `path_summary` counts
