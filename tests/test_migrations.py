@@ -119,3 +119,61 @@ def test_a_collision_is_refused_rather_than_merged():
     assert "collided.append" in body
     assert "continue" in body.split("collided.append")[1][:200], \
         "a collision must skip the row, not fall through to the UPDATE"
+
+
+# --------------------------------------------------------------------------- #
+#  What `init-db` prints                                                       #
+# --------------------------------------------------------------------------- #
+#
+# THE DEFECT THIS EXISTS FOR. `server/cli.py` read `result["migrated"]` straight
+# out of every migration's return value, which made each new migration owe the
+# FIRST one its vocabulary. The second migration returned `backfilled` instead
+# and `init-db` died with a KeyError — on a green suite of 5,829 tests, because
+# nothing in it runs the CLI. It surfaced when the container was rebuilt and the
+# command actually executed.
+#
+# The fix was not to add the missing key. Each migration now words its own
+# `summary`, and these tests hold that contract so the third one cannot repeat it.
+
+def test_every_migration_words_its_own_result():
+    """`cli.cmd_init_db` prints `summary` and nothing else about the shape."""
+    import inspect
+
+    from server import migrations as m
+
+    reported = []
+    for name, fn in vars(m).items():
+        if not name.startswith(("migrate_", "backfill_")):
+            continue
+        if not inspect.isfunction(fn):
+            continue
+        reported.append(name)
+    assert reported, "no migrations found to check"
+
+    # The `already applied` path returns no summary and the CLI skips it, so the
+    # contract is on the APPLIED path. Checked against the source rather than by
+    # running them, because running needs a database and this must hold anyway.
+    source = inspect.getsource(m)
+    for name in reported:
+        body = source.split("def %s(" % name, 1)[1]
+        body = body.split("\ndef ", 1)[0]
+        assert '"summary"' in body, (
+            "%s returns no `summary`, so `init-db` would print nothing for it — "
+            "or, if the CLI is ever changed back to reading a specific key, "
+            "raise a KeyError the test suite cannot see" % name)
+
+
+def test_the_cli_does_not_reach_into_a_migrations_own_keys():
+    """Structural, because the behavioural test cannot run the CLI without a
+    database. `cli.py` may read `summary` and `status`; a specific migration's
+    counter is what broke last time."""
+    import inspect
+
+    from server import cli
+
+    body = inspect.getsource(cli.cmd_init_db)
+    for forbidden in ("result['migrated']", 'result["migrated"]',
+                      "result['backfilled']", 'result["backfilled"]'):
+        assert forbidden not in body, (
+            "cli.cmd_init_db reads %s, which makes every future migration owe "
+            "this one a key it has no reason to carry" % forbidden)

@@ -145,7 +145,14 @@ def migrate_parameter_type(conn) -> Dict[str, Any]:
 
     result = {"status": "applied", "migrated": len(migrated),
               "unchanged": unchanged, "stale_nodes_removed": len(nodes),
-              "collisions": collided}
+              "collisions": collided,
+              # EACH MIGRATION WORDS ITS OWN RESULT. `server/cli.py` used to
+              # reach into `result["migrated"]` directly, which made every future
+              # migration owe this one a key it has no reason to have — and the
+              # second migration duly crashed `init-db` with a KeyError the whole
+              # suite could not see, because nothing runs the CLI.
+              "summary": "%d finding(s) re-identified, %d stale graph node(s) "
+                         "removed" % (len(migrated), len(nodes))}
     log.info("parameter type migration: %s", result)
     return result
 
@@ -201,7 +208,9 @@ def backfill_internet_exposed(conn) -> Dict[str, Any]:
     conn.execute("INSERT INTO schema_version (version) VALUES (%s) "
                  "ON CONFLICT DO NOTHING", (INTERNET_EXPOSED_VERSION,))
     log.info("backfilled internet_exposed on %d finding(s)", updated)
-    return {"status": "applied", "backfilled": int(updated or 0)}
+    return {"status": "applied", "backfilled": int(updated or 0),
+            "summary": "%d finding(s) given an exposure verdict from their "
+                       "latest observation" % int(updated or 0)}
 
 
 def run_all(conn) -> List[Dict[str, Any]]:

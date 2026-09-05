@@ -93,8 +93,11 @@ def cmd_init_db(args: argparse.Namespace) -> int:
         for result in migrations.run_all(conn):
             if result.get("status") == "already applied":
                 continue
-            print(f"migration: {result['migrated']} finding(s) re-identified, "
-                  f"{result.get('stale_nodes_removed', 0)} stale graph node(s) removed")
+            # The migration's own words. Reading a specific key here made
+            # every future migration owe this one its vocabulary, and the second
+            # one crashed init-db with a KeyError — in code no test exercises,
+            # because nothing in the suite runs the CLI.
+            print("migration: %s" % result.get("summary", result.get("status", "")))
             for c in result.get("collisions", []):
                 print(f"  NOT migrated: finding {c['finding']} ({c['check_id']}) would "
                       f"merge into {c['would_merge_into']}; left alone so neither "
