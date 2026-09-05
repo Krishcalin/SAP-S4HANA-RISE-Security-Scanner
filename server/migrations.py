@@ -150,6 +150,60 @@ def migrate_parameter_type(conn) -> Dict[str, Any]:
     return result
 
 
+#: Lifting `internet_exposed` from observation details onto the finding row.
+INTERNET_EXPOSED_VERSION = 5
+
+
+def backfill_internet_exposed(conn) -> Dict[str, Any]:
+    """Copy the exposure verdict from the latest observation onto the finding.
+
+    WHY A MIGRATION AND NOT JUST THE NEXT SCAN. `ingest` writes the column from
+    now on, so a re-scanned estate fills it in by itself. But an estate that is
+    not re-scanned would carry the verdict in `finding_observation.details` —
+    where it has been recorded since the endpoint join shipped — and NULL on the
+    row, so the same fact would read two different ways depending on which the
+    caller consulted. That is worse than not having the column.
+
+    WHAT IT REFUSES TO INVENT. Only observations that actually RECORD the key are
+    read. A finding scanned before the join existed has no `internet_exposed` in
+    its details at all, and stays NULL — which is the honest answer, because
+    nobody ever asked the question about it. `schema.sql` makes the same argument
+    for `crq_result.model_version`: "backfilling them with a revision they were
+    not computed from would be inventing provenance."
+
+    ONLY `true` IS COPIED. The verdict is `True` or absent — `reachability.
+    exposure` never answers "not exposed" — so there is no False to carry, and a
+    row that would have received one is a row this product does not produce.
+    """
+    done = conn.execute(
+        "SELECT 1 FROM schema_version WHERE version = %s",
+        (INTERNET_EXPOSED_VERSION,)).fetchone()
+    if done:
+        return {"status": "already applied", "backfilled": 0}
+
+    # The LATEST observation per finding, because the verdict is per-run: an
+    # endpoint deactivated between scans changes the answer, and the most recent
+    # scan is the one that describes the estate now.
+    updated = conn.execute(
+        """
+        UPDATE finding f
+           SET internet_exposed = true
+          FROM (
+                SELECT DISTINCT ON (o.finding_id) o.finding_id, o.details
+                  FROM finding_observation o
+                 ORDER BY o.finding_id, o.id DESC
+               ) latest
+         WHERE latest.finding_id = f.id
+           AND f.internet_exposed IS NULL
+           AND latest.details ->> 'internet_exposed' = 'true'
+        """).rowcount
+
+    conn.execute("INSERT INTO schema_version (version) VALUES (%s) "
+                 "ON CONFLICT DO NOTHING", (INTERNET_EXPOSED_VERSION,))
+    log.info("backfilled internet_exposed on %d finding(s)", updated)
+    return {"status": "applied", "backfilled": int(updated or 0)}
+
+
 def run_all(conn) -> List[Dict[str, Any]]:
     """Every data migration, in order. Called by `server.cli init-db`."""
-    return [migrate_parameter_type(conn)]
+    return [migrate_parameter_type(conn), backfill_internet_exposed(conn)]

@@ -93,6 +93,43 @@ def _meets_confidence(finding: Dict[str, Any], minimum: Optional[str]) -> bool:
     return _CONFIDENCE_RANK.get(str(actual), 0) >= _CONFIDENCE_RANK.get(minimum, 0)
 
 
+def _meets_exposure(finding: Dict[str, Any], required: bool) -> bool:
+    """Is this finding's code reachable from a published endpoint?
+
+    THE STRONGEST EVIDENCE GATE THIS GRAPH HAS, and the end of the same argument
+    `min_confidence` starts. That one asks whether the finding is more than a
+    pattern match; this asks whether anybody outside can get to it. An injection
+    behind an unauthenticated ICF node and the identical statement in a class
+    only a nightly job touches are not the same hop.
+
+    IT GATES ON `IS TRUE`, AND THAT IS WHY NO HOP USES IT YET. `internet_exposed`
+    is only ever `True` or NULL, because `reachability.exposure` does not answer
+    "not exposed" at all — a class can be reached through another class, a
+    dynamic call no graph resolves, or an endpoint whose HANDLER_CLASS the
+    customer left blank. That leaves exactly two ways to write this predicate and
+    neither is shippable as a default:
+
+      * `is not False` passes everything, since nothing is ever False. A gate
+        that admits every finding is a feature that does nothing, and shipping
+        one dressed as rigour is worse than shipping neither.
+
+      * `is True` drops every finding whose exposure is UNKNOWN — which is the
+        common case, because most estates have not supplied HANDLER_CLASS. An
+        estate that omitted one optional column would lose its attack paths, and
+        "no paths" is the most reassuring possible reading of a missing export.
+
+    So the mechanism is here and correct, and `data/attack_paths.json` carries no
+    `requires_exposure` until a hop can satisfy the condition that makes it safe:
+    other evidence to stand on, in an estate known to have supplied the join. The
+    honest version of this gate is not a per-finding predicate at all — it needs
+    an estate-level fact the column cannot currently express, because NULL means
+    both "assessed, no route found" and "never assessed".
+    """
+    if not required:
+        return True
+    return finding.get("internet_exposed") is True
+
+
 def load_templates(path: Optional[Path] = None) -> Dict[str, Any]:
     with open(path or TEMPLATES_PATH, encoding="utf-8") as fh:
         return json.load(fh)
@@ -119,7 +156,8 @@ def _open_findings_by_check(conn, landscape_id: int) -> Dict[str, List[Dict[str,
     rows = conn.execute(
         f"""
         SELECT f.id, f.check_id, f.severity, f.system_id, f.subject,
-               f.priority_tier, f.taint_confidence, s.sid, s.client, s.tier
+               f.priority_tier, f.taint_confidence, f.internet_exposed,
+               s.sid, s.client, s.tier
         FROM finding f
         LEFT JOIN sap_system s ON s.id = f.system_id
         WHERE f.landscape_id = %s
@@ -149,7 +187,10 @@ def instantiate(conn, landscape_id: int,
         for hop in path.get("hops", []):
             matched = [f for cid in hop.get("checks", []) for f in by_check.get(cid, ())]
             minimum = hop.get("min_confidence")
-            evidence = [f for f in matched if _meets_confidence(f, minimum)]
+            needs_exposure = bool(hop.get("requires_exposure"))
+            evidence = [f for f in matched
+                        if _meets_confidence(f, minimum)
+                        and _meets_exposure(f, needs_exposure)]
             # COUNTED, NEVER SILENT. A hop that drops evidence and says nothing
             # is the fail-open shape this codebase spends most of its comments
             # on: the reader sees a shorter list and no reason for it, and a
@@ -165,6 +206,7 @@ def instantiate(conn, landscape_id: int,
                 "why_cut": hop.get("why_cut"),
                 "checks": hop.get("checks", []),
                 "min_confidence": minimum,
+                "requires_exposure": needs_exposure,
                 "excluded_as_weaker": weaker,
                 "node_types": hop.get("node_types", []),
                 # Authored commentary on the hop. Usually the reason a hop is NOT a

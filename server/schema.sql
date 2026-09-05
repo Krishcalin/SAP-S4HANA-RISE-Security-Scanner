@@ -658,6 +658,20 @@ ALTER TABLE finding ADD COLUMN IF NOT EXISTS taint_confidence text
 ALTER TABLE finding ADD COLUMN IF NOT EXISTS reachability text
     CHECK (reachability IN ('reachable', 'unreachable', 'unknown'));
 
+-- Phase 4b: whether a PUBLISHED ENDPOINT reaches the code this finding is about.
+-- A different question from `reachability` above, and the one that turns an
+-- injection into an incident: that column says something in the system references
+-- the object, this says somebody on the network can call it.
+--
+-- ONLY `true` AND NULL ARE EVER WRITTEN. `reachability.exposure` does not answer
+-- "not exposed" at all — a class can be reached through another class, a dynamic
+-- call no graph resolves, or an endpoint whose HANDLER_CLASS the customer left
+-- blank — so the absence of a route is the absence of evidence and is stored as
+-- NULL. A query reading `WHERE internet_exposed = false` will therefore match
+-- nothing, and that is correct rather than a gap: the intended query is
+-- `IS NOT TRUE`.
+ALTER TABLE finding ADD COLUMN IF NOT EXISTS internet_exposed boolean;
+
 CREATE INDEX IF NOT EXISTS attack_path_open_idx
     ON attack_path (landscape_id, severity) WHERE closed_at IS NULL;
 CREATE INDEX IF NOT EXISTS attack_path_closed_idx

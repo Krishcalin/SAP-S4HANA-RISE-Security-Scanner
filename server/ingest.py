@@ -545,12 +545,19 @@ def store_run(conn: psycopg.Connection, run_id: int, landscape_id: int,
         # starts calling it. Writing them only at first sight would leave the
         # console asserting last quarter's verdict about this quarter's code.
         _details = f.get("details") or {}
-        if _details.get("confidence") or _details.get("reachability"):
+        if (_details.get("confidence") or _details.get("reachability")
+                or "internet_exposed" in _details):
+            # `internet_exposed` is tested with `in` rather than truthiness,
+            # because its useful values are `True` and `None` and a `None` is a
+            # real answer here — "the export named no endpoint reaching this" —
+            # which has to be able to CLEAR a stale `True` from a previous run.
+            # Read truthily, an endpoint that was deactivated between scans would
+            # leave the finding asserting exposure for ever.
             conn.execute(
-                "UPDATE finding SET taint_confidence = %s, reachability = %s "
-                "WHERE id = %s",
+                "UPDATE finding SET taint_confidence = %s, reachability = %s, "
+                "internet_exposed = %s WHERE id = %s",
                 (_details.get("confidence"), _details.get("reachability"),
-                 finding_id))
+                 _details.get("internet_exposed"), finding_id))
 
         seen_now[fp] = finding_id
 
