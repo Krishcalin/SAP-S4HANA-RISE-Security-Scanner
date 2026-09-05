@@ -43,10 +43,25 @@ So this module keeps the patterns and changes the unit they are matched against:
    only one carried the metadata to check for one. All five now look at the
    enclosing FORM / METHOD / FUNCTION before firing.
 
-None of this makes the analysis interprocedural. It is statement-pattern matching
-with optional intra-procedural taint refinement, and that is what it should be
-called in front of a customer — the competitors ship global data-flow analysis and
-this does not.
+4. **Caller-aware parameter seeding.** Every inbound parameter of every FORM,
+   METHOD and FUNCTION used to be seeded tainted, which made the confidence grade
+   constant: over every ABAP fixture here, 11 of 11 sink-carrying findings came
+   back ``confirmed`` and none came back ``tentative``, so "tainted input reaches
+   this sink" was printed over a subroutine whose only caller passes a string
+   literal. ``modules/abap_callgraph.py`` answers what the callers actually pass.
+
+NONE OF THIS IS INTERPROCEDURAL DATA-FLOW ANALYSIS, and it must not be described
+as such — `docs/CVA_MERGE_PLAN.md` records "not claim interprocedural analysis"
+as a decision and it still holds. The call graph sees ONE artefact, runs no
+fixpoint, and treats any non-literal actual as tainted rather than proving that
+it is. It answers one narrow question — *does anything visible hand this
+parameter something the caller controls?* — and it is the answer to that question
+alone that separates ``confirmed`` from ``tentative``.
+
+So this remains statement-pattern matching with taint refinement, now with
+intra-artefact call-graph awareness, and that is what it should be called in
+front of a customer. The competitors ship global data-flow analysis and this does
+not.
 """
 from __future__ import annotations
 
@@ -64,6 +79,7 @@ from modules.abap_sast_rules import (
     TaintAnalyzer,
     _ABAP_NOISE_WORDS,
 )
+from modules.abap_callgraph import CALLER_TAINTED, CallGraph
 from modules.base_auditor import BaseAuditor
 from modules.cds_authorization_index import (CROSS_ARTIFACT_RULES,
                                              CdsAuthorizationIndex,
@@ -1394,6 +1410,14 @@ class AbapSourceScanner:
         # `pattern-only`. The taint pass appeared to run and did nothing at all,
         # which is worse than not having it. A broken analyzer must fail loudly.
         cache: Dict[str, TaintAnalyzer] = {}
+        # BUILT FROM THE STATEMENTS, NOT FROM `aligned`. The analyzer works on
+        # MASKED text, where the content of a literal is blanked to `#` so that
+        # prose in a message cannot invent a finding — which also blanks the
+        # name in `CALL FUNCTION 'Z_DO_IT'`, the one place a callee is named by
+        # a literal. The statements carry both spellings, so the call graph is
+        # built where the unmasked text is, and the masking stays where it is
+        # doing its job.
+        callgraph = CallGraph(statements)
 
         for finding in relevant:
             rid = finding["rule_id"]
@@ -1401,7 +1425,7 @@ class AbapSourceScanner:
             if not arg:
                 continue
             if rid not in cache:
-                cache[rid] = _analyzer_for(rid, aligned)
+                cache[rid] = _analyzer_for(rid, aligned, callgraph)
             analyzer = cache[rid]
             verdict = analyzer.classify_sink(arg, finding["line"])
             if verdict == analyzer.TAINTED:
@@ -1730,7 +1754,21 @@ class RiseTaintAnalyzer(TaintAnalyzer):
         r"\bVALUE\s*\(\s*([A-Za-z_%][\w/]*)\s*\)|\b([A-Za-z_%][\w/]*)\s+TYPE\b"
         r"|\b(?:USING|CHANGING)\s+([A-Za-z_][\w/]*)", re.IGNORECASE)
 
-    def __init__(self, text: str, sanitizers: Iterable[str] = DEFAULT_SANITIZERS):
+    def __init__(self, text: str, sanitizers: Iterable[str] = DEFAULT_SANITIZERS,
+                 callgraph: Optional[CallGraph] = None):
+        #: Who calls the procedures in this artefact, and what they pass. Optional
+        #: because every existing caller constructs this class with two arguments
+        #: and must keep the behaviour it has: with no graph, every inbound
+        #: parameter is seeded tainted exactly as before.
+        self._callgraph = callgraph
+        #: (procedure header line, param) -> (verdict, caller line), for the flow
+        #: trace. KEYED ON THE HEADER LINE and not on the parameter name alone:
+        #: two procedures in one artefact share a parameter name constantly —
+        #: `run` and `safe_run` below both take `iv_where` — and a name-keyed dict
+        #: hands whichever walked last its neighbour's caller. It read correctly
+        #: only because the walk for a line runs immediately before that line is
+        #: traced, which is an ordering accident and not a guarantee.
+        self._param_evidence: Dict[Tuple[int, str], Tuple[str, Optional[int]]] = {}
         names = "|".join(sorted(sanitizers, key=len, reverse=True))
         # Anchored on both sides AND requiring call syntax. Without the `\(` a
         # variable merely NAMED `lv_escape_quotes` read as sanitized.
@@ -1810,6 +1848,33 @@ class RiseTaintAnalyzer(TaintAnalyzer):
             out.extend(n.lower() for n in self._names_in(section.group("params")))
         return out
 
+    def _trace_var(self, var: str, line_no: int) -> List[Dict[str, Any]]:
+        """The base trace, with the call that fed the parameter put in front of it.
+
+        The base walk stops at the procedure header and calls the parameter a
+        source, which is where a developer reading the report also stops: they
+        are told `iv_carrid` is tainted and shown the FORM line, and the value
+        they actually have to go and look at is one PERFORM away, in a part of
+        the file the trace never mentions.
+
+        The step is only ever ADDED, and only where a visible caller passed a
+        non-literal. A parameter with no caller evidence traces exactly as it did.
+        """
+        chain = super()._trace_var(var, line_no)
+        if not self._param_evidence:
+            return chain
+        out: List[Dict[str, Any]] = []
+        for step in chain:
+            name = str(step.get("var") or "").lower()
+            verdict, at = self._param_evidence.get(
+                (step.get("line"), name), (None, None))
+            if (step.get("role") == "source" and verdict == CALLER_TAINTED
+                    and at and at != step.get("line")):
+                out.append({"line": at, "role": "call", "var": name,
+                            "code": self._raw_line(at)})
+            out.append(step)
+        return out
+
     def _tainted_targets(self, code: str) -> List[str]:
         """Statements that taint what they WRITE INTO rather than being an RHS."""
         m = self._IMPORT_CLUSTER.match(code)
@@ -1836,7 +1901,29 @@ class RiseTaintAnalyzer(TaintAnalyzer):
     def _apply(self, code: str, state: dict, origin: dict, line_no: int) -> None:
         head = self._FORM_DECL.match(code)
         if head:
-            for name in self._inbound_params(head.group("name"), head.group("rest")):
+            proc = head.group("name")
+            for name in self._inbound_params(proc, head.group("rest")):
+                # WHAT THE CALLERS SAY, where there are callers to ask.
+                #
+                # Seeding every inbound parameter tainted made the confidence
+                # grade constant: measured over every ABAP fixture here, 11 of 11
+                # sink-carrying findings came back `confirmed` and none came back
+                # `tentative`, so "tainted input reaches this sink" was printed
+                # over a subroutine whose only caller passes a string literal.
+                #
+                # The seed is cleared ONLY for a FORM every visible caller feeds a
+                # literal. A METHOD or a FUNCTION keeps it whatever its visible
+                # callers look like — a public method is called by whatever
+                # imports the class and a remote-enabled function module by
+                # another system, so "no caller in this file" is their normal
+                # state and, for the RFC case, the dangerous one.
+                clean, verdict, at = (False, None, None)
+                if self._callgraph is not None:
+                    clean, verdict, at = self._callgraph.seeds_clean(proc, name)
+                if verdict is not None:
+                    self._param_evidence[(line_no, name)] = (verdict, at)
+                if clean:
+                    continue
                 self._set(name, self.TAINTED, None, line_no, state, origin)
             return
         targets = self._tainted_targets(code)
@@ -1909,13 +1996,19 @@ class RiseTaintAnalyzer(TaintAnalyzer):
         return super()._combine(expr, state)
 
 
-def _analyzer_for(rule_id: str, source: str) -> TaintAnalyzer:
+def _analyzer_for(rule_id: str, source: str,
+                  callgraph: Optional[CallGraph] = None) -> TaintAnalyzer:
     """One analyzer per sink, because the accepted guards differ by sink.
 
     A table-name check does not make a column name safe and neither makes a file
     path safe, but one flat regex was consulted identically for all nine.
+
+    `callgraph` is built once per artefact and shared across the per-sink
+    analyzers: it depends on the source and not on the rule, and rebuilding it
+    twelve times would parse the same file twelve times to the same answer.
     """
-    return RiseTaintAnalyzer(source, SINK_SANITIZERS.get(rule_id, DEFAULT_SANITIZERS))
+    return RiseTaintAnalyzer(source, SINK_SANITIZERS.get(rule_id, DEFAULT_SANITIZERS),
+                             callgraph=callgraph)
 
 
 def _object_name(path: Path) -> str:
