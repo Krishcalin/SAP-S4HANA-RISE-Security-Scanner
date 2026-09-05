@@ -962,6 +962,14 @@ def api_finding(finding_id: int, user: Dict[str, Any] = Depends(current_user)):
     # not evidence user -> auth_object.
     finding["graph"] = graph.finding_neighbourhood(finding_id,
                                                    auth.scope_for(user))
+    # THE CHANGE ITSELF, where it is exactly known. Absent for most of the
+    # catalogue on purpose: a pack is emitted only where the parameter, its
+    # required value and its owner are all in hand, and an approximate one would
+    # put unverified text into somebody's change request.
+    from server import remediation
+    pack = remediation.pack(finding)
+    if pack is not None:
+        finding["remediation_pack"] = pack
     return finding
 
 
