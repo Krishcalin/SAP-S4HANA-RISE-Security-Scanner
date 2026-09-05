@@ -100,6 +100,103 @@ def classify(finding: Dict[str, Any],
                       "nothing was settled either way"}
 
 
+# --------------------------------------------------------------------------- #
+#  The object side: has anything actually been DONE to this thing              #
+# --------------------------------------------------------------------------- #
+#
+# WHAT THE EXPORTS DO AND DO NOT SUPPORT, established by reading them rather
+# than by assuming. `security_audit_log.csv` is NOT an event log: its columns are
+# CONFIG_NAME, EVENT_CLASS, ACTIVE, PROFILE_TYPE, CLIENT — it records which SAL
+# filters are switched on, not one thing anybody did. So "this transaction was
+# executed" cannot be said from the corpus this product ingests, and nothing here
+# says it.
+#
+# `change_documents.csv` can: OBJECTCLAS / OBJECTID / USERNAME / UDATE / TCODE is
+# who changed which object, when, through which transaction. That is a different
+# and weaker claim than execution — it says the object is actively maintained
+# rather than a fossil — and it is stated as exactly that.
+#
+# `access_risk_analysis` already builds an execution index from the same file for
+# SoD risks. This generalises the idea to every finding instead of one module's.
+
+#: Object types this evidence can speak to, mapped to the OBJECTCLAS the change
+#: document uses. A type absent here gets no verdict rather than a guess.
+_CHANGE_CLASSES = {"role": "ROLE", "user": "USER", "profile": "PROFILE"}
+
+CHANGED = "changed"
+
+
+def _change_index(changes: Optional[Sequence[Dict[str, Any]]]
+                  ) -> Optional[Dict[tuple, Dict[str, Any]]]:
+    """`(OBJECTCLAS, OBJECTID) -> {who, when, tcode, n}`, or None if absent.
+
+    None where no change-document export was supplied, for the same reason
+    `active_users` returns None: nothing is known, and that is not the same
+    sentence as "nothing has been changed".
+    """
+    if changes is None:
+        return None
+    out: Dict[tuple, Dict[str, Any]] = {}
+    for raw in changes:
+        if not isinstance(raw, dict):
+            continue
+        row = {str(k).strip().upper(): v for k, v in raw.items()}
+        cls = str(row.get("OBJECTCLAS") or "").strip().upper()
+        oid = str(row.get("OBJECTID") or "").strip().upper()
+        if not cls or not oid:
+            continue
+        entry = out.setdefault((cls, oid), {"n": 0, "when": "", "who": "",
+                                            "tcode": ""})
+        entry["n"] += 1
+        when = str(row.get("UDATE") or "").strip()
+        # Keep the most recent, comparing as text: these are YYYYMMDD, and a
+        # date parser here would be one more thing to be wrong about.
+        if when >= entry["when"]:
+            entry["when"] = when
+            entry["who"] = str(row.get("USERNAME") or row.get("UNAME") or "").strip()
+            entry["tcode"] = str(row.get("TCODE") or "").strip()
+    return out
+
+
+def classify_object(finding: Dict[str, Any],
+                    index: Optional[Dict[tuple, Dict[str, Any]]]
+                    ) -> Optional[Dict[str, Any]]:
+    """`{state, ...}` for the objects a finding names, or None if none apply.
+
+    `changed` means a change document names this exact object. It does NOT mean
+    the privilege was exercised — no export here evidences that — so the wording
+    it carries says "changed", never "used".
+    """
+    named = []
+    for raw in (finding.get("affected_objects") or finding.get("subject") or ()):
+        if not isinstance(raw, dict):
+            continue
+        cls = _CHANGE_CLASSES.get(str(raw.get("type") or "").strip().lower())
+        name = str(raw.get("name") or "").strip().upper()
+        if cls and name:
+            named.append((cls, name))
+    if not named:
+        return None
+    if index is None:
+        return {"state": UNASSESSED, "objects": len(named),
+                "reason": "no change-document export was supplied"}
+
+    hits = [(cls, name, index[(cls, name)]) for cls, name in named
+            if (cls, name) in index]
+    if not hits:
+        return {"state": QUIET, "objects": len(named),
+                "reason": "the change documents record no change to %d object(s) "
+                          "named here" % len(named)}
+    cls, name, entry = hits[0]
+    return {"state": CHANGED, "objects": len(named), "changed": len(hits),
+            "last_changed": entry["when"], "changed_by": entry["who"],
+            "via": entry["tcode"],
+            "reason": "%s was changed on %s by %s%s"
+                      % (name, entry["when"] or "an unrecorded date",
+                         entry["who"] or "an unrecorded user",
+                         " via %s" % entry["tcode"] if entry["tcode"] else "")}
+
+
 def summarise(verdicts: Iterable[Optional[Dict[str, Any]]]) -> Dict[str, int]:
     """Counts by state, for a caller that wants to report the shape of a run."""
     out = {ACTIVE: 0, QUIET: 0, UNASSESSED: 0, "no_accounts": 0}

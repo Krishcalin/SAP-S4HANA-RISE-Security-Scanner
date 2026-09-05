@@ -208,6 +208,20 @@ class RiskPrioritizer:
             boost(10, "Account in use",
                   "the account this is about logged on in the exported window — "
                   + str(activity.get("reason") or ""))
+
+        # The object side, and a WEAKER claim stated as such. A change document
+        # says the role or user was maintained on a date, by somebody, through a
+        # transaction. It does not say the privilege was exercised — nothing this
+        # product ingests evidences that, because `security_audit_log.csv` is the
+        # SAL configuration rather than an event log. So this is worth less than
+        # an account demonstrably logging on, and says "changed" rather than
+        # "used" wherever a reader will see it.
+        obj = (f.get("details") or {}).get("object_activity") or {}
+        if obj.get("state") == "changed":
+            boost(6, "Configuration actively maintained",
+                  "a change document records a recent change to this object, so "
+                  "it is live rather than a fossil — "
+                  + str(obj.get("reason") or ""))
         if exposed and is_code:
             boost(12, "Reachable code",
                   "referenced or recently executed — an attacker can get to it: "

@@ -96,6 +96,11 @@ def enrich(findings: List[Dict[str, Any]], deployment_mode: str = "on_prem",
     from server.edges import active_users, observed_users
     active = active_users(data)
     observed = observed_users(data)
+    # The object side of the same question: not "is the account live" but "has
+    # anything been done to the thing this finding is about". `None` where no
+    # change-document export was supplied, which is not the same as no changes.
+    changes = activity_mod._change_index(
+        data.get("change_documents") if data else None)
 
     for f in findings:
         cid = (f.get("check_id") or "").upper()
@@ -109,6 +114,9 @@ def enrich(findings: List[Dict[str, Any]], deployment_mode: str = "on_prem",
         verdict = activity_mod.classify(f, active, observed)
         if verdict is not None:
             entry["account_activity"] = verdict
+        obj_verdict = activity_mod.classify_object(f, changes)
+        if obj_verdict is not None:
+            entry["object_activity"] = obj_verdict
 
         if prioritizer is not None:
             try:
@@ -117,10 +125,14 @@ def enrich(findings: List[Dict[str, Any]], deployment_mode: str = "on_prem",
                 # quietly adding keys here has bitten before. The prioritiser
                 # reads evidence out of `details`, exactly as it already does
                 # for the code-reachability verdict.
+                extra = {}
+                if verdict is not None:
+                    extra["account_activity"] = verdict
+                if obj_verdict is not None:
+                    extra["object_activity"] = obj_verdict
                 res = prioritizer.assess(
-                    {**f, "details": {**(f.get("details") or {}),
-                                      "account_activity": verdict}}
-                    if verdict is not None else f)
+                    {**f, "details": {**(f.get("details") or {}), **extra}}
+                    if extra else f)
                 entry["priority_tier"] = res.tier
                 entry["priority_score"] = int(getattr(res, "score", 0) or 0)
                 entry["priority_factors"] = list(getattr(res, "factors", ()) or ())
