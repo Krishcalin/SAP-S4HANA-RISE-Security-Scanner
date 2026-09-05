@@ -57,6 +57,31 @@ def _is_a_value(text: Any) -> bool:
     return len(s.split()) == 1
 
 
+def _qualified_names(row: Dict[str, Any]) -> set:
+    """Object names the finding recorded WITH a qualifier.
+
+    `hana_db_security` attaches the debug target as a qualifier rather than as
+    its own object, and says why: "the export gives a bare OBJECT_NAME that may
+    be a procedure ('DEBUG ON ZFI_PAYMENT_RUN') or a user ('ATTACH DEBUGGER ON
+    DBADMIN'), and there is no field that says which — typing it would be a
+    guess." A REVOKE has to name the object's KIND, so a grant carrying one of
+    these is not a statement this can write.
+    """
+    import json as _json
+
+    subject = row.get("subject") or row.get("affected_objects")
+    if isinstance(subject, str):
+        try:
+            subject = _json.loads(subject)
+        except ValueError:
+            return set()
+    out = set()
+    for obj in (subject or ()):
+        if isinstance(obj, dict) and obj.get("qualifier") and obj.get("name"):
+            out.add(str(obj["name"]))
+    return out
+
+
 def _detail(row: Dict[str, Any]) -> Dict[str, Any]:
     detail = row.get("details") or row.get("latest_details") or {}
     return detail if isinstance(detail, dict) else {}
@@ -144,11 +169,113 @@ def parameter_pack(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     }
 
 
-def pack(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+HANA_GRANT = "hana_grant"
+
+#: How many statements to write out. A grant repeated across 60 accounts is a
+#: script somebody runs, not a paragraph somebody reads, and the same [:50] cap
+#: the modules put on their display lists applies for the same reason.
+_MAX_STATEMENTS = 50
+
+_EDGE_SQL = {"holds_hana_privilege": ("REVOKE %s FROM %s;", "GRANT %s TO %s;"),
+             "holds_hana_role": ("REVOKE %s FROM %s;", "GRANT %s TO %s;")}
+
+
+def hana_pack(row: Dict[str, Any],
+              neighbourhood: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """`REVOKE` statements for a HANA grant finding, or None.
+
+    THE PAIRS COME FROM THE GRAPH, which is the point. A finding names its
+    grantees and its privileges as a flat list, and `REVOKE DATA ADMIN FROM
+    <one of these four users>` is not a statement. The `holds_hana_privilege`
+    edges record WHICH user holds WHICH privilege, so the statements are
+    evidence rather than a cross product.
+    """
+    check_id = str(row.get("check_id") or "")
+    if not check_id.startswith("HANADB-"):
+        return None
+    if not neighbourhood:
+        return None
+
+    pairs = [e for e in (neighbourhood.get("within") or [])
+             if e.get("edge_type") in _EDGE_SQL]
+    if not pairs:
+        return None
+
+    owner = str(row.get("remediation_owner") or "").strip().lower()
+    if owner and owner != _CUSTOMER_FIXABLE:
+        return {"kind": HANA_GRANT, "applicable": False, "owner": owner,
+                "why": "these grants are not the customer's to change under "
+                       "the contract; raise a service request instead",
+                "apply": [], "rollback": []}
+
+    # A QUALIFIED PRIVILEGE IS DECLINED, in the module's own words: the export
+    # gives a bare OBJECT_NAME that may be a procedure ("DEBUG ON
+    # ZFI_PAYMENT_RUN") or a user ("ATTACH DEBUGGER ON DBADMIN"), and no field
+    # says which. `REVOKE DEBUG ON X FROM Y` has to name the object's KIND, so
+    # writing one would be guessing at SQL somebody then runs against a
+    # production database.
+    # The qualifier is on the OBJECT, not in the edge's name: an edge to a
+    # scoped DEBUG grant still reads `-> DEBUG`, so a first version of this
+    # checked the edge text, found nothing, and would have written
+    # `REVOKE DEBUG FROM CONTRACTOR1;` for a grant that was `DEBUG ON
+    # ZFI_PAYMENT_RUN`. That statement revokes a DIFFERENT privilege — the
+    # system one instead of the object one — against a production database.
+    scoped = _qualified_names(row)
+    qualified = [e for e in pairs if str(e.get("to") or "") in scoped]
+    usable = [e for e in pairs if e not in qualified]
+    if not usable:
+        return {"kind": HANA_GRANT, "applicable": False,
+                "owner": owner or _CUSTOMER_FIXABLE,
+                "why": "every grant here names an object the export does not "
+                       "type, so the REVOKE would have to guess whether it is a "
+                       "schema, a procedure or a user",
+                "apply": [], "rollback": []}
+
+    apply_sql, rollback_sql = [], []
+    for edge in usable[:_MAX_STATEMENTS]:
+        fmt_apply, fmt_rollback = _EDGE_SQL[edge["edge_type"]]
+        apply_sql.append(fmt_apply % (edge["to"], edge["from"]))
+        rollback_sql.append(fmt_rollback % (edge["to"], edge["from"]))
+
+    caveats = [
+        "Review and apply through your normal change control. This tool holds "
+        "no connection to SAP and has changed nothing.",
+        "Run as a user holding the privilege WITH ADMIN OPTION; a REVOKE of a "
+        "grantable privilege cascades to anything the grantee granted onward, "
+        "so confirm the dependent grants before running it.",
+    ]
+    if qualified:
+        caveats.append(
+            "%d further grant(s) are not written here: they name an object the "
+            "export does not type, and the statement would have to guess "
+            "whether it is a schema, a procedure or a user."
+            % len(qualified))
+    if len(usable) > _MAX_STATEMENTS:
+        caveats.append("%d of %d statements shown."
+                       % (_MAX_STATEMENTS, len(usable)))
+
+    return {
+        "kind": HANA_GRANT,
+        "applicable": True,
+        "owner": owner or _CUSTOMER_FIXABLE,
+        "where": "HANA SQL console — %s" % (row.get("sid") or "the database"),
+        "executable": True,
+        "apply": apply_sql,
+        "rollback": rollback_sql,
+        "verify": "Re-run the scan; %s closes when these grants are gone."
+                  % check_id,
+        "source": "",
+        "caveats": caveats,
+    }
+
+
+def pack(row: Dict[str, Any],
+         neighbourhood: Optional[Dict[str, Any]] = None
+         ) -> Optional[Dict[str, Any]]:
     """The concrete change for one finding, or None if none can be generated.
 
     None is the honest answer for most of the catalogue today: a pack is only
     emitted where the exact change is KNOWN, and inventing an approximate one
     for the rest would put text into a change request that nobody verified.
     """
-    return parameter_pack(row)
+    return parameter_pack(row) or hana_pack(row, neighbourhood)

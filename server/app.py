@@ -967,7 +967,10 @@ def api_finding(finding_id: int, user: Dict[str, Any] = Depends(current_user)):
     # required value and its owner are all in hand, and an approximate one would
     # put unverified text into somebody's change request.
     from server import remediation
-    pack = remediation.pack(finding)
+    # The graph is handed in because a HANA REVOKE needs WHICH user holds WHICH
+    # privilege, and the finding lists both flat. The `holds_hana_privilege`
+    # edges are that pairing.
+    pack = remediation.pack(finding, finding["graph"])
     if pack is not None:
         finding["remediation_pack"] = pack
     return finding

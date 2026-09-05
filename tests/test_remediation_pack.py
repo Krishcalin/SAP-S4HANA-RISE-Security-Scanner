@@ -147,6 +147,107 @@ def test_a_finding_with_no_required_value_produces_nothing():
         finding(ecs_standard=None, expected_value=None)) is None
 
 
+# --------------------------------------------------------------------------- #
+#  HANA grants: the statements come from the graph, not from a cross product   #
+# --------------------------------------------------------------------------- #
+
+def hana(check_id="HANADB-PRIV-002", owner="customer_fixable",
+         pairs=(("J_SMITH", "DATA ADMIN"),), edge="holds_hana_privilege",
+         subject=None):
+    return (
+        {"check_id": check_id, "remediation_owner": owner, "sid": "PRD",
+         "subject": subject or [], "latest_details": {}},
+        {"within": [{"from": u, "to": p, "edge_type": edge,
+                     "provenance": "configured", "check_id": check_id}
+                    for u, p in pairs],
+         "held_by": [], "grants": [], "objects": 2, "edges_available": 40},
+    )
+
+
+def test_the_statements_pair_the_user_with_the_privilege_they_hold():
+    """A finding lists grantees and privileges FLAT, and "REVOKE DATA ADMIN
+    FROM one of these four users" is not a statement. The holds_hana_privilege
+    edges are the pairing, which is why the graph work had to come first."""
+    row, nb = hana(pairs=(("J_SMITH", "DATA ADMIN"),
+                          ("SVC_INT", "USER ADMIN")))
+    pack = remediation.pack(row, nb)
+    assert pack["apply"] == ["REVOKE DATA ADMIN FROM J_SMITH;",
+                             "REVOKE USER ADMIN FROM SVC_INT;"]
+
+
+def test_the_rollback_regrants_exactly_what_was_revoked():
+    row, nb = hana()
+    assert remediation.pack(row, nb)["rollback"] == \
+        ["GRANT DATA ADMIN TO J_SMITH;"]
+
+
+def test_a_role_grant_uses_the_same_statement_shape():
+    row, nb = hana(check_id="HANADB-ROLE-001", edge="holds_hana_role",
+                   pairs=(("CONTRACTOR1", "SAP_INTERNAL_HANA_SUPPORT"),))
+    assert remediation.pack(row, nb)["apply"] == \
+        ["REVOKE SAP_INTERNAL_HANA_SUPPORT FROM CONTRACTOR1;"]
+
+
+def test_a_scoped_privilege_is_refused_rather_than_guessed():
+    """THE BUG THIS TEST EXISTS FOR. The qualifier lives on the OBJECT, not in
+    the edge, so a first version checked the edge text, found nothing, and would
+    have written `REVOKE DEBUG FROM CONTRACTOR1;` for a grant that was `DEBUG ON
+    ZFI_PAYMENT_RUN`. That revokes the SYSTEM privilege instead of the object
+    one — a different statement, run against a production database.
+
+    The module's own comment says why it cannot be written: the export gives a
+    bare OBJECT_NAME that may be a procedure or a user and no field says which,
+    and a REVOKE has to name the object's kind."""
+    row, nb = hana(check_id="HANADB-PRIV-006",
+                   pairs=(("CONTRACTOR1", "DEBUG"),),
+                   subject=[{"type": "hana_privilege", "name": "DEBUG",
+                             "qualifier": "on=ZFI_PAYMENT_RUN"}])
+    pack = remediation.pack(row, nb)
+    assert pack["applicable"] is False
+    assert pack["apply"] == []
+    assert "guess whether it is a schema" in pack["why"]
+
+
+def test_the_unscoped_grants_survive_when_only_some_are_scoped():
+    row, nb = hana(pairs=(("A", "DEBUG"), ("B", "DATA ADMIN")),
+                   subject=[{"type": "hana_privilege", "name": "DEBUG",
+                             "qualifier": "on=ZFI"}])
+    pack = remediation.pack(row, nb)
+    assert pack["apply"] == ["REVOKE DATA ADMIN FROM B;"]
+    assert any("not written here" in c for c in pack["caveats"]), pack["caveats"]
+
+
+def test_it_warns_that_a_revoke_cascades():
+    """Revoking a privilege held WITH ADMIN OPTION takes away everything the
+    grantee granted onward. An operator running this from a console needs to
+    know that before, not after."""
+    row, nb = hana()
+    assert any("cascades" in c for c in remediation.pack(row, nb)["caveats"])
+
+
+def test_grants_the_customer_does_not_own_are_deferred():
+    row, nb = hana(owner="ticket_to_sap")
+    pack = remediation.pack(row, nb)
+    assert pack["applicable"] is False and pack["apply"] == []
+
+
+def test_a_long_list_is_capped_and_says_so():
+    """Sixty statements is a script somebody runs, and the same [:50] cap the
+    modules put on their display lists applies for the same reason."""
+    row, nb = hana(pairs=tuple((f"U{i:04d}", "DATA ADMIN") for i in range(60)))
+    pack = remediation.pack(row, nb)
+    assert len(pack["apply"]) == 50
+    assert any("50 of 60" in c for c in pack["caveats"])
+
+
+def test_without_the_graph_no_hana_pack_is_written():
+    """The pairing is the graph's, and a pack built from the flat object list
+    would be the cross product the edge rules exist to refuse."""
+    row, _ = hana()
+    assert remediation.pack(row, None) is None
+    assert remediation.pack(row, {"within": [], "held_by": [], "grants": []}) is None
+
+
 def test_a_check_this_cannot_write_a_change_for_returns_nothing():
     """Most of the catalogue, honestly. A role change needs the authorisation
     object, field and value to be safe; a REVOKE needs the grantee-privilege
