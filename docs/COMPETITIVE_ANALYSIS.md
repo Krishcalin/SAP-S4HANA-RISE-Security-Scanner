@@ -448,7 +448,7 @@ competitor and the vendor agree, the point is safe to make.
   string, four named boosts, a KEV-analog floor, and SLA windows (24–72h / 7d / 30d / next cycle).
   Works where CVSS does not apply.
 
-- **Breadth of input** — 128 logical sources / 279 accepted filenames, tolerant parsing (BOM-safe,
+- **Breadth of input** — 139 logical sources, tolerant parsing (BOM-safe,
   delimiter auto-detect, missing file → check self-skips).
 
 - **Citation discipline** — 295 of 296 sample findings carry real references. **Protect this; it

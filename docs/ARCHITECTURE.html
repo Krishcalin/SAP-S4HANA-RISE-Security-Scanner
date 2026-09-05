@@ -1106,7 +1106,7 @@ J_PATEL,A,64,20240119,,SALES
 <p>Three rows, and already several of the questions from chapter 3 can be asked. Is <code>J_PATEL</code> locked but still holding roles? <code>TRDAT</code> says the account has not logged in since January 2024 — is it dormant? <code>BATCH_MM</code> is a background account: does it hold permissions no automated job should have?</p>
 
 <h4>How many files, and does it matter if some are missing?</h4>
-<p>The full catalogue runs to <strong>135 logical sources</strong> (<a href="#appC">Appendix C</a> lists them). Almost nobody supplies all of them on a first run, and that is expected. Every file is optional: the system runs whatever checks it has the information for and records the rest as not assessed.</p>
+<p>The full catalogue runs to <strong>139 logical sources</strong> (<a href="#appC">Appendix C</a> lists them). Almost nobody supplies all of them on a first run, and that is expected. Every file is optional: the system runs whatever checks it has the information for and records the rest as not assessed.</p>
 <p>What is <em>not</em> acceptable is for a partial export to produce a clean-looking report. That is the whole subject of chapter <a href="#ch13">13</a>.</p>
 
 <h4>How the export is produced</h4>
@@ -1172,7 +1172,7 @@ J_PATEL,A,64,20240119,,SALES
 
 <h4>Route C — a source-code export</h4>
 <p>Custom ABAP code cannot be read from a RISE system by ordinary means; there is no file access and no shell. There is, however, one well-established open-source tool used across the SAP world to package code into a portable archive for version control. That archive is the route.</p>
-<p>When the customer supplies one, a further module unpacks it and analyses the code itself, applying <strong>139 rules</strong> for the classic weaknesses described in chapter 3, family 6.</p>
+<p>When the customer supplies one, a further module unpacks it and analyses the code itself, applying <strong>135 rules</strong> for the classic weaknesses described in chapter 3, family 6.</p>
 
 <h4>Why convergence matters more than it sounds</h4>
 <p>Because all three routes produce the same shape of information, none of the 819 checks contains any logic about provenance. There is no “if this came from the collector, be more careful” branch anywhere. Adding Route B required no changes to the checking logic at all, and required no new tests of the checks, because the checks could not tell the difference.</p>
@@ -2570,7 +2570,7 @@ python sap_scanner.py --data-dir ./exports --gate --gate-baseline baseline.json<
   <tr><td class="k">FIORI-</td><td>The web interface</td><td>Catalogue exposure, service-level authorisation, sensitive app visibility.</td></tr>
   <tr><td class="k">JOBCMD-</td><td>Jobs and commands</td><td>Operating-system command definitions and scheduled jobs, and whose identity they run under.</td></tr>
   <tr><td class="k">HOTNEWS-</td><td>Missing corrections</td><td>Applied corrections against a verified catalogue, including actively exploited flaws.</td></tr>
-  <tr><td class="k">ABAP-</td><td>Custom code scan</td><td><strong>139 rules</strong> over your own code, with instruction-level parsing and taint analysis.</td></tr>
+  <tr><td class="k">ABAP-</td><td>Custom code scan</td><td><strong>135 rules</strong> over your own code, with instruction-level parsing and taint analysis.</td></tr>
   <tr><td class="k">ATC-</td><td>SAP’s own code results</td><td>Imports SAP’s code-analysis findings where the customer licenses that product.</td></tr>
   <tr><td class="k">CODE-</td><td>Code and transports</td><td>Transport routes, approvals, client settings, modifications to SAP standard.</td></tr>
   <tr><td class="k">CODE-INV-</td><td>Code inventory</td><td>The estate picture: object counts, unreferenced code, code of unknown reachability.</td></tr>
@@ -2714,7 +2714,7 @@ fair_findings = list(all_findings)
 
 <p style="font-size:15px;color:var(--ink2);max-width:80ch"><strong>Provenance and caveat.</strong> This book was written from the repository’s documentation and its top-level program, at <a href="https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner">github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner</a>. Module names, the command-line surface, the pipeline order, the corpus-split rule, the gate rules and the deployment-mode behaviour are taken from the source and documentation. Descriptions of the internal structure of individual inspectors, the exact shape of a finding record, and the illustrative code in Appendix E are reconstructions written to be faithful in substance rather than literal in syntax; verify against the source before quoting them. All diagrams are architectural rather than exhaustive.</p>
 
-<p style="font-size:15px;color:var(--ink2);max-width:80ch">The counts this document states — 819 checks, 468 written as literals, 351 generated at run time from 6 rule families, 38 modules, 139 custom-code rules, 27 duty-separation risks, 78 profile parameters and 135 logical sources — are derived from the code by <code>tests/test_architecture_doc.py</code>, which fails the build if this page and the source disagree. Edition 1.1 corrected three figures that had drifted from the source.</p>
+<p style="font-size:15px;color:var(--ink2);max-width:80ch">The counts this document states — 819 checks, 468 written as literals, 351 generated at run time from 6 rule families, 38 modules, 135 custom-code rules, 27 duty-separation risks, 78 profile parameters and 139 logical sources — are derived from the code by <code>tests/test_architecture_doc.py</code>, which fails the build if this page and the source disagree. Edition 1.1 corrected three figures that had drifted from the source.</p>
 
 <p style="font-size:15px;color:var(--ink2)"><strong>Confidential.</strong> This document is not for publication. It describes the internal design, the current limitations and the forward direction of a commercial product; treat it as you would any other confidential product document.</p>
 

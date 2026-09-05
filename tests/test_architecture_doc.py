@@ -161,6 +161,26 @@ def test_a_figure_the_guide_quotes_is_still_the_figure_the_code_produces(page, w
         "— find the stale figure and update the sentence it sits in." % (value, what))
 
 
+def test_the_summary_sentence_attaches_each_figure_to_its_own_label(page):
+    """PRESENCE IS NOT ENOUGH, and this is the hole that proved it. The guide's
+    closing sentence read "139 custom-code rules … and 135 logical sources" when
+    the truth is 135 rules and 139 sources. Both numbers were in the document, so
+    the test above passed for a year while the sentence had them the wrong way
+    round — every figure correct, every label wrong.
+
+    This pins the two that are easy to transpose because they are adjacent in one
+    sentence and close in value.
+    """
+    derived = _derived()
+    for label, key in (("custom-code rules", "custom-code rules"),
+                       ("logical sources", "logical sources")):
+        value = derived[key]
+        assert re.search(r"\b%d\s+%s\b" % (value, re.escape(label)), page), (
+            "the guide does not say %r. Some other number is sitting next to "
+            "that label — check whether two figures have been swapped."
+            % ("%d %s" % (value, label)))
+
+
 def test_the_guide_does_not_hedge_a_count_it_can_state_exactly(page):
     """"~620 checks" was true only while the runtime families were unenumerated.
     They are enumerable now, so the tilde would be false modesty — and a hedged

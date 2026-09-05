@@ -62,19 +62,21 @@ product became client-server**, deliberately and one-way. It has NOT been relaxe
 Background and the full plan: [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md),
 [`docs/BUILD_ROADMAP.md`](docs/BUILD_ROADMAP.md).
 - **819 checks across 38 audit modules.** Measure, never estimate — and know which number you
-  are quoting. `modules/` holds 70 files, of which **36 emit findings**; the other 34 are rule
-  tables, loaders, importers and report writers. Those 33 are exactly `sap_scanner.py`'s
-  `--modules` choices. Check IDs: **363** are written as literals, and **621** exist once the
-  five runtime-generated families resolve against their shipped rulesets — `PARAM-<param>` (78),
-  the SAST rule ids (133), `ARA-<risk>` (27), `IAM-<sod_rule>` (10) and `ATC-<family>` (10),
-  which do not overlap the static set at all.
+  are quoting. `modules/` holds 74 files, of which **38 emit findings**; the rest are rule
+  tables, loaders, importers and report writers. Those 38 are exactly `sap_scanner.py`'s
+  `--modules` choices. Check IDs: **468** are written as literals and **351** appear once the
+  six runtime-generated families resolve against their shipped rulesets — `PARAM-<parameter>`
+  (86), `ABAP-<rule>` (135), `ARA-<risk>` (99), `WDISP-<nnn>` (14), `ATC-<family>` (10) and
+  `IAM-<sod rule>` (7). The two sets do not overlap, so they add to 819.
+  Every figure here comes from `modules/coverage.py`; if you are about to type one from memory,
+  run it instead — this paragraph was wrong in eight places until somebody did.
   ⚠️ **Counting `self.finding(` alone undercounts by 29** and silently misses every `AUTH-*`
   and `BASELINE-*` id: `abap_authorizations._emit` and `baseline_params._flag` forward
   `check_id` positionally into `finding()`. Include both wrappers or your number is wrong.
   Keep the README badge and `docs/CHECKS_REFERENCE.md` in sync when you add checks —
   `docs/CHECKS_REFERENCE.md` is GENERATED from the code by
   `tools/build_checks_reference.py`, and the `purity` CI job fails if it drifts.
-  It covers all 618 ids — 363 literal plus 255 from five runtime families —
+  It covers all 819 ids — 468 literal plus 351 from six runtime families —
   and renders a title or severity the code computes per finding as *varies*
   rather than freezing one branch as fact. Do not hand-edit it; change the
   check and regenerate.
@@ -715,7 +717,7 @@ wrong in that way.
 | `grcac` | grc_access_control | **GRC Access Control**: EAM/Firefighter usage+ownership, ARM access-request workflow, GRC-native SoD violations, mitigating controls, SoD ruleset governance |
 | `rolegov` | role_governance | **role design**: SU24 proposal hygiene for custom tcodes, ungenerated profiles (AGR_1016), derived-role authorization-value drift vs parent |
 | `atc` | atc_import | SAP's own ATC/CVA results, ingested rather than re-derived |
-| `cva` | abap_sast | **our** ABAP/CDS/BDEF scanner — **133 rules dispatched by file type** (118 ABAP/CDS/RAP, 7 JS/UI5, 8 BTP descriptor), statement lexer, intra-procedural taint. `ABAP-XSS-006` is retired and `ABAP-AUTH-003` is handled in the engine, so 116 of the 118 fire from the rule table |
+| `cva` | abap_sast | **our** ABAP/CDS/BDEF scanner — **135 rules dispatched by file type** (ABAP/CDS/RAP, JS/UI5 and BTP descriptors — the split is in `modules/abap_sast_rules.py`, which is the only place worth counting), statement lexer, intra-procedural taint. `ABAP-XSS-006` is retired and `ABAP-AUTH-003` is handled in the engine, so 116 of the 118 fire from the rule table |
 | `logreview` | log_review | retrospective SM20 review: what the audit log actually recorded |
 | `capxsuaa` | cap_xsuaa | **CAP project as written** (`--cap-src`): `xs-security.json` exactly + CDS model lexically. Traces scope ← role-template ← role-collection ← IdP group; `CAPX-TOK-001` closes the application-override blind spot `BTP-TOK-*` declares |
 | `codeinv` | code_inventory_report | custom-code estate: size by type, unreachable, dormant, unknown-kept-separate |

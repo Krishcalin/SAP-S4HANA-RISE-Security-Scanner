@@ -623,7 +623,7 @@ Three rows, and already several of the questions from chapter 3 can be asked. Is
 
 ### How many files, and does it matter if some are missing?
 
-The full catalogue runs to **135 logical sources** ([Appendix C](#contents) lists them). Almost nobody supplies all of them on a first run, and that is expected. Every file is optional: the system runs whatever checks it has the information for and records the rest as not assessed.
+The full catalogue runs to **139 logical sources** ([Appendix C](#contents) lists them). Almost nobody supplies all of them on a first run, and that is expected. Every file is optional: the system runs whatever checks it has the information for and records the rest as not assessed.
 
 What is *not* acceptable is for a partial export to produce a clean-looking report. That is the whole subject of chapter [13](#contents).
 
@@ -665,7 +665,7 @@ This route is optional, is never used for RISE, and — as chapter [9](#contents
 
 Custom ABAP code cannot be read from a RISE system by ordinary means; there is no file access and no shell. There is, however, one well-established open-source tool used across the SAP world to package code into a portable archive for version control. That archive is the route.
 
-When the customer supplies one, a further module unpacks it and analyses the code itself, applying **139 rules** for the classic weaknesses described in chapter 3, family 6.
+When the customer supplies one, a further module unpacks it and analyses the code itself, applying **135 rules** for the classic weaknesses described in chapter 3, family 6.
 
 ### Why convergence matters more than it sounds
 
@@ -1911,7 +1911,7 @@ The glossary is the most useful part of this book for a first-time reader; keep 
 | FIORI- | The web interface | Catalogue exposure, service-level authorisation, sensitive app visibility. |
 | JOBCMD- | Jobs and commands | Operating-system command definitions and scheduled jobs, and whose identity they run under. |
 | HOTNEWS- | Missing corrections | Applied corrections against a verified catalogue, including actively exploited flaws. |
-| ABAP- | Custom code scan | **139 rules** over your own code, with instruction-level parsing and taint analysis. |
+| ABAP- | Custom code scan | **135 rules** over your own code, with instruction-level parsing and taint analysis. |
 | ATC- | SAP’s own code results | Imports SAP’s code-analysis findings where the customer licenses that product. |
 | CODE- | Code and transports | Transport routes, approvals, client settings, modifications to SAP standard. |
 | CODE-INV- | Code inventory | The estate picture: object counts, unreferenced code, code of unknown reachability. |
@@ -2075,7 +2075,7 @@ The analysis still runs, and still tells you which scenarios dominate. What it w
 
 **Provenance and caveat.** This book was written from the repository’s documentation and its top-level program, at [github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner](https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner). Module names, the command-line surface, the pipeline order, the corpus-split rule, the gate rules and the deployment-mode behaviour are taken from the source and documentation. Descriptions of the internal structure of individual inspectors, the exact shape of a finding record, and the illustrative code in Appendix E are reconstructions written to be faithful in substance rather than literal in syntax; verify against the source before quoting them. All diagrams are architectural rather than exhaustive.
 
-The counts this document states — 819 checks, 468 written as literals, 351 generated at run time from 6 rule families, 38 modules, 139 custom-code rules, 27 duty-separation risks, 78 profile parameters and 135 logical sources — are derived from the code by `tests/test_architecture_doc.py`, which fails the build if this page and the source disagree. Edition 1.1 corrected three figures that had drifted from the source.
+The counts this document states — 819 checks, 468 written as literals, 351 generated at run time from 6 rule families, 38 modules, 135 custom-code rules, 27 duty-separation risks, 78 profile parameters and 139 logical sources — are derived from the code by `tests/test_architecture_doc.py`, which fails the build if this page and the source disagree. Edition 1.1 corrected three figures that had drifted from the source.
 
 **Published.** This document describes the internal design, the current limitations and the forward direction of the product, and it is meant to be read by anyone — the limitations especially. A design document that only lists what works is marketing.
 

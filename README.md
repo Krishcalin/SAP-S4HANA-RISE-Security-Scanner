@@ -18,18 +18,25 @@
 
 ## The SAP Security Tool
 
-MonitorRisk is an open source SAP Security Tool which someone can use to assess the effectiveness of the security controls within an SAP RISE Private or Public cloud environment. This is a solution built as a client server architecture using Python3, FastAPI, React, PostgreSQL16, TypeScript. You export configuration data out of your SAP systems as CSV and JSON files.
-This reads those files and tells you what is wrong, how bad it is, who can fix
-it, and what it might cost you.
+MonitorRisk checks how well the security controls in an SAP estate are actually
+holding — RISE private or public cloud, classic on-premise, ECC or BTP.
 
-You can extra the file in an offline fashion or in a connected way. Nothing is installed in the SAP system, no
-RFC user is created, and nothing is ever written back. That is deliberate: in a
-RISE contract a third-party ABAP add-on is an excluded task needing a separate
-SKU and a long evaluation, and a folder of exports needs none of it.
+You export configuration out of your SAP systems as CSV and JSON files. It reads
+those files and tells you what is wrong, how bad it is, who is allowed to fix it,
+what the fix is, and what the problem might cost you.
 
-There is an optional collector that can fetch those exports for you from a
-system you authorise. It is read-only, it is a separate command you have to run
-on purpose, and the scanner itself still connects to nothing.
+Nothing is installed in SAP, no RFC user is created, and nothing is ever written
+back. That is a deliberate choice rather than a limitation: under a RISE contract
+a third-party ABAP add-on is an excluded task needing its own SKU and a long
+evaluation, and a folder of exports needs none of that.
+
+If exporting by hand is a nuisance, an optional collector can fetch the files for
+you from a system you authorise. It is read-only, you run it deliberately as a
+separate command, and the scanner itself still connects to nothing.
+
+It is open source, MIT licensed, and built as a client-server application in
+Python, FastAPI, React and PostgreSQL — though the command line needs none of
+that.
 
 **Start here:** [System Architecture](docs/ARCHITECTURE.md) — a plain-language
 guide with no SAP background assumed.
@@ -75,12 +82,12 @@ The areas covered:
 
 - **Users and authorisations** — who has what, including permission-level
   segregation of duties against a ruleset of 99 conflicting-duty rules
-- **Profile parameters** — all 92 of the 92 parameters SAP makes mandatory for
-  Enterprise Cloud Services in Note 3250501
+- **Profile parameters** — every one of the 92 parameters SAP makes mandatory
+  for Enterprise Cloud Services in Note 3250501
 - **HANA database** — privileges, auditing, encryption, parameters
 - **BTP and cloud** — Cloud Connector, destinations, IAS, entitlements, CPI
 - **Interfaces** — RFC, web services, IDoc, gateway ACLs, OAuth clients
-- **Custom ABAP code** — 133 static-analysis rules with taint tracking
+- **Custom ABAP code** — 135 static-analysis rules with taint tracking
 - **Financial controls** — the SOX-relevant configuration in FI
 - **Patching, logging, encryption, transports, backup and recovery**
 
@@ -103,6 +110,18 @@ produce with standard SAP transactions.
 
 You do not need all of them. Give it what you have; it reports what it could
 not assess rather than quietly scoring you on a subset.
+
+It also tells you which missing export is worth producing next, because "supplied
+119 of 139 sources" is true and useless on its own. Each scan ends with something
+you can act on:
+
+```
+next: Supply btp_security_settings, audit_config, client_settings —
+      16 more check(s) would run. The other 15 missing source(s) would add 17 more.
+```
+
+Sources your contract does not let you produce are named separately rather than
+recommended, so nobody spends a week chasing a file RISE will never give them.
 
 ---
 
@@ -170,6 +189,25 @@ What the console adds over the CLI: findings that persist across uploads so you
 can see what got fixed and what came back, an attack-path graph, a dashboard
 with the financial figure on it, role-based access, an audit log, and a
 read-only MCP interface for asking questions of the data.
+
+**It says why a finding ranks where it does.** The tier is not a bare badge — the
+finding page lists the evidence behind it and what each piece was worth, so "this
+is P1" can be argued with. One of those pieces is whether anyone is actually
+using the account: a logon export turns "SAP_ALL is assigned" into "SAP_ALL is
+assigned to someone who signed in this week", which is a different problem from
+the same privilege sitting on a dormant account. Evidence of use raises priority
+and never lowers it — a thirty-day window is one break-glass procedure away from
+being wrong, and a firefighter account is dormant by design.
+
+**It writes the change, where the change is exactly known.** A profile parameter
+comes with the line to put in RZ10 and the current value to roll back to; a HANA
+grant comes with the `REVOKE` and the `GRANT` that undoes it. Per system, those
+are bundled into one artefact for one change window rather than one fragment per
+finding. It refuses more than it writes — nothing for a setting SAP owns under
+the contract, nothing where the baseline states a rule rather than a value,
+nothing for a grant whose object the export does not identify — and it says how
+many findings it could not write a change for, so 39 changes are never mistaken
+for a complete remedy.
 
 **It says what it takes to close a scenario, not just what is worst.** A single
 finding almost never severs a whole scenario — a real estate has four to six
@@ -293,9 +331,16 @@ crash: the API works and console URLs answer 503 with instructions.
 
 ## Testing
 
-About 4,500 tests, plus vitest tests over the console. They run every module
-against the bundled `sample_data`, which is crafted to trigger each check, and
-exercise the whole pipeline. No SAP system needed.
+About 5,600 tests, plus vitest tests over the console. They run every module
+against the bundled `sample_data` and exercise the whole pipeline. No SAP system
+needed.
+
+`sample_data` is a realistic estate, not a fixture built to trip every check, and
+plenty of the catalogue stays correctly silent on it. That matters, because a
+check that is correctly silent and a check that could never fire look identical
+unless somebody measures. So the suite records which check ids actually produce a
+finding anywhere in it, and publishes the count in
+[docs/CHECK_FIRING.md](docs/CHECK_FIRING.md) — currently 819 of 819.
 
 ```bash
 python -m pip install -r requirements.txt -r requirements-dev.txt httpx
