@@ -859,6 +859,21 @@ def main():
               f"{counts['modules_degraded']} module(s) ran with incomplete input, "
               f"{counts['modules_skipped']} had no input supplied, "
               f"{counts.get('modules_not_run', 0)} were not executed.")
+        # WHICH OF THE MISSING ONES TO GO AND GET, which the line above cannot
+        # say. "119 of 139" is true and unactionable: facing twenty absent
+        # extracts, nobody can tell that two of them carry a third of the
+        # remaining value, so the usual outcome is that none of them arrive and
+        # the product delivers 119/139 of itself forever.
+        try:
+            from modules import export_value
+            advice = export_value.sentence(
+                export_value.rank(coverage_manifest, args.deployment_mode))
+            if advice:
+                print(f"    {advice}")
+        except Exception:                                # noqa: BLE001
+            # Advice is a courtesy on top of a completed scan; failing to
+            # compute it must never cost the scan itself.
+            pass
     except Exception:                                    # noqa: BLE001
         # A manifest that cannot be built must not lose the scan. The reports
         # then say the coverage is unknown, which is worse than knowing and

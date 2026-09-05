@@ -477,6 +477,17 @@ def cmd_scan(args: argparse.Namespace) -> int:
         print(f"  {diff['resolution_skipped']}")
     if cov.get("summary"):
         print(f"  coverage: {cov['summary']}")
+        # ...and what to do about it. The summary states the gap honestly and
+        # gives no way to act on it; this names the two or three exports that
+        # would close most of it.
+        try:
+            from modules import export_value
+            advice = export_value.sentence(
+                export_value.rank(cov, land.get("deployment_mode", "on_prem")))
+            if advice:
+                print(f"  next: {advice}")
+        except Exception:                                # noqa: BLE001
+            pass
     failed = [n for n, m in result.get("module_status", {}).items()
               if m.get("status") == "failed"]
     if failed:
