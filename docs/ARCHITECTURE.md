@@ -695,7 +695,7 @@ The DataLoader holds a table matching each expected filename to a named slot. Wh
 
 In most software, asking for something that is not there is an error. Here it is not. If `ral_config.csv` was never supplied, the slot called `ral_config` exists and is empty, and every check that needs it quietly stands aside.
 
-This is the only sensible behaviour when nobody ever supplies all 135 sources — but it creates a serious danger, which the next chapter is entirely about. A system that skips silently produces a short, clean report and looks like good news.
+This is the only sensible behaviour when nobody ever supplies all 139 sources — but it creates a serious danger, which the next chapter is entirely about. A system that skips silently produces a short, clean report and looks like good news.
 
 > **The trap, stated once so you recognise it later**
 >
@@ -733,7 +733,7 @@ Nothing in that report is a lie. It is nonetheless the most dangerous document s
   - In truth 21 of 33 subject areas were never examined, because the files they need were not supplied. Every sentence is accurate. The document is still false.
 
 **With a coverage statement** — “12 findings. 2 critical.”
-  - “You supplied 41 of 135 sources.”
+  - “You supplied 41 of 139 sources.”
   - “21 areas were not assessed.”
   - “1 source cannot be obtained in RISE at all.”
   - The reader concludes: we have looked at a third of the building.

@@ -181,6 +181,49 @@ def test_the_summary_sentence_attaches_each_figure_to_its_own_label(page):
             % ("%d %s" % (value, label)))
 
 
+def _source_totals_stated_in(text):
+    """Every number that qualifies the word "sources", as a total.
+
+    `41 of 139 sources` yields 139 — the partial is free, the denominator is
+    not."""
+    return [(m.group(0), int(m.group(2) or m.group(1)))
+            for m in re.finditer(
+                r"(\d+)(?:\s+of\s+(\d+))?\s+(?:logical\s+)?sources\b", text)]
+
+
+@pytest.mark.parametrize("edition", ["html", "markdown"])
+def test_no_stale_denominator_survives_anywhere_in_the_prose(edition):
+    """PRESENCE IS NOT ENOUGH, part two — the same hole, one paragraph over.
+
+    The test above pins the closing summary and the one above that only asks
+    whether each figure appears SOMEWHERE. Between them, two sentences in the
+    body went on saying "nobody ever supplies all 135 sources" and "you supplied
+    41 of 135 sources" for as long as 139 appeared once, correctly, elsewhere on
+    the page. Both passed. A reader meets the wrong denominator in the chapter
+    that teaches them how to judge coverage, which is the worst place on the page
+    for it to be wrong — the number is the one they use to decide whether an
+    export is thorough enough to trust.
+
+    So every number that qualifies the word "sources" is checked, not just the
+    one in the summary. `41 of 139` is fine: the partial is free, the total is
+    not.
+
+    BOTH EDITIONS, SEPARATELY. Almost every test in this file takes the `page`
+    fixture, which is the HTML. Written that way, this one passed with the
+    Markdown edition mutated — the same false pass that let the figure drift in
+    the first place, reproduced in the test written to stop it. The two files are
+    maintained by hand side by side; either can rot alone.
+    """
+    text = (DOC if edition == "html" else MD).read_text(encoding="utf-8")
+    total = _derived()["logical sources"]
+    bad = [phrase for phrase, stated in _source_totals_stated_in(text)
+           if stated != total]
+    assert not bad, (
+        "the %s edition states a source total that is not %d: %s. A partial "
+        "(\"41 of %d\") is fine; the denominator is not."
+        % (edition, total, bad, total))
+
+
 def test_the_guide_does_not_hedge_a_count_it_can_state_exactly(page):
     """"~620 checks" was true only while the runtime families were unenumerated.
     They are enumerable now, so the tilde would be false modesty — and a hedged
