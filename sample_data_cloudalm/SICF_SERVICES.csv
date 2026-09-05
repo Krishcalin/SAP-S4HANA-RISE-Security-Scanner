@@ -12,3 +12,4 @@ wsdl,/sap/bc/soap/wsdl,ACTIVE,NONE
 webdynpro,/sap/bc/webdynpro,ACTIVE,BASIC
 icr_groups,/sap/public/icf_info/icr_groups,ACTIVE,NONE
 ping,/default_host/sap/bc/ping,ACTIVE,NONE
+z_vendor_report,/sap/bc/z_vendor_report,ACTIVE,NONE
