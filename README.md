@@ -211,6 +211,27 @@ nothing for a grant whose object the export does not identify — and it says ho
 many findings it could not write a change for, so 39 changes are never mistaken
 for a complete remedy.
 
+**It says whether anybody outside can reach the vulnerable line.** A code scanner
+reads ABAP and tells you a statement is dangerous. It cannot tell you who can get
+to it, because it sees the code and not the estate around it. This holds both. If
+you add two optional columns to exports you already produce — the handler class
+on an ICF node, the implementation class behind an OData service — a finding
+comes back with the route:
+
+```
+/sap/bc/z_vendor_report          ICF node, active, no authentication
+  → ZCL_TREE_CALLER              the class serving it
+     → drive                     zcl_tree_caller.clas.abap:20
+        → by_public_tainted      zcl_tree_worker.clas.abap:35
+           → SELECT … WHERE (iv_where)
+```
+
+That is a different finding from the same statement in a class only a nightly job
+touches, and it ranks accordingly. Without the columns it says so and claims
+nothing: no route found is reported as unknown, never as safe, because a dynamic
+call resolves to no edge and the endpoint list is only as complete as what you
+exported.
+
 **It says which export to go and get next.** The run page lists what each module
 could not read, and then orders it. On one partial upload, supplying the user
 list on its own would let 21 more checks run and `saprouttab` would let one — so

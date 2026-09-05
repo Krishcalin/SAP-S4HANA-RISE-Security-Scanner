@@ -222,10 +222,31 @@ class RiskPrioritizer:
                   "a change document records a recent change to this object, so "
                   "it is live rather than a fossil — "
                   + str(obj.get("reason") or ""))
-        if exposed and is_code:
+        # ── Reachable by WHAT, which is a different question ─────────────────
+        #
+        # "Referenced or recently executed" separates live code from
+        # housekeeping. It says nothing about the network, and the two were
+        # scored identically: an injection in a class published on an
+        # unauthenticated ICF node and the same statement in a class only a
+        # nightly job touches both earned the one "Reachable code" boost.
+        #
+        # `internet_exposed` is the stronger claim and is worth more. It is set
+        # only where an endpoint is NAMED — from HANDLER_CLASS / IMPL_CLASS — and
+        # where the call graph walks from that endpoint's class to this
+        # statement's own procedure. Absence is None, never False, so a customer
+        # who has not supplied the columns is not quietly told their code is
+        # unreachable; and None earns nothing, in either direction.
+        details = f.get("details") or {}
+        if details.get("internet_exposed") is True:
+            hops = details.get("exposure_path") or []
+            boost(20, "Reachable from a published endpoint",
+                  ("this statement is %s call(s) in from a published endpoint: "
+                   % len(hops) if hops else "this code serves a published endpoint: ")
+                  + "; ".join(details.get("exposure_reasons") or []))
+        elif exposed and is_code:
             boost(12, "Reachable code",
                   "referenced or recently executed — an attacker can get to it: "
-                  + "; ".join((f.get("details") or {}).get("reachability_reasons") or []))
+                  + "; ".join(details.get("reachability_reasons") or []))
         elif exposed:
             boost(12, "Exposed surface", "on a network / RISE-BTP surface reachable by an attacker")
         if cvss is not None:

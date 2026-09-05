@@ -85,7 +85,7 @@ from modules.base_auditor import BaseAuditor
 from modules.cds_authorization_index import (CROSS_ARTIFACT_RULES,
                                              CdsAuthorizationIndex,
                                              cross_artifact_findings)
-from modules.reachability import ReachabilityIndex, stamp
+from modules.reachability import EXPOSED, ReachabilityIndex, stamp
 
 #: The vendored corpus plus our own. Kept in separate modules because
 #: `tools/build_abap_rules.py` regenerates the vendored one verbatim from the
@@ -2190,6 +2190,12 @@ class AbapSastAuditor(BaseAuditor):
         # Built once and shared, so this module and the ATC import agree about the
         # same object rather than reaching two verdicts from the same inventory.
         self._reach = ReachabilityIndex(self.data)
+        # The graph the scan already built, reused rather than rebuilt: it is the
+        # same tree and parsing it twice would answer the same thing twice.
+        self._tree_graph_for_exposure = getattr(scanner, "_tree_graph", None)
+        self._entry_classes = sorted(
+            cls for cls, points in getattr(self._reach, "_entry_points", {}).items()
+            if any(p["active"] is not False for p in points))
         self._emit(raw, scanner)
         return self.findings
 
@@ -2483,6 +2489,73 @@ class AbapSastAuditor(BaseAuditor):
                 scope="aggregate",
             )
 
+    def _exposure_details(self, lead: Dict[str, Any]) -> Dict[str, Any]:
+        """Can somebody outside the system reach this statement, and by what route?
+
+        THE QUESTION `reachability.verdict` STOPS SHORT OF. It answers "does
+        anything in the system reference this object", which separates live code
+        from housekeeping and says nothing about the network. An injection in a
+        class published on an unauthenticated ICF node is an incident; the same
+        statement in a class only a batch job reaches is a bug to schedule. Those
+        are different findings and they were reported identically.
+
+        Two halves, and both have to be present:
+
+          * `reachability.exposure` names the endpoint, from the HANDLER_CLASS
+            and IMPL_CLASS columns that `docs/EXPORT_GUIDE.md` specified and
+            nothing read; and
+          * the tree call graph walks from the sink's own procedure up to a class
+            that serves one, so the answer holds for code three classes in from
+            the endpoint and not only for the handler itself.
+
+        ABSENCE IS NEVER SAFETY. No route found is reported as unknown, not as
+        unreachable: a dynamic `CALL METHOD (lv_name)` resolves to no edge, and
+        the entry list is only as complete as the columns the customer exported.
+        `reachability.exposure` refuses the same way, and for the same reason.
+        """
+        index = getattr(self, "_reach", None)
+        if index is None or not getattr(index, "has_entry_point_data", False):
+            return {"internet_exposed": None,
+                    "exposure_reasons": ["no HANDLER_CLASS or IMPL_CLASS column "
+                                         "was supplied"]}
+
+        obj = str(lead.get("object") or "")
+        direct = index.exposure(obj)
+        if direct["state"] == EXPOSED:
+            return {"internet_exposed": True,
+                    "exposure_entry_points": direct["entry_points"],
+                    "exposure_reasons": direct["reasons"],
+                    "exposure_path": []}
+
+        graph = getattr(self, "_tree_graph_for_exposure", None)
+        entries = getattr(self, "_entry_classes", None) or []
+        if graph is None or not entries:
+            return {"internet_exposed": None,
+                    "exposure_reasons": direct["reasons"]}
+
+        # `spans` are keyed on the artefact NAME, which is what
+        # `_build_tree_graph` fed them; the finding carries a full path.
+        name = Path(str(lead.get("file") or "")).name
+        proc = graph.proc_at(name, int(lead.get("line") or 0))
+        route = graph.path_from_entry(proc, entries) if proc else None
+        if route is None:
+            return {"internet_exposed": None,
+                    "exposure_reasons": [
+                        "no call route found from a published endpoint, which is "
+                        "not evidence that none exists — a dynamic call resolves "
+                        "to no edge here"]}
+
+        owner = route[0]["from"].split("~")[0] if route else proc.split("~")[0]
+        points = index.entry_points_for(owner)
+        reasons = ["reached from %s, %d call(s) in" % (owner.upper(), len(route))]
+        reasons += [r for p in points for r in
+                    ["%s %s is published%s" % (p["kind"].upper(), p["node"],
+                     "" if p["authenticated"] else " with no authentication")]]
+        return {"internet_exposed": True,
+                "exposure_entry_points": points,
+                "exposure_reasons": reasons,
+                "exposure_path": route}
+
     def _finding(self, lead: Dict[str, Any], members: List[Dict[str, Any]],
                  *, scope: str) -> None:
         obj = lead["object"]
@@ -2533,6 +2606,7 @@ class AbapSastAuditor(BaseAuditor):
                 "lex_degraded": lead.get("lex_degraded", False),
                 # The dynamically-named token was a compile-time literal.
                 "literal_operand": lead.get("literal_operand", False),
+                **self._exposure_details(lead),
                 **stamp({}, getattr(self, "_reach", None), obj),
             },
             affected_objects=[{"type": "program", "name": obj}],

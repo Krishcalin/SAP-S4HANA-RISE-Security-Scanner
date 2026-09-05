@@ -132,14 +132,13 @@ Required: ICF_NAME, ICF_ACTIVE, AUTH_REQUIRED
 Optional: HANDLER_CLASS
 ```
 
-> ⚠️ **`HANDLER_CLASS` IS NOT READ BY ANYTHING TODAY. Supply it only if you want to.**
-> The paragraph below describes what it is *for*, and that design is still the
-> intention — but no module currently consumes the column, and
-> `modules/reachability.py` says so in its own docstring ("no handler class").
-> Asking for a column and then ignoring it wastes somebody's afternoon in SICF, so
-> the honest position is stated here rather than left to be discovered.
+> ✅ **`HANDLER_CLASS` IS READ.** It was specified and then consumed by nothing
+> for a while, and this box said so. `modules/reachability.py` now joins on it,
+> and the ABAP call graph walks from the class it names to the statement a
+> finding sits on — so the answer holds for code several classes in from the
+> node, not only for the handler itself. Supplying it is worth the trip to SICF.
 >
-> **What it would be worth.** It is the ABAP class that serves
+> **What it is worth.** It is the ABAP class that serves
 > the node, and it is the one field that connects a *code* finding to the *outside
 > world*. With it, a SQL injection inside a class published on an unauthenticated
 > ICF node is identifiable as internet-reachable and ranks accordingly; without
@@ -329,10 +328,11 @@ Required: SERVICE_NAME, AUTH_CHECK
 Optional: ALIAS, SCOPE, REQUIRED_AUTH_OBJECT, IMPL_CLASS
 ```
 
-> ⚠️ **`IMPL_CLASS` IS NOT READ BY ANYTHING TODAY EITHER** — same position as
-> `HANDLER_CLASS` above, and the same reason for saying so plainly.
+> ✅ **`IMPL_CLASS` IS READ**, on the same footing as `HANDLER_CLASS` above. A
+> service whose `AUTH_CHECK` is `NONE` and whose DPC class reaches a finding is
+> reported as published without authentication, with the call route attached.
 >
-> **What it would be worth.** It is the OData half of the same link —
+> **What it is worth.** It is the OData half of the same link —
 > the Data Provider Class behind the service. It is what lets a code finding in a
 > DPC method be identified as sitting behind a published, possibly
 > unauthenticated, OData service. Without it, custom code exposed exclusively

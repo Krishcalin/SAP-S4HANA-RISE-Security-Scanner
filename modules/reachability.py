@@ -22,11 +22,15 @@ Only the object-name join is available from the exports we currently take:
 
     code_inventory.csv   OBJECT_NAME, OBJECT_TYPE, REFERENCED, LAST_USED   YES
 
-These do NOT join to an ABAP object, because the columns that would carry the
-link are not in the export:
+Two of these now join, where the customer supplies the optional column that
+carries the link. `docs/CVA_MERGE_PLAN.md` Phase 4b specified both, and
+`exposure()` below reads them:
 
-    icf_services.csv     ICF_NAME, ICF_ACTIVE, AUTH_REQUIRED    — no handler class
-    odata_auth.csv       SERVICE_NAME, ALIAS, AUTH_CHECK, ...   — no DPC class
+    icf_services.csv     + HANDLER_CLASS   -> the class serving an ICF node
+    odata_auth.csv       + IMPL_CLASS      -> the DPC behind an OData service
+
+These still do not, for the reason stated against each:
+
     fiori_tiles.csv      ... ODATA_SERVICE ...                  — stops at the service
     role_tcodes          role -> tcode                          — no tcode -> program
 
@@ -38,10 +42,18 @@ So `verdict()` returns one of three answers and never guesses:
                        read as either. An absent `code_inventory` export means we
                        know nothing, not that everything is dead.
 
-`docs/CVA_MERGE_PLAN.md` Phase 4b specifies the two extra export columns — the
-ICF node's handler class and the OData service's implementation class — that turn
-`unknown` into a real answer for internet-facing code. Until then this module is
-deliberately conservative: it dampens only when it can prove disuse.
+`exposure()` answers a DIFFERENT question and must not be confused with the one
+above. `verdict()` says whether anything in the system references the object,
+which separates live code from housekeeping. `exposure()` says whether somebody
+on the NETWORK can reach it, which is what turns an injection into an incident,
+and it is built from the two Phase 4b columns.
+
+Both are conservative in the same direction and for the same reason: `verdict`
+dampens only when it can prove disuse, and `exposure` never answers "not
+exposed" at all. A class can be reached through another class, through a dynamic
+call no graph resolves, or through an endpoint whose handler column the customer
+left blank — so the absence of a row is the absence of evidence, and it is
+reported as `unknown`.
 """
 from __future__ import annotations
 
@@ -50,6 +62,12 @@ from typing import Any, Dict, List, Optional
 REACHABLE = "reachable"
 UNREACHABLE = "unreachable"
 UNKNOWN = "unknown"
+
+#: A published endpoint names this class as its handler. Deliberately separate
+#: from REACHABLE: "something in the system references it" and "somebody on the
+#: network can call it" are different claims, and only the second one turns a
+#: code finding into an incident.
+EXPOSED = "exposed"
 
 #: `LAST_USED` older than this (or absent) stops counting as evidence of use. A
 #: program last run three years ago is not "in use" in any sense a risk decision
@@ -94,8 +112,17 @@ class ReachabilityIndex:
 
     def __init__(self, data: Dict[str, Any], *, today: Optional[int] = None):
         self._objects: Dict[str, Dict[str, Any]] = {}
+        #: UPPER class name -> the published endpoints it serves. Empty when the
+        #: exports carry no handler column, which is NOT the same as "this class
+        #: serves nothing" — see `exposure`.
+        self._entry_points: Dict[str, List[Dict[str, Any]]] = {}
+        #: Whether either export actually carried its handler column. Without it
+        #: every answer here is `unknown`, and saying so is the whole point.
+        self._have_icf_handlers = False
+        self._have_odata_impls = False
         self._today = today
         self._build(data)
+        self._build_entry_points(data)
 
     # ------------------------------------------------------------------ #
 
@@ -114,6 +141,99 @@ class ReachabilityIndex:
                 "last_used": _parse_date(_cell(row, "LAST_USED", "LAST_EXECUTED",
                                                "LASTUSED")),
             }
+
+    def _build_entry_points(self, data: Dict[str, Any]) -> None:
+        """ICF nodes and OData services, indexed by the class that serves them.
+
+        THE TWO COLUMNS THIS READS WERE SPECIFIED AND THEN READ BY NOTHING.
+        `docs/EXPORT_GUIDE.md` says so in a warning box against each of them, and
+        the module docstring above lists both exports under "these do NOT join to
+        an ABAP object". They do now.
+
+        `ICF_ACTIVE` and `AUTH_REQUIRED` are read with the same three-state care
+        as `REFERENCED`: only an explicit value counts, and a blank cell means the
+        export did not say. An inactive node cannot be reached, so it is indexed
+        and marked rather than dropped — the difference between "published without
+        authentication" and "published" is the difference between a P1 and
+        something to fix next quarter.
+        """
+        for row in data.get("icf_services") or []:
+            if not isinstance(row, dict):
+                continue
+            handler = _cell(row, "HANDLER_CLASS", "HANDLER", "CLASS").upper()
+            if not handler:
+                continue
+            self._have_icf_handlers = True
+            active = _cell(row, "ICF_ACTIVE", "ACTIVE").upper()
+            auth = _cell(row, "AUTH_REQUIRED", "AUTH").upper()
+            self._entry_points.setdefault(handler, []).append({
+                "kind": "icf",
+                "node": _cell(row, "ICF_NAME", "NODE", "PATH"),
+                "active": True if active in _TRUE else False if active in _FALSE else None,
+                "authenticated": (True if auth in _TRUE else
+                                  False if auth in _FALSE else None),
+            })
+
+        for row in data.get("odata_auth") or []:
+            if not isinstance(row, dict):
+                continue
+            impl = _cell(row, "IMPL_CLASS", "DPC_CLASS", "CLASS").upper()
+            if not impl:
+                continue
+            self._have_odata_impls = True
+            # `AUTH_CHECK` is a word here rather than a flag: NONE means the
+            # service performs no authorisation check of its own.
+            check = _cell(row, "AUTH_CHECK", "AUTH").upper()
+            self._entry_points.setdefault(impl, []).append({
+                "kind": "odata",
+                "node": _cell(row, "SERVICE_NAME", "SERVICE", "ALIAS"),
+                "active": None,
+                "authenticated": (False if check in ("NONE", "") else
+                                  True if check else None),
+            })
+
+    @property
+    def has_entry_point_data(self) -> bool:
+        """True when at least one export carried its handler column."""
+        return self._have_icf_handlers or self._have_odata_impls
+
+    def entry_points_for(self, class_name: str) -> List[Dict[str, Any]]:
+        return list(self._entry_points.get((class_name or "").upper(), []))
+
+    def exposure(self, object_name: str) -> Dict[str, Any]:
+        """Is this object published to the outside world, and behind what?
+
+        THREE STATES, AND THE THIRD IS THE COMMON ONE. `exposed` needs a named
+        endpoint; everything else is `unknown`, INCLUDING an object that simply
+        does not appear in the handler columns. This module never answers "not
+        exposed", and the reason is the same one that stops `verdict` calling
+        things unreachable on half the evidence: a class can be reached through
+        another class, through a dynamic call no graph resolves, or through an
+        endpoint whose handler column the customer left blank. Absence of a row
+        is absence of evidence.
+        """
+        name = (object_name or "").upper()
+        if not self.has_entry_point_data:
+            return {"state": UNKNOWN, "entry_points": [],
+                    "reasons": ["no HANDLER_CLASS or IMPL_CLASS column was supplied; "
+                                "see docs/EXPORT_GUIDE.md"]}
+        points = self._entry_points.get(name) or []
+        live = [p for p in points if p["active"] is not False]
+        if not live:
+            if points:
+                return {"state": UNKNOWN, "entry_points": points,
+                        "reasons": ["every endpoint naming this class is inactive"]}
+            return {"state": UNKNOWN, "entry_points": [],
+                    "reasons": ["no published endpoint names this class, which is "
+                                "not evidence that nothing reaches it"]}
+        reasons = []
+        for point in live:
+            if point["authenticated"] is False:
+                reasons.append("%s %s is published with no authentication"
+                               % (point["kind"].upper(), point["node"]))
+            else:
+                reasons.append("%s %s is published" % (point["kind"].upper(), point["node"]))
+        return {"state": EXPOSED, "entry_points": live, "reasons": reasons}
 
     # ------------------------------------------------------------------ #
 

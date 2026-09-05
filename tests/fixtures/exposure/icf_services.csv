@@ -1,5 +1,6 @@
 ICF_NAME,ICF_ACTIVE,AUTH_REQUIRED,HANDLER_CLASS
 /sap/bc/z_vendor_report,X,NO,ZCL_TREE_CALLER
 /sap/bc/z_admin,X,YES,ZCL_TREE_ADMIN
-/sap/bc/z_retired,,NO,ZCL_TREE_RETIRED
+/sap/bc/z_retired,NO,NO,ZCL_TREE_RETIRED
+/sap/bc/z_unstated,,NO,ZCL_TREE_UNSTATED
 /sap/public/info,X,NO,

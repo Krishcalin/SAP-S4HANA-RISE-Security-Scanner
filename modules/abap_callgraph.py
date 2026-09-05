@@ -80,7 +80,7 @@ reads as tainted. That is the direction to be wrong in.
 from __future__ import annotations
 
 import re
-from typing import Dict, List, NamedTuple, Optional, Sequence, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 
 class Evidence(NamedTuple):
@@ -168,6 +168,8 @@ _CLASS_BLOCK = re.compile(
     r"^\s*CLASS\s+(?P<name>%s)\s+(?P<what>DEFINITION|IMPLEMENTATION)\b" % _IDENT,
     re.IGNORECASE)
 _ENDCLASS = re.compile(r"^\s*ENDCLASS\b", re.IGNORECASE)
+#: Closes a procedure body, so a call below it is no longer inside one.
+_PROC_END = re.compile(r"^\s*END(?:FORM|METHOD|FUNCTION|MODULE)\b", re.IGNORECASE)
 _SECTION = re.compile(r"^\s*(?P<vis>PUBLIC|PROTECTED|PRIVATE)\s+SECTION\s*$",
                       re.IGNORECASE)
 
@@ -313,11 +315,12 @@ class CallSite:
     """One call, and what it hands over."""
 
     __slots__ = ("callee", "line", "positional", "named", "file",
-                 "qualified", "code")
+                 "qualified", "code", "in_proc")
 
     def __init__(self, callee: str, line: int,
                  positional: Dict[str, List[str]], named: Dict[str, str],
-                 file: str = "", qualified: bool = True, code: str = ""):
+                 file: str = "", qualified: bool = True, code: str = "",
+                 in_proc: str = ""):
         #: `zcl_x~run` where the receiver's class was resolved, else the bare
         #: name. `qualified` says which, and it decides what the call may prove:
         #: an unresolved receiver can ADD taint to every method of that name, and
@@ -332,6 +335,10 @@ class CallSite:
         #: The calling statement as written, so a cross-file trace step can show
         #: it without the reader opening the other artefact.
         self.code = code
+        #: The procedure this call sits INSIDE. Without it the graph has edges
+        #: but no way to walk them: `callers_of` finds the call, and continuing
+        #: upward needs to know which procedure to ask about next.
+        self.in_proc = in_proc
 
 
 class CallGraph:
@@ -349,6 +356,10 @@ class CallGraph:
         self.visibility: Dict[str, str] = {}
         #: key -> the artefact that defines it, for the cross-file trace step.
         self.defined_in: Dict[str, str] = {}
+        #: (file, first line, last line, key). A finding knows its file and line
+        #: and nothing about procedures, so this is how a sink is turned into a
+        #: node the graph can walk from.
+        self.spans: List[Tuple[str, int, int, str]] = []
         #: True when every artefact in the tree has been added. It is what makes
         #: a PROTECTED member answerable (its subclasses are in the tree) and
         #: what makes "nothing calls this" mean more than "nothing here does".
@@ -409,6 +420,12 @@ class CallGraph:
     def _scan(self, statements: Sequence[object], methods_decl: Dict[str, str],
               var_class: Dict[str, str], path: str) -> None:
         cls: Optional[str] = None
+        #: The procedure whose body we are inside, so a call can record where it
+        #: was made FROM. Without it the graph has edges and no way to walk them:
+        #: `callers_of` finds a call, and continuing upward needs to know which
+        #: procedure to ask about next.
+        in_proc: str = ""
+        proc_start: int = 0
         for st in statements:
             text = (getattr(st, "text", "") or "").strip()
             if not text:
@@ -436,8 +453,38 @@ class CallGraph:
             if _ENDCLASS.match(text):
                 cls = None
                 continue
-            self._add_definition(text, methods_decl, cls, path)
-            self._add_calls(text, masked, line, cls, var_class, path)
+            opened = self._add_definition(text, methods_decl, cls, path)
+            if opened is not None:
+                if in_proc:
+                    # An unclosed procedure. Recorded to where the next one
+                    # starts rather than dropped: a span that stops existing is a
+                    # sink the walk cannot start from at all.
+                    self.spans.append((path, proc_start, line - 1, in_proc))
+                in_proc, proc_start = opened, line
+            elif _PROC_END.match(text):
+                if in_proc:
+                    self.spans.append((path, proc_start, line, in_proc))
+                in_proc, proc_start = "", 0
+            self._add_calls(text, masked, line, cls, var_class, path, in_proc)
+        if in_proc:
+            # A procedure left open at end of file. Its span runs to the end
+            # rather than being dropped: a sink inside it would otherwise belong
+            # to no procedure and the walk could not start from it at all.
+            self.spans.append((path, proc_start, 10 ** 9, in_proc))
+
+    def proc_at(self, file: str, line: int) -> str:
+        """The procedure containing `line` of `file`, or "".
+
+        A finding knows its file and its line and nothing about procedures, so
+        this is how a sink becomes a node the graph can walk up from. The latest
+        span that starts before the line wins — ABAP does not nest procedures, so
+        the tie-break only matters for a malformed file where one was left open.
+        """
+        best, best_start = "", -1
+        for span_file, start, end, key in self.spans:
+            if span_file == file and start <= line <= end and start > best_start:
+                best, best_start = key, start
+        return best
 
     # ---------------------------------------------------------------- #
     #  Building                                                         #
@@ -451,11 +498,13 @@ class CallGraph:
         self.defined_in.setdefault(key, path)
 
     def _add_definition(self, text: str, methods_decl: Dict[str, str],
-                        cls: Optional[str], path: str) -> None:
+                        cls: Optional[str], path: str) -> Optional[str]:
+        """Record a procedure, and return the key it opened (None if none)."""
         m = _FORM_DEF.match(text)
         if m:
-            self._define(m.group("name"), FORM, m.group("rest"), path)
-            return
+            key = m.group("name").lower()
+            self._define(key, FORM, m.group("rest"), path)
+            return key
         m = _METHOD_DEF.match(text)
         if m:
             name = m.group("name").lower()
@@ -463,23 +512,27 @@ class CallGraph:
             # the interface and is not in this artefact. The bare name is tried
             # too, because an implementing class usually declares it as well.
             rest = methods_decl.get(name) or methods_decl.get(name.split("~")[-1], "")
-            self._define(self._key(cls, name), METHOD, rest, path)
-            return
+            key = self._key(cls, name)
+            self._define(key, METHOD, rest, path)
+            return key
         m = _FUNCTION_DEF.match(text)
         if m:
             # A function module's signature is in its (generated) include, not
             # here. Its formals are therefore unknown and callers bind by name.
-            self._define(m.group("name"), FUNCTION, "", path)
+            key = m.group("name").lower()
+            self._define(key, FUNCTION, "", path)
+            return key
+        return None
 
     def _add_calls(self, text: str, masked: str, line: int,
                    cls: Optional[str], var_class: Dict[str, str],
-                   path: str) -> None:
+                   path: str, in_proc: str = "") -> None:
         m = _PERFORM.match(masked)
         if m:
             pos, named = _actuals_in(m.group("rest"))
             self.calls.append(
                 CallSite(m.group("name").lower(), line, pos, named, path,
-                         code=text))
+                         code=text, in_proc=in_proc))
             return
         m = _CALL_FUNCTION.search(masked)
         if m:
@@ -488,14 +541,15 @@ class CallGraph:
             name = text[m.start("name"):m.end("name")]
             pos, named = _actuals_in(m.group("rest"))
             self.calls.append(
-                CallSite(name.lower(), line, pos, named, path, code=text))
+                CallSite(name.lower(), line, pos, named, path, code=text,
+                         in_proc=in_proc))
             return
         m = _CALL_METHOD.search(masked)
         if m:
             pos, named = _actuals_in(m.group("rest"))
             self.calls.append(
                 CallSite(m.group("name").lower(), line, pos, named, path,
-                         qualified=False, code=text))
+                         qualified=False, code=text, in_proc=in_proc))
             return
         for call in _METHOD_CALL.finditer(masked):
             args = call.group("args")
@@ -511,7 +565,8 @@ class CallGraph:
             name = call.group("name").lower()
             self.calls.append(
                 CallSite(self._key(owner, name), line, pos, named, path,
-                         qualified=owner is not None, code=text))
+                         qualified=owner is not None, code=text,
+                         in_proc=in_proc))
 
     @staticmethod
     def _receiver_class(recv: str, arrow: str, cls: Optional[str],
@@ -620,6 +675,63 @@ class CallGraph:
             return Evidence(NO_CALLER)
         first = sites[0]
         return Evidence(LITERAL_ONLY, first.line, first.file, code=first.code)
+
+    def path_from_entry(self, sink_proc: str, entry_classes: Sequence[str],
+                        max_depth: int = 8) -> Optional[List[Dict[str, Any]]]:
+        """The shortest call chain from one of `entry_classes` down to `sink_proc`.
+
+        WHAT THIS IS FOR. `reachability.exposure` can say a class is the handler
+        of a published ICF node. That is worth something on its own, and it is
+        not the question anybody actually asks — which is whether the injection
+        three classes further in can be reached from outside. This walks the
+        graph backwards from the sink until it arrives in a class somebody can
+        call over the network, and returns the route.
+
+        SHORTEST, BY BREADTH-FIRST. A reader given the shortest chain can check
+        it; given the longest they will not read it. And bounded: `max_depth`
+        stops a pathological graph, and a chain nobody would follow is not
+        evidence anybody can use.
+
+        Returns None when no route was found, which is NOT proof there is none —
+        a dynamic call resolves to no edge here, and the entry list is only as
+        complete as the handler columns the customer exported. The caller must
+        report absence as unknown, never as safe.
+        """
+        wanted = {c.lower() for c in entry_classes if c}
+        if not wanted or not sink_proc:
+            return None
+
+        def owner_of(proc: str) -> str:
+            return proc.split("~")[0].lower() if "~" in proc else ""
+
+        start = sink_proc.lower()
+        if owner_of(start) in wanted:
+            # The sink is already inside an entry class; the route is empty and
+            # the exposure is direct.
+            return []
+
+        # Breadth-first over "who calls this", carrying the route built so far.
+        queue: List[Tuple[str, List[Dict[str, Any]]]] = [(start, [])]
+        seen = {start}
+        depth = 0
+        while queue and depth < max_depth:
+            nxt: List[Tuple[str, List[Dict[str, Any]]]] = []
+            for proc, route in queue:
+                for site in self.callers_of(proc):
+                    caller = (site.in_proc or "").lower()
+                    if not caller:
+                        continue
+                    hop = {"from": caller, "to": proc, "line": site.line,
+                           "file": site.file, "code": site.code}
+                    if owner_of(caller) in wanted:
+                        return [hop] + route
+                    if caller in seen:
+                        continue
+                    seen.add(caller)
+                    nxt.append((caller, [hop] + route))
+            queue = nxt
+            depth += 1
+        return None
 
     def _clearable(self, key: str) -> bool:
         """May a parameter of this procedure ever start the walk untainted?

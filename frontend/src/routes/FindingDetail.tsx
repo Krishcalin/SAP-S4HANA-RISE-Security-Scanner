@@ -361,6 +361,47 @@ export function FindingDetail() {
                   </dd>
                 </>
               )}
+
+              {/* REACHABLE BY WHAT, which is the question "Reachable" above does
+                  not answer. It says something in the system references this
+                  object; this says somebody on the network can get to it, and
+                  the two were being shown as one thing.
+
+                  `internet_exposed` is a three-state value and null is the
+                  common one: no route found is NOT the same as no route, since
+                  a dynamic call resolves to no edge and the entry list is only
+                  as complete as the columns the customer exported. So the null
+                  case says what to supply rather than claiming anything. */}
+              {details['internet_exposed'] !== undefined && (
+                <>
+                  <dt className={DT}>Reachable from outside</dt>
+                  <dd className={DD}>
+                    {details['internet_exposed'] === true
+                      ? <span className="own own-ticket_to_sap">published endpoint</span>
+                      : <span className="own own-not_assessable">unknown</span>}
+                    {arr(details['exposure_reasons']).length > 0 && (
+                      <div className="text-[12px] text-ink3 mt-1">
+                        {arr(details['exposure_reasons']).map((r) => String(r)).join(' · ')}
+                      </div>
+                    )}
+                    {arr(details['exposure_path']).length > 0 && (
+                      <div className="mt-1.5 text-[12px] font-mono text-ink2">
+                        {arr(details['exposure_path']).map((raw, i) => {
+                          const hop = obj(raw) ?? {}
+                          return (
+                            <div key={i} className="break-all">
+                              {str(hop['from'])} → {str(hop['to'])}
+                              <span className="text-ink3">
+                                {' '}({str(hop['file'])}:{str(hop['line'])})
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </dd>
+                </>
+              )}
             </dl>
 
             {str(details['snippet']) && (

@@ -10,7 +10,7 @@
 | 2 · statements not lines; abapGit extensions | **done** | `bf7532a` · `modules/abap_sast.py` |
 | 3 · land as an auditor; drop BTP/grade/reporting | **done** | `bf7532a` |
 | 4a · reachability join on `code_inventory` | **done** | `modules/reachability.py` |
-| 4b · specify `HANDLER_CLASS` / `IMPL_CLASS` | **done** (specified; awaiting a customer export) | `docs/EXPORT_GUIDE.md` |
+| 4b · `HANDLER_CLASS` / `IMPL_CLASS` | **done** (specified, and now read: `reachability.exposure` joins on them and the ABAP call graph walks from the class they name to the finding) | `modules/reachability.py`, `modules/abap_callgraph.py` |
 | 5 · trust model | **done** | `abap_sast.py`, `fair_adapter.py` |
 | 6 · server tier + console | **done** | `schema.sql`, `finding_detail.html` |
 | 7 · coverage gaps | **done** (RAP declined, see §6) | `modules/abap_sast_extra.py` |
