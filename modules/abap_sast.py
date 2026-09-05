@@ -572,8 +572,8 @@ def split_statements(source: str) -> List[Statement]:
             while _in_amdp(stack):
                 stack.pop()
 
-        code, mask, term, stack = _scan_line(line, stack)
-        if _scan_line.unterminated_at_eol:
+        code, mask, term, stack, unterminated = _scan_line(line, stack)
+        if unterminated:
             pending_degraded = True
         raw.append(line)
 
@@ -934,8 +934,12 @@ def _scan_line(line: str, stack: List[Tuple[str, str]]
 
     # A `*` in column 1 comments the whole line — but only when we are not inside
     # a literal or template left open on a previous line, where it is text.
+    #
+    # `False` for the last element and not a carried value: a comment line opens
+    # nothing and closes nothing, so it leaves nothing unterminated. Whatever the
+    # line above left open was reported when THAT line was scanned.
     if line[:1] == "*" and mode in (_M_CODE, _M_EMB, _M_AMDP):
-        return "", "", "", stack
+        return "", "", "", stack, False
 
     i, n = 0, len(line)
     while i < n:
@@ -1071,10 +1075,8 @@ def _scan_line(line: str, stack: List[Tuple[str, str]]
         i += 1
 
     closed = _close_at_end_of_line(stack)
-    #: Set on the function so the splitter can mark the statement without
-    #: changing a return signature four call sites depend on.
-    _scan_line.unterminated_at_eol = len(closed) != len(stack)
-    return "".join(code), "".join(mask), "".join(term), closed
+    return ("".join(code), "".join(mask), "".join(term), closed,
+            len(closed) != len(stack))
 
 
 def _close_at_end_of_line(stack: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
@@ -1744,7 +1746,7 @@ class RiseTaintAnalyzer(TaintAnalyzer):
         code_lines: List[str] = []
         stack: List[Tuple[str, str]] = []
         for line in self._raw:
-            _code, mask, _term, stack = _scan_line(line, stack)
+            _code, mask, _term, stack, _unterminated = _scan_line(line, stack)
             code_lines.append(_taint_rewrite(mask.strip()))
         self._code = code_lines
         # B2/B4 — a METHOD implementation header carries no signature, so the
