@@ -62,11 +62,11 @@ reason for each.
 
 ## Every source, including the ones this guide does not cover
 
-The scanner reads **128** logical sources. All of them now have a procedure: the
+The scanner reads **139** logical sources. All of them now have a procedure: the
 sections up to *SAP Cloud ALM* cover what a first scan needs, and
 [*The remaining sources*](#the-remaining-sources) below covers the rest.
 
-[**`EXPORT_SOURCES.md`**](EXPORT_SOURCES.md) lists all 128 — the filenames the
+[**`EXPORT_SOURCES.md`**](EXPORT_SOURCES.md) lists all 139 — the filenames the
 loader accepts, which checks each one feeds, and whether a procedure exists. It is
 generated from the code, so a source cannot be added to the scanner without
 appearing there, and it will show up as undocumented until somebody writes the
