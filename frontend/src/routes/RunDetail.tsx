@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { ApiError, cancelRun, run as fetchRun, runDiff as fetchDiff } from '../api/client'
-import type { RunDiff, RunStatus, ScanRun } from '../api/types'
+import { ApiError, cancelRun, remediationPlan, run as fetchRun, runExportValue, runDiff as fetchDiff } from '../api/client'
+import type { ExportValue, RemediationPlan, RunDiff, RunStatus, ScanRun } from '../api/types'
 import { useSession } from '../lib/session'
 import { useTitle } from '../lib/title'
 import { ScanLine } from 'lucide-react'
@@ -179,6 +179,11 @@ function Sev({ value }: { value: string | null }) {
 
 const TH = 'text-left text-[11px] font-semibold uppercase tracking-[.05em] ' +
            'text-ink3 px-2.5 py-2 border-b border-line'
+// The apply/rollback blocks: monospace, wrapping, and scrollable rather
+// than truncated — a change script that is cut off is worse than none.
+const PRE = 'm-0 p-2.5 rounded-md bg-panel2 border border-line text-[12px] font-mono whitespace-pre-wrap break-words'
+const BREAK = '\n'
+
 const TD = 'px-2.5 py-2.5 border-b border-line align-top'
 
 export function RunDetail() {
@@ -274,6 +279,42 @@ export function RunDetail() {
       .catch((err) => { if (!stopped) setDiffError(describe(err, runId)) })
     return () => { stopped = true }
   }, [runId, status])
+
+  // The change plan for the system this run scanned, once the run is terminal.
+  //
+  // ON THE RUN PAGE because this is where somebody stands after a scan, and
+  // "what do I change" is the next question. It is per SYSTEM rather than per
+  // run: a change window works in systems, and the plan is built from what is
+  // open now rather than from what this particular run happened to find.
+  const systemId = poll?.run.system_id ?? null
+  const [plan, setPlan] = useState<RemediationPlan | null>(null)
+  useEffect(() => {
+    if (status === undefined || IN_FLIGHT.has(status) || systemId === null) return
+    let stopped = false
+    remediationPlan(systemId)
+      .then((p) => { if (!stopped) setPlan(p) })
+      // A run with nothing open answers 404, which is not an error worth a
+      // banner — it means there is nothing to change.
+      .catch(() => { if (!stopped) setPlan(null) })
+    return () => { stopped = true }
+  }, [systemId, status])
+
+  // Which missing export is worth fetching first.
+  //
+  // Same terminal-only rule as the diff and the plan, for a sharper reason than
+  // either: `coverage` is written at the END of the pipeline, so mid-scan the
+  // column still holds `{}` and `rank({})` answers "nothing is missing" — the
+  // most reassuring possible reading of a run that has not looked yet.
+  const [value, setValue] = useState<ExportValue | null>(null)
+  useEffect(() => {
+    if (status === undefined || IN_FLIGHT.has(status)) return
+    let stopped = false
+    runExportValue(runId)
+      .then((v) => { if (!stopped) setValue(v) })
+      .catch(() => { if (!stopped) setValue(null) })
+    return () => { stopped = true }
+  }, [runId, status])
+
 
   async function requestCancel() {
     setCancelBusy(true)
@@ -589,6 +630,61 @@ export function RunDetail() {
         </>
       )}
 
+      {plan && plan.changes > 0 && (
+        <>
+          <h2 className="mt-6 mb-2.5 text-[15px] font-semibold text-ink">
+            What to change on {plan.sid ?? 'this system'}
+          </h2>
+          <p className="text-[12px] text-ink3 mb-2.5">
+            {plan.changes} change(s) across {plan.blocks.length} block(s), from{' '}
+            {plan.findings_considered} open finding(s). Review and apply through
+            your normal change control &mdash; nothing here has been applied.
+          </p>
+          {plan.blocks.map((b) => (
+            <div key={b.kind} className="mb-4 rounded-lg border border-cardline bg-panel p-4">
+              <p className="text-[12px] text-ink3 m-0">
+                {b.where} &middot; closes {b.closes.length} check(s)
+              </p>
+              <p className="text-[11px] uppercase tracking-[.05em] text-ink3 mt-3 mb-1.5">
+                Apply
+              </p>
+              <pre className={PRE}>{b.apply.join(BREAK)}</pre>
+              {b.rollback.length > 0 && (
+                <>
+                  <p className="text-[11px] uppercase tracking-[.05em] text-ink3 mt-3 mb-1.5">
+                    Roll back, in this order
+                  </p>
+                  <pre className={PRE}>{b.rollback.join(BREAK)}</pre>
+                </>
+              )}
+              {b.caveats.length > 0 && (
+                <ul className="mt-3 mb-0 pl-[18px] list-disc">
+                  {b.caveats.map((c, i) => (
+                    <li key={i} className="text-[12px] text-ink2">{c}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+          {/* WHAT THE PLAN DOES NOT COVER, on the same screen as what it does.
+              39 changes beside 366 findings it could not write one for is a
+              different message from 39 changes alone, and the second one reads
+              as a complete remedy for the system. */}
+          <p className="text-[12px] text-ink2 mb-6">
+            Not in this plan:{' '}
+            {plan.sap_owned > 0 && (
+              <>{plan.sap_owned} finding(s) SAP operates under the contract &mdash;
+                raise the service request instead. </>
+            )}
+            {plan.declined.length > 0 && (
+              <>{plan.declined.length} where the baseline states a rule rather than
+                a single value, or the export does not identify the object. </>
+            )}
+            {plan.not_covered} finding(s) this tool cannot write a change for at all.
+          </p>
+        </>
+      )}
+
       {/* ── module coverage ─────────────────────────────────────────────────
           The RISE column only exists for a RISE landscape, where some sources are
           not obtainable at all (they need OS access) and a module's scope is the
@@ -627,6 +723,72 @@ export function RunDetail() {
               </tbody>
             </table>
           </div>
+        </>
+      )}
+
+      {/* ── what to fetch next ──────────────────────────────────────────────
+          The table above names the missing sources per module and stops there,
+          which leaves a list of filenames and no way to tell which one is worth
+          going back to Basis for. This is that ordering, and nothing else on
+          the page carries it. */}
+      {value && (value.ranked.length > 0 || value.unobtainable.length > 0) && (
+        <>
+          <h2 className="mt-6 mb-2.5 text-[15px] font-semibold text-ink">
+            Which export to supply next
+          </h2>
+          {value.ranked.length > 0 ? (
+            <>
+              <p className="text-[12px] text-ink3 mb-2.5">
+                {value.missing} source(s) were missing from this upload, between
+                them blocking {value.checks_blocked} check(s).
+              </p>
+              <div className="overflow-x-auto rounded-lg border border-cardline bg-panel">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr>
+                      <th className={TH}>Source</th>
+                      <th className={`${TH} w-[110px]`}>Unlocks now</th>
+                      <th className={`${TH} w-[130px]`}>Needs another too</th>
+                      <th className={TH}>Read by</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {value.ranked.map((r) => (
+                      <tr key={r.source} className="hover:bg-panel2">
+                        <td className={`${TD} font-mono text-[12px]`}>{r.source}</td>
+                        {/* THE TWO COLUMNS ARE NEVER ADDED TOGETHER. Supplying
+                            this one file makes `unlocks_now` checks run; the
+                            others still wait on a source that is also missing,
+                            and one summed number would promise the whole of it
+                            for a single upload. */}
+                        <td className={`${TD} tabular-nums`}>{r.unlocks_now}</td>
+                        <td className={`${TD} tabular-nums text-ink3`}>
+                          {r.also_needed_by || '—'}
+                        </td>
+                        <td className={`${TD} text-[12px] text-ink3`}>
+                          {r.modules.length ? r.modules.join(', ') : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <p className="text-[12px] text-ink2">
+              Nothing missing here can be supplied under this contract.
+            </p>
+          )}
+          {value.unobtainable.length > 0 && (
+            <p className="mt-2.5 text-[12px] text-ink2">
+              Not obtainable under RISE:{' '}
+              <span className="font-mono">
+                {value.unobtainable.map((r) => r.source).join(', ')}
+              </span>
+              . These need OS-level access SAP retains, so they are why those
+              checks did not run &mdash; not something to go and ask for.
+            </p>
+          )}
         </>
       )}
 

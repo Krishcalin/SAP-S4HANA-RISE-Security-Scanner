@@ -293,6 +293,9 @@ export interface FindingDetail extends Omit<FindingRow,
   /** What the attack graph joins to this finding's objects. Optional: an older
    *  server does not send it, and an absent section is better than an empty one. */
   graph?: FindingGraph
+  /** The change to make, where it is exactly known. Absent for most of the
+   *  catalogue on purpose — see `server/remediation.py`. */
+  remediation_pack?: RemediationPack
 }
 
 /** server/queries.py `finding_history` — finding_transition.*. */
@@ -653,6 +656,93 @@ export interface PathFinding {
 }
 
 /** server/app.py `api_path`. */
+/**
+ * The change itself, for a finding the customer is able to make —
+ * `server/remediation.py`.
+ *
+ * `applicable: false` is a real answer rather than an absence: it means there IS
+ * a fix and this is not the route to it — usually because the setting is SAP's
+ * under a RISE contract, and the service request is the artefact instead. `why`
+ * says which.
+ */
+export interface RemediationPack {
+  kind: string
+  applicable: boolean
+  owner: string
+  why?: string
+  where?: string
+  /** True where the lines are statements to run, false where they are steps to
+   *  follow. Nothing here is ever executed by this product. */
+  executable?: boolean
+  apply: string[]
+  rollback: string[]
+  verify?: string
+  source?: string
+  caveats?: string[]
+}
+
+/** One missing export file, and what supplying it would buy. */
+export interface ExportValueRow {
+  source: string
+  /** Checks that would run on this source ALONE. The number that justifies the
+   *  trip to Basis. */
+  unlocks_now: number
+  /** Checks that need this source AND something else still missing. Counted
+   *  apart because supplying only this one does not make them run, and folding
+   *  the two together would overstate what a single file achieves. */
+  also_needed_by: number
+  checks: string[]
+  modules: string[]
+  obtainable: boolean
+}
+
+/**
+ * `modules/export_value.rank` — the missing sources of one run, ordered by what
+ * each would unlock.
+ *
+ * `unobtainable` is not a lesser tier of `ranked`. Under RISE those sources need
+ * OS access the customer does not have, so they are the explanation for a gap
+ * and never a next step; presenting them as one sends somebody to ask SAP for a
+ * file the contract does not let them have.
+ */
+export interface ExportValue {
+  ranked: ExportValueRow[]
+  unobtainable: ExportValueRow[]
+  missing: number
+  checks_blocked: number
+}
+
+/** One kind of change, gathered across a system — `remediation.plan_for_system`. */
+export interface RemediationBlock {
+  kind: string
+  where: string
+  executable: boolean
+  apply: string[]
+  rollback: string[]
+  /** The check ids this block closes. */
+  closes: string[]
+  caveats: string[]
+}
+
+/**
+ * Every change the customer can apply on one system.
+ *
+ * The three "not in here" counts are not bookkeeping. A plan that silently omits
+ * what it cannot write reads as a complete remedy for the system, and they lead
+ * to different actions: ask SAP, decide the value yourself, or nothing this tool
+ * can write.
+ */
+export interface RemediationPlan {
+  system_id: number
+  sid: string | null
+  findings_considered: number
+  blocks: RemediationBlock[]
+  changes: number
+  sap_owned: number
+  declined: { check_id: string; why: string }[]
+  not_covered: number
+}
+
 /** One edge touching an object a finding names — `graph.finding_neighbourhood`. */
 export interface NeighbourEdge {
   name: string

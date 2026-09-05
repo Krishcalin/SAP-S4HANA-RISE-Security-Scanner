@@ -1175,6 +1175,39 @@ def api_run_diff(run_id: int, user: Dict[str, Any] = Depends(current_user)):
     return queries.run_diff(run_id, scope)
 
 
+@app.get("/api/runs/{run_id}/export-value")
+def api_run_export_value(run_id: int,
+                         user: Dict[str, Any] = Depends(current_user)):
+    """Which missing export would let the most checks run, for one run.
+
+    THE MODULE COVERAGE TABLE ALREADY NAMES THE MISSING SOURCES and stops there,
+    which leaves the reader with a list of filenames and no way to tell which one
+    is worth going back to Basis for. `export_value.rank` is the answer and until
+    now only the CLI printed it — the console, which is where everybody actually
+    reads a run, had no access to it at all.
+
+    DEPLOYMENT MODE COMES FROM THE LANDSCAPE, NOT FROM THE MANIFEST. Both carry
+    it, and they agree on any run scanned since the field existed. They part
+    company on older ones: `coverage` defaults to `{}`, so a manifest without the
+    key would be read as on_prem, and on_prem is the mode under which nothing is
+    unobtainable. That failure is not cosmetic — it moves sources a RISE customer
+    has no contractual route to out of `unobtainable` and into `ranked`, where
+    they read as the next thing to go and fetch. The landscape row is the
+    contract, so it decides.
+
+    `unobtainable` is returned alongside, not filtered out. A source that cannot
+    be produced under RISE is why a gap exists, and dropping it would leave the
+    page asserting a gap with no account of it.
+    """
+    from modules import export_value
+
+    run = queries.get_run(run_id, auth.scope_for(user))
+    if run is None:
+        raise HTTPException(404, "not found")
+    return export_value.rank(run.get("coverage") or {},
+                             run.get("deployment_mode") or "on_prem")
+
+
 @app.get("/api/findings/{finding_id}/history")
 def api_finding_history(finding_id: int, user: Dict[str, Any] = Depends(current_user)):
     """The lifecycle trail and the per-run observations for one finding.

@@ -6,6 +6,7 @@ import {
 } from '../api/client'
 import type {
   ServiceRequest, FindingDetail as Finding, FindingGraph, FindingHistory,
+  RemediationPack,
 } from '../api/types'
 import { useSession } from '../lib/session'
 import { useTitle } from '../lib/title'
@@ -525,6 +526,8 @@ ${finding.remediation ?? ''}`}
         </>
       )}
 
+      <TheChange pack={finding.remediation_pack} />
+
       <WhyThisRanks finding={finding} />
 
       <GraphNeighbourhood graph={finding.graph} />
@@ -825,6 +828,84 @@ function describe(e: unknown): string {
 
 const CARD = 'rounded-lg border border-cardline bg-panel p-4'
 const G2 = 'grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]'
+/**
+ * The change to make, when the product knows exactly what it is.
+ *
+ * THE APPLY AND ROLLBACK ARE SHOWN TOGETHER, always. A proposed change without
+ * the way back is not a proposal an operator can accept, and the rollback is the
+ * value the scan actually observed rather than a guess at what SAP ships.
+ *
+ * `applicable: false` gets a paragraph rather than nothing. It means there IS a
+ * fix and this is not the route to it — under a RISE contract the parameters are
+ * SAP's, and the drafted service request is the artefact. A reader who sees an
+ * empty section concludes the tool has no answer.
+ *
+ * Nothing here is ever run by this product, which holds no connection to SAP.
+ * The caveats say so on every pack, and they are rendered rather than trimmed.
+ */
+function TheChange({ pack }: { pack?: RemediationPack }) {
+  if (!pack) return null
+
+  if (!pack.applicable) {
+    // THE OWNERSHIP CASE IS ALREADY ON THIS PAGE, in the banner at the top and
+    // in the drafted service request below it. Repeating it here would tell the
+    // reader the same thing a third time. The other refusals — a baseline that
+    // states a rule rather than a value, a grant whose object the export does
+    // not type — are new information and are worth a line.
+    if (pack.owner !== 'customer_fixable') return null
+    return (
+      <>
+        <h2 className={H2}>The change</h2>
+        <div className={CARD}>
+          <p className="text-[13px] text-ink2 m-0">
+            {pack.why || 'This is not a change to make from here.'}
+          </p>
+        </div>
+      </>
+    )
+  }
+
+  const lines = (label: string, rows: string[]) => rows.length > 0 && (
+    <>
+      <p className="text-[11px] uppercase tracking-[.05em] text-ink3 mt-3 mb-1.5">
+        {label}
+      </p>
+      <pre className="m-0 p-2.5 rounded-md bg-panel2 border border-line
+                      text-[12px] font-mono whitespace-pre-wrap break-words">
+        {rows.join('\n')}
+      </pre>
+    </>
+  )
+
+  return (
+    <>
+      <h2 className={H2}>The change</h2>
+      <div className={CARD}>
+        {pack.where && (
+          <p className="text-[12px] text-ink3 m-0">{pack.where}</p>
+        )}
+        {lines('Apply', pack.apply)}
+        {lines('Roll back', pack.rollback)}
+        {pack.verify && (
+          <p className="text-[12px] text-ink2 mt-3 mb-0">{pack.verify}</p>
+        )}
+        {pack.source && (
+          <p className="text-[12px] text-ink3 mt-1.5 mb-0">
+            Required value from {pack.source}.
+          </p>
+        )}
+        {(pack.caveats ?? []).length > 0 && (
+          <ul className="mt-3 mb-0 pl-[18px] list-disc">
+            {(pack.caveats ?? []).map((c, i) => (
+              <li key={i} className="text-[12px] text-ink2">{c}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </>
+  )
+}
+
 /**
  * Why this finding ranks where it does.
  *

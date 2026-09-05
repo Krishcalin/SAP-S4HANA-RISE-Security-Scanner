@@ -32,6 +32,8 @@ import type {
   CheckIndexEntry, ChokepointsView,
   ServiceRequest, SeveringSet, Coverage, CrqControlsView,
   CrqParametersView, CrqQuantifyResult, CrqTrendPoint, CsfFunctionView,
+  ExportValue,
+  RemediationPlan,
   ComplianceView,
   CsfView, Dashboard, DomainsView, FindingDetail, FindingFilters, TopRisksView,
   FindingHistory, FindingPage, GeneratedPassword, Health, Journey, Landscape,
@@ -385,6 +387,21 @@ export function coverage(): Promise<Coverage> {
 
 export function run(id: number): Promise<ScanRun> {
   return get<ScanRun>(`/runs/${id}`)
+}
+
+/** Every change the customer can apply on one system, as one artefact.
+ *
+ *  A change window works in systems rather than in findings, so this is the
+ *  per-finding packs bundled: profile lines together, SQL together, one combined
+ *  rollback, and the count of findings it could NOT write a change for. */
+export function remediationPlan(systemId: number): Promise<RemediationPlan> {
+  return get<RemediationPlan>(`/systems/${systemId}/remediation-plan`)
+}
+
+/** Which missing export to fetch first, for one run. Answers 200 with an empty
+ *  ranking when nothing is missing — an empty ranking is a result, not a gap. */
+export function runExportValue(runId: number): Promise<ExportValue> {
+  return get<ExportValue>(`/runs/${runId}/export-value`)
 }
 
 /** New / persisting / resolved / regressed for one run. Separate from `run()` on
