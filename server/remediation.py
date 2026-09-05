@@ -26,6 +26,8 @@ and neither is guessed at here.
 """
 from __future__ import annotations
 
+import re
+
 from server import db
 
 from typing import Any, Dict, List, Optional, Sequence
@@ -271,6 +273,169 @@ def hana_pack(row: Dict[str, Any],
     }
 
 
+ROLE_AUTHORIZATION = "role_authorization"
+
+#: Qualifiers this cannot read as field values. A qualifier is free text on the
+#: subject object, and most `AUTH-*` checks write `FIELD=VALUE,FIELD=VALUE` —
+#: but not all of them do, and one that says something else is a sentence, not
+#: coordinates.
+_FIELD_PAIR = re.compile(r"^[A-Z_][A-Z0-9_]*\s*=\s*\S*$", re.IGNORECASE)
+
+
+def _field_values(qualifier: str) -> List[str]:
+    """`RFC_USER=*,RFC_SYSID=*` as a list, or [] if it is not field values."""
+    parts = [p.strip() for p in str(qualifier or "").split(",") if p.strip()]
+    if not parts or not all(_FIELD_PAIR.match(p) for p in parts):
+        return []
+    return parts
+
+
+def _qualifier_of(row: Dict[str, Any]) -> Dict[str, str]:
+    """Object name -> its qualifier, for the objects the finding named.
+
+    THE SAME LESSON AS `hana_pack`, INVERTED. The qualifier lives on the SUBJECT
+    object and never on the edge: an edge to a scoped grant still reads
+    `Z_BASIS_SUPER -> S_RFCACL` with nothing about the fields. In HANA that made
+    the grant unwritable; here it is the opposite — the field values are the
+    whole change, because removing S_RFCACL from a role and restricting
+    `RFC_USER` within it are different acts with different blast radii.
+    """
+    import json as _json
+
+    subject = row.get("subject") or row.get("affected_objects")
+    if isinstance(subject, str):
+        try:
+            subject = _json.loads(subject)
+        except ValueError:
+            return {}
+    out: Dict[str, str] = {}
+    for obj in (subject or ()):
+        if isinstance(obj, dict) and obj.get("name") and obj.get("qualifier"):
+            out[str(obj["name"])] = str(obj["qualifier"])
+    return out
+
+
+def role_pack(row: Dict[str, Any],
+              neighbourhood: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Where to go in PFCG for an authorization finding, or None.
+
+    NOT EXECUTABLE, AND THAT IS NOT A SHORTCOMING. PFCG is a dialog transaction:
+    there is no statement to paste, and a generated script would be a fiction.
+    What a security administrator actually needs is the coordinates — which
+    role, which authorization object, which field values — and those are exactly
+    what the finding and the graph hold between them.
+
+        PFCG > Z_BASIS_SUPER > Authorizations > S_RFCACL
+               RFC_USER=*, RFC_SYSID=*
+
+    THE PAIRS COME FROM THE GRAPH, for the same reason they do in `hana_pack`: a
+    finding names roles and objects as two flat lists, and "restrict one of these
+    six objects in one of these four roles" is not a change. The
+    `grants_authorization` edges record which role grants which object.
+
+    WHAT IT REFUSES. A pair whose object carries no field values is counted and
+    not written: without them the only statable change is "remove the object",
+    which is a different and much larger act than restricting it, and choosing
+    between them is a judgement about the business this tool will not make.
+    """
+    check_id = str(row.get("check_id") or "")
+    if not check_id.startswith("AUTH-"):
+        return None
+    if not neighbourhood:
+        return None
+
+    pairs = [e for e in (neighbourhood.get("within") or [])
+             if e.get("edge_type") == "grants_authorization"
+             and str(e.get("from_type")) == "role"
+             and str(e.get("to_type")) == "auth_object"]
+    if not pairs:
+        return None
+
+    owner = str(row.get("remediation_owner") or "").strip().lower()
+    if owner and owner != _CUSTOMER_FIXABLE:
+        return {"kind": ROLE_AUTHORIZATION, "applicable": False, "owner": owner,
+                "why": "these roles are not the customer's to change under the "
+                       "contract; raise a service request instead",
+                "apply": [], "rollback": []}
+
+    qualifiers = _qualifier_of(row)
+    stated, unstated = [], []
+    for edge in pairs:
+        fields = _field_values(qualifiers.get(str(edge.get("to")), ""))
+        (stated if fields else unstated).append((edge, fields))
+
+    if not stated:
+        return {"kind": ROLE_AUTHORIZATION, "applicable": False,
+                "owner": owner or _CUSTOMER_FIXABLE,
+                "why": "the export does not carry the field values for these "
+                       "authorizations, so the only change this could state is "
+                       "removing the object outright — a much larger act than "
+                       "restricting it, and not one to choose for you",
+                "apply": [], "rollback": []}
+
+    apply_steps, rollback_steps = [], []
+    for edge, fields in stated[:_MAX_STATEMENTS]:
+        role, obj = edge["from"], edge["to"]
+        apply_steps.append(
+            "PFCG > %s > Authorizations > %s — restrict or remove: %s"
+            % (role, obj, ", ".join(fields)))
+        rollback_steps.append(
+            "PFCG > %s > Authorizations > %s — restore: %s"
+            % (role, obj, ", ".join(fields)))
+
+    caveats = [
+        "Review and apply through your normal change control. This tool holds "
+        "no connection to SAP and has changed nothing.",
+        "PFCG does not apply an authorization change until the profile is "
+        "regenerated, and a user does not receive it until their next logon. A "
+        "role edited and not generated reads as fixed here and is not.",
+        "Capture the role's current state before editing — download it or note "
+        "the transport request. The rollback above restores the values named "
+        "here and cannot restore anything this tool never saw.",
+    ]
+
+    # WHO THIS BREAKS, where the export says. Removing an authorization from a
+    # role changes it for everyone holding the role, and that is the reason
+    # these changes stall in review. Naming them is the difference between a
+    # coordinate and a plan.
+    holders = sorted({str(e.get("name")) for e in (neighbourhood.get("held_by") or [])
+                      if e.get("edge_type") == "holds_role" and e.get("name")})
+    if holders:
+        caveats.append(
+            "%d account(s) hold these roles and are affected: %s."
+            % (len(holders), ", ".join(holders[:20])
+               + (" …" if len(holders) > 20 else "")))
+    else:
+        # Absent, not empty. The three-state rule this codebase runs on: a
+        # missing user-role export is not an unassigned role.
+        caveats.append(
+            "The export carried no role assignments for these roles, so who is "
+            "affected is unknown rather than nobody.")
+
+    if unstated:
+        caveats.append(
+            "%d further authorization(s) are not written here: the export did "
+            "not carry their field values." % len(unstated))
+    if len(stated) > _MAX_STATEMENTS:
+        caveats.append("%d of %d steps shown." % (_MAX_STATEMENTS, len(stated)))
+
+    return {
+        "kind": ROLE_AUTHORIZATION,
+        "applicable": True,
+        "owner": owner or _CUSTOMER_FIXABLE,
+        "where": "PFCG — %s" % (row.get("sid") or "the system"),
+        # Steps to follow, not statements to run. The console renders the two
+        # differently and a customer must not paste these anywhere.
+        "executable": False,
+        "apply": apply_steps,
+        "rollback": rollback_steps,
+        "verify": "Re-run the scan; %s closes when these authorizations no "
+                  "longer carry the values above." % check_id,
+        "source": "",
+        "caveats": caveats,
+    }
+
+
 #: The states a finding must be in to belong in a change window. `accepted` is
 #: excluded deliberately: somebody decided to tolerate it, and putting it into a
 #: script would undo that decision without asking.
@@ -382,4 +547,6 @@ def pack(row: Dict[str, Any],
     emitted where the exact change is KNOWN, and inventing an approximate one
     for the rest would put text into a change request that nobody verified.
     """
-    return parameter_pack(row) or hana_pack(row, neighbourhood)
+    return (parameter_pack(row)
+            or hana_pack(row, neighbourhood)
+            or role_pack(row, neighbourhood))

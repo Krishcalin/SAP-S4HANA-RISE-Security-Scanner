@@ -645,16 +645,34 @@ export function RunDetail() {
               <p className="text-[12px] text-ink3 m-0">
                 {b.where} &middot; closes {b.closes.length} check(s)
               </p>
+              {/* STATEMENTS AND STEPS RENDER DIFFERENTLY, because they are not
+                  the same thing. A hana_grant block is SQL to run; a
+                  role_authorization block is PFCG coordinates, and PFCG is a
+                  dialog transaction with nothing to paste into. Shown in the
+                  same monospace box, the second kind reads as a script and
+                  somebody tries to run it. */}
               <p className="text-[11px] uppercase tracking-[.05em] text-ink3 mt-3 mb-1.5">
-                Apply
+                {b.executable ? 'Apply' : 'Steps to follow'}
               </p>
-              <pre className={PRE}>{b.apply.join(BREAK)}</pre>
+              {b.executable
+                ? <pre className={PRE}>{b.apply.join(BREAK)}</pre>
+                : <ol className="m-0 pl-[20px] list-decimal">
+                    {b.apply.map((s, i) => (
+                      <li key={i} className="text-[12px] text-ink2 mb-1 break-words">{s}</li>
+                    ))}
+                  </ol>}
               {b.rollback.length > 0 && (
                 <>
                   <p className="text-[11px] uppercase tracking-[.05em] text-ink3 mt-3 mb-1.5">
-                    Roll back, in this order
+                    {b.executable ? 'Roll back, in this order' : 'To undo'}
                   </p>
-                  <pre className={PRE}>{b.rollback.join(BREAK)}</pre>
+                  {b.executable
+                    ? <pre className={PRE}>{b.rollback.join(BREAK)}</pre>
+                    : <ol className="m-0 pl-[20px] list-decimal">
+                        {b.rollback.map((s, i) => (
+                          <li key={i} className="text-[12px] text-ink2 mb-1 break-words">{s}</li>
+                        ))}
+                      </ol>}
                 </>
               )}
               {b.caveats.length > 0 && (

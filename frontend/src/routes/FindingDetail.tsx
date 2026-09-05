@@ -915,15 +915,33 @@ function TheChange({ pack }: { pack?: RemediationPack }) {
     )
   }
 
-  const lines = (label: string, rows: string[]) => rows.length > 0 && (
+  // STATEMENTS AND STEPS ARE NOT THE SAME THING, and rendering them alike
+  // invites somebody to paste the second kind somewhere. A HANA pack is SQL to
+  // run; a role pack is PFCG coordinates — `PFCG > Z_BASIS_SUPER >
+  // Authorizations > S_RFCACL` is a place to go, not a command, and PFCG is a
+  // dialog transaction with nothing to paste into.
+  //
+  // `!== false` rather than `=== true`: a parameter pack sets no flag and an
+  // RZ10 line IS text you type, so the absence of the field keeps its behaviour.
+  const runnable = pack.executable !== false
+  const lines = (label: string, stepLabel: string, rows: string[]) =>
+    rows.length > 0 && (
     <>
       <p className="text-[11px] uppercase tracking-[.05em] text-ink3 mt-3 mb-1.5">
-        {label}
+        {runnable ? label : stepLabel}
       </p>
-      <pre className="m-0 p-2.5 rounded-md bg-panel2 border border-line
-                      text-[12px] font-mono whitespace-pre-wrap break-words">
-        {rows.join('\n')}
-      </pre>
+      {runnable ? (
+        <pre className="m-0 p-2.5 rounded-md bg-panel2 border border-line
+                        text-[12px] font-mono whitespace-pre-wrap break-words">
+          {rows.join('\n')}
+        </pre>
+      ) : (
+        <ol className="m-0 pl-[20px] list-decimal">
+          {rows.map((r, i) => (
+            <li key={i} className="text-[12px] text-ink2 mb-1 break-words">{r}</li>
+          ))}
+        </ol>
+      )}
     </>
   )
 
@@ -934,8 +952,8 @@ function TheChange({ pack }: { pack?: RemediationPack }) {
         {pack.where && (
           <p className="text-[12px] text-ink3 m-0">{pack.where}</p>
         )}
-        {lines('Apply', pack.apply)}
-        {lines('Roll back', pack.rollback)}
+        {lines('Apply', 'Steps to follow', pack.apply)}
+        {lines('Roll back', 'To undo', pack.rollback)}
         {pack.verify && (
           <p className="text-[12px] text-ink2 mt-3 mb-0">{pack.verify}</p>
         )}

@@ -256,3 +256,51 @@ describe('the change plan on a finished run', () => {
     expect(remediationPlan).not.toHaveBeenCalled()
   })
 })
+
+/** A role_authorization block: PFCG coordinates, which are steps and not SQL. */
+const STEP_PLAN: RemediationPlan = {
+  ...PLAN,
+  blocks: [{
+    kind: 'role_authorization',
+    where: 'PFCG — PRD',
+    executable: false,
+    apply: ['PFCG > Z_BASIS_SUPER > Authorizations > S_RFCACL — restrict or remove: RFC_USER=*'],
+    rollback: ['PFCG > Z_BASIS_SUPER > Authorizations > S_RFCACL — restore: RFC_USER=*'],
+    closes: ['AUTH-002'],
+    caveats: ['PFCG does not apply a change until the profile is regenerated.'],
+  }],
+  changes: 1,
+}
+
+describe('a block that is steps rather than statements', () => {
+  it('does not render PFCG coordinates in a script box', async () => {
+    show('complete', STEP_PLAN)
+    await waitFor(() => expect(screen.getByText(/What to change on PRD/)).toBeTruthy())
+    // <pre> is where this screen puts things to run. PFCG is a dialog
+    // transaction, and a monospace block reads as a script somebody can paste.
+    expect(document.querySelectorAll('pre').length).toBe(0)
+    expect(document.querySelectorAll('ol').length).toBeGreaterThan(0)
+  })
+
+  it('labels them as steps', async () => {
+    show('complete', STEP_PLAN)
+    await waitFor(() => expect(screen.getByText('Steps to follow')).toBeTruthy())
+    expect(screen.getByText('To undo')).toBeTruthy()
+    expect(screen.queryByText('Roll back, in this order')).toBeNull()
+  })
+
+  it('still shows the coordinates and the caveat', async () => {
+    show('complete', STEP_PLAN)
+    await waitFor(() => expect(screen.getByText(/What to change on PRD/)).toBeTruthy())
+    expect(body()).toContain('Z_BASIS_SUPER')
+    expect(body()).toContain('RFC_USER=*')
+    expect(body()).toContain('regenerated')
+  })
+
+  it('keeps rendering a runnable block as a script', async () => {
+    show()
+    await waitFor(() => expect(screen.getByText(/What to change on PRD/)).toBeTruthy())
+    expect(document.querySelectorAll('pre').length).toBeGreaterThan(0)
+    expect(screen.getByText('Roll back, in this order')).toBeTruthy()
+  })
+})

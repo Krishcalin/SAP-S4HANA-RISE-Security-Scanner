@@ -262,3 +262,58 @@ describe('a finding with no pack', () => {
     expect(screen.queryByText('The change')).toBeNull()
   })
 })
+
+/** `role_pack` on a real AUTH-002 finding: PFCG coordinates, not statements. */
+const PFCG_STEPS: RemediationPack = {
+  kind: 'role_authorization',
+  applicable: true,
+  owner: 'customer_fixable',
+  where: 'PFCG — PRD',
+  executable: false,
+  apply: [
+    'PFCG > Z_BASIS_SUPER > Authorizations > S_RFCACL — restrict or remove: RFC_USER=*, RFC_SYSID=*',
+  ],
+  rollback: [
+    'PFCG > Z_BASIS_SUPER > Authorizations > S_RFCACL — restore: RFC_USER=*, RFC_SYSID=*',
+  ],
+  verify: 'Re-run the scan.',
+  caveats: ['PFCG does not apply an authorization change until the profile is regenerated.'],
+}
+
+describe('a change that is steps rather than statements', () => {
+  it('does not render PFCG coordinates as a script', async () => {
+    await draw(PFCG_STEPS)
+    // A <pre> is where this page puts things to run. PFCG is a dialog
+    // transaction: there is nothing to paste, and a monospace block invites
+    // somebody to try.
+    expect(changeCard().querySelectorAll('pre').length).toBe(0)
+    expect(changeCard().querySelectorAll('ol').length).toBeGreaterThan(0)
+  })
+
+  it('labels them as steps, not as Apply', async () => {
+    await draw(PFCG_STEPS)
+    // Scoped to the card: the assignment form further down has its own Apply
+    // BUTTON, and a page-wide query finds that instead.
+    const card = changeCard().textContent ?? ''
+    expect(card).toContain('Steps to follow')
+    expect(card).toContain('To undo')
+    expect(card).not.toContain('Roll back')
+  })
+
+  it('still shows the coordinates and the caveat', async () => {
+    await draw(PFCG_STEPS)
+    const text = changeCard().textContent ?? ''
+    expect(text).toContain('Z_BASIS_SUPER')
+    expect(text).toContain('S_RFCACL')
+    expect(text).toContain('RFC_USER=*')
+    expect(text).toContain('regenerated')
+  })
+
+  it('keeps rendering a runnable pack as a script', async () => {
+    await draw(APPLICABLE)
+    expect(changeCard().querySelectorAll('pre').length).toBeGreaterThan(0)
+    const card = changeCard().textContent ?? ''
+    expect(card).toContain('Roll back')
+    expect(card).not.toContain('Steps to follow')
+  })
+})
