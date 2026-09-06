@@ -13,6 +13,7 @@ API" structural rather than something to remember.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from functools import lru_cache
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from modules import coverage as _coverage_module
@@ -1119,3 +1120,142 @@ def findings_for_domains(scope: Optional[Sequence[int]]) -> List[Dict[str, Any]]
         "ORDER BY CASE f.severity WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1 "
         "         WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 ELSE 4 END, f.check_id",
         params)
+
+
+def evidence_gaps(scope: Optional[Sequence[int]]) -> Dict[str, Any]:
+    """Which unsupplied export would make the most findings decidable.
+
+    WHY THIS EXISTS. Every module already records its own evidence gap: a finding
+    assessed on partial input carries `evidence.complete = false` alongside
+    `declared_sources` and `missing_sources`, and `modules/domains.py` keeps
+    `not_supplied` distinct from `clear` so no screen reports "we looked and found
+    nothing" about a domain nobody exported. All of that is PER FINDING. Nothing
+    added it up, so the one question a customer can act on had no answer:
+    *of everything we did not send, what is worth sending first?*
+
+    On the bundled demo estate the answer is one file. `auth_objects` alone leaves
+    35 findings resting on partial evidence; the next four sources together
+    account for 31. Without the aggregate a reader sees 66 individually-caveated
+    findings and no way to tell that most of them share four causes.
+
+    "DECIDABLE" IS THE STRONGEST CLAIM AVAILABLE, and the wording is the point.
+    Supplying a source lets the check reach a verdict; it does not say which
+    verdict. A finding here may harden, may clear, may split across systems. This
+    returns `findings_undecided`, never `findings_that_would_be_fixed` — the
+    product holds no connection to SAP, cannot predict a verdict it has not
+    computed, and a ranking that implied otherwise would be selling a number it
+    made up.
+
+    RISE-UNOBTAINABLE SOURCES ARE RANKED BUT MARKED, NOT SILENTLY DROPPED. Five
+    logical sources come from a layer SAP operates under RISE, and
+    `ext_os_commands_sap` is one of them — worth 5 findings on the demo estate.
+    Telling a RISE customer to go and produce it is advice they cannot take, so
+    the row carries `obtainable_in_rise: false` and the caller can say so. It is
+    still counted, because the gap is real and on-premise readers of the same
+    screen can close it; hiding it would misstate the total.
+
+    A SOURCE THE LOADER DOES NOT KNOW IS SURFACED, NOT SWALLOWED. `missing_sources`
+    is written by modules and the loader's table is the authority on what can be
+    supplied. A name in one and not the other is a defect — a typo'd source is a
+    gap no export can ever close, and it would otherwise sit there for ever
+    looking like ordinary missing input. Those rows come back with
+    `known_to_loader: false` and no filenames to offer.
+    """
+    from modules.coverage import RISE_UNREACHABLE_SOURCES, all_logical_sources
+    from modules.data_loader import DataLoader
+
+    where = ["f.state NOT IN ('resolved','false_positive')"]
+    params: List[Any] = []
+    _scoped(where, params, scope)
+
+    # THE LATEST OBSERVATION PER FINDING, matching the rule the rest of this file
+    # keeps: an open finding is a statement about its most recent scan, and an
+    # earlier run's evidence describes input the customer may since have sent.
+    #
+    # ORDERED BY scan_run_id, THE SAME WAY `list_findings` PICKS `latest_evidence`.
+    # This screen is the aggregate of the very sentence FindingDetail prints on
+    # each finding, so the two must not be able to disagree about which
+    # observation is the latest one. `o.id DESC` is the same answer whenever runs
+    # are observed in order and a different one as soon as they are not -- a
+    # re-imported older run inserts a high id against a low scan_run_id -- and a
+    # total that contradicts the findings it is summing is the failure this
+    # codebase keeps warning about: the same run saying two different things
+    # depending on which artefact you read.
+    rows = db.query(
+        # count(DISTINCT f.id), NOT count(*). The lateral expansion emits one row
+        # per (finding, named source), so a `missing_sources` array that repeats a
+        # name would count that finding twice and rank the source above one with
+        # more real findings behind it. Nothing enforces uniqueness in that array,
+        # and a duplicate inside a sibling evidence array -- `affected_items` --
+        # has already been observed in this database.
+        "SELECT src.source, count(DISTINCT f.id) AS findings, "
+        "       count(DISTINCT f.check_id) AS checks, "
+        "       count(DISTINCT f.system_id) AS systems "
+        "FROM finding f "
+        "JOIN LATERAL ("
+        "     SELECT o.evidence FROM finding_observation o "
+        "      WHERE o.finding_id = f.id ORDER BY o.scan_run_id DESC LIMIT 1"
+        ") latest ON true "
+        "CROSS JOIN LATERAL "
+        "     jsonb_array_elements_text(latest.evidence->'missing_sources') "
+        "     AS src(source) "
+        f"WHERE {' AND '.join(where)} "
+        "  AND latest.evidence->>'complete' = 'false' "
+        "GROUP BY src.source "
+        "ORDER BY count(*) DESC, src.source",
+        params)
+
+    known = set(all_logical_sources())
+    feeds = _sources_to_modules()
+    gaps = []
+    for row in rows:
+        source = row["source"]
+        gaps.append({
+            "source": source,
+            "findings_undecided": int(row["findings"]),
+            "checks": int(row["checks"]),
+            "systems": int(row["systems"]),
+            "files_accepted": list(DataLoader.FILE_MAP.get(source, [])),
+            "feeds": list(feeds.get(source, ())),
+            "known_to_loader": source in known,
+            "obtainable_in_rise": source not in RISE_UNREACHABLE_SOURCES,
+        })
+
+    # The TOTAL counts findings, not source mentions: one finding can name several
+    # missing sources, and summing the column above would report more undecided
+    # findings than the estate has. Asked of the database rather than derived,
+    # because a derivation that double-counts is exactly the bug being avoided.
+    total = db.one(
+        "SELECT count(*) AS n FROM finding f "
+        "JOIN LATERAL ("
+        "     SELECT o.evidence FROM finding_observation o "
+        "      WHERE o.finding_id = f.id ORDER BY o.scan_run_id DESC LIMIT 1"
+        ") latest ON true "
+        f"WHERE {' AND '.join(where)} "
+        "  AND latest.evidence->>'complete' = 'false'",
+        params)
+
+    return {
+        "gaps": gaps,
+        "findings_undecided": int(total["n"]) if total else 0,
+        "unknown_sources": [g["source"] for g in gaps if not g["known_to_loader"]],
+    }
+
+
+@lru_cache(maxsize=1)
+def _sources_to_modules() -> Dict[str, Tuple[str, ...]]:
+    """Which modules read each logical source, from the module table itself.
+
+    CACHED LIKE ITS INPUT. `coverage.module_sources` carries `lru_cache(1)`
+    because it AST-parses every module on disk -- 1.3 seconds on the first call
+    -- and this inverts it. The mapping is a property of the source tree, which
+    cannot change inside a running process, so re-deriving it per request buys
+    nothing. Tuples rather than lists because a cached value must not be a
+    mutable one a caller can edit under the next reader.
+    """
+    from modules.coverage import module_sources
+    out: Dict[str, set] = {}
+    for module, sources in module_sources().items():
+        for source in sources:
+            out.setdefault(source, set()).add(module)
+    return {src: tuple(sorted(mods)) for src, mods in out.items()}

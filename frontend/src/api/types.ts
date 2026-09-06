@@ -1026,6 +1026,39 @@ export interface Journey {
  *  our checks that map to no SAP requirement, which is not a failure — SoD, GRC,
  *  financial controls and the attack-path content have no Baseline equivalent,
  *  and that is precisely where the product goes beyond it. */
+/** One unsupplied export, and how much of the estate is waiting on it.
+ *
+ *  `findings_undecided` COUNTS FINDINGS THAT COULD NOT REACH A VERDICT, not
+ *  problems waiting to be discovered. Supplying the source lets those checks
+ *  answer; it does not say what they will answer. There is deliberately no field
+ *  estimating the outcome — the scanner has no connection to SAP and would be
+ *  inventing it. The screen must not word it as "would fix". */
+export interface EvidenceGap {
+  source: string
+  findings_undecided: number
+  checks: number
+  systems: number
+  /** Filenames the loader accepts for this source, from its own table. Empty
+   *  when the name is one the loader does not know. */
+  files_accepted: string[]
+  feeds: string[]
+  /** False means the name appears in a module's `missing_sources` but in no
+   *  loader slot — a defect, not an export anyone can send. */
+  known_to_loader: boolean
+  /** False for the five sources SAP operates under RISE. Still counted, because
+   *  an on-premise reader of the same estate can close it — but a RISE customer
+   *  cannot, and telling them to is advice they cannot take. */
+  obtainable_in_rise: boolean
+}
+
+export interface EvidenceGapsView {
+  gaps: EvidenceGap[]
+  /** Findings, not source mentions: one finding blocked on two exports is one
+   *  undecided finding in two rows, so this is NOT the column's sum. */
+  findings_undecided: number
+  unknown_sources: string[]
+}
+
 export interface Coverage {
   baseline_version: string | null
   requirements_published: number

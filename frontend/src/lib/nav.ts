@@ -1,5 +1,5 @@
 import {
-  Calculator, CircleAlert, ListOrdered, ScrollText, CircleDollarSign, Landmark, LayoutDashboard, LayoutGrid, Scissors, ShieldCheck, TrendingUp, Upload, UserCog, Waypoints, type LucideIcon,
+  Calculator, CircleAlert, FileQuestion, ListOrdered, ScrollText, CircleDollarSign, Landmark, LayoutDashboard, LayoutGrid, Scissors, ShieldCheck, TrendingUp, Upload, UserCog, Waypoints, type LucideIcon,
 } from 'lucide-react'
 import type { Role } from '../api/types'
 
@@ -41,6 +41,11 @@ export const NAV_MAIN: NavItem[] = [
   // sits in the main list rather than under a reports submenu.
   { to: '/risk', label: 'Risk ($)', icon: CircleDollarSign },
   { to: '/coverage', label: 'Coverage', icon: ShieldCheck },
+  // Directly under Coverage, because it is the same question from the other
+  // side: Coverage says what the catalogue can ever see, this says what THIS
+  // estate did not send. A reader who accepts the first immediately asks the
+  // second.
+  { to: '/evidence-gaps', label: 'Evidence Gaps', icon: FileQuestion },
   { to: '/domains', label: 'Domains', icon: LayoutGrid },
   // Directly under Domains, because it is the same twelve buckets asked a
   // narrower question: not "how much is in each" but "what is worst in

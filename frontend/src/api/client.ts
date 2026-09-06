@@ -32,6 +32,7 @@ import type {
   CheckIndexEntry, ChokepointsView,
   ServiceRequest, SeveringSet, Coverage, CrqControlsView,
   CrqParametersView, CrqQuantifyResult, CrqTrendPoint, CsfFunctionView,
+  EvidenceGapsView,
   ExportValue,
   RemediationPlan,
   ComplianceView,
@@ -381,6 +382,11 @@ export function trend(days = 180): Promise<Journey> {
 
 export function coverage(): Promise<Coverage> {
   return get<Coverage>('/coverage')
+}
+
+/** Which unsupplied export would let the most open findings reach a verdict. */
+export function evidenceGaps(): Promise<EvidenceGapsView> {
+  return get<EvidenceGapsView>('/evidence-gaps')
 }
 
 // ══ runs and upload ═════════════════════════════════════════════════════════

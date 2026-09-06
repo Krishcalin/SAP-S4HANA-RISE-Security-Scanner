@@ -23,6 +23,7 @@ import { Paths } from './routes/Paths'
 import { Risk } from './routes/Risk'
 import { Trend } from './routes/Trend'
 import { Dashboard } from './routes/Dashboard'
+import { EvidenceGaps } from './routes/EvidenceGaps'
 import { Findings } from './routes/Findings'
 import { FindingDetail } from './routes/FindingDetail'
 
@@ -68,6 +69,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/account" element={<Account />} />
           <Route path="/coverage" element={<Coverage />} />
+          <Route path="/evidence-gaps" element={<EvidenceGaps />} />
           <Route path="/checks/:id" element={<CheckDetail />} />
           <Route path="/chokepoints" element={<Chokepoints />} />
           <Route path="/requirements/:id" element={<RequirementDetail />} />

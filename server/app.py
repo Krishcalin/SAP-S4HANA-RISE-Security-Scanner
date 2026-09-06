@@ -1520,6 +1520,33 @@ def api_domains(user: Dict[str, Any] = Depends(current_user)):
     return domains.roll_up(findings, coverage=queries.latest_coverage(scope))
 
 
+@app.get("/api/evidence-gaps")
+def api_evidence_gaps(user: Dict[str, Any] = Depends(current_user)):
+    """Which unsupplied export would make the most open findings decidable.
+
+    THE AGGREGATE OF A FACT EVERY FINDING ALREADY CARRIES. A finding assessed on
+    partial input records `evidence.complete = false` and names what it could not
+    read; /api/findings shows that one finding at a time. Nothing summed it, so a
+    reader facing sixty individually-caveated findings had no way to see that four
+    absent files explain most of them.
+
+    IT RANKS INPUT, NOT RISK, and the two must not be confused on screen. A source
+    high on this list is one that would let many checks REACH A VERDICT — not one
+    hiding many problems. The verdicts are not known; that is the entire reason
+    the source is being asked for. `findings_undecided` is named for what it
+    counts, and there is deliberately no field estimating what supplying it would
+    find, because the product has no connection to SAP and would be inventing it.
+
+    `obtainable_in_rise` IS THE HALF A RISE READER NEEDS. Five logical sources
+    come from the layer SAP operates, so for those customers the honest answer is
+    that the gap cannot be closed by them at all — a ranking that told them to go
+    and run an OS-level export would be advice they cannot act on. The row is
+    still returned and still counted, because on-premise readers of the same
+    endpoint can close it.
+    """
+    return queries.evidence_gaps(auth.scope_for(user))
+
+
 @app.get("/api/top-risks")
 def api_top_risks(user: Dict[str, Any] = Depends(current_user)):
     """The worst five open findings in each of the twelve domains.
