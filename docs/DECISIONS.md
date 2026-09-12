@@ -467,3 +467,42 @@ that is not assessed.
 **Not touched by this decision:** SuccessFactors, which D1 moved *into* scope
 and which remains there — `in_scope_unbuilt`, not declined. Recording it as an
 exclusion would have reversed D1 without saying so.
+
+## D10 — Does "all-inclusive" hosting reopen the DB or the cloud scope?
+
+**Decided: neither. Hosting is a responsibility axis, not a coverage axis — and
+the product is on-premise by default already.**
+
+On-premise and self-managed SAP on a hyperscaler (AWS, Azure, GCP IaaS) are
+first-class, not RISE-only. That is not new direction: D5 put ECC and on-prem in
+scope, and D7 made `on_prem` the default mode with `is_rise()` gating the
+ECS-only rules. What "all-inclusive" adds is the **coverage customer-managed
+hosting exposes and RISE does not** — the OS and infrastructure layer. In RISE
+the customer has no OS access, so the NetWeaver guide's UNIX/Windows hardening,
+the host-side message-server / Web-Dispatcher config, and `USRCTR-O` are
+provider-owned and out of scope. On-prem, and on a self-managed hyperscaler VM,
+the customer owns exactly those, so they are in scope and `customer_fixable`.
+The mode already carries this: `is_rise()` false means the customer owns the
+host.
+
+**Self-managed SAP on a hyperscaler is `on_prem` for every SAP, OS and HANA
+check.** The responsibility boundary is identical — the customer holds OS root
+and the SAP profile. AWS, Azure and GCP differ only *below* the OS: the
+hypervisor, block storage, security groups, and cloud IAM. That layer is audited
+by the customer's cloud CNAPP, not by an SAP config scanner, and MonitorRisk
+will not duplicate it — it names the boundary and defers, the same way D6
+declines anydb rather than half-building it. Duplicating a CNAPP would trade the
+content differentiation D5 rests on for surface nobody asked this tool for.
+
+**The DB engine stays HANA (D6).** All-inclusive *hosting* does not reopen
+anydb: an on-prem S/4HANA system is still HANA, and ECC-on-anydb remains the
+explicitly-costed, deliberately-deferred four-module core of D6.
+
+**Consequence for coverage.** An OS / infrastructure hardening family — the
+NetWeaver guide's host section, `USRCTR-O`, `/usr/sap` permissions, OS
+user/group membership, and the customer-run Web Dispatcher and SAProuter —
+becomes an in-scope build target for non-RISE modes, fed by the `collect/`
+connected tier that D2/D5 permit where the customer grants access. A
+host-platform tag (bare-metal / VMware / AWS / Azure / GCP) is reporting
+metadata; if added it is one more entry in the six-place deployment vocabulary —
+a D7-class change made once with an agreement test, never five string edits.

@@ -5,27 +5,33 @@ A quality check of **MonitorRisk** against the *SAP NetWeaver Security Guide,
 requires, what does the tool check, what is a genuine gap, and what is
 out of scope — with a reason for every line.
 
-## The scope frame comes first, because most of this guide is out of scope
+## Scope depends on deployment mode, not on the product being RISE-only
 
 NetWeaver 7.5 is a **generic platform** guide. It covers AS ABAP, AS Java, the
 Enterprise Portal, TREX, the Content Server, ALE/IDoc, the SAP GUI, five
 non-HANA databases, and both UNIX and Windows host hardening. MonitorRisk is an
-**offline S/4HANA RISE + BTP** config-review tool. The RISE contract and the
-S/4HANA/HANA target scope out whole chapters of this guide **by construction**,
-not by omission:
+**offline (and optionally connected) S/4HANA + BTP** config-review tool that
+covers **on-premise, RISE, and self-managed SAP on a hyperscaler** (AWS / Azure
+/ GCP IaaS) — see decisions D5, D7 and D10.
 
-| Guide chapter | Status here | Why |
-|---|---|---|
-| OS security — UNIX/LINUX & Windows (SUID, NFS/NIS, `/usr/sap` perms, UMASK, SAP_<SID>_GlobalAdmin, `<sid>adm`) | **Out of scope** | In RISE the customer contractually has **no OS access**; the host is SAP ECS's. A tool premised on customer-supplied exports cannot read, and is not responsible for, `/etc/passwd` or NTFS ACLs. |
-| Non-HANA databases — Oracle (OPS$, `sqlnet.ora`), MaxDB, ASE, Db2, SQL Server | **Out of scope** | RISE S/4HANA runs on **HANA**. HANA DB security is covered in depth (below); the other five engines do not occur in the target estate. |
-| AS Java — UME, JAAS, Web Dynpro Java `DevelopmentMode`, servlet_jsp, deploy service, secure store | **Out of scope** | S/4HANA is ABAP + HANA. The Java stack is not part of an S/4HANA RISE system. (BTP, the modern Java-adjacent surface, **is** covered — `btpcloud`, `intglayer`, `capxsuaa`.) |
-| Enterprise Portal, KM, Collaboration, TREX, Content Server, SLD, NWDI, Universal Worklist | **Out of scope** | Legacy NetWeaver components not shipped with S/4HANA RISE. |
-| Network topology — firewalls, DMZ, SAProuter, network zones | **Out of scope (architecture)** | Landscape architecture, provider-operated in RISE, and not a fact any config export states. The guide itself presents these as recommendations, not checkable settings. |
-| SAP's own services — EarlyWatch Alert, Security Optimization Service, Configuration Validation | **N/A (peer tooling)** | These are the SAP services MonitorRisk sits alongside; not requirements to audit. |
+The deciding axis is **who owns the host**, which the deployment mode already
+carries (`is_rise()`). Chapters of this guide are therefore in or out of scope
+*per mode*, not absolutely:
 
-Everything below is the part that **is** in scope: AS ABAP hardening, HANA
-database security, the message server, the Web Dispatcher (where customer-run),
-SNC/TLS, the audit log, standard users, and data protection.
+| Guide chapter | RISE (`rise_*`) | On-prem / self-managed hyperscaler (`on_prem`) | Why |
+|---|---|---|---|
+| OS security — UNIX/LINUX & Windows (SUID, NFS/NIS, `/usr/sap` perms, UMASK, `SAP_<SID>_GlobalAdmin`, `<sid>adm`) | **Out of scope** — SAP ECS owns the host; customer has no OS access | **In-scope build target (D10)** — customer owns OS root; `customer_fixable`; fed by the `collect/` tier where access is granted | The customer owns exactly this layer on any host they manage, including a self-managed hyperscaler VM. |
+| Host-side message server / Web Dispatcher / SAProuter config | **Out of scope** — provider-operated | **In-scope build target (D10)** — customer-run infra | Same boundary: in RISE these are ECS's; on a customer-run host they are the customer's. |
+| Cloud infrastructure *below* the OS — hypervisor, block-storage encryption, security groups, cloud IAM | **Out of scope** | **Out of scope — deferred to the customer's cloud CNAPP (D10)** | AWS/Azure/GCP posture is a CNAPP's job, not an SAP config scanner's. MonitorRisk names the boundary and does not duplicate it. |
+| Non-HANA databases — Oracle (OPS$, `sqlnet.ora`), MaxDB, ASE, Db2, SQL Server | **Out of scope** | **Out of scope (D6)** — anydb explicitly declined | S/4HANA runs on HANA in every hosting mode. HANA DB security is covered in depth (below). ECC-on-anydb is D6's costed, deferred core. |
+| AS Java — UME, JAAS, Web Dynpro Java `DevelopmentMode`, servlet_jsp, deploy service, secure store | **Out of scope** | **Out of scope** | S/4HANA is ABAP + HANA regardless of hosting. (BTP, the modern Java-adjacent surface, **is** covered — `btpcloud`, `intglayer`, `capxsuaa`.) |
+| Enterprise Portal, KM, Collaboration, TREX, Content Server, SLD, NWDI, Universal Worklist | **Out of scope** | **Out of scope** | Legacy NetWeaver components not shipped with S/4HANA. |
+| Network topology — firewalls, DMZ, network zones | **Out of scope (architecture)** | **Out of scope (architecture)** | Landscape architecture, not a fact any config export states. (The customer-run *devices* — WD, SAProuter — are the row above, and are in-scope on-prem.) |
+| SAP's own services — EarlyWatch Alert, Security Optimization Service, Configuration Validation | **N/A (peer tooling)** | **N/A (peer tooling)** | The SAP services MonitorRisk sits alongside; not requirements to audit. |
+
+Everything below is the part that is **in scope in every mode**: AS ABAP
+hardening, HANA database security, the message server, the Web Dispatcher (where
+customer-run), SNC/TLS, the audit log, standard users, and data protection.
 
 ---
 
@@ -62,6 +68,11 @@ check and **deliberately left out**, because firing on it would either misfire
 or claim a fact an offline export cannot support. This is the same discipline
 that leaves `SECSTO-A` unchecked and that drives the four-state coverage model:
 a check that cannot be right is worse than an honest gap.
+
+Two of the four — the message-server per-port ACLs and `wdisp/ssl_encrypt` —
+sit on the customer-run host surface that **D10 makes an on-prem / hyperscaler
+build target**. They are left out *today* on offline-signal grounds, and will be
+reconsidered with the host-export contract (below), not adopted as naive rules.
 
 ### 1. Message-server per-port ACL files — `ms/acl_file_{ext,int,admin,extbnd}`
 
@@ -114,14 +125,20 @@ configuration. Recorded here rather than guessed at.
 
 ## Bottom line
 
-The NetWeaver 7.5 guide is a broad platform document most of which a RISE /
-S/4HANA / HANA offline scanner scopes out for structural reasons — no OS access,
-no non-HANA databases, no Java stack. Within the part that **is** in scope, the
-guide **validates** the tool's coverage: every concrete AS-ABAP and HANA control
-it states is already checked, and the HANA and RAL coverage is more thorough
-than the guide's own text. The four residual gaps are all conditional or
-out-of-scope; **no new firing check is warranted**, and inventing one would
-lower the tool's quality rather than raise it. The gaps are recorded above so
-that a future move toward **on-premise** (non-RISE) coverage — where OS access,
-customer-run Web Dispatchers, and `wdisp/ssl_encrypt` become real — has the
-list ready.
+Within the part that is in scope **in every mode** — AS ABAP, HANA, the message
+server, SNC/TLS, the audit log, standard users, data protection — the guide
+**validates** the tool's coverage: every concrete AS-ABAP and HANA control it
+states is already checked, and the HANA and RAL coverage is more thorough than
+the guide's own text. For the covered surface, **no new firing check is
+warranted today**, and inventing one would lower the tool's quality rather than
+raise it.
+
+The guide's largest remaining value is as the **specification for the on-prem /
+hyperscaler host layer** that D10 brings into scope: its UNIX/Windows hardening,
+`USRCTR-O`, `/usr/sap` permissions, OS user/group membership, and customer-run
+Web Dispatcher / SAProuter sections are the requirement list for the OS /
+infrastructure module family. That layer is out of scope in RISE (ECS owns the
+host) and in scope for `on_prem` — including self-managed SAP on AWS / Azure /
+GCP, where the customer owns OS root — with the cloud infrastructure *below* the
+OS deferred to the customer's CNAPP. The four residual gaps above are recorded
+against that build, not carried as permanent exclusions.
