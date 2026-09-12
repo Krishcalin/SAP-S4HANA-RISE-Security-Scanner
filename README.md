@@ -19,7 +19,8 @@
 ## The SAP Security Tool
 
 MonitorRisk checks how well the security controls in an SAP estate are actually
-holding — RISE private or public cloud, classic on-premise, ECC or BTP.
+holding — RISE private or public cloud, classic on-premise, self-managed on a
+hyperscaler (AWS, Azure or GCP), ECC or BTP.
 
 You export configuration out of your SAP systems as CSV and JSON files. It reads
 those files and tells you what is wrong, how bad it is, who is allowed to fix it,
@@ -89,6 +90,11 @@ The areas covered:
 - **Interfaces** — RFC, web services, IDoc, gateway ACLs, OAuth clients
 - **Custom ABAP code** — 135 static-analysis rules with taint tracking
 - **Financial controls** — the SOX-relevant configuration in FI
+- **OS and infrastructure hardening** — SAP service-account privilege, `/usr/sap`
+  and secure-store permissions, and dangerous host services (telnet, NIS), plus
+  the customer-run Web Dispatcher and SAProuter. On hosts you manage — classic
+  on-premise or self-managed on AWS/Azure/GCP; SAP owns this layer under RISE, so
+  it is reported as not-assessable there rather than as a gap
 - **Patching, logging, encryption, transports, backup and recovery**
 
 Findings are mapped to ISO 27001, NIST 800-53, NIST CSF, CIS Controls, DORA,
@@ -135,6 +141,7 @@ The console shows the same ranking on the run page, as a table.
 | `--severity CRITICAL \| HIGH \| …` | What to list. It never changes what was *found* — the scores and the money are always computed on everything |
 | `--modules iam,hanadb,…` | Run only some of them. `--modules all` is the default |
 | `--deployment-mode on_prem \| rise_pce \| rise_tailored \| rise_ecc` | Decides what counts as compliant. Get this right or a RISE system looks broken |
+| `--platform bare_metal \| vmware \| aws \| azure \| gcp` | Where a customer-managed host runs. Reporting metadata only — it changes no verdict; on a self-managed hyperscaler it adds the note that the layer below the OS is your CNAPP's job, not this tool's |
 | `--config FILE` | Your own thresholds, merged over the shipped baseline |
 | `--abap-src DIR` | Scan custom ABAP from an abapGit offline export |
 | `--cap-src DIR` | Scan a CAP project's `xs-security.json` and CDS model |
