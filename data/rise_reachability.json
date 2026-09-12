@@ -811,6 +811,12 @@
       "basis": "application_layer",
       "note": "Reachable but not from the system: section 3 records that the note CATALOGUE sits behind SAP for Me, so this product ships age and coverage logic rather than live note data. A customer with an S-user can supply it; one without cannot, and that is an entitlement question rather than a RISE one."
     },
+    "me_hotnews": {
+      "state": "yes",
+      "how": "The customer's own SAP for Me HotNews list (Systems & Provisioning, the HotNews table for the installation), exported as CSV or XLSX",
+      "basis": "application_layer",
+      "note": "SAP for Me content the customer already has for their own systems, not a system export and not a RISE-operated artefact. Like the note catalogue it is an entitlement (S-user) question rather than a RISE one: a customer with SAP for Me access supplies it, one without cannot."
+    },
     "sap_kernel": {
       "state": "read_only",
       "how": "System > Status, or the kernel level in the component export",

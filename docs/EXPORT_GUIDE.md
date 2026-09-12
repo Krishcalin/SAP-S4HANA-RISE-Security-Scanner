@@ -62,11 +62,11 @@ reason for each.
 
 ## Every source, including the ones this guide does not cover
 
-The scanner reads **143** logical sources. All of them now have a procedure: the
+The scanner reads **144** logical sources. All of them now have a procedure: the
 sections up to *SAP Cloud ALM* cover what a first scan needs, and
 [*The remaining sources*](#the-remaining-sources) below covers the rest.
 
-[**`EXPORT_SOURCES.md`**](EXPORT_SOURCES.md) lists all 143 — the filenames the
+[**`EXPORT_SOURCES.md`**](EXPORT_SOURCES.md) lists all 144 — the filenames the
 loader accepts, which checks each one feeds, and whether a procedure exists. It is
 generated from the code, so a source cannot be added to the scanner without
 appearing there, and it will show up as undocumented until somebody writes the
@@ -898,6 +898,33 @@ built-in flag). `applies_to` values other than `abap` (`java`, `bi`, `btp`,
 `solman`) move an entry into the adjacent-systems disclosure instead of the
 missing-notes findings; an entry that does not say defaults to `abap` — the
 fail-safe direction is a false alarm on this system, never a silent pass.
+
+### Your SAP-for-Me HotNews list (`me_hotnews.csv`, `me_hotnews.xlsx`, `hotnews_list.*`, `sap_for_me_hotnews.*`)
+**A system export, and the strongest of the three.** SAP for Me publishes, per
+customer, the HotNews that reach the products that customer actually runs — this
+is SAP's own product scoping, not a global list this product judges applicable.
+Feeding it in lets the scanner diff SAP's own "these apply to your products"
+against the applied-notes export (finding **HOTNEWS-015**), and each note is
+reported with the `me.sap.com` link straight from the export.
+
+**Route:** SAP for Me → **Systems & Provisioning** → your system / installation,
+open the **SAP HotNews** (Important News) list — the table with columns *SAP
+Component · Number · Version · Title · Released On · Link*. Use the table's
+**Export / Download** action and save it beside the other exports as
+`me_hotnews.csv` or `me_hotnews.xlsx`. The `.xlsx` download is read directly with
+the standard library — no conversion step, and no third-party dependency.
+
+**Scope:** only the SECURITY rows are used — those whose title carries a CVE (or
+announces multiple vulnerabilities). The functional and data-loss HotNews on the
+same list (table-consistency, SUM downtime, and so on) are out of this security
+scanner's scope and are silently ignored, not reported. Nothing here overlaps the
+catalogue extension above: that file is a global catalogue you maintain, this is
+SAP's per-customer scoping, and the two are diffed independently.
+
+> This file needs no S-user — it is the customer's own SAP-for-Me content, and
+> every field the scanner reads (note number, CVE, component, title, link) is in
+> the exported table. No note number is ever invented: it comes from the Number
+> column, or is read out of the me.sap.com link.
 
 ## SAP HANA database exports (the `hana_db_security` module)
 

@@ -373,6 +373,9 @@ class SapHotNewsAuditor(BaseAuditor):
             # most needs something said about it. Returning here was the reason
             # this module had one detection route instead of three.
             self._report_exposure(assessable, set(), has_applied=False)
+            # The customer's own SAP-for-Me list needs no SNOTE diff to be worth
+            # reporting: it is SAP's product scoping, and the note links are in it.
+            self._report_me_hotnews_list(catalog, set())
             return self.findings
 
         # A note counts as "present" if it is fully addressed OR partially
@@ -393,6 +396,9 @@ class SapHotNewsAuditor(BaseAuditor):
         self._report_below_fix_level(present)
         self._report_applied_but_undelivered(present)
         self._report_sap_published_hotnews(catalog, present)
+        # The customer's own product-scoped HotNews list, diffed against applied
+        # notes — SAP's scoping, stronger than any this product infers.
+        self._report_me_hotnews_list(catalog, present)
         # Only ABAP-assessable entries count as missing: the absence of an AS
         # Java note from this system's SNOTE export is not evidence about the
         # Java system, and alarming on it here was a false positive.
@@ -1626,6 +1632,220 @@ class SapHotNewsAuditor(BaseAuditor):
                      "applicability_determined": False,
                      "settled_by_component_evidence": len(settled),
                      "source": "SAP-samples/frun-csa-policies-best-practices"},
+            scope="aggregate",
+        )
+
+    # ── HOTNEWS-015: the customer's OWN product-scoped HotNews list ─────────
+    #
+    # SAP for Me publishes, per customer, the HotNews that reach the products
+    # that customer actually runs — the "Number / Component / Title / Released /
+    # Link" table behind the HotNews view. That is a DIFFERENT and stronger
+    # provenance than either catalogue this module already carries: the curated
+    # list is a global impact selection, and the FRUN catalogue is SAP's global
+    # patch-day record judged applicable by component arithmetic. This list is
+    # SAP itself saying "these apply to YOUR installed products". So a note on it
+    # that the applied-notes export does not record is the most direct statement
+    # this product can make about a missing HotNews, and it is kept as its own
+    # finding rather than folded into the curated merge, where its provenance
+    # would be lost.
+    #
+    # SECURITY-ONLY, DELIBERATELY. The SAP-for-Me HotNews list also carries
+    # functional/data-loss HotNews (table-partitioning corruption, SUM data
+    # loss). This is a SECURITY scanner, so a row is taken only when its title
+    # carries a CVE or announces multiple vulnerabilities; the rest are the
+    # customer's to act on through basis operations and are counted out here, not
+    # reported. The filter is the same CVE test the FRUN catalogue builder uses.
+    _ME_CVE = re.compile(r"CVE-\d{4}-\d{4,7}", re.IGNORECASE)
+    _ME_MULTI = re.compile(r"multiple\s+(?:security\s+)?(?:vulnerabilit|cve)",
+                           re.IGNORECASE)
+    _ME_NOTE_IN_URL = re.compile(r"/notes?/0*(\d{3,10})", re.IGNORECASE)
+
+    def _me_hotnews_rows(self) -> List[Dict[str, Any]]:
+        """The customer's SAP-for-Me HotNews list, security notes only.
+
+        Reads the `me_hotnews` source (CSV or XLSX export of the SAP for Me
+        HotNews table), normalises the columns however they are spelled, keeps
+        only the rows that are security notes, and never invents a note number:
+        it comes from the Number column or is read out of the me.sap.com link,
+        exactly as `_norm_note` would take it from any other export.
+        """
+        raw = self.data.get("me_hotnews")
+        if not isinstance(raw, list):
+            return []
+        out, seen = [], set()
+        for row in raw:
+            if not isinstance(row, dict):
+                continue
+
+            def cell(*keys):
+                for k in keys:
+                    v = row.get(k)
+                    if v not in (None, ""):
+                        return str(v).strip()
+                return ""
+
+            title = cell("TITLE", "DESCRIPTION", "NOTE_TITLE", "SHORT_TEXT",
+                         "SUBJECT")
+            link = cell("LINK", "URL", "HREF", "NOTE_LINK")
+            note = self._norm_note(cell("NUMBER", "NOTE", "NOTE_NUMBER",
+                                        "NOTE_NO", "SAP_NOTE", "NOTE_ID"))
+            if not note and link:
+                m = self._ME_NOTE_IN_URL.search(link)
+                if m:
+                    note = m.group(1).lstrip("0")
+            if not note or note in seen:
+                continue
+
+            cves = list(dict.fromkeys(c.upper() for c in self._ME_CVE.findall(title)))
+            # Security-only: a CVE in the title, or a "multiple vulnerabilities /
+            # multiple CVEs" announcement. Everything else is a functional or
+            # data-loss HotNews and is excluded by scope, not reported.
+            if not cves and not self._ME_MULTI.search(title):
+                continue
+            seen.add(note)
+            url = link if link.lower().startswith("http") \
+                else "https://me.sap.com/notes/%s" % note
+            out.append({
+                "note": note,
+                "cve": ", ".join(cves) or "Multiple CVEs",
+                "component": cell("SAP_COMPONENT", "COMPONENT", "COMPONENT_KEY",
+                                  "APPLICATION_COMPONENT"),
+                "title": title,
+                "url": url,
+                "version": cell("VERSION", "NOTE_VERSION"),
+                "released": cell("RELEASED_ON", "RELEASED", "RELEASE_DATE",
+                                 "RELEASED_ON_DATE", "DATE"),
+            })
+        return out
+
+    def _report_me_hotnews_list(self, catalog: List[Dict[str, Any]],
+                                present: Set[str]):
+        """Security HotNews SAP lists for THIS customer's products, not applied.
+
+        The reference URL for every note is the me.sap.com link the customer's
+        own export carried, so each item is directly openable. Where the note is
+        also in SAP's published catalogue this run enriches it with the CVSS and,
+        when the component export settled it, the fact that the installed
+        software is below the fix level (the HOTNEWS-013 determination) — but the
+        finding stands on the customer's list alone, which is why it fires even
+        when no component export was supplied.
+        """
+        rows = self._me_hotnews_rows()
+        if not rows:
+            return
+        has_applied = self.data.get("applied_notes") is not None
+        published = self._sap_catalogue()
+        curated = {self._norm_note(e.get("note")): e for e in catalog}
+        settled = self._settled_notes(present) if has_applied else {}
+
+        missing = [r for r in rows if r["note"] not in present]
+        if not missing:
+            return
+
+        exploited_ct = below_ct = crit_ct = 0
+        for r in missing:
+            cur = curated.get(r["note"]) or {}
+            rec = published.get(r["note"]) or {}
+            r["_cvss"] = cur.get("cvss") or rec.get("cvss")
+            r["_exploited"] = bool(cur.get("exploited"))
+            r["_below"] = settled.get(r["note"], (None,))[0] == "below"
+            if r["_exploited"]:
+                exploited_ct += 1
+            if r["_below"]:
+                below_ct += 1
+            if r["_exploited"] or r["_below"] or float(r["_cvss"] or 0) >= 9.0:
+                crit_ct += 1
+
+        # SAP for Me's HotNews view is priority-1 by construction, so a note on
+        # it that is not applied is serious by default; it is raised to CRITICAL
+        # when this run can show it is exploited in the wild, or its component is
+        # demonstrably below the fix level, or it scores 9.0+.
+        severity = self.SEVERITY_CRITICAL if crit_ct else self.SEVERITY_HIGH
+
+        missing.sort(key=lambda r: (not r["_exploited"], not r["_below"],
+                                    -float(r["_cvss"] or 0), r["note"]))
+        items = []
+        for r in missing[:80]:
+            tags = []
+            if r["_cvss"]:
+                tags.append("CVSS %s" % r["_cvss"])
+            if r["_exploited"]:
+                tags.append("exploited in the wild")
+            if r["_below"]:
+                tags.append("component below fix level")
+            tag = " [%s]" % "; ".join(tags) if tags else ""
+            items.append("%s — %s (%s) — %s%s"
+                         % (r["note"], r["cve"],
+                            r["component"] or "component not stated",
+                            r["url"], tag))
+
+        if has_applied:
+            body = (
+                "%d security HotNews that SAP for Me lists as relevant to THIS "
+                "customer's installed products do not appear in the system's "
+                "applied-notes export. This is SAP's own product scoping — not a "
+                "global list judged applicable by this product — so unlike "
+                "HOTNEWS-012 there is no question of whether the note reaches a "
+                "product that is installed: SAP says it does. Each item carries "
+                "the me.sap.com link from the customer's own export.\n\n"
+                "%d of these are also settled by the component export as below "
+                "the support package that carries the fix (the HOTNEWS-013 "
+                "determination), and %d are known to be exploited in the wild. "
+                "Functional and data-loss HotNews on the same SAP-for-Me list "
+                "are out of this security scanner's scope and are not counted "
+                "here." % (len(missing), below_ct, exploited_ct))
+        else:
+            body = (
+                "%d security HotNews that SAP for Me lists as relevant to THIS "
+                "customer's installed products are shown as a worklist because "
+                "no applied-notes export (applied_notes.csv) was supplied to "
+                "diff them against. SAP has scoped these to the products that are "
+                "installed, so the applicability question is already answered; "
+                "what is missing is only the implementation status. Supply the "
+                "SNOTE / System Recommendations export and re-run to see which of "
+                "these are unhandled. Each item carries the me.sap.com link from "
+                "the customer's own export." % len(missing))
+
+        self.finding(
+            check_id="HOTNEWS-015",
+            title="SAP-for-Me HotNews for your products absent from the "
+                  "applied-notes export",
+            severity=severity,
+            category=self.CATEGORY,
+            description=body,
+            affected_items=items,
+            affected_objects=self._note_objects(missing),
+            remediation=(
+                "1. Treat this list as pre-scoped: SAP for Me built it from the "
+                "products this customer runs, so every note reaches an installed "
+                "product and does not need the applicability triage HOTNEWS-012 "
+                "does.\n"
+                "2. Work the exploited-in-the-wild and below-fix-level entries "
+                "first — those are flagged inline — then the rest by CVSS.\n"
+                "3. Implement each note through SNOTE, or take the affected "
+                "component to the support-package level that carries the fix; "
+                "open each note directly from the me.sap.com link in the item.\n"
+                "4. Where a note cannot be applied in the current window, check "
+                "whether SAP documents a workaround (HOTNEWS-008 reports the "
+                "ones that have one) and record it as an interim control.\n"
+                "5. Under RISE, raise the SAP-owned components against the "
+                "operations contract with the note numbers attached — SAP has "
+                "already declared these relevant to the estate.\n"
+                "6. Re-export the SAP-for-Me HotNews list and applied_notes.csv "
+                "and re-run: implemented notes drop out automatically, so the "
+                "list shrinks as work completes rather than needing hand "
+                "maintenance."),
+            references=[
+                "SAP for Me — HotNews for your installed products "
+                "(customer-supplied list; each note's link is in the item)",
+                "SAP ONE Support Launchpad — the note itself",
+            ],
+            details={"count": len(missing), "listed": len(items),
+                     "below_fix_level": below_ct, "exploited": exploited_ct,
+                     "applied_notes_supplied": has_applied,
+                     "security_only": True,
+                     "source": "sap_for_me_hotnews_list",
+                     "customer_authoritative": True},
             scope="aggregate",
         )
 

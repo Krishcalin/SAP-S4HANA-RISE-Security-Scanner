@@ -296,6 +296,17 @@ class DataLoader:
         # SAP Security Notes / HotNews data sources
         "applied_notes":           ["applied_notes.csv", "snote_status.csv", "implemented_notes.csv"],
         "sap_security_notes":      ["sap_security_notes.json", "hotnews_catalog.json"],
+        # The customer's OWN SAP-for-Me HotNews list — the per-customer,
+        # product-scoped HotNews table (columns: SAP Component / Number / Version
+        # / Title / Released On / Link), downloaded from SAP for Me as CSV or
+        # XLSX. Read by modules/sap_hotnews.py (HOTNEWS-015). CSV goes through the
+        # normal reader; the .xlsx variants are parsed by _load_xlsx with the
+        # standard library. The column VOCABULARY lives in sap_hotnews.py, not
+        # here — a header only one side knows would read as an empty cell.
+        "me_hotnews":              ["me_hotnews.csv", "hotnews_list.csv",
+                                    "sap_for_me_hotnews.csv", "me_security_notes.csv",
+                                    "me_hotnews.xlsx", "hotnews_list.xlsx",
+                                    "sap_for_me_hotnews.xlsx"],
         # ABAP Authorization & Critical Access data sources
         "role_auth_values":        ["role_auth_values.csv", "role_authorizations.csv", "agr1251_values.csv"],
         # Table/view -> authorization group, TDDAT-shaped. The OBJECT side of
@@ -557,6 +568,14 @@ class DataLoader:
                         self._data[logical_name] = self._load_json(fpath)
                         if self._data[logical_name] is None and \
                                 fpath.name in self.unreadable_sources:
+                            self.unreadable_logical_names.add(logical_name)
+                    elif fname.endswith(".xlsx"):
+                        # Same third-state contract as the CSV branch: None when
+                        # the workbook could not be read, so "was this supplied?"
+                        # stays honest.
+                        loaded = self._load_xlsx(fpath)
+                        self._data[logical_name] = loaded
+                        if loaded is None:
                             self.unreadable_logical_names.add(logical_name)
                     break  # Use first matching file
             else:
@@ -1015,6 +1034,107 @@ class DataLoader:
         """Load a JSON file."""
         try:
             return json.loads(self._read_text(path))
+        except Exception as e:
+            print(f"    [WARN] Failed to load {path}: {e}")
+            self.unreadable_sources[path.name] = str(e)
+            return None
+
+    def _load_xlsx(self, path: Path) -> Optional[List[Dict[str, str]]]:
+        """Load the first worksheet of an .xlsx into the same shape as _load_csv.
+
+        SAP for Me offers its HotNews table as an .xlsx download, so it is read
+        directly rather than asking the customer to convert it first. Only what
+        this product needs is parsed — the shared-string table and the first
+        sheet's cell values — with the standard library (zipfile + ElementTree),
+        so no third-party dependency is introduced. Keys are normalised exactly
+        as _load_csv does (stripped, uppercased, spaces to underscores), so a
+        consuming module cannot tell which format a row arrived in.
+
+        Element traversal is by LOCAL tag name rather than a fixed namespace: the
+        spreadsheet namespace is stable in practice, but matching on local name
+        costs nothing and does not turn a namespace quirk into an empty extract —
+        the same failure mode _read_text exists to prevent for CSV. On any
+        failure the file is recorded as unreadable and None is returned, the
+        third state _load_csv uses: supplied, and could not be read.
+        """
+        import zipfile
+        import xml.etree.ElementTree as ET
+
+        def local(tag: str) -> str:
+            return tag.rsplit("}", 1)[-1]
+
+        def col_index(ref: str) -> Optional[int]:
+            # "A1" / "AB12" -> zero-based column index from the letter run.
+            letters = "".join(ch for ch in ref if ch.isalpha())
+            if not letters:
+                return None
+            idx = 0
+            for ch in letters:
+                idx = idx * 26 + (ord(ch.upper()) - 64)
+            return idx - 1
+
+        try:
+            with zipfile.ZipFile(path) as zf:
+                names = set(zf.namelist())
+                shared: List[str] = []
+                if "xl/sharedStrings.xml" in names:
+                    sroot = ET.fromstring(zf.read("xl/sharedStrings.xml"))
+                    for si in (e for e in sroot if local(e.tag) == "si"):
+                        shared.append("".join(
+                            (t.text or "") for t in si.iter()
+                            if local(t.tag) == "t"))
+                sheets = sorted(n for n in names
+                                if n.startswith("xl/worksheets/sheet")
+                                and n.endswith(".xml"))
+                if not sheets:
+                    raise ValueError("no worksheet in workbook")
+                wroot = ET.fromstring(zf.read(sheets[0]))
+
+            matrix: List[List[str]] = []
+            for row in (e for e in wroot.iter() if local(e.tag) == "row"):
+                cells: Dict[int, str] = {}
+                width = 0
+                seq = 0
+                for c in (e for e in row if local(e.tag) == "c"):
+                    ci = col_index(c.get("r") or "")
+                    if ci is None:
+                        ci = seq
+                    seq = ci + 1
+                    ctype = c.get("t")
+                    if ctype == "inlineStr":
+                        text = "".join((t.text or "") for t in c.iter()
+                                       if local(t.tag) == "t")
+                    else:
+                        v = next((e for e in c if local(e.tag) == "v"), None)
+                        raw = v.text if v is not None else None
+                        if raw is None:
+                            text = ""
+                        elif ctype == "s":
+                            # A shared-string cell holds an index into the table.
+                            try:
+                                text = shared[int(raw)]
+                            except (ValueError, IndexError):
+                                text = ""
+                        else:
+                            text = raw
+                    cells[ci] = (text or "").strip()
+                    width = max(width, ci + 1)
+                matrix.append([cells.get(i, "") for i in range(width)])
+
+            # Drop fully-empty rows (SAP-for-Me exports sometimes carry a blank
+            # or title row above the header), then read the first as the header.
+            matrix = [r for r in matrix if any(cell for cell in r)]
+            if not matrix:
+                return []
+            header = [h.strip().upper().replace(" ", "_") for h in matrix[0]]
+            rows: List[Dict[str, str]] = []
+            for r in matrix[1:]:
+                record: Dict[str, str] = {}
+                for i, key in enumerate(header):
+                    if key:
+                        record[key] = r[i].strip() if i < len(r) else ""
+                rows.append(record)
+            return rows
         except Exception as e:
             print(f"    [WARN] Failed to load {path}: {e}")
             self.unreadable_sources[path.name] = str(e)

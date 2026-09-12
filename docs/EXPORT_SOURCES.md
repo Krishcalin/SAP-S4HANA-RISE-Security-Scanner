@@ -8,7 +8,7 @@
 Every logical source the scanner can read, what it enables, and whether
 [`EXPORT_GUIDE.md`](EXPORT_GUIDE.md) tells you how to produce it.
 
-**143 logical sources, all of them with a written procedure** in the export
+**144 logical sources, all of them with a written procedure** in the export
 guide. This table is the regression detector for that: add a source to the loader
 without writing its procedure and it appears here as *not yet written*.
 
@@ -101,6 +101,7 @@ clean — see chapter 13 of the architecture guide.
 | `key_management` | `key_management.json` | `crypto_posture` | documented |
 | `log_retention` | `log_retention.json` | `log_monitoring` | documented |
 | `logon_events` | `logon_events.csv`, `logon_stats.csv` | `log_monitoring`, `log_review` | documented |
+| `me_hotnews` | `me_hotnews.csv`, `hotnews_list.csv`, `sap_for_me_hotnews.csv`, `me_security_notes.csv`, `me_hotnews.xlsx`, `hotnews_list.xlsx`, `sap_for_me_hotnews.xlsx` | `sap_hotnews` | documented |
 | `mitigating_controls` | `mitigating_controls.csv`, `mitigations.csv`, `grc_mitigations.csv` | `access_risk_analysis` | documented |
 | `ms_acl` | `ms_acl.csv`, `ms_acl_info.csv`, `msacl.csv` | `system_trust` | documented · not obtainable in RISE |
 | `oauth_clients` | `oauth_clients.json`, `xsuaa_clients.json` | `integration_layer` | documented |
