@@ -61,13 +61,13 @@ product became client-server**, deliberately and one-way. It has NOT been relaxe
 
 Background and the full plan: [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md),
 [`docs/BUILD_ROADMAP.md`](docs/BUILD_ROADMAP.md).
-- **830 checks across 39 audit modules.** Measure, never estimate — and know which number you
+- **831 checks across 39 audit modules.** Measure, never estimate — and know which number you
   are quoting. `modules/` holds 75 files, of which **39 emit findings**; the rest are rule
   tables, loaders, importers and report writers. Those 39 are exactly `sap_scanner.py`'s
-  `--modules` choices. Check IDs: **477** are written as literals and **353** appear once the
+  `--modules` choices. Check IDs: **478** are written as literals and **353** appear once the
   six runtime-generated families resolve against their shipped rulesets — `PARAM-<parameter>`
   (88), `ABAP-<rule>` (135), `ARA-<risk>` (99), `WDISP-<nnn>` (14), `ATC-<family>` (10) and
-  `IAM-<sod rule>` (7). The two sets do not overlap, so they add to 830.
+  `IAM-<sod rule>` (7). The two sets do not overlap, so they add to 831.
   Every figure here comes from `modules/coverage.py`; if you are about to type one from memory,
   run it instead — this paragraph was wrong in eight places until somebody did.
   ⚠️ **Counting `self.finding(` alone undercounts by 29** and silently misses every `AUTH-*`
@@ -76,7 +76,7 @@ Background and the full plan: [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md),
   Keep the README badge and `docs/CHECKS_REFERENCE.md` in sync when you add checks —
   `docs/CHECKS_REFERENCE.md` is GENERATED from the code by
   `tools/build_checks_reference.py`, and the `purity` CI job fails if it drifts.
-  It covers all 830 ids — 477 literal plus 353 from six runtime families —
+  It covers all 831 ids — 478 literal plus 353 from six runtime families —
   and renders a title or severity the code computes per finding as *varies*
   rather than freezing one branch as fact. Do not hand-edit it; change the
   check and regenerate.

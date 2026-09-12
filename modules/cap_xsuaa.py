@@ -171,6 +171,36 @@ _SENSITIVE_ELEMENT_ANNOTATIONS = (
     "@PersonalData.IsPotentiallyPersonal",
 )
 
+#: Any `@PersonalData` annotation, lower-cased for a substring test. This is the
+#: broader trigger CAPX-CDS-006 rests on: `@cap-js/audit-logging` emits its audit
+#: events off ANY `@PersonalData` annotation — entity-level `@PersonalData: {...}`
+#: as much as the element-level `IsPotentiallyPersonal`/`IsPotentiallySensitive`
+#: subset above — so it is the presence of any of them, not only the sensitive
+#: ones, that creates the expectation of an audit trail.
+_PERSONAL_DATA_MARK = "@personaldata"
+
+#: The audit-logging wiring CAP offers, quoted from SAP's own docs rather than
+#: chosen. CAPX-CDS-006 looks for ANY of these and stays silent on finding one —
+#: the same one-direction discipline as the rest of this module: it reports the
+#: wiring it could not find, and never asserts that wiring present is wiring
+#: correct (whether the bound service carries the right plan, whether the plugin
+#: is actually reached at runtime), because those are deploy-time facts an
+#: offline read of the source cannot settle.
+#:
+#:   Node    "@cap-js/audit-logging" — the SAP CAP Audit Logging plugin, added
+#:           with `npm add @cap-js/audit-logging` (or `cds add audit-logging`).
+#:   Java    "cds-feature-auditlog" — a substring, so it matches both the current
+#:           `com.sap.cds:cds-feature-auditlog-v2` (the AuditLog v2 handler, added
+#:           at runtime scope) and the older `cds-feature-auditlog`.
+#:   Config  an "audit-log" key under `cds.requires` — how a project declares the
+#:           service to the CAP runtime (package.json's `cds` block, or .cdsrc.json).
+#:   Service "auditlog" — the SAP Audit Log Service instance a project binds in
+#:           its mta.yaml (`service: auditlog`), the sink the events are written to.
+_NODE_AUDIT_PLUGIN = "@cap-js/audit-logging"
+_JAVA_AUDIT_FEATURE = "cds-feature-auditlog"
+_CDS_REQUIRES_AUDIT_KEY = "audit-log"
+_AUDIT_LOG_SERVICE = "auditlog"
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 #  Scope and role reference syntax
@@ -1041,6 +1071,98 @@ def detect_runtime(root: Path) -> str:
     return "unknown"
 
 
+def personal_data_entities(model: CdsModel) -> List[str]:
+    """Every entity whose model marks it as holding personal data.
+
+    An entity qualifies when `@PersonalData` appears in its OWN annotations —
+    entity-level `@PersonalData: {...}` or an `annotate` block — or on any of the
+    elements declared in its own body. That is the DECLARATION site, so a domain
+    entity and a projection that exposes it are not both counted for the same
+    annotation: the projection carries no `@PersonalData` of its own.
+
+    Deliberately broader than `_SENSITIVE_ELEMENT_ANNOTATIONS`: audit logging is
+    driven by any `@PersonalData` annotation, not only the sensitive subset, so
+    the trigger for "this ought to be audited" is any of them.
+    """
+    out = []
+    for name in sorted(model.entities):
+        combined = model.entity_annotations(name)
+        for element in model.entities[name].get("elements") or []:
+            combined += " " + (element.get("annotations") or "")
+        if _PERSONAL_DATA_MARK in combined.lower():
+            out.append(name)
+    return out
+
+
+def detect_audit_logging(root: Path) -> Dict[str, Any]:
+    """What audit-logging wiring, if any, a CAP project declares.
+
+    Reads package.json and .cdsrc.json (the Node plugin and the `cds.requires`
+    declaration), pom.xml (the Java feature) and mta.yaml/.yml (the bound
+    `auditlog` service). `_walk` skips node_modules and build output, so a
+    dependency's own audit-logging plugin is never credited to the application —
+    the same trap `_load_descriptors` and the CDS parser already avoid.
+
+    Returns `{"wired": bool, "evidence": [str, ...]}`. `wired` is true if any one
+    source was found; the evidence names each with the file it sat in, so the
+    finding — raised only when nothing is found — can state what it looked for.
+    """
+    evidence: List[str] = []
+
+    for path in _walk(root, (".json",)):
+        if path.name.lower() not in ("package.json", ".cdsrc.json"):
+            continue
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(raw, dict):
+            continue
+        deps: Dict[str, Any] = {}
+        for section in ("dependencies", "devDependencies"):
+            block = raw.get(section)
+            if isinstance(block, dict):
+                deps.update(block)
+        if _NODE_AUDIT_PLUGIN in deps:
+            evidence.append("%s depends on %s"
+                            % (_rel(root, path), _NODE_AUDIT_PLUGIN))
+        # `cds.requires."audit-log"` lives under a `cds` block in package.json and
+        # at the top level of .cdsrc.json.
+        holder = raw.get("cds") if isinstance(raw.get("cds"), dict) else raw
+        requires = holder.get("requires") if isinstance(holder, dict) else None
+        if isinstance(requires, dict) and _CDS_REQUIRES_AUDIT_KEY in requires:
+            evidence.append("%s configures cds.requires.\"%s\""
+                            % (_rel(root, path), _CDS_REQUIRES_AUDIT_KEY))
+
+    for path in _walk(root, (".xml",)):
+        if path.name.lower() != "pom.xml":
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if _JAVA_AUDIT_FEATURE in text:
+            evidence.append("%s declares a %s dependency"
+                            % (_rel(root, path), _JAVA_AUDIT_FEATURE))
+
+    # `service: auditlog` under an mta.yaml resource. The value must be exactly
+    # `auditlog`: `auditlog-viewer` and `auditlog-management` are the read/manage
+    # services, not the write sink the plugin emits to, so a `\b` boundary here
+    # would wrongly accept them.
+    service = re.compile(r"(?mi)^\s*service:\s*[\"']?%s[\"']?\s*(?:#.*)?$"
+                         % re.escape(_AUDIT_LOG_SERVICE))
+    for path in _walk(root, (".yaml", ".yml")):
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if service.search(text):
+            evidence.append("%s binds the %s service"
+                            % (_rel(root, path), _AUDIT_LOG_SERVICE))
+
+    return {"wired": bool(evidence), "evidence": sorted(set(evidence))}
+
+
 def _walk(root: Path, suffixes: Tuple[str, ...]):
     """Every file under `root` with one of `suffixes`, skipping build output."""
     stack = [root]
@@ -1153,8 +1275,10 @@ class CapXsuaaAuditor(BaseAuditor):
 
         self.check_model_access_control(model)
         self.check_open_privileges(model)
-        self.check_expand_reach(model, detect_runtime(path))
+        runtime = detect_runtime(path)
+        self.check_expand_reach(model, runtime)
         self.check_property_exposure(model)
+        self.check_audit_logging_coverage(model, path, runtime)
         self.check_model_descriptor_agreement(model, descriptors)
         self.check_who_holds_the_scopes(descriptors)
         self.check_undeliverable_role_templates(descriptors)
@@ -2226,6 +2350,114 @@ class CapXsuaaAuditor(BaseAuditor):
             affected_objects=objects,
             details={"elements": len(items), "basis": "model_annotation",
                      "cwe": "CWE-359", "parser": "lexical"},
+            scope="aggregate",
+        )
+
+    # ── CAPX-CDS-006: personal data modelled, no audit logging wired ────────
+
+    def check_audit_logging_coverage(self, model: CdsModel, root: Any,
+                                     runtime: str):
+        """Personal data is annotated in the model, and nothing logs access to it.
+
+        `@PersonalData` is what drives CAP's audit logging: the audit-logging
+        plugin emits a SensitiveDataRead event when a field marked
+        `@PersonalData.IsPotentiallySensitive` is read, and a PersonalDataModified
+        event when `@PersonalData` is created, updated or deleted. Annotating the
+        data and then never installing the plugin — or, once deployed, never
+        binding the SAP Audit Log Service the plugin writes to — leaves those
+        reads and changes with no audit trail at all. That is OWASP A09, Security
+        Logging and Monitoring Failures, at the point the data-privacy annotations
+        say it matters most.
+
+        Written in the one direction the rest of this module is: it fires only
+        where personal data IS modelled AND no audit-logging wiring of any kind
+        was found. Finding any one of the plugin, the Java feature, a
+        `cds.requires` declaration or a bound `auditlog` service silences it — the
+        module does not then judge whether that wiring is complete or correct,
+        because whether a bound service has the right plan and whether the plugin
+        is reached at runtime are deploy-time facts this offline scan cannot see.
+        """
+        personal = personal_data_entities(model)
+        if not personal:
+            return
+        audit = detect_audit_logging(Path(root))
+        if audit["wired"]:
+            return
+
+        runtime_note = {
+            "node": "This project builds on CAP Node, where the emitter is the "
+                    "`@cap-js/audit-logging` plugin (`npm add "
+                    "@cap-js/audit-logging`); it is in no package.json read.",
+            "java": "This project builds on CAP Java, where the emitter is the "
+                    "`com.sap.cds:cds-feature-auditlog-v2` dependency; it is in "
+                    "no pom.xml read.",
+            "both": "A package.json and a pom.xml were both found; neither the "
+                    "Node plugin `@cap-js/audit-logging` nor the Java dependency "
+                    "`cds-feature-auditlog-v2` is declared.",
+            "unknown": "The runtime could not be settled from the sources, so "
+                       "either emitter would satisfy this — the Node plugin "
+                       "`@cap-js/audit-logging` or the Java dependency "
+                       "`cds-feature-auditlog-v2` — and neither is present.",
+        }[runtime]
+
+        noun = "entity" if len(personal) == 1 else "entities"
+        verb = "carries" if len(personal) == 1 else "carry"
+        items = ["%s — annotated `@PersonalData`; its reads and changes emit no "
+                 "audit event" % name for name in personal]
+        objects: List[Dict[str, Any]] = []
+        for name in personal:
+            self._add(objects, "cap_service_entity", name)
+
+        self.finding(
+            check_id="CAPX-CDS-006",
+            title="Personal data is modelled but no audit logging is wired up",
+            severity=self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=(
+                "%d model %s %s `@PersonalData`, but this project wires up no "
+                "audit logging: no audit-logging plugin or feature, no "
+                "`cds.requires` declaration for it, and no bound SAP Audit Log "
+                "Service. `@PersonalData` is exactly what CAP's audit logging "
+                "acts on — the plugin emits a SensitiveDataRead event on reads of "
+                "a field marked `@PersonalData.IsPotentiallySensitive` and a "
+                "PersonalDataModified event on create, update or delete of "
+                "`@PersonalData` — so annotating the data and omitting the plugin "
+                "leaves access to it with no audit trail. %s This is OWASP A09, "
+                "Security Logging and Monitoring Failures: the data is identified "
+                "as personal, the obligation to record access to it follows, and "
+                "nothing does. The annotations quoted are the project's own; this "
+                "check infers sensitivity from no element name."
+                % (len(personal), noun, verb, runtime_note)),
+            affected_items=items,
+            remediation=(
+                "1. Add the audit-logging emitter for the runtime. CAP Node: "
+                "`npm add @cap-js/audit-logging` (or `cds add audit-logging`), "
+                "which auto-emits events from the `@PersonalData` annotations "
+                "already in the model. CAP Java: add "
+                "`com.sap.cds:cds-feature-auditlog-v2` at runtime scope.\n"
+                "2. Bind the sink for the deployed system: add an SAP Audit Log "
+                "Service instance and bind it to the application — `cds add "
+                "audit-logging --plan standard` writes the `auditlog` resource "
+                "into mta.yaml. The default plan reads system logs only; custom "
+                "application events need the standard or premium plan.\n"
+                "3. Confirm the `@PersonalData` annotations are complete — an "
+                "unannotated personal column is invisible to the plugin, to "
+                "CAPX-CDS-005 and to the data-privacy tooling alike.\n"
+                "4. Verify by reading a sensitive field and changing a personal "
+                "one, then confirming the SensitiveDataRead and "
+                "PersonalDataModified entries appear in the SAP Audit Log "
+                "Viewer.\n"
+                "5. Re-run the scan."),
+            references=[
+                "SAP CAP — Audit Logging (data-privacy guide)",
+                "SAP CAP — @cap-js/audit-logging plugin",
+                "SAP CAP Java — Audit Logging (cds-feature-auditlog-v2)",
+                "OWASP Top 10 A09:2021 — Security Logging and Monitoring Failures",
+            ],
+            affected_objects=objects,
+            details={"personal_data_entities": len(personal),
+                     "runtime": runtime, "cwe": "CWE-778",
+                     "basis": "model_annotation", "parser": "lexical"},
             scope="aggregate",
         )
 

@@ -130,6 +130,11 @@ CWE_TO_OWASP: Dict[str, Tuple[str, Optional[str], str]] = {
     # A07 Identification and Authentication Failures
     "CWE-287": ("A07", "API2", "V2"),    # improper authentication
     "CWE-798": ("A07", "API2", "V2"),    # hardcoded credentials
+    # A09 Security Logging and Monitoring Failures. The CAPX family maps to A01
+    # by prefix, so CAPX-CDS-006 (personal data modelled, no audit logging) carries
+    # this CWE to reach A09 instead — CWE beats the family guess, which is exactly
+    # what this row is for.
+    "CWE-778": ("A09", None,   "V7"),    # insufficient logging
     # A10 SSRF
     "CWE-918": ("A10", "API7", "V13"),   # server-side request forgery
 }

@@ -528,7 +528,7 @@ def test_every_check_in_this_module_fires_on_the_fixture(shop):
         "CAPX-GRAPH-001", "CAPX-GRAPH-002", "CAPX-GRAPH-003", "CAPX-SCOPE-001",
         "CAPX-AUTH-001", "CAPX-ATTR-001", "CAPX-TOK-001", "CAPX-URI-001",
         "CAPX-CRED-001", "CAPX-TEN-001", "CAPX-CDS-001", "CAPX-CDS-002",
-        "CAPX-CDS-003", "CAPX-CDS-004", "CAPX-CDS-005",
+        "CAPX-CDS-003", "CAPX-CDS-004", "CAPX-CDS-005", "CAPX-CDS-006",
     }
     assert expected == set(shop), sorted(expected ^ set(shop))
 
@@ -731,3 +731,132 @@ def test_the_fixture_reports_the_composition_hop_the_reporting_service_opens(sho
     assert len(hit) == 1, items
     assert "FinanceAuditor" in hit[0] and "Treasury" in hit[0]
     assert "$expand=payment" in hit[0]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  CAPX-CDS-006 — personal data modelled, no audit logging wired
+# ═════════════════════════════════════════════════════════════════════════════
+
+#: A model that marks one column personal — enough to make audit logging
+#: expected. The annotation is the project's own; the check reads nothing else.
+PD_MODEL = """namespace db;
+entity Customers {
+  key id : UUID;
+  @PersonalData.IsPotentiallyPersonal
+  email : String(255);
+}
+service CustomerService { entity Customers as projection on db.Customers; }
+"""
+
+#: The same shape with nothing marked personal — the directional control.
+PLAIN_MODEL = """namespace db;
+entity Widgets { key id : UUID; label : String(80); }
+service WidgetService { entity Widgets as projection on db.Widgets; }
+"""
+
+
+def test_personal_data_without_audit_logging_is_reported(tmp_path):
+    """@PersonalData in the model and no plugin, feature, cds.requires or bound
+    auditlog service anywhere: the reads and changes of that data are unaudited,
+    which is the OWASP A09 gap this check exists for."""
+    finding = _run(_project(tmp_path, cds=PD_MODEL))["CAPX-CDS-006"][0]
+    assert finding["severity"] == "HIGH"
+    assert any("Customers" in i for i in finding["affected_items"])
+    assert finding["details"]["runtime"] == "unknown"   # no package.json/pom.xml
+
+
+def test_no_personal_data_means_no_audit_logging_finding(tmp_path):
+    """The one direction: with nothing marked @PersonalData there is no
+    expectation of an audit trail, so a project with no audit logging is not a
+    finding. A check that fired here would flag every CAP project without logging,
+    personal data or not."""
+    assert "CAPX-CDS-006" not in _run(_project(tmp_path, cds=PLAIN_MODEL))
+
+
+def test_the_node_plugin_silences_the_finding(tmp_path):
+    """`@cap-js/audit-logging` in package.json is the emitter. Its presence is
+    enough for this module to stay silent — it does not go on to assert the wiring
+    is complete, which is a deploy-time fact the source cannot settle."""
+    project = _project(tmp_path, cds=PD_MODEL)
+    (project / "package.json").write_text(json.dumps(
+        {"dependencies": {"@sap/cds": "^8", "@cap-js/audit-logging": "^0.8"}}),
+        encoding="utf-8")
+    assert "CAPX-CDS-006" not in _run(project)
+
+
+def test_the_cds_requires_declaration_silences_the_finding(tmp_path):
+    """A project can declare the service to the runtime under cds.requires. That
+    declaration counts as wiring even where the plain dependency line is not the
+    one this check happened to read."""
+    project = _project(tmp_path, cds=PD_MODEL)
+    (project / "package.json").write_text(json.dumps(
+        {"dependencies": {"@sap/cds": "^8"},
+         "cds": {"requires": {"audit-log": {"kind": "audit-log-to-restv2"}}}}),
+        encoding="utf-8")
+    assert "CAPX-CDS-006" not in _run(project)
+
+
+def test_the_java_audit_feature_silences_the_finding(tmp_path):
+    """CAP Java's emitter is the cds-feature-auditlog-v2 dependency in a pom.xml,
+    not a package.json plugin. The check has to recognise the runtime it is on."""
+    project = _project(tmp_path, cds=PD_MODEL)
+    (project / "pom.xml").write_text(
+        "<project><dependencies><dependency>"
+        "<groupId>com.sap.cds</groupId>"
+        "<artifactId>cds-feature-auditlog-v2</artifactId>"
+        "<scope>runtime</scope></dependency></dependencies></project>",
+        encoding="utf-8")
+    assert "CAPX-CDS-006" not in _run(project)
+
+
+def test_a_bound_auditlog_service_silences_the_finding(tmp_path):
+    """The sink counts as much as the emitter: a project that binds the SAP Audit
+    Log Service in its mta.yaml has wired logging up regardless of the plugin
+    line."""
+    project = _project(tmp_path, cds=PD_MODEL)
+    (project / "mta.yaml").write_text(
+        "ID: demo\nresources:\n"
+        "  - name: demo-auditlog\n"
+        "    type: org.cloudfoundry.managed-service\n"
+        "    parameters:\n"
+        "      service: auditlog\n"
+        "      service-plan: standard\n",
+        encoding="utf-8")
+    assert "CAPX-CDS-006" not in _run(project)
+
+
+def test_the_read_only_auditlog_services_do_not_count_as_the_sink(tmp_path):
+    """`auditlog-viewer` and `auditlog-management` are the read/manage services,
+    not the write sink the plugin emits to. Binding one of those is not wiring
+    audit logging, so the finding must still fire — the value is matched exactly
+    rather than as a prefix."""
+    project = _project(tmp_path, cds=PD_MODEL)
+    (project / "mta.yaml").write_text(
+        "ID: demo\nresources:\n"
+        "  - name: demo-viewer\n"
+        "    parameters:\n"
+        "      service: auditlog-viewer\n",
+        encoding="utf-8")
+    assert "CAPX-CDS-006" in _run(project)
+
+
+def test_a_dependencys_audit_plugin_is_not_credited_to_the_app(tmp_path):
+    """The same node_modules trap the descriptor and CDS parsers avoid: a plugin
+    declared by a DEPENDENCY's own package.json must not silence a finding about
+    the customer's application, which declares none of its own."""
+    project = _project(tmp_path, cds=PD_MODEL)
+    dep = project / "node_modules" / "some-dep"
+    dep.mkdir(parents=True)
+    (dep / "package.json").write_text(json.dumps(
+        {"dependencies": {"@cap-js/audit-logging": "^0.8"}}), encoding="utf-8")
+    assert "CAPX-CDS-006" in _run(project)
+
+
+def test_the_audit_logging_finding_maps_to_a09(tmp_path):
+    """CWE-778 (insufficient logging) reaches OWASP A09 through the published CWE
+    list, not this module's opinion — the CAPX family otherwise maps to A01, and
+    the CWE is what overrides it."""
+    finding = _run(_project(tmp_path, cds=PD_MODEL))["CAPX-CDS-006"][0]
+    assert finding["details"]["cwe"] == "CWE-778"
+    assert finding["owasp"]["owasp_top10"] == "A09"
+    assert finding["owasp"]["basis"] == "cwe"
