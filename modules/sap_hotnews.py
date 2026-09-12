@@ -92,6 +92,7 @@ Data sources:
 """
 
 import re
+import datetime
 import json
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Set, Tuple
@@ -359,6 +360,10 @@ class SapHotNewsAuditor(BaseAuditor):
         applied, partial = self._applied_sets()
         has_applied = self.data.get("applied_notes") is not None
 
+        # Independent of the SNOTE list: it reads the component export and SAP's
+        # own SP-age table, so it runs in both the has_applied and no-data paths.
+        self.check_sp_stack_age()
+
         if not has_applied:
             self._report_no_data(catalog)
             self._report_catalogue_disagreement(catalog)
@@ -472,6 +477,125 @@ class SapHotNewsAuditor(BaseAuditor):
             if c:
                 comps.add(c)
         return comps or None
+
+    #: SAP's own SAP_BASIS support-package release dates, derived by
+    #: tools/build_abap_sp_stack_dates.py from the FRUN CSA age policy.
+    _SP_DATES_PATH = (Path(__file__).resolve().parents[1]
+                      / "data" / "abap_sp_stack_dates.json")
+
+    def _sp_stack_dates(self) -> Dict[str, Any]:
+        """SAP's (SAP_BASIS release, SP) -> release-date table, or empty.
+
+        An unreadable file disables the check rather than firing on nothing —
+        the SP-age check simply goes back to not existing, which is where it was.
+        """
+        cached = getattr(self, "_sp_dates_cache", None)
+        if cached is None:
+            try:
+                cached = json.loads(self._SP_DATES_PATH.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                cached = {"releases": {}, "threshold_days": 730}
+            self._sp_dates_cache = cached
+        return cached
+
+    def check_sp_stack_age(self):
+        """HOTNEWS-SPAGE-001 — the SAP_BASIS support-package stack is years out of date.
+
+        SAP's own judgement (FRUN CSA `age_of_sap_basis.xml`): a SAP_BASIS support
+        package whose RELEASE DATE is more than 730 days before now is out of
+        currency. This product reads system_component for the installed
+        (release, SP), looks the release date up in SAP's table, and ages it
+        against the scan date — SAP's SQL is not executed.
+
+        NOT-ASSESSABLE IS NOT A PASS. SAP's published table is dated June 2020 and
+        covers SAP_BASIS 700-754 only, so a system on 755+ (S/4HANA 2020 and
+        later) is skipped rather than reported current — the coverage manifest
+        carries that absence. The check is therefore decisive for legacy/ECC
+        stacks and silent, by construction, on the S/4HANA core.
+        """
+        rows = self.data.get("system_component")
+        if not rows:
+            return  # absent export is the coverage manifest's to report
+        table = self._sp_stack_dates()
+        releases = table.get("releases") or {}
+        threshold = int(table.get("threshold_days") or 730)
+
+        rel = sp_raw = None
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            comp = str(row.get("COMPONENT", row.get("COMPONENT_NAME",
+                       row.get("NAME", "")))).strip().upper()
+            if comp != "SAP_BASIS":
+                continue
+            rel = str(row.get("RELEASE", row.get("VERSION",
+                      row.get("REL", "")))).strip()
+            sp_raw = str(row.get("SP_LEVEL", row.get("SP",
+                         row.get("SUPPORT_PACKAGE", "")))).strip()
+            break
+        if not rel:
+            return  # no SAP_BASIS row to judge
+        relinfo = releases.get(rel)
+        if not relinfo:
+            return  # release outside SAP's table (755+/unknown): not assessable for age
+
+        sp_int = int(re.sub(r"\D", "", sp_raw or "") or "0")
+        date_str = (relinfo.get("exact") or {}).get(str(sp_int))
+        if date_str is None:
+            above_sp = relinfo.get("above_sp")
+            if above_sp is not None and sp_int > above_sp:
+                date_str = relinfo.get("above_date")
+        if not date_str:
+            return  # this SP is not datable from SAP's table
+        try:
+            sp_date = datetime.date.fromisoformat(date_str)
+        except ValueError:
+            return
+        age_days = (datetime.date.today() - sp_date).days
+        if age_days <= threshold:
+            return  # within SAP's currency window
+
+        years = age_days / 365.25
+        self.finding(
+            check_id="HOTNEWS-SPAGE-001",
+            title="SAP_BASIS support-package stack is years out of date",
+            severity=self.SEVERITY_MEDIUM,
+            category=self.CATEGORY,
+            description=(
+                f"The installed SAP_BASIS support package (release {rel}, "
+                f"SP {sp_int:04d}) was released on {date_str} — about "
+                f"{years:.1f} years ago, past SAP's {threshold}-day currency "
+                "window. A stack this far behind has missed years of support "
+                "packages, and with them the security corrections those packages "
+                "carry; the specific missing SAP Security Notes are a lower bound "
+                "on the exposure, not the whole of it.\n\n"
+                "This rating is SAP's own, from its Focused Run CSA 'age of "
+                "SAP_BASIS' policy. SAP's published table covers SAP_BASIS "
+                "700-754; a system on 755 or later cannot be aged from it and is "
+                "reported as not-assessable rather than current."
+            ),
+            affected_items=[
+                f"SAP_BASIS {rel} SP{sp_int:04d} released {date_str} "
+                f"(~{years:.1f} years old, threshold {threshold} days)"
+            ],
+            # One statement about the whole stack, identified by system + check id:
+            # re-scanning the same stale stack must not reset its age, and an
+            # upgrade (the release changes) resolves it. No object is named — the
+            # SAP_BASIS stack is not an export-named entity in this bundle.
+            scope="aggregate",
+            remediation=(
+                "Apply the current SAP_BASIS support-package stack for this "
+                "release, or upgrade the release, to return to SAP's maintenance "
+                "window. Where SAP operates the stack under RISE, this is a "
+                "service request rather than a change you apply."
+            ),
+            references=[
+                "SAP FRUN CSA policy — Age of ABAP SAP Basis (age_of_sap_basis.xml)",
+                "SAP Support Package Stack schedule / Maintenance planner",
+            ],
+            details={"release": rel, "sp": sp_int, "sp_release_date": date_str,
+                     "age_days": age_days, "threshold_days": threshold},
+        )
 
     def _partition(self, catalog: List[Dict[str, Any]]
                    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:

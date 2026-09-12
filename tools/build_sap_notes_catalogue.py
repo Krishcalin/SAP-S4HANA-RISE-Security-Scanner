@@ -210,10 +210,17 @@ CONFIGSTORE_SOURCES = {
 #: explicit so the catalogue can count what a missing export costs rather than
 #: leaving the note looking unanswerable.
 CONFIGSTORE_UNMAPPED = {
-    "SAPUI5_VERSION": "SAPUI5 version",
-    "BOBJ_VERSION": "BusinessObjects version",
-    "ABAP_UR_VERSION": "Unified Rendering version",
-    "igsmanifest.mf": "Internet Graphics Server build",
+    # DELIBERATELY unmapped, not overlooked. The two UI-layer stores are version
+    # strings compared branch-and-patch — `substring(VALUE,0,4)='1.71' and
+    # lpad(substr_after(VALUE,'1.71.'),4,'0') >= '0056'` — exactly the shape the
+    # HANA-revision fix uses, NOT a COMP_LEVEL support-package check. Answering
+    # them needs a dedicated version export AND that branch/patch comparator; the
+    # comparator is deferred, so mapping the store to a loader source now would
+    # invite an export nothing reads. Recorded as a decision, not a gap.
+    "SAPUI5_VERSION": "SAPUI5 library version (branch/patch); dedicated export + comparator deferred",
+    "ABAP_UR_VERSION": "Unified Rendering version (branch/patch); dedicated export + comparator deferred",
+    "BOBJ_VERSION": "BusinessObjects version — a separate product, out of scope",
+    "igsmanifest.mf": "Internet Graphics Server build — niche, out of scope",
     "Parameters": "a generic parameter store; the policy does not say which",
 }
 
@@ -288,6 +295,7 @@ def parse_policy(path: Path, strict_errors: list) -> dict:
     # use a `between` range and are counted rather than guessed at.
     levels: dict = {}
     ranges = 0
+    range_notes: set = set()
     for store_name, block in _STORE_BLOCK.findall(text):
         for item_id, item in _CHECKITEM_BLOCK.findall(block):
             note_match = CHECKITEM_NOTE.match(item_id)
@@ -301,6 +309,13 @@ def parse_policy(path: Path, strict_errors: list) -> dict:
             if store_name == "COMP_LEVEL":
                 if _BETWEEN.search(blob):
                     ranges += 1
+                    # A `between A and B` support-package range. Deliberately NOT
+                    # interpreted: it is predominantly two-sided (A > 0), so the
+                    # lower bound is a real ambiguity — SP < A may be unaffected —
+                    # and reading it as "fixed at B+1" would over-flag. Tracked per
+                    # note so the catalogue can COUNT what the deferral costs
+                    # (notes_blocked_only_by_a_range) rather than leave it implicit.
+                    range_notes.add(note)
                 for triple in _component_levels(blob):
                     levels.setdefault(note, {}).setdefault(
                         "components", set()).add(triple)
@@ -332,7 +347,7 @@ def parse_policy(path: Path, strict_errors: list) -> dict:
 
     return {"patchday": patchday, "stack": _stack(path), "file": path.name,
             "entries": entries, "stores": stores, "levels": levels,
-            "ranges": ranges}
+            "ranges": ranges, "range_notes": range_notes}
 
 
 def build(source: Path, strict: bool = False) -> str:
@@ -355,11 +370,13 @@ def build(source: Path, strict: bool = False) -> str:
     notes: dict = {}
     patchdays = set()
     range_items = 0
+    notes_with_range: set = set()
     unattributable = 0
     for path in files:
         policy = parse_policy(path, strict_errors)
         patchdays.add(policy["patchday"])
         range_items += policy["ranges"]
+        notes_with_range |= policy["range_notes"]
         for entry in policy["entries"]:
             rec = notes.setdefault(entry["note"], {
                 "cve": [], "component": None, "cvss": None, "priority": None,
@@ -477,6 +494,16 @@ def build(source: Path, strict: bool = False) -> str:
                 1 for r in notes.values() if r["hana_fix"]),
             "check_items_with_an_unattributable_id": unattributable,
             "check_items_using_an_uninterpreted_range": range_items,
+            # The DISTINCT NOTES the range deferral actually costs: a COMP_LEVEL
+            # range and no extracted component/kernel/HANA fix of any kind, so
+            # applicability cannot be judged from a supplied component export.
+            # This is the number that matters, and the one the range insight asked
+            # to be made explicit; the check-item count above over-counts it
+            # because one note carries a range clause per affected release.
+            "notes_blocked_only_by_a_range": sum(
+                1 for n in notes_with_range if n in notes and not (
+                    notes[n]["fix_levels"] or notes[n]["kernel_fix"]
+                    or notes[n]["hana_fix"])),
         },
         "fix_levels": (
             "The first support package carrying the fix, per component and "

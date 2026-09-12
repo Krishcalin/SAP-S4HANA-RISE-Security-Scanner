@@ -13,11 +13,11 @@
    "SAP_KERNEL": "sap_kernel"
   },
   "config_store_unmapped": {
-   "ABAP_UR_VERSION": "Unified Rendering version",
-   "BOBJ_VERSION": "BusinessObjects version",
+   "ABAP_UR_VERSION": "Unified Rendering version (branch/patch); dedicated export + comparator deferred",
+   "BOBJ_VERSION": "BusinessObjects version — a separate product, out of scope",
    "Parameters": "a generic parameter store; the policy does not say which",
-   "SAPUI5_VERSION": "SAPUI5 version",
-   "igsmanifest.mf": "Internet Graphics Server build"
+   "SAPUI5_VERSION": "SAPUI5 library version (branch/patch); dedicated export + comparator deferred",
+   "igsmanifest.mf": "Internet Graphics Server build — niche, out of scope"
   },
   "config_store_usage": {
    "ABAP_INSTANCE_PAHI": 6,
@@ -46,6 +46,7 @@
    "checked_by_sap_policy": 990,
    "component_release_sp_triples": 6637,
    "notes": 1732,
+   "notes_blocked_only_by_a_range": 29,
    "patch_days": 154,
    "policy_files": 157,
    "with_component_fix_levels": 837,

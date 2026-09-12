@@ -282,7 +282,7 @@ jobs:
           git clone --depth 1 --filter=blob:none --sparse \
             https://github.com/SAP-samples/frun-csa-policies-best-practices.git /tmp/sappol
           cd /tmp/sappol
-          git sparse-checkout set BaselinePolicies NotesPolicies Schema
+          git sparse-checkout set BaselinePolicies NotesPolicies MiscPolicies Schema
           echo "policy files: $(find . -name '*.xml' | wc -l)"
 
       - name: Re-derive the catalogue and compare
@@ -326,6 +326,31 @@ jobs:
       # in the note list a customer is working from.
       - name: Re-derive the notes catalogue and compare
         run: python -m tools.build_sap_notes_catalogue --source /tmp/sappol --strict --check
+
+      # A NEW upstream baseline version (a v2.6 beside the pinned v2.4) is
+      # invisible to the compare above, which only ever re-derives the pinned
+      # version. Fail here so adopting it is a conscious act, not a silent drift.
+      - name: Flag a newer SAP baseline policy version than we pin to
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, ".")
+          from server.sapcontent import newer_baseline_versions, BASELINE_VERSION
+          newer = newer_baseline_versions("/tmp/sappol")
+          if newer:
+              print(f"::error::SAP has published baseline policy version(s) {newer} "
+                    f"newer than the pinned {BASELINE_VERSION}. Bump "
+                    f"server.sapcontent.BASELINE_VERSION and regenerate the coverage "
+                    f"catalogue (a D7-class vocabulary move), or record why not.")
+              raise SystemExit(1)
+          print(f"baseline version current: pinned {BASELINE_VERSION}, none newer")
+          PY
+
+      # The SAP_BASIS support-package-age table behind HOTNEWS-SPAGE-001 is derived
+      # from the same repo (MiscPolicies) by a third generator. --check fails if
+      # the committed table has drifted from SAP's published age policy.
+      - name: Re-derive the SP-stack-date table and compare
+        run: python -m tools.build_abap_sp_stack_dates --source /tmp/sappol --check
 
   # ------------------------------------------------------------------ #
   #  Brand asset drift — the served PNGs must match the master         #

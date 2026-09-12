@@ -104,7 +104,48 @@ def parse_policy(path: Path) -> Dict[str, Any]:
     return policy
 
 
-def build_catalogue(root_dir: Path, version: str = "v2.4") -> Dict[str, Any]:
+#: The SAP Baseline policy version this product derives its requirement
+#: vocabulary from. SAP publishes several versions side by side
+#: (`BaselinePolicies/SOS/v1.9.3`, `v2.2`, `v2.4`); we pin the newest so the
+#: catalogue is a deliberate, versioned adoption rather than "whatever is latest".
+#:
+#: THE PIN IS ALSO A BLIND SPOT, WHICH IS WHY `newer_baseline_versions` EXISTS.
+#: The CI freshness check re-derives THIS version and fails on drift — but it
+#: would never notice SAP publishing a v2.6 beside v2.4, because it only ever
+#: looks at the pinned directory. Bumping this is a D7-class vocabulary move (new
+#: requirement families reach the coverage page), so it must be a conscious act;
+#: the guard makes a new upstream version fail the build instead of ageing
+#: silently.
+BASELINE_VERSION = "v2.4"
+
+
+def _version_key(name: str):
+    """`v2.4` -> (2, 4); `v1.9.3` -> (1, 9, 3); anything else -> None."""
+    m = re.match(r"v(\d+(?:\.\d+)*)$", str(name).strip())
+    return tuple(int(p) for p in m.group(1).split(".")) if m else None
+
+
+def newer_baseline_versions(root_dir: Path,
+                            pinned: str = BASELINE_VERSION) -> List[str]:
+    """SOS policy versions in the checkout that sort NEWER than the pinned one.
+
+    Empty is the healthy state. A non-empty result means SAP shipped a baseline
+    version this product has not adopted, and the coverage page is measured
+    against a superseded requirement set until `BASELINE_VERSION` is bumped and
+    the catalogue regenerated. The CI guard turns that into a build failure.
+    """
+    base = Path(root_dir) / "BaselinePolicies" / "SOS"
+    if not base.is_dir():
+        return []
+    pin = _version_key(pinned)
+    if pin is None:
+        return []
+    newer = [d.name for d in base.iterdir()
+             if d.is_dir() and (_version_key(d.name) or ()) > pin]
+    return sorted(newer, key=lambda n: _version_key(n) or ())
+
+
+def build_catalogue(root_dir: Path, version: str = BASELINE_VERSION) -> Dict[str, Any]:
     """Build the requirement catalogue from a checkout of SAP's policy repository.
 
     `root_dir` is the repo root (the directory holding `BaselinePolicies/`).

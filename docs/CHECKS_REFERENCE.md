@@ -6,13 +6,13 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**476** check ids are written as literals in `modules/`, across **39** modules. A further **353** are built at runtime from shipped rule tables, giving **829** in total.
+**477** check ids are written as literals in `modules/`, across **39** modules. A further **353** are built at runtime from shipped rule tables, giving **830** in total.
 
 Each check is published with **what it reads** and **which SAP Security Baseline requirement it answers** — the two things that make a catalogue auditable rather than a number. A competitor publishing a count and no itemised list is making a claim; this is a claim somebody else can check.
 
 ## What this file does not claim
 
-**62 of the 476 titles and 32 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**62 of the 477 titles and 32 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -25,7 +25,7 @@ Every check below carries the SAP Security Baseline requirement it answers, wher
 - **28 of 28** requirements that are IN SCOPE for this product are addressed by at least one check here.
 - **10 of 38** published requirements are out of scope, because they are for a stack this product does not read. They are named below, not dropped: the denominator has to be honest in both directions, and a reader comparing 28 against 38 has no way to know that.
 - **0** in-scope requirements are not addressed at all. They are listed below rather than summarised away.
-- **552 of 829** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
+- **552 of 830** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
 
 > ⚠️ These are CHECK ITEMS in the CSA policies, not the 'control points' counted in the Baseline document — the widely-quoted 214 (69/92/53) is that other unit. The two do not reconcile; do not publish a percentage of one against the other.
 
@@ -701,7 +701,7 @@ Reads: `btp_role_collection_mappings`, `business_role_catalogs`, `business_role_
 | `S4AUTHZ-007` | HIGH | Cloud Foundry privileged platform role over-assigned | — |
 | `S4AUTHZ-008` | MEDIUM | Birthright role collection auto-granted to all federated users | — |
 
-### `sap_hotnews` — 16 checks
+### `sap_hotnews` — 17 checks
 
 Reads: `applied_notes`, `hana_version`, `role_auth_values`, `sap_kernel`, `sap_security_notes`, `system_component` — the sources the MODULE consumes; an individual check below reads some subset of them.
 
@@ -723,6 +723,7 @@ Reads: `applied_notes`, `hana_version`, `role_auth_values`, `sap_kernel`, `sap_s
 | `HOTNEWS-013` | *varies* — CRITICAL or HIGH | Installed component is below the support package that fixes an unpatched note | `SECUPD-A` |
 | `HOTNEWS-014` | *varies* — CRITICAL or HIGH | Note recorded as applied, but the fix it needs is not installed | `SECUPD-A` |
 | `HOTNEWS-COVERAGE` | INFO | SAP note check ran against a curated subset, not the full patch history | `SECUPD-A` |
+| `HOTNEWS-SPAGE-001` | MEDIUM | SAP_BASIS support-package stack is years out of date | `SECUPD-A` |
 
 ### `security_params` — 9 checks
 
