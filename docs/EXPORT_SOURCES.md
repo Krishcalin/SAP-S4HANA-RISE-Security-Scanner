@@ -115,7 +115,7 @@ clean — see chapter 13 of the architecture guide.
 | `payment_runs` | `payment_runs.csv`, `reguh.csv` | `master_data_changes` | documented |
 | `personal_data_inventory` | `personal_data_inventory.csv`, `pdi.csv` | `data_protection` | documented |
 | `posting_periods` | `posting_periods.csv`, `t001b.csv`, `ob52.csv` | `financial_controls` | documented |
-| `profiles` | `profiles.csv`, `usr04.csv` | `basis_job_command`, `log_review`, `user_auth_audit` | documented |
+| `profiles` | `profiles.csv`, `usr04.csv` | `basis_job_command`, `log_review`, `system_trust`, `user_auth_audit` | documented |
 | `pse_inventory` | `pse_inventory.csv`, `strust_pse.csv` | `crypto_posture` | documented |
 | `purpose_of_processing` | `purpose_of_processing.csv`, `pop_config.csv` | `data_protection` | documented |
 | `ral_config` | `ral_config.csv`, `sralmanager.csv` | `data_protection` | documented |
@@ -145,7 +145,7 @@ clean — see chapter 13 of the architecture guide.
 | `system_change` | `system_change.csv`, `se06.csv`, `system_change_option.csv` | `code_transport` | documented |
 | `system_component` | `system_component.csv`, `cvers.csv`, `component_versions.csv` | `sap_hotnews` | documented |
 | `system_landscape` | `system_landscape.csv`, `landscape.csv` | `data_protection` | documented |
-| `table_auth_groups` | `table_auth_groups.csv`, `table_authorization_groups.csv`, `se54.csv` | `ecs_config_items` | documented |
+| `table_auth_groups` | `table_auth_groups.csv`, `table_authorization_groups.csv`, `se54.csv` | `ecs_config_items`, `system_trust` | documented |
 | `table_logging` | `table_logging.csv`, `dd09l.csv` | `log_monitoring` | documented |
 | `tls_config` | `tls_config.csv`, `icm_ssl.csv` | `crypto_posture` | documented |
 | `tolerance_groups` | `tolerance_groups.csv`, `t043t.csv`, `oba4.csv` | `financial_controls` | documented |
@@ -156,7 +156,7 @@ clean — see chapter 13 of the architecture guide.
 | `ucon_rfc_state` | `ucon_rfc_state.csv`, `ucon_rfc.csv`, `uconcockpit.csv`, `ucon_phase_tool.csv` | `ucon_exposure` | documented |
 | `user_groups` | `user_groups.csv` | `iam_advanced` | documented |
 | `user_roles` | `user_roles.csv`, `agr_users.csv` | `abap_authorizations`, `access_risk_analysis`, `iam_advanced`, `role_governance`, `user_auth_audit` | documented |
-| `users` | `users.csv` | `basis_job_command`, `iam_advanced`, `security_params`, `user_auth_audit` | documented |
+| `users` | `users.csv` | `basis_job_command`, `iam_advanced`, `security_params`, `system_trust`, `user_auth_audit` | documented |
 | `vendor_bank` | `vendor_bank.csv`, `but0bk.csv`, `lfbk.csv` | `vendor_master` | documented |
 | `vendor_master` | `vendor_master.csv`, `but000.csv`, `lfa1.csv` | `vendor_master` | documented |
 | `webdisp_params` | `webdisp_params.csv`, `webdisp_profile.csv`, `web_dispatcher_params.csv`, `sapwebdisp_pfl.csv` | `webdisp_security` | documented |

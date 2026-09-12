@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — DO NOT EDIT BY HAND.
      Produced by tools/build_firing_reference.py from a full test run. -->
 
-**831 of 831** literal check ids are proven to produce a finding somewhere in the
+**837 of 837** literal check ids are proven to produce a finding somewhere in the
 test suite. A further **0** are proven by construction. **0** are unproven.
 
 ## What "unproven" means here

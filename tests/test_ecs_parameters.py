@@ -86,6 +86,9 @@ LEGACY_ONLY_COMPLIANT = {
     "dynp/confirmskip1screen": "ALL",         # USRCTR-A_a.2
     "rdisp/vbdelete": "0",                    # USRCTR-A_f
     "gw/monitor": "1",                        # RFCGW-A_e
+    # A BASELINE gateway parameter the note does not mandate, like gw/monitor above:
+    # RFC gateway ACL simulation off (SAP Note 1689663 / 'Securing RFC' section 6).
+    "gw/sim_mode": "0",
     "rsau/log_peer_address": "1",             # AUDIT-A_a.3p
     "wdisp/add_xforwardedfor_header": "TRUE",  # NETCF-A_g2
     "ms/admin_port": "0",                     # MSGSRV-A_c

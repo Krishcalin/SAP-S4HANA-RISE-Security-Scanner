@@ -281,11 +281,13 @@ def test_every_absent_parameter_is_now_named_somewhere():
     # (FILE-A a), the Windows half that was missing) and snc/log_unencrypted_rfc
     # (NETENC-A d), absent because snc_posture is a transcript of ECS note
     # 3250501 and this parameter is not in the note).
+    # 52 -> 53 when gw/sim_mode joined the BASELINE set (RFC gateway ACL simulation
+    # mode; SAP Note 1689663 / 'Securing RFC' section 6), absent from this fixture.
     #
     # The number moves whenever the rule set does; what must not move is that
     # EVERY absent parameter is named by one of the two roll-ups, which is what
     # this compares against.
-    assert named == 52, f"{named} of the 52 absent parameters are named"
+    assert named == 53, f"{named} of the 53 absent parameters are named"
 
 
 def test_the_further_parameters_finding_is_a_disclosure_not_a_verdict():

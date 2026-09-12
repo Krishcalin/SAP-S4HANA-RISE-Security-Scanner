@@ -62,7 +62,9 @@ class SystemTrustAuditor(BaseAuditor):
         self.check_inbound_trust_tier()
         self.check_self_trust()
         self.check_trust_migration()
+        self.check_rfc_trust_table_protected()
         self.check_trusted_dest_fixed_user()
+        self.check_privileged_destination_user()
         self.check_saprouttab_wildcard()
         self.check_message_server_ports()
         self.check_message_server_acl()
@@ -533,7 +535,9 @@ class SystemTrustAuditor(BaseAuditor):
                     "Set rfc/selftrust = 0 and remove self-referential trust entries unless a "
                     "specific, reviewed scenario requires it."
                 ),
-                references=["SAP Note 128447", "SAP Security Baseline — rfc/selftrust"],
+                references=["SAP Note 2449757 — [CVE-2017-16689] Additional authentication "
+                            "check in trusted RFC on same system (rfc/selftrust)",
+                            "SAP Note 128447", "SAP Security Baseline — rfc/selftrust"],
             )
 
     def check_trust_migration(self):
@@ -577,7 +581,7 @@ class SystemTrustAuditor(BaseAuditor):
                     "Migrate all trust relationships to the new method (transaction SMT1 → "
                     "migrate) and set rfc/allowoldticket4tt = no. See SAP Notes 3089413 / 3157268."
                 ),
-                references=["SAP Note 3089413 — Trusted-RFC security method (CVE-2021-27610)",
+                references=["SAP Note 3089413 — Trusted-RFC security method (CVE-2023-0014)",
                             "SAP Note 3157268 — Trusted RFC migration how-to"],
             )
 
@@ -629,6 +633,143 @@ class SystemTrustAuditor(BaseAuditor):
                 references=["SAP Note 128447 — Trusted destinations",
                             "SAP Security Baseline — RFC destinations"],
             )
+
+    def check_privileged_destination_user(self):
+        """RFC destination storing credentials for a locally highly-privileged user (RFC hopping)."""
+        rows = self.data.get("rfc_destinations")
+        if not rows:
+            return
+        crit = {"SAP_ALL", "SAP_NEW", "S_A.SYSTEM"}
+        # Local evidence only. The stored user logs on to the TARGET system, whose user
+        # master this scan does not have; its privilege can be judged only where the same
+        # name is a user of THIS system (loopback destinations, and the very common
+        # landscape-wide technical user). Where the name is not a local user its privilege
+        # is unknown and the destination is deliberately not reported — no guessing.
+        local_type = {}
+        for r in (self.data.get("users") or []):
+            if isinstance(r, dict):
+                u = self._get(r, "BNAME", "UNAME", "USER").upper()
+                if u:
+                    local_type[u] = self._get(r, "USTYP", "USER_TYPE").upper()
+        crit_by_user = {}
+        for r in (self.data.get("profiles") or []):
+            if isinstance(r, dict):
+                u = self._get(r, "BNAME", "UNAME", "USER").upper()
+                p = self._get(r, "PROFILE", "PROFILES", "AGR_NAME").upper()
+                if u and p in crit:
+                    crit_by_user.setdefault(u, set()).add(p)
+        offenders, objects = [], []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            name = self._get(row, "RFCDEST", "DESTINATION", "NAME", "RFCDES")
+            rfcauth = self._get(row, "RFCAUTH", "AUTH_METHOD", "AUTH")
+            user = self._get(row, "RFCUSER", "USER", "LOGON_USER", "USERNAME")
+            if not user or rfcauth.upper() == "TRUSTED":
+                continue                    # trusted destinations are TRUST-004's domain
+            profs = crit_by_user.get(user.upper())
+            if not profs:
+                continue                    # not a locally-privileged user → silent
+            utype = local_type.get(user.upper(), "")
+            type_note = ", and is a Dialog user" if utype in ("A", "DIALOG") else ""
+            offenders.append("%s — stored user '%s' holds %s%s"
+                             % (name, user, "/".join(sorted(profs)), type_note))
+            if name:
+                objects.append({"type": "destination", "name": name})
+            objects.append({"type": "user", "name": user})
+        if offenders:
+            self.finding(
+                check_id="TRUST-009",
+                title="Highly privileged user stored in an RFC destination (RFC hopping)",
+                severity=self.SEVERITY_HIGH,
+                category=self.CATEGORY,
+                description=(
+                    "%d RFC destination(s) store logon credentials for a user that holds a highly "
+                    "privileged profile (SAP_ALL / SAP_NEW / S_A.SYSTEM) in this system. Anyone "
+                    "who can use the destination acts in the target with those privileges — the "
+                    "stored credentials belong to the destination, not to the caller, so the caller "
+                    "needs no such privilege, and often no account, of their own. This is the "
+                    "mechanism SAP calls RFC hopping: an insecurely configured destination lets "
+                    "access reach from a less-trusted system toward a more critical one. Privilege "
+                    "is judged from THIS system's user master, so the finding holds for loopback "
+                    "destinations and for landscape-wide technical users of the same name; where "
+                    "the stored user is not a user of this system its privilege cannot be seen here "
+                    "and the destination is not reported." % len(offenders)),
+                affected_items=offenders,
+                affected_objects=objects,
+                scope="aggregate",
+                remediation=(
+                    "Give each RFC destination a dedicated technical user of type System carrying "
+                    "the MINIMUM authorization the business scenario needs in the target — never "
+                    "SAP_ALL / SAP_NEW / S_A.SYSTEM. Remove those profiles from the stored user or "
+                    "replace the user. Prefer current-user / trusted-RFC or SSO propagation over "
+                    "stored credentials where the scenario allows, and restrict who may use the "
+                    "destination with an authorization group (S_ICF). Reconcile with the stored-"
+                    "credential inventory (NET-001) and the SAP_ALL holders (USR-004/005)."
+                ),
+                references=["SAP Note 622464 — user type SYSTEM for RFC destination users",
+                            "SAP Note 1682316 — optimizing RFC user authorizations",
+                            "SAP 'Securing RFC' section 4 — RFC hopping"],
+            )
+
+    def check_rfc_trust_table_protected(self):
+        """RFCSYSACL behind table authorization group TTRL (SAP Note 1562697)."""
+        rows = self.data.get("table_auth_groups")
+        if not rows:
+            return
+        table_keys = ("TABNAME", "TABLE", "TABLE_NAME", "OBJECT", "OBJECT_NAME", "VIEWNAME")
+        group_keys = ("CCLASS", "AUTH_GROUP", "AUTHGROUP", "AUTHORIZATION_GROUP",
+                      "AUTH_GRP", "DICBERCLS", "BRGRU")
+        no_group = {"", "-", "&NC&", "N/A", "NONE"}
+        found, group = False, None
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            if self._get(row, *table_keys).upper() != "RFCSYSACL":
+                continue
+            found = True
+            g = self._get(row, *group_keys).upper()
+            group = "" if g in no_group else g
+            break
+        if not found:
+            # A complete TDDAT/SE54 extract lists every table with its group; where the
+            # extract omits RFCSYSACL it was filtered or partial, which is no evidence
+            # about the table, so it is judged only where the extract carries it. A full
+            # TDDAT lists every table anyway, so a missing group shows there as a blank.
+            return
+        if group == "TTRL":
+            return
+        observed = ("no authorization group assigned" if not group
+                    else "authorization group %s" % group)
+        self.finding(
+            check_id="TRUST-012",
+            title="Trusted-RFC ACL table RFCSYSACL is not protected by authorization group TTRL",
+            severity=self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=(
+                "Table RFCSYSACL, which holds the technical data for every trusted-system "
+                "(trusted-RFC) relationship into this system, is %s — SAP Note 1562697 "
+                "requires it behind authorization group TTRL. Table display is authorised "
+                "through S_TABU_DIS against the table's authorization group, so a table "
+                "carrying no group, or a group broad support roles already hold, puts the "
+                "whole trust list within reach of anyone with generic table-display "
+                "access; change access via S_TABU_NAM would let them add a trusted system "
+                "outright. Either way an attacker learns, or edits, which systems can log "
+                "on here without a password — the map, and the keys, to the trust paths "
+                "into this system." % observed),
+            affected_items=["RFCSYSACL: %s" % observed],
+            affected_objects=[{"type": "table", "name": "RFCSYSACL"}],
+            scope="object",
+            remediation=(
+                "1. In SE54, assign authorization group TTRL to table RFCSYSACL.\n"
+                "2. Restrict S_TABU_DIS (display) and S_TABU_NAM (change) for TTRL to the "
+                "accounts that genuinely administer trusted-system relationships.\n"
+                "3. Re-extract the assignments and confirm RFCSYSACL reports TTRL."),
+            references=["SAP Note 1562697 — Authorization group for trust relationship",
+                        "SAP 'Securing RFC' section 2.1 — RFCSYSACL behind group TTRL"],
+            details={"table": "RFCSYSACL", "expected_group": "TTRL",
+                     "observed_group": group if group else None},
+        )
 
     # ============================================================  CONNECTIVITY
     def check_saprouttab_wildcard(self):

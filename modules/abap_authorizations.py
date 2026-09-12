@@ -45,6 +45,8 @@ class AbapAuthorizationAuditor(BaseAuditor):
         "PFCG": "role maintenance", "SU02": "profile maintenance", "SU03": "authorization maint.",
         # RFC / connectivity
         "SM59": "RFC destinations", "SMT1": "trusted RFC", "SMGW": "gateway monitor",
+        # cryptographic key / trust stores (PSE)
+        "STRUST": "trust manager (SNC/TLS PSE keys)", "STRUSTSSO2": "trust manager (SSO tickets)",
         # client / system administration
         "SCC4": "client administration", "SCC5": "client delete", "RZ10": "profile parameters",
         "RZ11": "profile parameters", "SICF": "ICF services", "SMICM": "ICM monitor",
@@ -89,6 +91,9 @@ class AbapAuthorizationAuditor(BaseAuditor):
         self.check_batch_impersonation()
         self.check_sensitive_tcodes()
         self.check_developer_change_access()
+        self.check_developer_test_execution()
+        self.check_rfc_admin_maintenance()
+        self.check_trust_maintenance()
         self.check_object_disabling()
         return self.findings
 
@@ -725,6 +730,104 @@ class AbapAuthorizationAuditor(BaseAuditor):
             "Remove development authorizations from productive-system roles; enforce "
             "change-and-transport. Restrict S_DEVELOP to the development system and to developers.",
             ["SAP Security Baseline — S_DEVELOP", "DSAG Audit — developer access in production"],
+            objects=objs)
+
+    def check_developer_test_execution(self):
+        """S_DEVELOP ACTVT=16 (test/execute) on function modules → SE37 test-run of any FM."""
+        bad, objs = [], []
+        for i in self._objects("S_DEVELOP"):
+            objtype = self._field(i, "OBJTYPE")
+            # The SE37 test-execution vector is specifically object type FUGR (function
+            # group / function module); '*' covers it too. Anything else is not this control.
+            if not (self._covers(objtype, "FUGR") or self._has_star(objtype)):
+                continue
+            if self._covers(self._field(i, "ACTVT"), "16"):
+                bad.append(self._role_label(i["role"],
+                                            "S_DEVELOP OBJTYPE=FUGR, ACTVT=16 (test/execute)"))
+                objs.extend(self._role_objects(i["role"], i["object"], "OBJTYPE=FUGR,ACTVT=16"))
+        self._emit(
+            "AUTH-018", "Function-module test execution via S_DEVELOP (ACTVT=16)",
+            self.SEVERITY_MEDIUM,
+            f"{len(bad)} role(s) grant S_DEVELOP with ACTVT=16 (test/execute) covering object type "
+            "FUGR — the authorization the Function Builder (SE37) checks when a user runs a "
+            "function module in test mode. Test execution runs the module directly in the caller's "
+            "context, bypassing the transaction-level and UCON access control that would apply to a "
+            "normal remote or dialog call, so an RFC-enabled module can be executed by anyone "
+            "holding this authorization together with SE37. In a production system, or in any "
+            "system whose RFC destinations store credentials for business-critical systems, that is "
+            "a way to run privileged function modules outside the controls designed to govern them. "
+            "SAP Note 587410 documents this ACTVT 16 test vector.",
+            bad,
+            "Remove S_DEVELOP ACTVT=16 (and SE37 access) from productive-system roles and from any "
+            "system holding RFC credentials to business-critical systems; restrict it to developers "
+            "in the development system. Where support needs test execution, gate it behind an "
+            "emergency-access (firefighter) procedure with logging. Reconcile with AUTH-013 (SE37 "
+            "in roles) and AUTH-014 (S_DEVELOP create/change).",
+            ["SAP Note 587410 — Test environment: Activity 16 (Execute) in S_DEVELOP",
+             "SAP Security Baseline — S_DEVELOP",
+             "SAP 'Securing RFC' section 4 — client-side S_DEVELOP"],
+            objects=objs)
+
+    def check_rfc_admin_maintenance(self):
+        """S_RFC_ADM with create/change activity → maintain RFC destinations (SM59)."""
+        bad, objs = [], []
+        for i in self._objects("S_RFC_ADM"):
+            actvt = self._field(i, "ACTVT")
+            # Maintenance = create/change/delete (01/02/06) or '*'. Display-only (03) and an
+            # unmaintained ACTVT field are deliberately not flagged, to keep this to the
+            # who-can-change-destinations question the whitepaper actually asks.
+            if self._has_star(actvt) or any(self._covers(actvt, a) for a in ("01", "02", "06")):
+                bad.append(self._role_label(i["role"],
+                                            "S_RFC_ADM (create/change RFC destinations)"))
+                objs.extend(self._role_objects(i["role"], i["object"], "maintain destinations"))
+        self._emit(
+            "AUTH-019", "RFC destination maintenance authorization (S_RFC_ADM)",
+            self.SEVERITY_MEDIUM,
+            f"{len(bad)} role(s) grant S_RFC_ADM with create/change activity — the authorization "
+            "object that controls maintenance of RFC destinations in transaction SM59. RFC "
+            "destinations frequently store logon credentials for other systems or use trusted-RFC, "
+            "so whoever can create or change them can point a destination at a sensitive target, "
+            "change the stored user, or weaken its security settings — an indirect route to the "
+            "connected systems that needs no authorization in those targets at all. SAP strongly "
+            "advises restricting SM59 maintenance to authorized administrators, controlled "
+            "primarily through S_RFC_ADM. This is the object-level companion to the SM59 "
+            "transaction finding (AUTH-013).",
+            bad,
+            "Restrict S_RFC_ADM create/change to a small set of dedicated Basis/connectivity "
+            "administrator roles under least privilege and four-eyes; remove it from broadly "
+            "assigned or productive business roles. Reconcile with who holds SM59 (AUTH-013) and "
+            "with the destinations that store credentials or use trusted-RFC (NET-001, TRUST-004).",
+            ["SAP Help — Authorization Object S_RFC_ADM",
+             "SAP 'Securing RFC' section 2 — restrict SM59 maintenance via S_RFC_ADM"],
+            objects=objs)
+
+    def check_trust_maintenance(self):
+        """S_RFC_TT with create/change activity → maintain trusted-system relationships (SMT1)."""
+        bad, objs = [], []
+        for i in self._objects("S_RFC_TT"):
+            actvt = self._field(i, "ACTVT")
+            if self._has_star(actvt) or any(self._covers(actvt, a) for a in ("01", "02", "06")):
+                bad.append(self._role_label(i["role"],
+                                            "S_RFC_TT (maintain trusted-system relationships)"))
+                objs.extend(self._role_objects(i["role"], i["object"], "maintain trust"))
+        self._emit(
+            "AUTH-020", "Trusted-system maintenance authorization (S_RFC_TT)",
+            self.SEVERITY_MEDIUM,
+            f"{len(bad)} role(s) grant S_RFC_TT with create/change activity — the authorization "
+            "object (used with S_ADMI_FCD) that controls maintenance of trusted/trusting-system "
+            "relationships in transaction SMT1. A trust relationship lets users of a trusted system "
+            "log on to this system without a password, so whoever can create one can make a lower-"
+            "security system trusted and open a passwordless path into this system. SAP requires "
+            "trust maintenance to be tightly restricted. This is the object-level companion to the "
+            "SMT1 transaction finding (AUTH-013) and complements the trust-content checks "
+            "(TRUST-001/002/003).",
+            bad,
+            "Restrict S_RFC_TT create/change to dedicated administrators under four-eyes; remove it "
+            "from broadly assigned roles. Review every existing trust relationship (TRUST-001) and "
+            "confirm each trusted system has equal-or-higher security classification. Keep "
+            "S_RFCACL in the trusting system tightly scoped (AUTH-002).",
+            ["SAP Help — Authorization Object S_RFC_TT",
+             "SAP 'Securing RFC' section 2.1 — restrict SMT1 trust maintenance (S_RFC_TT)"],
             objects=objs)
 
     # ==================================================================  MEDIUM

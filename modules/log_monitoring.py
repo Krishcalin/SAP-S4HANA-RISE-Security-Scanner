@@ -45,6 +45,9 @@ class LogMonitoringAuditor(BaseAuditor):
         "table_access":          "Direct table access (SE16/SE16N)",
         "system_event":          "System events (restart, parameter changes)",
         "audit_config_change":   "Changes to audit configuration itself",
+        "rfc_callback":          "RFC callback events DUI/DUJ/DUK (SAP 'Securing RFC' section 5)",
+        "switchable_authorization": "Switchable authorization check events DUO/DUP/DUQ "
+                                    "(SAP 'Securing RFC' section 3.3)",
     }
 
     # Critical tables that must have change logging
@@ -287,9 +290,15 @@ class LogMonitoringAuditor(BaseAuditor):
         missing = []
         for event_key, desc in self.REQUIRED_AUDIT_EVENTS.items():
             found = any(
-                event_key.upper().replace("_", " ") in ev or
-                event_key.upper().replace("_", "") in ev or
-                ev in event_key.upper()
+                # `ev and` is load-bearing: rows without a DESCRIPTION column put an
+                # empty string into configured_events, and `"" in event_key` is True
+                # for every event — so without this guard a single description-less
+                # active filter marked EVERY required class as covered and this check
+                # never fired on the description-less exports that are the norm.
+                ev and (
+                    event_key.upper().replace("_", " ") in ev or
+                    event_key.upper().replace("_", "") in ev or
+                    ev in event_key.upper())
                 for ev in configured_events
             )
             if not found and "ALL" not in configured_events:

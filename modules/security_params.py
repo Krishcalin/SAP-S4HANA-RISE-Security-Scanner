@@ -1260,6 +1260,22 @@ class SecurityParamAuditor(BaseAuditor):
                      "SAP policy check RFCGW-A_e — "
                      "NAME = 'gw/monitor' and VALUE = '1'"],
         },
+        "gw/sim_mode": {
+            "expected": "0", "op": "==",
+            "severity": "MEDIUM", "category": "Security Parameters",
+            "desc": ("RFC gateway ACL simulation mode. Value 1 makes the gateway "
+                     "LOG the access its secinfo/reginfo/prxyinfo ACLs would deny "
+                     "rather than denying it, so the access control lists look "
+                     "configured but are not enforced. Simulation is meant only "
+                     "as a temporary test phase; left switched on it silently "
+                     "disables gateway access control while appearing set up."),
+            "fix": ("Set gw/sim_mode = 0 so the gateway ACLs are enforced. Use "
+                    "simulation only briefly when testing ACL changes: review the "
+                    "gateway log for action Z entries, add any missing ACL "
+                    "entries, then switch simulation off."),
+            "refs": ["SAP Note 1689663 — GW: Simulation mode for reg_info and sec_info",
+                     "SAP 'Securing RFC' section 6 — gw/sim_mode not left active"],
+        },
         "rsau/log_peer_address": {
             "expected": "1", "op": "==",
             "severity": "MEDIUM", "category": "Security Parameters",

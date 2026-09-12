@@ -6,13 +6,13 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**478** check ids are written as literals in `modules/`, across **39** modules. A further **353** are built at runtime from shipped rule tables, giving **831** in total.
+**483** check ids are written as literals in `modules/`, across **39** modules. A further **354** are built at runtime from shipped rule tables, giving **837** in total.
 
 Each check is published with **what it reads** and **which SAP Security Baseline requirement it answers** — the two things that make a catalogue auditable rather than a number. A competitor publishing a count and no itemised list is making a claim; this is a claim somebody else can check.
 
 ## What this file does not claim
 
-**62 of the 478 titles and 32 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**62 of the 483 titles and 32 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -25,7 +25,7 @@ Every check below carries the SAP Security Baseline requirement it answers, wher
 - **28 of 28** requirements that are IN SCOPE for this product are addressed by at least one check here.
 - **10 of 38** published requirements are out of scope, because they are for a stack this product does not read. They are named below, not dropped: the denominator has to be honest in both directions, and a reader comparing 28 against 38 has no way to know that.
 - **0** in-scope requirements are not addressed at all. They are listed below rather than summarised away.
-- **553 of 831** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
+- **555 of 837** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
 
 > ⚠️ These are CHECK ITEMS in the CSA policies, not the 'control points' counted in the Baseline document — the widely-quoted 214 (69/92/53) is that other unit. The two do not reconcile; do not publish a percentage of one against the other.
 
@@ -52,7 +52,7 @@ Baseline version: **v2.4**.
 
 ## Checks by module
 
-### `abap_authorizations` — 17 checks
+### `abap_authorizations` — 20 checks
 
 Reads: `parameter_transactions`, `role_auth_values`, `security_params`, `user_roles` — the sources the MODULE consumes; an individual check below reads some subset of them.
 
@@ -75,6 +75,9 @@ Reads: `parameter_transactions`, `role_auth_values`, `security_params`, `user_ro
 | `AUTH-015` | MEDIUM | Global authorization-object disabling is active | `CRITAU-A` |
 | `AUTH-016` | HIGH | Unrestricted destination authorization (S_ICF ICF_FIELD=DEST, ICF_VALUE=*) | `CRITAU-A` |
 | `AUTH-017` | HIGH | Parameter transaction reaches a critical transaction with its entry screen still open | `CRITAU-A` |
+| `AUTH-018` | MEDIUM | Function-module test execution via S_DEVELOP (ACTVT=16) | `CRITAU-A` |
+| `AUTH-019` | MEDIUM | RFC destination maintenance authorization (S_RFC_ADM) | `CRITAU-A` |
+| `AUTH-020` | MEDIUM | Trusted-system maintenance authorization (S_RFC_TT) | `CRITAU-A` |
 
 ### `abap_sast` — 8 checks
 
@@ -758,9 +761,9 @@ Reads: `security_params` — the sources the MODULE consumes; an individual chec
 | `CRYPTO-SNCECS-005` | MEDIUM | SNC identity is not consistent with the ECS baseline | `NETENC-A` |
 | `CRYPTO-SNCECS-006` | MEDIUM | SNC GSS-API library is not the one the ECS baseline mandates | `NETENC-A` |
 
-### `system_trust` — 16 checks
+### `system_trust` — 18 checks
 
-Reads: `client_settings`, `ms_acl`, `rfc_destinations`, `rfc_trust`, `saprouttab`, `security_params`, `standard_users` — the sources the MODULE consumes; an individual check below reads some subset of them.
+Reads: `client_settings`, `ms_acl`, `profiles`, `rfc_destinations`, `rfc_trust`, `saprouttab`, `security_params`, `standard_users`, `table_auth_groups`, `users` — the sources the MODULE consumes; an individual check below reads some subset of them.
 
 | Check | Severity | Title | SAP Baseline |
 |---|---|---|---|
@@ -778,8 +781,10 @@ Reads: `client_settings`, `ms_acl`, `rfc_destinations`, `rfc_trust`, `saprouttab
 | `TRUST-006` | HIGH | Message-server internal/external separation weak | `MSGSRV-A` |
 | `TRUST-007` | HIGH | UCON RFC allowlist is not active | `RFCGW-A` |
 | `TRUST-008` | MEDIUM | RFC Gateway proxy ACL (gw/prxy_info) not configured | `RFCGW-A` |
+| `TRUST-009` | HIGH | Highly privileged user stored in an RFC destination (RFC hopping) | `RFCGW-A` |
 | `TRUST-010` | HIGH | Message-server ACL permits any host to register (rogue app server) | `MSGSRV-A` |
 | `TRUST-011` | HIGH | Message server browser monitoring port has no ACL | — |
+| `TRUST-012` | HIGH | Trusted-RFC ACL table RFCSYSACL is not protected by authorization group TTRL | — |
 
 ### `ucon_exposure` — 5 checks
 
@@ -845,11 +850,11 @@ Examples: `WDISP-001`, `WDISP-002`, `WDISP-003`, `WDISP-004`, `WDISP-005`, `WDIS
 
 Transcribed from SAP's WEBDISP_ALL baseline policies (2ODISCL, 2ONETENC). `WDISP-COV-001` is a fixed id and appears in the literal table.
 
-### `PARAM-<parameter name>` — 88
+### `PARAM-<parameter name>` — 89
 
 Source: `modules/security_params.py — BASELINE + ECS_RULES`
 
-SAP Baseline: `CHANGE-A`, `FILE-A`, `NETCF-A`, `NETENC-A`, `PWDPOL-A`, `RFCGW-A`, `SCRIPT-A`, `USRCTR-A` — 75 of 88 answer none, which for this family is expected rather than a gap.
+SAP Baseline: `CHANGE-A`, `FILE-A`, `NETCF-A`, `NETENC-A`, `PWDPOL-A`, `RFCGW-A`, `SCRIPT-A`, `USRCTR-A` — 76 of 89 answer none, which for this family is expected rather than a gap.
 
 Examples: `PARAM-abap/ext_debugging_possible`, `PARAM-abap/path_norm_Windows`, `PARAM-abap/path_normalization`, `PARAM-auth/check/calltransaction`, `PARAM-auth/no_check_in_some_cases`, `PARAM-auth/object_disabling_active`
 

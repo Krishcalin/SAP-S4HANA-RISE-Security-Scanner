@@ -6,7 +6,7 @@
 > outstanding. A great deal has shipped since they were written, and this document
 > has not been rewritten phase by phase:
 >
-> - **39 audit modules** (these documents say 23), 831 check ids, 143 logical sources.
+> - **39 audit modules** (these documents say 23), 837 check ids, 143 logical sources.
 >   The forward lists in Phases 5 and 6 have since been reconciled item by item
 >   against the shipped code — they had drifted in the direction that is easy to
 >   miss, understating the product, so a reader would have set out to rebuild
