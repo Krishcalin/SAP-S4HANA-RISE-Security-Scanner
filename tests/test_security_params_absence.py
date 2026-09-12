@@ -277,11 +277,15 @@ def test_every_absent_parameter_is_now_named_somewhere():
     # rather than a threshold chosen here: dynp/checkskip1screen,
     # dynp/confirmskip1screen, rdisp/vbdelete, gw/monitor, rsau/log_peer_address,
     # wdisp/add_xforwardedfor_header and ms/admin_port.
+    # 50 -> 52 on the Security Baseline v2.6 review: abap/path_norm_Windows
+    # (FILE-A a), the Windows half that was missing) and snc/log_unencrypted_rfc
+    # (NETENC-A d), absent because snc_posture is a transcript of ECS note
+    # 3250501 and this parameter is not in the note).
     #
     # The number moves whenever the rule set does; what must not move is that
     # EVERY absent parameter is named by one of the two roll-ups, which is what
     # this compares against.
-    assert named == 50, f"{named} of the 50 absent parameters are named"
+    assert named == 52, f"{named} of the 52 absent parameters are named"
 
 
 def test_the_further_parameters_finding_is_a_disclosure_not_a_verdict():

@@ -70,6 +70,12 @@ LEGACY_ONLY_COMPLIANT = {
     # it; `on` is the fixture's choice rather than a claim about a mandated
     # value, because the note does not mandate this parameter at all.
     "abap/path_normalization": "on",
+    # The Windows half of FILE-A a). SAP states the default 0 "should not be
+    # changed", so 0 is the compliant value rather than the fixture's choice.
+    "abap/path_norm_Windows": "0",
+    # NETENC-A d) states 2. The addendum sanctions 1 as well, so the rule is
+    # `>= 1`; the fixture uses the value chapter 2 actually asks for.
+    "snc/log_unencrypted_rfc": "2",
     # These seven are NOT the fixture's choice. Each value is SAP's own
     # `<compliant>` predicate from the CSA policy XML in
     # SAP-samples/frun-csa-policies-best-practices, transcribed with its check

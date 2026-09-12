@@ -1335,6 +1335,60 @@ class SecurityParamAuditor(BaseAuditor):
                     "FILE-A tests exactly this."),
             "refs": ["SAP Security Baseline FILE-A", "SAP policy 2AFILE check FILE-A_a2"],
         },
+        "abap/path_norm_Windows": {
+            # The SECOND half of FILE-A a), and it was missing. SAP states the
+            # Windows-specific parameter separately because the default differs
+            # by kernel: on a Windows-based system the default 0 "should not be
+            # changed", and on kernel 722 it "should be set to value 0".
+            #
+            # WHY IT IS CHECKED ON EVERY SYSTEM AND NOT ONLY ON WINDOWS. This
+            # product reads an export, not a host: nothing in a profile-parameter
+            # dump reliably states the operating system. A non-zero value is
+            # worth reporting wherever it is found, and on a system where the
+            # parameter is irrelevant it will simply be absent — which self-skips
+            # rather than accusing.
+            "expected": "0",
+            "op": "==",
+            "severity": "MEDIUM",
+            "category": "Security Parameters",
+            "desc": ("Windows path normalisation is not at its default. It works "
+                     "with abap/path_normalization to canonicalise file paths "
+                     "before the kernel uses them; changing it weakens the "
+                     "directory-traversal protection that parameter provides, "
+                     "and SAP's guidance is not to change it."),
+            "fix": ("Set abap/path_norm_Windows to 0 (its default) in the instance "
+                    "profile and restart. SAP Note 2634476 covers the kernel 722 case."),
+            "refs": ["SAP Security Baseline v2.6 FILE-A a)", "SAP Note 2634476"],
+        },
+
+        # --- Unencrypted RFC visibility ---
+        "snc/log_unencrypted_rfc": {
+            # NETENC-A d). It lives HERE and not in snc_posture because that
+            # module is a transcript of ECS note 3250501, and this parameter is
+            # not in the note — adding it there would put a value into a file
+            # that claims to be SAP's.
+            #
+            # `>= 1` AND NOT `== 2`, on the precedent set by
+            # abap/path_normalization above. Chapter 2 states 2, and the
+            # addendum sanctions 1 explicitly: "Use value 1 if you want to log
+            # unencrypted external RFC calls but accept unencrypted internal
+            # RFC connections." A rule of `== 2` would report a system SAP's own
+            # baseline permits. 0 is the real finding — nothing is logged, so
+            # nobody can tell whether anything is still connecting in clear.
+            "expected": "1",
+            "op": ">=",
+            "severity": "MEDIUM",
+            "category": "Security Parameters",
+            "desc": ("Unencrypted RFC connections are not being logged. Without "
+                     "this, an estate cannot find out WHICH callers still connect "
+                     "in clear — which is the information needed before "
+                     "snc/only_encrypted_rfc can be turned on without breaking "
+                     "production. The Security Audit Log records these as BUJ."),
+            "fix": ("Set snc/log_unencrypted_rfc to 2 to log all unencrypted RFC "
+                    "connections, or 1 to log external calls only while accepting "
+                    "unencrypted internal ones."),
+            "refs": ["SAP Security Baseline v2.6 NETENC-A d)"],
+        },
 
         # --- Password Policy ---
         "login/min_password_lng": {
@@ -1374,22 +1428,31 @@ class SecurityParamAuditor(BaseAuditor):
             "refs": ["CIS SAP Benchmark 1.1.4"],
         },
         "login/password_expiration_time": {
-            "expected": "90",
-            "op": "<=",
+            "expected": "1-183",
+            "op": "between",
             "severity": "MEDIUM",
             "category": "Password Policy",
-            "desc": "Password expiration should be 90 days or less",
-            "fix": "Set login/password_expiration_time <= 90 in RZ10",
-            "refs": ["CIS SAP Benchmark 1.1.6"],
+            "desc": ("Productive passwords must expire. SAP Security Baseline v2.6 "
+                     "PWDPOL-A c) states this as a RANGE — between 1 and 183 — and "
+                     "the lower bound is the part that matters: 0 does not mean a "
+                     "short expiry, it means passwords never expire at all."),
+            "fix": ("Set login/password_expiration_time between 1 and 183 in RZ10 "
+                    "(SAP proposes half a year). A value of 0 disables expiry."),
+            "refs": ["SAP Security Baseline v2.6 PWDPOL-A c)"],
         },
         "login/password_max_idle_initial": {
-            "expected": "7",
-            "op": "<=",
+            "expected": "1-14",
+            "op": "between",
             "severity": "MEDIUM",
             "category": "Password Policy",
-            "desc": "Initial passwords should expire within 14 days if unused",
-            "fix": "Set login/password_max_idle_initial <= 14",
-            "refs": ["CIS SAP Benchmark 1.1.7"],
+            "desc": ("An unused initial password must expire. SAP Security Baseline "
+                     "v2.6 PWDPOL-A b) states 1 to 14, recommending 7. SAP's own "
+                     "note is explicit that 0 DISABLES the check — and an initial "
+                     "password that never expires is a credential sitting in "
+                     "whatever email or ticket delivered it."),
+            "fix": ("Set login/password_max_idle_initial between 1 and 14 "
+                    "(SAP recommends 7). A value of 0 disables the check entirely."),
+            "refs": ["SAP Security Baseline v2.6 PWDPOL-A b)", "SAP Note 862989"],
         },
         "login/password_history_size": {
             "expected": "15",
@@ -1403,22 +1466,31 @@ class SecurityParamAuditor(BaseAuditor):
 
         # --- Login Security ---
         "login/fails_to_session_end": {
-            "expected": "3",
-            "op": "<=",
+            "expected": "1-3",
+            "op": "between",
             "severity": "HIGH",
             "category": "Login Security",
-            "desc": "Session should end after max 3 failed logon attempts",
-            "fix": "Set login/fails_to_session_end <= 3",
-            "refs": ["CIS SAP Benchmark 1.2.1"],
+            "desc": ("How many failed attempts end the session. 0 means the session "
+                     "is never ended, which lets one dialog session carry an "
+                     "unbounded guessing run — the opposite of what this parameter "
+                     "is set for."),
+            "fix": "Set login/fails_to_session_end between 1 and 3. A value of 0 disables it.",
+            "refs": ["SAP Note 3250501"],
         },
         "login/fails_to_user_lock": {
-            "expected": "6",
-            "op": "<=",
+            "expected": "1-5",
+            "op": "between",
             "severity": "HIGH",
             "category": "Login Security",
-            "desc": "Account should lock after max 5 failed logon attempts",
-            "fix": "Set login/fails_to_user_lock <= 6 and not 0 (SAP Note 3250501)",
-            "refs": ["CIS SAP Benchmark 1.2.2"],
+            "desc": ("How many failed attempts lock the account. SAP Security "
+                     "Baseline v2.6 PWDPOL-A j) states 1 to 5 for "
+                     "MAX_FAILED_PASSWORD_LOGON_ATTEMPTS. 0 means the account "
+                     "NEVER locks."),
+            # The old rule was `<= 6`, and its own fix text already said "and not
+            # 0" — the intent was right and the operator could not express it, so
+            # a system with locking switched off was reported compliant.
+            "fix": "Set login/fails_to_user_lock between 1 and 5. A value of 0 means no lockout at all.",
+            "refs": ["SAP Security Baseline v2.6 PWDPOL-A j)", "SAP Note 3250501"],
         },
         "login/no_automatic_user_sapstar": {
             "expected": "1",
@@ -2721,7 +2793,7 @@ class SecurityParamAuditor(BaseAuditor):
 
     #: Every operator this evaluator understands. Anything else is a programming
     #: error, and it must not be answered with a verdict.
-    _KNOWN_OPS = ("==", "!=", ">=", "<=", "contains", "in", "not_in")
+    _KNOWN_OPS = ("==", "!=", ">=", "<=", "between", "contains", "in", "not_in")
 
     @staticmethod
     def _evaluate_rule(actual: str, expected: str, op: str) -> bool:
@@ -2780,6 +2852,22 @@ class SecurityParamAuditor(BaseAuditor):
                 return int(actual) >= int(expected)
             elif op == "<=":
                 return int(actual) <= int(expected)
+            elif op == "between":
+                # ⚠️ THIS OPERATOR EXISTS BECAUSE `<=` GOT FOUR CHECKS WRONG IN
+                # THE DANGEROUS DIRECTION.
+                #
+                # SAP states several parameters as a RANGE — PWDPOL-A c) is
+                # "login/password_expiration_time between 1 and 183" — and a
+                # range written as a single `<=` silently accepts the value that
+                # switches the control OFF. Zero does not mean "very short
+                # expiry"; it means passwords never expire, initial passwords
+                # never expire, the account never locks. Every one of those
+                # passed `<= n` and was reported compliant.
+                #
+                # The lower bound is the whole point, so the expected value is
+                # written "lo-hi" and BOTH ends are checked.
+                low, _, high = expected.partition("-")
+                return int(low) <= int(actual) <= int(high)
             elif op == "contains":
                 return expected.lower() in actual.lower()
             elif op == "in":

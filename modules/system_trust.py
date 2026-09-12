@@ -66,6 +66,7 @@ class SystemTrustAuditor(BaseAuditor):
         self.check_saprouttab_wildcard()
         self.check_message_server_ports()
         self.check_message_server_acl()
+        self.check_message_server_browser_monitoring()
         self.check_ucon_allowlist()
         self.check_gateway_proxy_acl()
         return self.findings
@@ -724,6 +725,76 @@ class SystemTrustAuditor(BaseAuditor):
                 references=["SAP Note 1421005 — Message server security",
                             "SAP Security Baseline — Message server"],
             )
+
+    def check_message_server_browser_monitoring(self):
+        """ms/server_port_<xx> set without an ACL → anonymous browser monitoring.
+
+        SAP Security Baseline v2.6 MSGSRV-A f), **[Critical]**, and the only
+        message-server requirement stated that strongly. It is a different
+        weakness from TRUST-006: that one is about the internal/external channel
+        split, this one is about an HTTP port that answers a browser.
+
+        SAP's instruction is "do not set this parameter" — not in RZ10, not
+        temporarily in RZ11, not via SMMS — and then: "If you are using this
+        parameter, then use the sub-parameter ACLFILE, too." So a bare port is
+        the finding and a port carrying ACLFILE is not.
+
+        WHY A PRESENT PORT WITHOUT ACLFILE IS REPORTED RATHER THAN A MISSING
+        ONE. Absence here is the compliant state, so this fires only on
+        present-and-risky, which is the convention the rest of this tier already
+        follows: an unset parameter tells us the monitoring port was never
+        opened.
+        """
+        exposed = []
+        objects = []
+        for name in sorted(self._param_sets):
+            if not name.startswith("ms/server_port_"):
+                continue
+            for value in self._param_sets[name]:
+                text = str(value or "")
+                # The sub-parameter travels inside the value, e.g.
+                # "PROT=HTTP,PORT=8081,ACLFILE=/usr/sap/.../ms_acl". No ACLFILE
+                # means the port answers whoever reaches it.
+                if "aclfile" in text.lower():
+                    continue
+                exposed.append(f"{name} = {text or '(empty)'} (no ACLFILE sub-parameter)")
+                objects.append({"type": "parameter_name", "name": name})
+
+        if not exposed:
+            return
+
+        self.finding(
+            check_id="TRUST-011",
+            title="Message server browser monitoring port has no ACL",
+            severity=self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=(
+                "A ms/server_port_<xx> parameter is set without an ACLFILE "
+                "sub-parameter, so the message server answers HTTP monitoring "
+                "requests from any client that can reach the port, with no "
+                "authentication. That discloses the application-server list and "
+                "the system's internal topology to an unauthenticated caller. "
+                "SAP's baseline asks that this parameter not be set at all, and "
+                "that an ACL file be supplied wherever it is."
+            ),
+            affected_items=exposed,
+            # One weakness per port: each is separately openable and separately
+            # closeable, so they are named objects rather than an aggregate.
+            affected_objects=objects,
+            scope="object",
+            remediation=(
+                "Remove ms/server_port_<xx> from the instance profile if browser "
+                "monitoring of the message server is not required. Where it is, "
+                "add the ACLFILE sub-parameter naming a restrictive ACL, and do "
+                "not set the parameter temporarily in RZ11 or change it in SMMS. "
+                "Profile-parameter changes are visible in RZ11 change documents "
+                "and in SM21 messages Q19 and Q1A."
+            ),
+            references=[
+                "SAP Security Baseline v2.6 MSGSRV-A f) [Critical]",
+                "SAP KBA 3272585",
+            ],
+        )
 
     def check_ucon_allowlist(self):
         """UCON RFC allowlist not active → external RFC surface unrestricted."""

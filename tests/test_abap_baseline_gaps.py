@@ -175,3 +175,67 @@ def test_the_operator_trap_is_recorded_where_the_next_transcription_will_look():
                       .read_text(encoding="utf-8"))["_meta"]
     assert "NOT_EXIST" in meta["the_operator_attribute"]
     assert "verified rather than assumed" in meta["the_operator_attribute"]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  MSGSRV-A f) — ms/server_port_<xx> browser monitoring
+#
+#  Found by the same catalogue publication. It is the ONLY message-server
+#  requirement SAP marks [Critical] in Security Baseline v2.6, and nothing here
+#  checked it: TRUST-006 covers the internal/external channel split and
+#  TRUST-010 the ACL file, neither of which sees an HTTP monitoring port.
+#
+#  SAP's instruction is "do not set this parameter" — not in RZ10, not
+#  temporarily in RZ11, not in SMMS — and then, for anyone who does: "use the
+#  sub-parameter ACLFILE, too".
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _msgsrv(params):
+    return [f for f in SystemTrustAuditor({"security_params": params}, {}, {}).run_all_checks()
+            if f["check_id"] == "TRUST-011"]
+
+
+def _rows(mapping):
+    return [{"NAME": k, "VALUE": v} for k, v in mapping.items()]
+
+
+def test_the_check_exists_in_the_catalogue():
+    assert "TRUST-011" in ALL_IDS
+
+
+def test_an_unset_monitoring_port_is_the_compliant_state():
+    """Absence is what SAP asks for, so this fires only on present-and-risky —
+    the convention the rest of the parameter tier already follows."""
+    assert _msgsrv(_rows({"ms/monitor": "0"})) == []
+
+
+def test_a_monitoring_port_without_an_acl_is_reported():
+    found = _msgsrv(_rows({"ms/server_port_0": "PROT=HTTP,PORT=8081"}))
+    assert len(found) == 1
+    assert "ms/server_port_0" in found[0]["affected_items"][0]
+
+
+def test_a_monitoring_port_with_an_acl_is_not_reported():
+    """The finding is the missing ACL, not the port. Flagging a port that
+    carries ACLFILE would report the configuration SAP itself sanctions."""
+    assert _msgsrv(_rows({"ms/server_port_0": "PROT=HTTP,PORT=8081,ACLFILE=/usr/sap/ms_acl"})) == []
+
+
+def test_each_exposed_port_is_a_named_object_not_an_aggregate():
+    """Two ports are two things to close, and closing one must shrink the
+    finding rather than retire it and restart its age."""
+    found = _msgsrv(_rows({
+        "ms/server_port_0": "PROT=HTTP,PORT=8081,ACLFILE=/x",
+        "ms/server_port_1": "PROT=HTTPS,PORT=8443",
+    }))
+    assert len(found) == 1
+    assert found[0]["scope"] == "object"
+    names = {o["name"] for o in found[0]["affected_objects"]}
+    assert names == {"ms/server_port_1"}, "the ACL-protected port must not be named"
+
+
+def test_it_cites_the_requirement_and_the_kba():
+    found = _msgsrv(_rows({"ms/server_port_2": "PROT=HTTP,PORT=8082"}))
+    refs = " ".join(found[0]["references"])
+    assert "MSGSRV-A" in refs
+    assert "3272585" in refs
