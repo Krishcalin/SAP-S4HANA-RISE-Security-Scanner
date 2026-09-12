@@ -106,6 +106,11 @@ TEAM_BY_PREFIX: List[Tuple[str, str]] = [
     #     is not a detection gap, and the module's docstring claimed the prefix
     #     made it under-price when in fact it mis-priced.
     ("WDISP-", "basis"),   # instance profile maintenance
+    # OS & infrastructure hardening. Basis owns the host — the SAP service
+    # accounts, /usr/sap permissions, and the OS services around the system —
+    # the same team that produces the OS extracts and would remediate them where
+    # the customer runs the host (on-prem / self-managed hyperscaler).
+    ("OSEC-", "basis"),
     ("UCON-", "integration"),   # remote-callable exposure is interface work
     ("RES-", "basis"),
     # SoD ruleset coverage. `authorizations`, alongside ARA- and RG-, because
@@ -131,6 +136,11 @@ RISE_PROVIDER_PREFIXES: Tuple[str, ...] = (
 #: saying so is more honest than reporting them as missing or as a failure.
 RISE_UNREACHABLE_PREFIXES: Tuple[str, ...] = (
     "INTG-GW-",     # secinfo / reginfo are files on the application server
+    "OSEC-",        # OS & infrastructure hardening — no shell access under RISE.
+                    # not_assessable is the honest state (customer can neither see
+                    # nor change the host), the same treatment TRUST-010 gets. Where
+                    # the customer DID supply the OS export, owner_for_finding flips
+                    # it back to customer_fixable via OS_SOURCED_EVIDENCE below.
 )
 
 #: Specific check IDs that are OS-sourced even though their family is not.
@@ -307,4 +317,11 @@ def owner_for_finding(finding: Dict[str, Any], deployment_mode: str,
 #: The logical sources behind the OS-sourced check families. Named once here
 #: rather than spelled out at the call site, because `remediation_owner_for`'s
 #: `data_was_supplied` argument is only meaningful against this exact set.
-OS_SOURCED_EVIDENCE = frozenset({"gw_secinfo", "gw_reginfo", "saprouttab", "ms_acl"})
+OS_SOURCED_EVIDENCE = frozenset({
+    "gw_secinfo", "gw_reginfo", "saprouttab", "ms_acl",
+    # OS & infrastructure hardening (OSEC-*). A RISE customer normally cannot
+    # produce these; if one is present the customer obtained OS access some other
+    # way and the finding is real and theirs — so its presence flips OSEC- back
+    # from not_assessable to customer_fixable, exactly as for the gateway files.
+    "os_users", "os_groups", "os_file_permissions", "os_services",
+})

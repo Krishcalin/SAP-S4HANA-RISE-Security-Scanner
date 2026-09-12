@@ -159,6 +159,7 @@ class WebDispatcherAuditor(BaseAuditor):
             if name:
                 params[name] = _value(row)
         self.check_rules(params)
+        self.check_backend_encryption(params)
         return self.findings
 
     # ── checks ─────────────────────────────────────────────────────────────
@@ -193,6 +194,66 @@ class WebDispatcherAuditor(BaseAuditor):
             ),
             references=["SAP Security Baseline WEBDISP_ALL (2ODISCL, 2ONETENC)"],
             details={"degrades_coverage": True},
+        )
+
+    def check_backend_encryption(self, params: Dict[str, str]):
+        """wdisp/ssl_encrypt = 0 — the dispatcher forwards to the back end in clear.
+
+        NOT A WEBDISP_ALL BASELINE RULE, AND DELIBERATELY OUTSIDE
+        data/webdisp_baseline.json. SAP's WEBDISP_ALL policies (2ODISCL / 2ONETENC)
+        do not assert this, because the NetWeaver Security Guide makes it CONDITIONAL
+        in its own words: encrypt the Web Dispatcher-to-back-end hop "if the network
+        between SAP Web Dispatcher and the back-end systems is not sufficiently
+        secured otherwise." A scanner cannot see whether that network is secured, so
+        an UNCONDITIONAL finding here would be a false positive — which is exactly why
+        it was left as a recorded gap until now (docs/NETWEAVER_75_COVERAGE.md).
+        Decision D10 brings the customer-run Web Dispatcher into scope, so it is
+        surfaced — but as a LOW, present-and-off observation that names the condition,
+        never as a defect.
+
+        Fires only on an explicitly exported wdisp/ssl_encrypt = 0. Absent takes
+        SAP's default, which the profile does not state, so absence is not a finding
+        (the same rule the WEBDISP_ALL checks follow). A value that enables back-end
+        encryption is compliant.
+        """
+        if "wdisp/ssl_encrypt" not in params:
+            return
+        value = params["wdisp/ssl_encrypt"].strip()
+        if value != "0":
+            return
+        self.finding(
+            check_id="WDISP-SSL-001",
+            title="Web Dispatcher does not encrypt traffic to the back-end systems",
+            severity="LOW",
+            category=self.CATEGORY,
+            description=(
+                "wdisp/ssl_encrypt = 0, so the Web Dispatcher terminates the external "
+                "TLS connection and forwards the request to the back-end systems in "
+                "clear text. Everything it passes on — including logon credentials and "
+                "session cookies — then crosses the internal network unencrypted "
+                "between the dispatcher and the application servers.\n\n"
+                "This is reported at LOW and stated as a condition, not a defect: the "
+                "NetWeaver Security Guide requires back-end encryption only where the "
+                "network between the Web Dispatcher and the back end is not otherwise "
+                "secured, and a configuration export cannot see whether it is. Confirm "
+                "for this landscape whether that segment is trusted; where it is not, "
+                "this is a real exposure."
+            ),
+            affected_items=[f"wdisp/ssl_encrypt = {value}"],
+            affected_objects=[{"type": "parameter_name", "name": "wdisp/ssl_encrypt"}],
+            scope="object",
+            remediation=(
+                "Where the Web Dispatcher-to-back-end network is not independently "
+                "secured, set wdisp/ssl_encrypt = 1 so the dispatcher re-encrypts to "
+                "the back end, and configure the back-end HTTPS ports and the "
+                "dispatcher's certificate trust accordingly. Where the segment is "
+                "genuinely trusted, record that decision so the finding can be closed "
+                "as accepted."
+            ),
+            references=[
+                "SAP NetWeaver Security Guide 7.5 — SAP Web Dispatcher, back-end encryption",
+                "SAP Help — wdisp/ssl_encrypt",
+            ],
         )
 
     def check_rules(self, params: Dict[str, str]):

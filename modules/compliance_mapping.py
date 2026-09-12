@@ -190,6 +190,14 @@ class ComplianceMapper:
         # A.5.30, which is why the category is worth mapping rather than leaving
         # to fall out of the panels.
         "Resilience & Recovery Readiness": ["backup-recovery", "incident-response"],
+        # os_security.py — the host layer beneath SAP: service-account privilege
+        # (privileged-access), /usr/sap and secure-store permissions
+        # (secure-config, access-control), and dangerous host network services
+        # like telnet/NIS (network-security). This is the NetWeaver guide's OS
+        # hardening chapter and the Security Baseline's USRCTR-O, and it maps to
+        # the CIS OS benchmarks and ISO A.8 technological controls.
+        "OS & Infrastructure Security": ["privileged-access", "secure-config",
+                                         "access-control", "network-security"],
     }
 
     # ── Frameworks: theme → [(control-id, control-name)] ──────────────────────

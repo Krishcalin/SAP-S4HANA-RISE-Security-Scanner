@@ -1,0 +1,7 @@
+NAME,STATE,PORT
+sshd,enabled,22
+telnet,enabled,23
+saphostexec,running,1128
+vsftpd,disabled,21
+ypbind,disabled,
+sapstartsrv,running,50013

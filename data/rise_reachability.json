@@ -562,6 +562,30 @@
       "licence": "Carried over from the original RISE_UNREACHABLE_SOURCES set. Not itself a row in section 3 — the section 3 row covers the customer-defined SM69 commands, which ARE reachable. Kept at its previous classification rather than silently reclassified.",
       "basis": "section_3"
     },
+    "os_users": {
+      "state": "no",
+      "how": "getent passwd / /etc/passwd on the application-server host, or the local-users view on Windows",
+      "blocked_by": "The OS account inventory is a host artifact and a RISE customer has no shell or administrative access to the host SAP operates",
+      "basis": "infrastructure"
+    },
+    "os_groups": {
+      "state": "no",
+      "how": "getent group / /etc/group, or the local-groups view on Windows",
+      "blocked_by": "OS group membership is a host artifact and a RISE customer has no OS access to the host SAP operates",
+      "basis": "infrastructure"
+    },
+    "os_file_permissions": {
+      "state": "no",
+      "how": "ls -l / stat over /usr/sap and /sapmnt, or icacls on Windows",
+      "blocked_by": "Filesystem permissions are a host artifact and a RISE customer has no OS access to the host SAP operates",
+      "basis": "infrastructure"
+    },
+    "os_services": {
+      "state": "no",
+      "how": "systemctl / chkconfig / a service listing on the host, or the Services view on Windows",
+      "blocked_by": "Host network services are an OS artifact and a RISE customer has no OS access to the host SAP operates",
+      "basis": "infrastructure"
+    },
     "ucon_rfc_state": {
       "state": "yes",
       "how": "UCONCOCKPIT — UCON RFC scenario, function-module list export",

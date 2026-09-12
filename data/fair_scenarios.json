@@ -116,7 +116,7 @@
       "effect": "C-I-A",
       "routing": {
         "categories": ["ABAP Authorization & Critical Access", "User & Authorization", "Identity & Access Management", "S/4HANA & Cloud Authorization", "Role Design & Governance", "Security Parameters", "Security Baseline Parameters", "Code & Transport Security", "Fiori & UI Layer", "Basis Jobs & OS Commands", "System Trust & Standard Users"],
-        "check_prefixes": ["AUTH-", "USR-", "IAM-", "S4AUTHZ-", "RG-", "PARAM-", "BASELINE-", "CODE-", "FIORI-", "JOBCMD-", "STDUSR-"]
+        "check_prefixes": ["AUTH-", "USR-", "IAM-", "S4AUTHZ-", "RG-", "PARAM-", "BASELINE-", "CODE-", "FIORI-", "JOBCMD-", "STDUSR-", "OSEC-"]
       },
       "threat_capability": { "min": 55, "likely": 68, "max": 85 },
       "contact_frequency": {

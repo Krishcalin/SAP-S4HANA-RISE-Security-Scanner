@@ -6,13 +6,13 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**469** check ids are written as literals in `modules/`, across **38** modules. A further **353** are built at runtime from shipped rule tables, giving **822** in total.
+**476** check ids are written as literals in `modules/`, across **39** modules. A further **353** are built at runtime from shipped rule tables, giving **829** in total.
 
 Each check is published with **what it reads** and **which SAP Security Baseline requirement it answers** — the two things that make a catalogue auditable rather than a number. A competitor publishing a count and no itemised list is making a claim; this is a claim somebody else can check.
 
 ## What this file does not claim
 
-**62 of the 469 titles and 31 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**62 of the 476 titles and 32 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -25,7 +25,7 @@ Every check below carries the SAP Security Baseline requirement it answers, wher
 - **28 of 28** requirements that are IN SCOPE for this product are addressed by at least one check here.
 - **10 of 38** published requirements are out of scope, because they are for a stack this product does not read. They are named below, not dropped: the denominator has to be honest in both directions, and a reader comparing 28 against 38 has no way to know that.
 - **0** in-scope requirements are not addressed at all. They are listed below rather than summarised away.
-- **545 of 822** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
+- **552 of 829** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
 
 > ⚠️ These are CHECK ITEMS in the CSA policies, not the 'control points' counted in the Baseline document — the widely-quoted 214 (69/92/53) is that other unit. The two do not reconcile; do not publish a percentage of one against the other.
 
@@ -613,6 +613,19 @@ Reads: `audit_config`, `icf_services`, `rfc_destinations`, `transports` — the 
 | `NET-007` | HIGH | Transports with debug/replace indicators | `NETCF-A` |
 | `NET-008` | CRITICAL | No active security audit filters configured | `NETCF-A` |
 
+### `os_security` — 6 checks
+
+Reads: `os_file_permissions`, `os_groups`, `os_services`, `os_users` — the sources the MODULE consumes; an individual check below reads some subset of them.
+
+| Check | Severity | Title | SAP Baseline |
+|---|---|---|---|
+| `OSEC-CLOUD-001` | INFO | Cloud infrastructure below the OS is out of scope (self-managed hyperscaler) | — |
+| `OSEC-FILE-001` | HIGH | SAP directory is writable by all OS users | — |
+| `OSEC-FILE-002` | MEDIUM | SAP secure-store / security directory is accessible beyond its owner | — |
+| `OSEC-NET-001` | *varies* — HIGH or MEDIUM | Dangerous OS network service enabled on the SAP host | — |
+| `OSEC-USR-001` | HIGH | SAP OS service account holds administrative privilege | — |
+| `OSEC-USR-002` | MEDIUM | SAP Host Agent account sapadm has an interactive login shell | — |
+
 ### `resilience_posture` — 9 checks
 
 Reads: `background_jobs`, `backup_catalog`, `hana_parameters`, `recovery_tests` — the sources the MODULE consumes; an individual check below reads some subset of them.
@@ -807,13 +820,14 @@ Reads: `vendor_bank`, `vendor_master` — the sources the MODULE consumes; an in
 | `VBM-DATA-001` | LOW | Bank export contains no account numbers, so no account can be compared | — |
 | `VBM-SOLE-001` | MEDIUM | Payment-relevant partners created and last changed by the same person | — |
 
-### `webdisp_security` — 1 check
+### `webdisp_security` — 2 checks
 
 Reads: `webdisp_params` — the sources the MODULE consumes; an individual check below reads some subset of them.
 
 | Check | Severity | Title | SAP Baseline |
 |---|---|---|---|
 | `WDISP-COV-001` | INFO | No Web Dispatcher profile was supplied, so the internet-facing instance was not assessed | — |
+| `WDISP-SSL-001` | LOW | Web Dispatcher does not encrypt traffic to the back-end systems | — |
 
 ## Runtime check families
 

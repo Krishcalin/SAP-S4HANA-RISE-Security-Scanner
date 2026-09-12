@@ -10,7 +10,7 @@
 <p align="center">
   <a href="https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner/actions/workflows/tests.yml"><img src="https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner/actions/workflows/tests.yml/badge.svg" alt="tests"/></a>
   <img src="https://img.shields.io/badge/python-3.8%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python 3.8+"/>
-  <img src="https://img.shields.io/badge/checks-822%20in%2038%20modules-red?style=flat-square" alt="822 checks in 38 modules"/>
+  <img src="https://img.shields.io/badge/checks-829%20in%2039%20modules-red?style=flat-square" alt="829 checks in 39 modules"/>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT licensed"/>
 </p>
 
@@ -73,7 +73,7 @@ Python packages.
 
 ## What it checks
 
-**822 checks across 38 modules.** Every one is listed, with what it reads and
+**829 checks across 39 modules.** Every one is listed, with what it reads and
 which SAP baseline requirement it answers, in
 **[docs/CHECKS_REFERENCE.md](docs/CHECKS_REFERENCE.md)** — a file generated from
 the code, so it cannot drift from what actually runs.
@@ -102,7 +102,7 @@ Cyber System at all; that determination is CIP-002's, and the customer's.
 
 ## What you feed it
 
-139 different export sources, all of them files a Basis or security team can
+143 different export sources, all of them files a Basis or security team can
 produce with standard SAP transactions.
 
 - **[docs/EXPORT_GUIDE.md](docs/EXPORT_GUIDE.md)** — how to produce each one
@@ -112,7 +112,7 @@ You do not need all of them. Give it what you have; it reports what it could
 not assess rather than quietly scoring you on a subset.
 
 It also tells you which missing export is worth producing next, because "supplied
-119 of 139 sources" is true and useless on its own. Each scan ends with something
+119 of 143 sources" is true and useless on its own. Each scan ends with something
 you can act on:
 
 ```
@@ -372,7 +372,7 @@ plenty of the catalogue stays correctly silent on it. That matters, because a
 check that is correctly silent and a check that could never fire look identical
 unless somebody measures. So the suite records which check ids actually produce a
 finding anywhere in it, and publishes the count in
-[docs/CHECK_FIRING.md](docs/CHECK_FIRING.md) — currently 822 of 822.
+[docs/CHECK_FIRING.md](docs/CHECK_FIRING.md) — currently 829 of 829.
 
 ```bash
 python -m pip install -r requirements.txt -r requirements-dev.txt httpx

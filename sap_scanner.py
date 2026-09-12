@@ -53,6 +53,7 @@ from modules.cap_xsuaa import CapXsuaaAuditor
 from modules.cloudalm_verdicts import CloudAlmVerdictAuditor
 from modules.ucon_exposure import UconExposureAuditor
 from modules.webdisp_security import WebDispatcherAuditor
+from modules.os_security import OSSecurityAuditor
 from modules.baseline_params import BaselineParamAuditor
 from modules.s4_business_authz import S4BusinessAuthzAuditor
 from modules.access_risk_analysis import AccessRiskAnalysisAuditor
@@ -73,6 +74,7 @@ from modules.coverage import CLI_MODULE_ALIASES, build_manifest
 ALL_MODULE_KEYS = sorted(CLI_MODULE_ALIASES)
 from modules.data_loader import DataLoader
 from modules.deployment_modes import DEPLOYMENT_MODES, DEFAULT_DEPLOYMENT_MODE
+from modules.host_platforms import HOST_PLATFORMS, DEFAULT_HOST_PLATFORM
 
 
 def _make_output_encoding_safe() -> None:
@@ -196,6 +198,20 @@ def main():
              "findings, and DDIC is not required to be locked. Defaults to on_prem, "
              "because guessing ECS would silently relax genuine on-premise findings.")
     parser.add_argument(
+        # `--platform` rather than a connection-target name: tests/test_collect.py
+        # forbids the offline scanner a flag that names a live SAP server to dial,
+        # because the whole point of the offline model is that this process never
+        # opens a connection. dest keeps the internal name host_platform.
+        "--platform", dest="host_platform", choices=list(HOST_PLATFORMS),
+        default=DEFAULT_HOST_PLATFORM,
+        help="Where a customer-managed host runs: bare_metal, vmware, aws, azure or "
+             "gcp. Reporting metadata only — hosting is a responsibility axis, not a "
+             "coverage axis (D10), so a self-managed hyperscaler host is still "
+             "on_prem for every SAP/OS/HANA check. For a hyperscaler it adds the "
+             "cloud-infrastructure boundary note (OSEC-CLOUD-001): the layer below "
+             "the OS is the customer's CNAPP's job, not this scanner's. Defaults to "
+             "unspecified, which emits nothing.")
+    parser.add_argument(
         "--clients", default=None, metavar="LIST",
         help="Which clients this export set is meant to cover, e.g. 000,100,200. "
              "Only needed when no client_settings (T000) export was supplied — with "
@@ -302,7 +318,8 @@ def main():
     # quietly judging an ECS estate by on-premise rules.
     #
     # tests/test_run_context_is_uniform.py holds this shut.
-    run_ctx = {"deployment_mode": args.deployment_mode, "modules": set(run_modules)}
+    run_ctx = {"deployment_mode": args.deployment_mode, "modules": set(run_modules),
+               "host_platform": args.host_platform}
 
     all_findings = []
     scan_meta = {
@@ -314,6 +331,10 @@ def main():
         # real. On premise every finding is the customer's, and a badge saying so
         # on all of them is noise that trains the reader to ignore the badge.
         "deployment_mode": args.deployment_mode,
+        # Where a customer-managed host runs (D10). Reporting metadata: it changes
+        # no verdict, and drives only the cloud-infra boundary note on a
+        # self-managed hyperscaler. `unspecified` unless the caller declared it.
+        "host_platform": args.host_platform,
         # Audit-replay anchor: which bytes produced this report. Rendered as
         # the evidence-manifest section; hashed here, in the run that read them.
         "evidence_manifest": loader.evidence_manifest(),
@@ -650,6 +671,15 @@ def main():
     if "webdisp" in run_modules:
         print("[*] Auditing Web Dispatcher profile (SAP WEBDISP_ALL baseline)...")
         auditor = WebDispatcherAuditor(data, baseline_overrides, run_ctx)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- OS & infrastructure hardening: the host layer (D10) ---
+    if "osec" in run_modules:
+        print("[*] Auditing OS & infrastructure hardening (host accounts, "
+              "permissions, services)...")
+        auditor = OSSecurityAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")

@@ -277,6 +277,15 @@ UNPLACED_CATEGORIES: Dict[str, str] = {
     "Resilience & Recovery Readiness":
         "Backup, disaster recovery and ransomware readiness. A real domain, and one "
         "this taxonomy has no name for.",
+    "OS & Infrastructure Security":
+        "The operating-system layer beneath the SAP application — the accounts that "
+        "run and administer it, the permissions on /usr/sap and /sapmnt, and the host "
+        "services around it. The twelve buyer-facing tiles mirror an SAP-application "
+        "security suite and have no word for host hardening; it is a real domain the "
+        "vocabulary does not name, exactly like Resilience & Recovery Readiness. It is "
+        "in scope only where the customer owns the host (on-prem / self-managed "
+        "hyperscaler) and out of reach in RISE, so a tile that counted it would read "
+        "as clear on every RISE estate that never supplied an OS export.",
 }
 
 _REACH_ORDER = {FULL: 0, PARTIAL: 1, CONFIG_ONLY: 2, NONE: 3}

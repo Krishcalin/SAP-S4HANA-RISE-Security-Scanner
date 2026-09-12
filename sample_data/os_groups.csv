@@ -1,0 +1,5 @@
+GROUP,GID,MEMBERS
+sapsys,1000,"prdadm,sapadm"
+root,0,root
+dba,1001,sdb
+sapinst,1004,prdadm

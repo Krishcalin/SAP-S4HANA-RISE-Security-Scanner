@@ -1,0 +1,6 @@
+NAME,UID,GID,GROUPS,SHELL
+prdadm,1001,1000,sapsys,/bin/csh
+sapadm,1002,1000,sapsys,/bin/bash
+root,0,0,root,/bin/bash
+sdb,1003,1001,sapsys,/bin/false
+daemon,2,2,daemon,/usr/sbin/nologin

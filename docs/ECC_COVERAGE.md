@@ -12,7 +12,7 @@ Phase 3.
 auditors produced findings on the ECC fixture **identical** to what they produced
 on the full sample — the estimate the plan rested on, confirmed on its own terms.
 
-**The number is now thirteen of thirty-eight, and no move along the way was the
+**The number is now thirteen of thirty-nine, and no move along the way was the
 estimate being wrong.** The product grew, in two different ways.
 
 Two auditors were added that ECC *can* feed — `master_data_changes` and
@@ -49,23 +49,23 @@ the least interesting reason available.
 
 The estimate was conservative, not mistaken.
 
-Re-measured on 2026-09-05 against all 38 auditors, by running both fixtures
+Re-measured on 2026-09-12 against all 39 auditors, by running both fixtures
 through `tests/measure_ecc_coverage.py` and diffing them module by module.
 
-| | of 38 |
+| | of 39 |
 |---|---:|
 | identical to the full sample — *"runs with no code change"* | **13** |
 | produce findings, but fewer than with full data | 11 |
 | produce **more** than with full data (`sap_hotnews`) | 1 |
 | **produce findings at all** | **25** |
 | cannot exist on ECC (no HANA, Fiori, BTP, CDS, S/4 business roles) | 6 |
-| optional tooling — could run if the customer exports it (GRC, FI, Cloud ALM) | 3 |
+| optional tooling — could run if the customer exports it (GRC, FI, Cloud ALM, OS) | 4 |
 | no file inputs (`abap_sast` reads `--abap-src`) | 1 |
 | degraded and silent on this fixture | 2 |
 | silent because the evidence was clean (`export_integrity`) | 1 |
 
 The parity number is not the whole story, so the second one is published beside
-it: **25 of 38 produce findings at all.** Twelve of those are not at parity —
+it: **25 of 39 produce findings at all.** Twelve of those are not at parity —
 eleven return fewer findings than the full sample and one returns more — and they
 are still worth running. Which number is right depends on what "runs" is taken to
 mean, and this table exists so that nobody has to guess.
@@ -231,4 +231,4 @@ systems now receive different — correct — answers about what was hidden from
 their reports, and `access_risk_analysis` left the identical set. It did so by
 saying more, which is the same trade recorded twice above.
 
-Measured parity is **13 of 38** identical and **25 of 38** producing something.
+Measured parity is **13 of 39** identical and **25 of 39** producing something.

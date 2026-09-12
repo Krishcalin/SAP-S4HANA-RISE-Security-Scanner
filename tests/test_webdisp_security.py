@@ -242,3 +242,30 @@ def test_the_sample_profile_exercises_the_module_end_to_end():
     findings = WebDispatcherAuditor(data, {}, {}).run_all_checks()
     assert findings and "WDISP-COV-001" not in _ids(findings)
     assert "WDISP-014" in _ids(findings)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  WDISP-SSL-001: back-end encryption (the NetWeaver guide's CONDITIONAL rec)
+#
+#  NOT a WEBDISP_ALL baseline rule — SAP makes it conditional, so it is surfaced
+#  as a LOW, present-and-off observation that names the condition, never a defect.
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_backend_encryption_off_fires_low_and_conditional():
+    findings = _run(**{"wdisp/ssl_encrypt": "0"})
+    f = [x for x in findings if x["check_id"] == "WDISP-SSL-001"][0]
+    assert f["severity"] == "LOW"
+    assert f["scope"] == "object"
+    assert f["affected_objects"] == [
+        {"type": "parameter_name", "name": "wdisp/ssl_encrypt"}]
+
+
+@pytest.mark.parametrize("value", ["1", "2"])
+def test_backend_encryption_enabled_is_silent(value):
+    assert "WDISP-SSL-001" not in _ids(_run(**{"wdisp/ssl_encrypt": value}))
+
+
+def test_backend_encryption_absent_is_not_a_finding():
+    """Absent takes SAP's default, which the profile does not state - not a finding,
+    the same rule the WEBDISP_ALL checks follow."""
+    assert "WDISP-SSL-001" not in _ids(_run(**{"is/HTTP/show_server_header": "FALSE"}))

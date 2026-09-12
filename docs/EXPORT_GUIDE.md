@@ -62,11 +62,11 @@ reason for each.
 
 ## Every source, including the ones this guide does not cover
 
-The scanner reads **139** logical sources. All of them now have a procedure: the
+The scanner reads **143** logical sources. All of them now have a procedure: the
 sections up to *SAP Cloud ALM* cover what a first scan needs, and
 [*The remaining sources*](#the-remaining-sources) below covers the rest.
 
-[**`EXPORT_SOURCES.md`**](EXPORT_SOURCES.md) lists all 139 — the filenames the
+[**`EXPORT_SOURCES.md`**](EXPORT_SOURCES.md) lists all 143 — the filenames the
 loader accepts, which checks each one feeds, and whether a procedure exists. It is
 generated from the code, so a source cannot be added to the scanner without
 appearing there, and it will show up as undocumented until somebody writes the
@@ -3258,6 +3258,57 @@ quality gap — the analysis did not run — rather than as an absence of shared
 accounts. That distinction is the entire reason the check exists in that shape:
 a payment-fraud analysis that silently reports nothing is worse than one that says
 it could not run.
+
+---
+
+## OS & infrastructure hardening (the `osec` module)
+
+The operating-system layer beneath the SAP application — the accounts that run
+and administer it, the permissions on its directories, and the host services
+around it. This is the NetWeaver Security Guide's OS chapter and the Security
+Baseline's `USRCTR-O`, and it is in scope only where the customer owns the host:
+**on-premise and self-managed SAP on a hyperscaler VM** (decision D10). In RISE
+SAP operates the OS and the customer has no shell access, so these four sources
+are `not_assessable` there and the checks self-skip — supply them only for a
+host you administer. Every command below is read-only; run it on each
+application-server host and save the output as CSV.
+
+### OS accounts (`os_users.csv`)
+**UNIX:** `getent passwd` (or read `/etc/passwd`), plus each account's groups
+from `id <user>`. **Windows:** the local users and their group membership
+(`Get-LocalUser`, `Get-LocalGroupMember Administrators`).  
+Columns read: `NAME`, `UID`, `GROUPS`, `SHELL` (`USER`/`LOGIN`, `GID`,
+`login_shell` also accepted). Drives the service-account privilege check
+(`OSEC-USR-001`: `sapadm`/`SAPService<SID>`/`<sid>adm`) and the Host Agent login
+shell (`OSEC-USR-002`).  
+Also accepted: `passwd.csv`, `getent_passwd.csv`.
+
+### OS groups (`os_groups.csv`)
+**UNIX:** `getent group` (or `/etc/group`). **Windows:** local group membership,
+in particular the **Administrators** group.  
+Columns read: `GROUP`, `MEMBERS` (comma- or semicolon-separated). Supplies the
+membership `OSEC-USR-001` reads to decide whether a service account is a local
+administrator on Windows.  
+Also accepted: `group.csv`, `getent_group.csv`.
+
+### SAP directory permissions (`os_file_permissions.csv`)
+**UNIX:** `ls -l` / `stat` over `/usr/sap`, `/sapmnt/<SID>` and
+`/usr/sap/trans`. **Windows:** `icacls` over the `\usr\sap` tree.  
+Columns read: `PATH` and `MODE` (octal `750` or symbolic `drwxr-x---`); a Windows
+`ACL` column is read in place of `MODE`. Flags world-writable SAP directories
+(`OSEC-FILE-001`) and a secure store / security directory readable or writable
+beyond its owner (`OSEC-FILE-002`).  
+Also accepted: `file_permissions.csv`, `usr_sap_perms.csv`.
+
+### Host network services (`os_services.csv`)
+**UNIX:** the enabled/running services (`systemctl list-units --type=service`,
+`chkconfig --list`, or listening ports from `ss -lntu`). **Windows:** the
+Services list and their state.  
+Columns read: `NAME` and `STATE` — a service listed `disabled`/`stopped` is a
+real answer that it is off and does not fire. Flags cleartext or trust-based
+remote access (telnet/rlogin/rsh) and network-exposed password directories (NIS)
+on the SAP host (`OSEC-NET-001`).  
+Also accepted: `host_services.csv`, `systemctl_units.csv`.
 
 ---
 

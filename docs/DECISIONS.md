@@ -506,3 +506,35 @@ connected tier that D2/D5 permit where the customer grants access. A
 host-platform tag (bare-metal / VMware / AWS / Azure / GCP) is reporting
 metadata; if added it is one more entry in the six-place deployment vocabulary —
 a D7-class change made once with an agreement test, never five string edits.
+
+## D11 - The host-platform tag is built (bare_metal / VMware / AWS / Azure / GCP)
+
+D10 anticipated this as "reporting metadata; if added it is ... a D7-class change
+made once with an agreement test". It is now built.
+
+**What it is.** A single-source vocabulary in `modules/host_platforms.py`
+(HOST_PLATFORMS, the hyperscaler subset, and the boundary-note text), carried on
+the offline scanner as `--platform` and through the one `run_ctx`, exactly
+as `deployment_mode` is. `tests/test_host_platforms.py` holds the CLI declaration
+and the Python invariants to the tuple, the same way `test_deployment_modes.py`
+holds the four deployment-mode declarations.
+
+**What it is NOT: a coverage axis.** Hosting is a responsibility axis (D10). The
+tag changes no verdict and gates no security check. A self-managed hyperscaler
+host is still `on_prem` for every SAP, OS and HANA check. Its only effects are
+reporting metadata and one INFO finding.
+
+**The one thing it produces: OSEC-CLOUD-001.** On a customer-managed hyperscaler
+VM (host_platform aws/azure/gcp, and NOT a RISE tenant, where the whole stack is
+SAP's), the OS module emits an INFO note naming the boundary D10 draws:
+MonitorRisk audits the SAP application, the OS and HANA; the cloud infrastructure
+below the OS (hypervisor, storage encryption, security groups, cloud IAM) is the
+customer's CNAPP's job. It names the boundary so the two tools neither overlap
+silently nor leave a gap between them, and it does not duplicate the layer beneath.
+
+**Deferred, deliberately.** The client-server product does not yet store or render
+the tag, so `server/schema.sql` and `frontend/src/api/types.ts` carry no mirror
+and the agreement test asserts none - declaring a vocabulary the console neither
+persists nor shows would be dead declarations, worse than an honest absence. When
+the console surfaces the tag, both mirrors and their agreement assertions land
+together, the way deployment_mode is already stored and shown.

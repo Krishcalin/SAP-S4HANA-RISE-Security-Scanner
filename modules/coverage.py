@@ -116,6 +116,12 @@ RISE_MODULE_SCOPE: Dict[str, str] = {
     "cloudalm_verdicts": "in_scope",
     "ucon_exposure": "in_scope",
     "webdisp_security": "in_scope",
+    # OS & infrastructure hardening. Conditional on who owns the host: in scope
+    # where the customer runs it (on-prem / self-managed hyperscaler, decision
+    # D10), out of reach in RISE where SAP operates the OS and the customer has no
+    # shell access — the same reason system_trust's ms_acl/saprouttab checks are
+    # OS-level, here for the whole family.
+    "os_security": "conditional",
 }
 
 #: The CLI's `--modules` vocabulary, mapped to the module file names this file
@@ -180,6 +186,9 @@ CLI_MODULE_ALIASES: Dict[str, str] = {
     "csa": "cloudalm_verdicts",
     "ucon": "ucon_exposure",
     "webdisp": "webdisp_security",
+    # OS & infrastructure hardening — the host layer, reachable where the customer
+    # owns OS root (on-prem / self-managed hyperscaler); self-skips in RISE.
+    "osec": "os_security",
 }
 
 #: Logical sources a RISE customer cannot produce, because they are read from the
@@ -195,6 +204,13 @@ CLI_MODULE_ALIASES: Dict[str, str] = {
 #: would be strictly worse than both.
 RISE_UNREACHABLE_SOURCES: Set[str] = {
     "ms_acl", "saprouttab", "gw_secinfo", "gw_reginfo", "ext_os_commands_sap",
+    # OS & infrastructure hardening (module `osec`, decision D10). The operating
+    # system is SAP-operated under RISE and the customer never gets shell access,
+    # so these four are as structurally out of reach as secinfo/reginfo above.
+    # Kept in lockstep with the `"no"` rows in data/rise_reachability.json —
+    # test_rise_reachability.test_the_original_five_are_still_unreachable asserts
+    # the two sets are equal.
+    "os_users", "os_groups", "os_file_permissions", "os_services",
 }
 
 

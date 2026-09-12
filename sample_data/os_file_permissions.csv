@@ -1,0 +1,6 @@
+PATH,MODE,OWNER,GROUP
+/usr/sap/PRD/SYS/exe/uc/linuxx86_64,755,prdadm,sapsys
+/usr/sap/PRD/SYS/profile,750,prdadm,sapsys
+/usr/sap/trans,777,prdadm,sapsys
+/usr/sap/PRD/SYS/global/security/rsecssfs/data,750,prdadm,sapsys
+/sapmnt/PRD/global,750,prdadm,sapsys

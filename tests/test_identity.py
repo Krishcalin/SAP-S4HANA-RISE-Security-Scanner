@@ -555,6 +555,11 @@ CLOUD_SCOPED_BY_TYPE = {
     "ral_config": False, "ral_channel": False, "ilm_policy": False,
     "processing_purpose": False, "data_transfer": False, "dsar_request": False,
     "audit_filter": False,
+    # OS accounts and services (os_security) live on the host of the scanned SID,
+    # never in a cloud tenant. `root` on PRD's host and `root` on DEV's host are
+    # two different accounts — stamping the SID keeps them two identities, and
+    # exempting them (True) would merge every host's accounts into one.
+    "os_user": False, "os_service": False,
     # CAP / XSUAA. Both run on BTP and belong to a subaccount, never to an ABAP
     # SID — the same project scanned beside two ABAP systems is one project.
     # These reached this table only once `cap_xsuaa` could be reached at all: it

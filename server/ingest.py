@@ -90,6 +90,7 @@ AUDITORS: List[Tuple[str, str]] = [
     ("cloudalm_verdicts", "CloudAlmVerdictAuditor"),
     ("ucon_exposure", "UconExposureAuditor"),
     ("webdisp_security", "WebDispatcherAuditor"),
+    ("os_security", "OSSecurityAuditor"),
 ]
 
 #: Module KEYS (the CLI's `--modules` vocabulary), for `BaseAuditor.run_context`.

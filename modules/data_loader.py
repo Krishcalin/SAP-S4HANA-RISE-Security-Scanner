@@ -179,6 +179,19 @@ class DataLoader:
         "gw_secinfo":           ["gw_secinfo.csv", "secinfo.csv"],
         "gw_reginfo":           ["gw_reginfo.csv", "reginfo.csv"],
         "ms_acl":               ["ms_acl.csv", "ms_acl_info.csv", "msacl.csv"],
+        # OS & INFRASTRUCTURE HARDENING (module `osec`). The operating-system layer
+        # of the host — the accounts that run SAP, the permissions on its
+        # directories, and the network services around it. Reachable only where the
+        # customer owns OS root: on-premise and self-managed hyperscaler VMs. In
+        # RISE these are OS artifacts the customer contractually cannot produce, so
+        # they sit in RISE_UNREACHABLE_SOURCES beside secinfo/reginfo/ms_acl and the
+        # osec checks self-skip. See modules/os_security.py and decision D10.
+        "os_users":             ["os_users.csv", "passwd.csv", "getent_passwd.csv"],
+        "os_groups":            ["os_groups.csv", "group.csv", "getent_group.csv"],
+        "os_file_permissions":  ["os_file_permissions.csv", "file_permissions.csv",
+                                 "usr_sap_perms.csv"],
+        "os_services":          ["os_services.csv", "host_services.csv",
+                                 "systemctl_units.csv"],
         "system_change":        ["system_change.csv", "se06.csv", "system_change_option.csv"],
         "integration_alerts":   ["integration_alerts.json", "alert_config.json"],
         "cpi_datastores":       ["cpi_datastores.json", "cpi_variables.json"],

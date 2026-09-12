@@ -147,7 +147,12 @@ def test_every_auditor_is_visible_to_the_coverage_manifest():
     # first auditor whose subject is the EVIDENCE rather than the SAP estate,
     # and it exists because an undecodable export used to load as an empty list
     # and read downstream as an export that held nothing.
-    assert len(auditors) == 38, f"auditor count moved to {len(auditors)}"
+    #
+    # 39 since `os_security`, the OS & infrastructure hardening family (decision
+    # D10). It is the first auditor whose subject is the HOST rather than the SAP
+    # application — in scope where the customer owns the host (on-prem /
+    # self-managed hyperscaler), out of reach in RISE.
+    assert len(auditors) == 39, f"auditor count moved to {len(auditors)}"
 
 
 def test_a_required_source_is_always_one_the_loader_knows():
@@ -246,10 +251,10 @@ def test_the_published_document_states_the_number_it_measured():
     assert "| **13** |" in doc, \
         "docs/ECC_COVERAGE.md no longer states 13; update it and the test together"
     assert "**25**" in doc
-    assert "| of 38 |" in doc, (
+    assert "| of 39 |" in doc, (
         "docs/ECC_COVERAGE.md does not head its table with the current auditor "
         "count. Re-measure with tests/measure_ecc_coverage.py and update both.")
     # The prose above the table restates the parity figure in words, and that is
     # where the last drift lived.
-    assert "thirteen of thirty-eight" in doc, \
+    assert "thirteen of thirty-nine" in doc, \
         "the prose in docs/ECC_COVERAGE.md disagrees with its own table"

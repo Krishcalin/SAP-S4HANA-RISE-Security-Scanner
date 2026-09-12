@@ -178,6 +178,14 @@ _CASE_SENSITIVE_TYPES = frozenset({
     # repository object that SAP upper-cases, so folding case would merge two
     # distinct filters into one node.
     "audit_filter",
+    # OS-layer objects (os_security). A UNIX account, group or service name is
+    # case-bearing — `root` and `Root` are different accounts, `SAPServiceSID`
+    # keeps its casing — so it must never be upper-cased. They are system-scoped,
+    # NOT cloud-scoped: an OS account belongs to the host of the SID being
+    # scanned, and `root` on PRD's host and `root` on DEV's host are two
+    # different accounts that must keep two identities. Classified `False` in
+    # tests/test_identity.py:CLOUD_SCOPED_BY_TYPE.
+    "os_user", "os_service",
 })
 
 #: A BTP subaccount user, kept DISTINCT from an ABAP `user`.
