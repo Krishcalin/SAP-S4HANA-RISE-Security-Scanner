@@ -1179,6 +1179,40 @@ ECS_RULES: Dict[str, Dict[str, Any]] = build_ecs_rules()
 from modules import ecs_baseline
 
 
+#: SAP Note numbers carried over from the pre-baseline (legacy) rule set whose
+#: provenance was NEVER checked against note 3250501's own reference list —
+#: enumerated verbatim from the `BASELINE` comment below (and recorded in
+#: monitorrisk-accuracy). Publishing one into a customer-facing finding, or into
+#: a service request SAP will check the change against, cites an unverified SAP
+#: identifier, which CLAUDE.md's standing rule forbids. Every "CIS SAP Benchmark
+#: n.n.n" clause is unverified for the same reason.
+_UNVERIFIED_BASELINE_NOTES = frozenset(
+    {"68048", "2416093", "1408081", "510007", "2191612"})
+
+
+def _ref_is_verified(ref: str) -> bool:
+    """True for a reference safe to cite to the customer and to SAP.
+
+    Verified = transcribed from SAP's Apache-2.0 CSA policy XML or the Security
+    Baseline (the ``SAP policy …`` predicate quotes and the ``SAP Security
+    Baseline <REQ>`` requirement names), plus SAP Note 3250501, which
+    ``snc_posture`` transcribes wholesale. Unverified = the legacy note numbers
+    above and every CIS SAP Benchmark clause.
+
+    A SAP Note that is neither 3250501 nor in the unverified set (e.g. 1956086,
+    which SAP's own baseline names beside ``dynp/confirmskip1screen``) is treated
+    as verified: the guard is deliberately a denylist of the numbers this file
+    knows it never checked, not an allowlist that would silently drop a
+    legitimately sourced citation.
+    """
+    text = str(ref)
+    if "CIS SAP Benchmark" in text:
+        return False
+    if "Note" in text:
+        return not any(num in text for num in _UNVERIFIED_BASELINE_NOTES)
+    return True
+
+
 class SecurityParamAuditor(BaseAuditor):
 
     # Legacy baseline: parameter → (expected_value, operator, severity, description,
@@ -2546,7 +2580,7 @@ class SecurityParamAuditor(BaseAuditor):
                 affected_objects=[param_object],
                 scope="object",
                 remediation=rule["fix"],
-                references=rule.get("refs", []),
+                references=self._public_refs(rule),
                 details=self._details(param_name, rule, actual_value),
             )
 
@@ -2723,12 +2757,13 @@ class SecurityParamAuditor(BaseAuditor):
             affected_objects=[{"type": "parameter_name", "name": param_name}],
             scope="object",
             remediation=rule["fix"],
-            references=rule.get("refs", []),
+            references=self._public_refs(rule),
             details={"observed": "not_set",
                      "rests_on_declaration": True,
                      "declared_by": declaration["declared_by"],
                      "declared_at": declaration["declared_at"],
-                     "declaration_method": declaration["method"]},
+                     "declaration_method": declaration["method"],
+                     "baseline_source": self._source_label(rule)},
         )
 
     # ------------------------------------------------------------------ helpers
@@ -2792,17 +2827,50 @@ class SecurityParamAuditor(BaseAuditor):
                 f"{required}{caveat}")
 
     @staticmethod
+    def _public_refs(rule: Dict[str, Any]) -> List[str]:
+        """The references safe to publish on a finding for this rule.
+
+        Verified refs are propagated verbatim; the legacy note numbers and CIS
+        clauses are WITHHELD. A rule left with nothing verified falls back to a
+        generic "SAP Security Baseline", which CLAUDE.md prescribes wherever a
+        specific SAP Note number cannot be vouched for — never the unverified
+        number itself. Cleaning here, at the single emit point, is what keeps the
+        HTML/PDF reports, the console references list and the service request's
+        `_basis()` all free of unverified citations without any of them needing
+        to know which is which.
+        """
+        verified = [str(r) for r in rule.get("refs", []) if _ref_is_verified(r)]
+        return verified or ["SAP Security Baseline"]
+
+    @staticmethod
+    def _source_label(rule: Dict[str, Any]) -> str:
+        """The short, verified provenance label surfaced as a finding's `source`.
+
+        For the ECS rules it is the note. For a legacy rule it is the SAP
+        Security Baseline requirement the rule already names (e.g. "SAP Security
+        Baseline USRCTR-A"), or the generic baseline — this was EMPTY for all 33
+        BASELINE rules, so `server/remediation.py` and `server/servicerequest.py`
+        rendered a blank source (see monitorrisk-accuracy).
+        """
+        if rule.get("source") == "ecs_note_3250501":
+            return "SAP Note 3250501"
+        for ref in rule.get("refs", []):
+            if str(ref).startswith("SAP Security Baseline"):
+                return str(ref)
+        return "SAP Security Baseline"
+
+    @staticmethod
     def _details(param_name: str, rule: Dict[str, Any], actual: str) -> Dict[str, Any]:
         details: Dict[str, Any] = {
             "parameter": param_name,
             "current_value": actual,
             "expected_value": rule.get("expected", ""),
             "operator": rule.get("op", "ecs-baseline"),
+            "baseline_source": SecurityParamAuditor._source_label(rule),
         }
         if rule.get("source") == "ecs_note_3250501":
             details["ecs_standard"] = rule.get("ecs", "")
             details["ecs_allowed"] = list(rule.get("allowed") or [])
-            details["baseline_source"] = "SAP Note 3250501"
             if rule.get("caveat"):
                 details["verification_caveat"] = rule["caveat"]
         return details
