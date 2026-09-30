@@ -21,10 +21,10 @@
   },
   "config_store_usage": {
    "ABAP_INSTANCE_PAHI": 6,
-   "ABAP_NOTES": 865,
+   "ABAP_NOTES": 872,
    "ABAP_UR_VERSION": 2,
    "BOBJ_VERSION": 3,
-   "COMP_LEVEL": 878,
+   "COMP_LEVEL": 885,
    "CRYPTOLIB": 4,
    "GW_REGINFO": 1,
    "GW_SECINFO": 1,
@@ -33,27 +33,27 @@
    "Parameters": 1,
    "RFCDES": 1,
    "RFCSYSACL": 1,
-   "SAPUI5_VERSION": 5,
-   "SAP_KERNEL": 75,
+   "SAPUI5_VERSION": 6,
+   "SAP_KERNEL": 79,
    "SICF_SERVICES": 1,
    "igsmanifest.mf": 9
   },
   "counts": {
-   "answerable_from_a_supplied_export": 967,
-   "blocked_only_by_an_unmapped_store": 18,
-   "check_items_using_an_uninterpreted_range": 1220,
+   "answerable_from_a_supplied_export": 978,
+   "blocked_only_by_an_unmapped_store": 19,
+   "check_items_using_an_uninterpreted_range": 1227,
    "check_items_with_an_unattributable_id": 5,
-   "checked_by_sap_policy": 990,
-   "component_release_sp_triples": 6637,
-   "notes": 1732,
+   "checked_by_sap_policy": 1002,
+   "component_release_sp_triples": 6667,
+   "notes": 1752,
    "notes_blocked_only_by_a_range": 29,
-   "patch_days": 154,
-   "policy_files": 157,
-   "with_component_fix_levels": 837,
-   "with_cve": 1167,
-   "with_cvss": 1097,
+   "patch_days": 155,
+   "policy_files": 158,
+   "with_component_fix_levels": 844,
+   "with_cve": 1187,
+   "with_cvss": 1117,
    "with_hana_fix_levels": 26,
-   "with_kernel_fix_levels": 74
+   "with_kernel_fix_levels": 78
   },
   "fix_levels": "The first support package carrying the fix, per component and release, extracted from the affected-version facts SAP's predicates encode. SAP's SQL is neither executed nor reproduced; the comparison against system_component.csv is this product's own. `between`-range predicates are not interpreted and are counted above as check_items_using_an_uninterpreted_range.",
   "licence": "Apache-2.0, Copyright (c) 2020 SAP SE or an SAP affiliate company. Derived metadata only.",
@@ -56324,6 +56324,99 @@
    ],
    "title": "Directory Traversal vulnerability in SAP Master Data Governance"
   },
+  "3365276": {
+   "answerable_from": [
+    "applied_notes",
+    "system_component"
+   ],
+   "checked_by_sap_policy": true,
+   "component": "FIN-FSCM-PF",
+   "config_stores": [
+    "ABAP_NOTES",
+    "COMP_LEVEL"
+   ],
+   "cve": [
+    "CVE-2026-76960"
+   ],
+   "cvss": 4.3,
+   "fix_levels": [
+    {
+     "component": "S4CORE",
+     "min_sp": 7,
+     "release": "105"
+    },
+    {
+     "component": "S4CORE",
+     "min_sp": 5,
+     "release": "106"
+    },
+    {
+     "component": "S4CORE",
+     "min_sp": 3,
+     "release": "107"
+    }
+   ],
+   "hana_fix": [],
+   "kernel_fix": [],
+   "needs_unmapped_store": [],
+   "patch_days": [
+    "PatchDay_2026-09"
+   ],
+   "priority": 3,
+   "stacks": [
+    "ABAP"
+   ],
+   "title": "Cross-Site Request Forgery (CSRF) vulnerability in SAP S/4HANA (Finance for Advanced Payment Management)"
+  },
+  "3365311": {
+   "answerable_from": [
+    "applied_notes",
+    "system_component"
+   ],
+   "checked_by_sap_policy": true,
+   "component": "FIN-FSCM-PF",
+   "config_stores": [
+    "ABAP_NOTES",
+    "COMP_LEVEL"
+   ],
+   "cve": [
+    "CVE-2026-76959"
+   ],
+   "cvss": 4.3,
+   "fix_levels": [
+    {
+     "component": "UIAPFI70",
+     "min_sp": 7,
+     "release": "800"
+    },
+    {
+     "component": "UIAPFI70",
+     "min_sp": 5,
+     "release": "900"
+    },
+    {
+     "component": "UIAPFI70",
+     "min_sp": 3,
+     "release": "901"
+    },
+    {
+     "component": "UIAPFI70",
+     "min_sp": 1,
+     "release": "902"
+    }
+   ],
+   "hana_fix": [],
+   "kernel_fix": [],
+   "needs_unmapped_store": [],
+   "patch_days": [
+    "PatchDay_2026-09"
+   ],
+   "priority": 3,
+   "stacks": [
+    "ABAP"
+   ],
+   "title": "Cross-Site Request Forgery (CSRF) vulnerability in SAP S/4HANA (Finance for Advanced Payment Management)"
+  },
   "3366410": {
    "answerable_from": [],
    "checked_by_sap_policy": false,
@@ -56453,6 +56546,40 @@
     "ABAP"
    ],
    "title": "Insufficient File type validation in SAP BusinessObjects Business Intelligence Platform (Web Intelligence HTML interface)"
+  },
+  "3371336": {
+   "answerable_from": [
+    "applied_notes",
+    "system_component"
+   ],
+   "checked_by_sap_policy": true,
+   "component": "FIN-FSCM-PF",
+   "config_stores": [
+    "ABAP_NOTES",
+    "COMP_LEVEL"
+   ],
+   "cve": [
+    "CVE-2026-76961"
+   ],
+   "cvss": 4.3,
+   "fix_levels": [
+    {
+     "component": "S4CORE",
+     "min_sp": 1,
+     "release": "108"
+    }
+   ],
+   "hana_fix": [],
+   "kernel_fix": [],
+   "needs_unmapped_store": [],
+   "patch_days": [
+    "PatchDay_2026-09"
+   ],
+   "priority": 3,
+   "stacks": [
+    "ABAP"
+   ],
+   "title": "Cross-Site Request Forgery (CSRF) vulnerability in SAP S/4HANA (Finance for Advanced Payment Management)"
   },
   "3371873": {
    "answerable_from": [],
@@ -61812,6 +61939,45 @@
     "ABAP"
    ],
    "title": "Prerequisite for Security Note 3458789"
+  },
+  "3485073": {
+   "answerable_from": [
+    "applied_notes",
+    "system_component"
+   ],
+   "checked_by_sap_policy": true,
+   "component": "CA-ATP-SUP",
+   "config_stores": [
+    "ABAP_NOTES",
+    "COMP_LEVEL"
+   ],
+   "cve": [
+    "CVE-2026-66766"
+   ],
+   "cvss": 7.5,
+   "fix_levels": [
+    {
+     "component": "UIS4HOP1",
+     "min_sp": 5,
+     "release": "800"
+    },
+    {
+     "component": "UIS4HOP1",
+     "min_sp": 2,
+     "release": "900"
+    }
+   ],
+   "hana_fix": [],
+   "kernel_fix": [],
+   "needs_unmapped_store": [],
+   "patch_days": [
+    "PatchDay_2026-09"
+   ],
+   "priority": 2,
+   "stacks": [
+    "ABAP"
+   ],
+   "title": "Denial of Service (DoS) due to use of third-party component in SAP S/4HANA (Manage Supply Protection)"
   },
   "3485284": {
    "answerable_from": [],
@@ -72749,6 +72915,50 @@
    ],
    "title": "User Enumeration and Sensitive Data Exposure via RFC Function in SAP Financial Service Claims Management"
   },
+  "3657599": {
+   "answerable_from": [
+    "applied_notes",
+    "system_component"
+   ],
+   "checked_by_sap_policy": true,
+   "component": "FI-BL-MD",
+   "config_stores": [
+    "ABAP_NOTES",
+    "COMP_LEVEL"
+   ],
+   "cve": [
+    "CVE-2026-76962"
+   ],
+   "cvss": 4.3,
+   "fix_levels": [
+    {
+     "component": "S4CORE",
+     "min_sp": 7,
+     "release": "107"
+    },
+    {
+     "component": "S4CORE",
+     "min_sp": 5,
+     "release": "108"
+    },
+    {
+     "component": "S4CORE",
+     "min_sp": 1,
+     "release": "109"
+    }
+   ],
+   "hana_fix": [],
+   "kernel_fix": [],
+   "needs_unmapped_store": [],
+   "patch_days": [
+    "PatchDay_2026-09"
+   ],
+   "priority": 3,
+   "stacks": [
+    "ABAP"
+   ],
+   "title": "Missing Authorization check in SAP S/4HANA (Manage Bank Chains app)"
+  },
   "3657998": {
    "answerable_from": [],
    "checked_by_sap_policy": false,
@@ -78385,6 +78595,28 @@
    ],
    "title": "Missing Authorization check in Application Server ABAP of SAP NetWeaver and ABAP Platform"
   },
+  "3736494": {
+   "answerable_from": [],
+   "checked_by_sap_policy": false,
+   "component": "BC-XI-CON-SOP",
+   "config_stores": [],
+   "cve": [
+    "CVE-2026-58234"
+   ],
+   "cvss": 2.2,
+   "fix_levels": [],
+   "hana_fix": [],
+   "kernel_fix": [],
+   "needs_unmapped_store": [],
+   "patch_days": [
+    "PatchDay_2026-09"
+   ],
+   "priority": 4,
+   "stacks": [
+    "ABAP"
+   ],
+   "title": "Denial of Service vulnerability in SAP Process Integration (SOAP Adapter)"
+  },
   "3739913": {
    "answerable_from": [],
    "checked_by_sap_policy": false,
@@ -78687,6 +78919,69 @@
    ],
    "title": "Multiple vulnerabilities in Apache Tomcat within SAP Commerce Cloud"
   },
+  "3747649": {
+   "answerable_from": [
+    "sap_kernel"
+   ],
+   "checked_by_sap_policy": true,
+   "component": "BC-CST-DP",
+   "config_stores": [
+    "SAP_KERNEL"
+   ],
+   "cve": [
+    "CVE-2026-44756"
+   ],
+   "cvss": 10.0,
+   "fix_levels": [],
+   "hana_fix": [],
+   "kernel_fix": [
+    {
+     "min_patch": 1518,
+     "release": "722%"
+    },
+    {
+     "min_patch": 1610,
+     "release": "753_REL"
+    },
+    {
+     "min_patch": 646,
+     "release": "754_REL"
+    },
+    {
+     "min_patch": 912,
+     "release": "777_REL"
+    },
+    {
+     "min_patch": 242,
+     "release": "804_REL"
+    },
+    {
+     "min_patch": 100,
+     "release": "916_REL"
+    },
+    {
+     "min_patch": 29,
+     "release": "918_REL"
+    },
+    {
+     "min_patch": 14,
+     "release": "919_REL"
+    },
+    {
+     "min_patch": 4,
+     "release": "920_REL"
+    }
+   ],
+   "needs_unmapped_store": [],
+   "patch_days": [
+    "PatchDay_2026-09"
+   ],
+   "priority": 1,
+   "stacks": [
+    "ABAP"
+   ],
+   "title": "Memory Corruption vulnerability in SAP Extended Passport (EPP) Processing"
+  },
   "3747787": {
    "answerable_from": [],
    "checked_by_sap_policy": false,
@@ -78849,6 +79144,69 @@
     "ABAP"
    ],
    "title": "Missing caller identification check-in for ODP Data Replication APIs"
+  },
+  "3750721": {
+   "answerable_from": [
+    "sap_kernel"
+   ],
+   "checked_by_sap_policy": true,
+   "component": "BC-CST-IC",
+   "config_stores": [
+    "SAP_KERNEL"
+   ],
+   "cve": [
+    "CVE-2026-76968"
+   ],
+   "cvss": 6.5,
+   "fix_levels": [],
+   "hana_fix": [],
+   "kernel_fix": [
+    {
+     "min_patch": 1518,
+     "release": "722%"
+    },
+    {
+     "min_patch": 1610,
+     "release": "753_REL"
+    },
+    {
+     "min_patch": 647,
+     "release": "754_REL"
+    },
+    {
+     "min_patch": 912,
+     "release": "777_REL"
+    },
+    {
+     "min_patch": 401,
+     "release": "793_REL"
+    },
+    {
+     "min_patch": 100,
+     "release": "916_REL"
+    },
+    {
+     "min_patch": 29,
+     "release": "918_REL"
+    },
+    {
+     "min_patch": 14,
+     "release": "919_REL"
+    },
+    {
+     "min_patch": 4,
+     "release": "920_REL"
+    }
+   ],
+   "needs_unmapped_store": [],
+   "patch_days": [
+    "PatchDay_2026-09"
+   ],
+   "priority": 3,
+   "stacks": [
+    "ABAP"
+   ],
+   "title": "Information Disclosure vulnerability in SAP Web Dispatcher, Internet Communication Manager and SAP Content Server"
   },
   "3751691": {
    "answerable_from": [
@@ -79131,6 +79489,70 @@
    ],
    "title": "Cross-Site Scripting (XSS) vulnerability in SAP NetWeaver Application Server ABAP (applications based on Business Server Pages)"
   },
+  "3756450": {
+   "answerable_from": [
+    "applied_notes",
+    "system_component"
+   ],
+   "checked_by_sap_policy": true,
+   "component": "FIN-CS-ICR",
+   "config_stores": [
+    "ABAP_NOTES",
+    "COMP_LEVEL"
+   ],
+   "cve": [
+    "CVE-2026-44766"
+   ],
+   "cvss": 6.5,
+   "fix_levels": [
+    {
+     "component": "S4CORE",
+     "min_sp": 15,
+     "release": "104"
+    },
+    {
+     "component": "S4CORE",
+     "min_sp": 13,
+     "release": "105"
+    },
+    {
+     "component": "S4CORE",
+     "min_sp": 10,
+     "release": "106"
+    },
+    {
+     "component": "S4CORE",
+     "min_sp": 8,
+     "release": "107"
+    },
+    {
+     "component": "S4CORE",
+     "min_sp": 6,
+     "release": "108"
+    },
+    {
+     "component": "S4CORE",
+     "min_sp": 2,
+     "release": "109"
+    },
+    {
+     "component": "SAPSCORE",
+     "min_sp": 4,
+     "release": "136"
+    }
+   ],
+   "hana_fix": [],
+   "kernel_fix": [],
+   "needs_unmapped_store": [],
+   "patch_days": [
+    "PatchDay_2026-09"
+   ],
+   "priority": 3,
+   "stacks": [
+    "ABAP"
+   ],
+   "title": "SQL Injection vulnerability in SAP S/4HANA (Intercompany Matching and Reconciliation)"
+  },
   "3756565": {
    "answerable_from": [],
    "checked_by_sap_policy": false,
@@ -79191,6 +79613,73 @@
     "ABAP"
    ],
    "title": "Memory Corruption vulnerability in SAP ABAP Platform"
+  },
+  "3757002": {
+   "answerable_from": [
+    "sap_kernel"
+   ],
+   "checked_by_sap_policy": true,
+   "component": "BC-MID-RFC",
+   "config_stores": [
+    "SAP_KERNEL"
+   ],
+   "cve": [
+    "CVE-2026-66767"
+   ],
+   "cvss": 7.7,
+   "fix_levels": [],
+   "hana_fix": [],
+   "kernel_fix": [
+    {
+     "min_patch": 1518,
+     "release": "722%"
+    },
+    {
+     "min_patch": 1610,
+     "release": "753_REL"
+    },
+    {
+     "min_patch": 649,
+     "release": "754_REL"
+    },
+    {
+     "min_patch": 912,
+     "release": "777_REL"
+    },
+    {
+     "min_patch": 401,
+     "release": "793_REL"
+    },
+    {
+     "min_patch": 242,
+     "release": "804_REL"
+    },
+    {
+     "min_patch": 100,
+     "release": "916_REL"
+    },
+    {
+     "min_patch": 31,
+     "release": "918_REL"
+    },
+    {
+     "min_patch": 16,
+     "release": "919_REL"
+    },
+    {
+     "min_patch": 6,
+     "release": "920_REL"
+    }
+   ],
+   "needs_unmapped_store": [],
+   "patch_days": [
+    "PatchDay_2026-09"
+   ],
+   "priority": 2,
+   "stacks": [
+    "ABAP"
+   ],
+   "title": "Memory Corruption vulnerability in SAP NetWeaver Application Server for ABAP and ABAP Platform"
   },
   "3757815": {
    "answerable_from": [],
@@ -79323,6 +79812,37 @@
     "ABAP"
    ],
    "title": "Missing Authorization Check in SAP Manufacturing Integration and Intelligence"
+  },
+  "3759472": {
+   "answerable_from": [
+    "sap_kernel"
+   ],
+   "checked_by_sap_policy": true,
+   "component": "BC-CST-MS",
+   "config_stores": [
+    "SAP_KERNEL"
+   ],
+   "cve": [
+    "CVE-2026-58240"
+   ],
+   "cvss": 9.8,
+   "fix_levels": [],
+   "hana_fix": [],
+   "kernel_fix": [
+    {
+     "min_patch": 100,
+     "release": "916_REL"
+    }
+   ],
+   "needs_unmapped_store": [],
+   "patch_days": [
+    "PatchDay_2026-09"
+   ],
+   "priority": 1,
+   "stacks": [
+    "ABAP"
+   ],
+   "title": "Missing Authentication check in SAP NetWeaver (Message Server)"
   },
   "3759854": {
    "answerable_from": [],
@@ -79599,7 +80119,8 @@
    "kernel_fix": [],
    "needs_unmapped_store": [],
    "patch_days": [
-    "PatchDay_2026-08"
+    "PatchDay_2026-08",
+    "PatchDay_2026-09"
    ],
    "priority": 1,
    "stacks": [
@@ -79709,13 +80230,93 @@
    "kernel_fix": [],
    "needs_unmapped_store": [],
    "patch_days": [
-    "PatchDay_2026-08"
+    "PatchDay_2026-08",
+    "PatchDay_2026-09"
    ],
    "priority": 2,
    "stacks": [
     "ABAP"
    ],
    "title": "Privilege Escalation vulnerability in SAP ABAP Developer Tools"
+  },
+  "3772838": {
+   "answerable_from": [
+    "applied_notes",
+    "system_component"
+   ],
+   "checked_by_sap_policy": true,
+   "component": "BC-I18",
+   "config_stores": [
+    "ABAP_NOTES",
+    "COMP_LEVEL"
+   ],
+   "cve": [
+    "CVE-2026-76963"
+   ],
+   "cvss": 4.3,
+   "fix_levels": [
+    {
+     "component": "SAP_BASIS",
+     "min_sp": 40,
+     "release": "731"
+    },
+    {
+     "component": "SAP_BASIS",
+     "min_sp": 36,
+     "release": "740"
+    },
+    {
+     "component": "SAP_BASIS",
+     "min_sp": 37,
+     "release": "750"
+    },
+    {
+     "component": "SAP_BASIS",
+     "min_sp": 19,
+     "release": "752"
+    },
+    {
+     "component": "SAP_BASIS",
+     "min_sp": 17,
+     "release": "753"
+    },
+    {
+     "component": "SAP_BASIS",
+     "min_sp": 15,
+     "release": "754"
+    },
+    {
+     "component": "SAP_BASIS",
+     "min_sp": 13,
+     "release": "755"
+    },
+    {
+     "component": "SAP_BASIS",
+     "min_sp": 11,
+     "release": "756"
+    },
+    {
+     "component": "SAP_BASIS",
+     "min_sp": 9,
+     "release": "757"
+    },
+    {
+     "component": "SAP_BASIS",
+     "min_sp": 7,
+     "release": "758"
+    }
+   ],
+   "hana_fix": [],
+   "kernel_fix": [],
+   "needs_unmapped_store": [],
+   "patch_days": [
+    "PatchDay_2026-09"
+   ],
+   "priority": 3,
+   "stacks": [
+    "ABAP"
+   ],
+   "title": "Missing Authorization Check in Application Server ABAP of SAP NetWeaver and ABAP Platform"
   },
   "3773203": {
    "answerable_from": [],
@@ -79804,6 +80405,76 @@
    ],
    "title": "Missing Authorization Check in SAP Manufacturing Integration and Intelligence (MII)"
   },
+  "3781729": {
+   "answerable_from": [],
+   "checked_by_sap_policy": false,
+   "component": "BC-FES-JAV",
+   "config_stores": [],
+   "cve": [
+    "CVE-2026-66768"
+   ],
+   "cvss": 9.0,
+   "fix_levels": [],
+   "hana_fix": [],
+   "kernel_fix": [],
+   "needs_unmapped_store": [],
+   "patch_days": [
+    "PatchDay_2026-09"
+   ],
+   "priority": 1,
+   "stacks": [
+    "ABAP"
+   ],
+   "title": "Improper Access Control in SAP NetWeaver (SAP GUI for Java)"
+  },
+  "3783189": {
+   "answerable_from": [],
+   "checked_by_sap_policy": true,
+   "component": "CA-UI5-COR",
+   "config_stores": [
+    "SAPUI5_VERSION"
+   ],
+   "cve": [
+    "CVE-2026-76977"
+   ],
+   "cvss": 4.3,
+   "fix_levels": [],
+   "hana_fix": [],
+   "kernel_fix": [],
+   "needs_unmapped_store": [
+    "SAPUI5_VERSION"
+   ],
+   "patch_days": [
+    "PatchDay_2026-09"
+   ],
+   "priority": 3,
+   "stacks": [
+    "ABAP"
+   ],
+   "title": "Clickjacking vulnerability in SAPUI5 (Frame Options Allowlist)"
+  },
+  "3784138": {
+   "answerable_from": [],
+   "checked_by_sap_policy": false,
+   "component": "BC-FES-BUS",
+   "config_stores": [],
+   "cve": [
+    "CVE-2026-76967"
+   ],
+   "cvss": 7.8,
+   "fix_levels": [],
+   "hana_fix": [],
+   "kernel_fix": [],
+   "needs_unmapped_store": [],
+   "patch_days": [
+    "PatchDay_2026-09"
+   ],
+   "priority": 2,
+   "stacks": [
+    "ABAP"
+   ],
+   "title": "Insecure Deserialization in SAP NetWeaver Business Client"
+  },
   "3786038": {
    "answerable_from": [],
    "checked_by_sap_policy": false,
@@ -79825,6 +80496,116 @@
     "ABAP"
    ],
    "title": "Multiple vulnerabilities in SAP Business AI Platform (Approuter)"
+  },
+  "3786489": {
+   "answerable_from": [],
+   "checked_by_sap_policy": false,
+   "component": "MFG-MII-CON",
+   "config_stores": [],
+   "cve": [
+    "CVE-2026-76971"
+   ],
+   "cvss": 6.5,
+   "fix_levels": [],
+   "hana_fix": [],
+   "kernel_fix": [],
+   "needs_unmapped_store": [],
+   "patch_days": [
+    "PatchDay_2026-09"
+   ],
+   "priority": 3,
+   "stacks": [
+    "ABAP"
+   ],
+   "title": "Server-Side Request Forgery in SAP Manufacturing Integration and Intelligence"
+  },
+  "3787345": {
+   "answerable_from": [],
+   "checked_by_sap_policy": false,
+   "component": "CEC-SCC-COM-SF",
+   "config_stores": [],
+   "cve": [
+    "CVE-2026-34477"
+   ],
+   "cvss": 5.9,
+   "fix_levels": [],
+   "hana_fix": [],
+   "kernel_fix": [],
+   "needs_unmapped_store": [],
+   "patch_days": [
+    "PatchDay_2026-09"
+   ],
+   "priority": 3,
+   "stacks": [
+    "ABAP"
+   ],
+   "title": "Security Misconfiguration vulnerability due to use of Apache Log4j in SAP Commerce Cloud"
+  },
+  "3791068": {
+   "answerable_from": [],
+   "checked_by_sap_policy": false,
+   "component": "CEC-SCC-COM-SF",
+   "config_stores": [],
+   "cve": [
+    "CVE-2026-2332"
+   ],
+   "cvss": 7.4,
+   "fix_levels": [],
+   "hana_fix": [],
+   "kernel_fix": [],
+   "needs_unmapped_store": [],
+   "patch_days": [
+    "PatchDay_2026-09"
+   ],
+   "priority": 2,
+   "stacks": [
+    "ABAP"
+   ],
+   "title": "CRLF Injection vulnerability due to use of Jetty components in SAP Commerce Cloud (Search And Navigation)"
+  },
+  "3792978": {
+   "answerable_from": [],
+   "checked_by_sap_policy": false,
+   "component": "LOD-HCI-PI-TPM",
+   "config_stores": [],
+   "cve": [
+    "CVE-2026-76958"
+   ],
+   "cvss": 8.5,
+   "fix_levels": [],
+   "hana_fix": [],
+   "kernel_fix": [],
+   "needs_unmapped_store": [],
+   "patch_days": [
+    "PatchDay_2026-09"
+   ],
+   "priority": 2,
+   "stacks": [
+    "ABAP"
+   ],
+   "title": "XML External Entity (XXE) Vulnerability in SAP Integration Suite"
+  },
+  "3798315": {
+   "answerable_from": [],
+   "checked_by_sap_policy": false,
+   "component": "BC-XS-CDX-SEC",
+   "config_stores": [],
+   "cve": [
+    "CVE-2026-76969"
+   ],
+   "cvss": 9.4,
+   "fix_levels": [],
+   "hana_fix": [],
+   "kernel_fix": [],
+   "needs_unmapped_store": [],
+   "patch_days": [
+    "PatchDay_2026-09"
+   ],
+   "priority": 1,
+   "stacks": [
+    "ABAP"
+   ],
+   "title": "Credential disclosure in multitenant applications using SAP Cloud Application Programming Model (CAP)"
   }
  }
 }
