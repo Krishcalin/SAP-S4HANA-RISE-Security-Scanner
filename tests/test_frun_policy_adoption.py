@@ -151,7 +151,7 @@ def test_version_ordering_is_numeric_not_lexical():
 
 
 def test_the_pin_is_recorded_so_a_bump_is_a_conscious_act():
-    assert sapcontent.BASELINE_VERSION == "v2.4"
+    assert sapcontent.BASELINE_VERSION == "v2.6"
     # The catalogue that ships was built from the pinned version.
     cat = sapcontent.load_catalogue()
     assert cat["_meta"]["baseline_version"] == sapcontent.BASELINE_VERSION

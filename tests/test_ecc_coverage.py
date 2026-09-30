@@ -152,7 +152,12 @@ def test_every_auditor_is_visible_to_the_coverage_manifest():
     # D10). It is the first auditor whose subject is the HOST rather than the SAP
     # application — in scope where the customer owns the host (on-prem /
     # self-managed hyperscaler), out of reach in RISE.
-    assert len(auditors) == 39, f"auditor count moved to {len(auditors)}"
+    #
+    # 40 since `prgn_cust_switches`, which answers three SAP Baseline v2.6
+    # requirements (AUTHASSIGN-A, USRTYP-A, USRCHAR-A) from the Profile Generator
+    # switch table PRGN_CUST — a customizing surface the scanner did not read
+    # until v2.6 added requirements over it.
+    assert len(auditors) == 40, f"auditor count moved to {len(auditors)}"
 
 
 def test_a_required_source_is_always_one_the_loader_knows():

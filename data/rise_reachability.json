@@ -861,6 +861,28 @@
       "how": "SE16 on table TSTCP, or SE93 per transaction. Two columns are enough: TCODE and PARAM.",
       "note": "Customer-side in both directions: the transactions are the customer's own Z objects and SE93 is where they are corrected, so unlike the profile parameters this needs no service request.",
       "basis": "section_3"
+    },
+    "prgn_cust": {
+      "state": "yes",
+      "how": "SM30 / SE16 on table PRGN_CUST (the Profile Generator switch table)",
+      "note": "Customizing the security/authorization team maintains directly; both exportable and fixable in a RISE tenant.",
+      "basis": "application_layer"
+    },
+    "secure_store": {
+      "state": "read_only",
+      "how": "Secure-store diagnostics (config store ABAP_SECSTORE_INFO)",
+      "blocked_by": "Generating an individual SecStore master key and re-encrypting the store is a kernel/basis operation SAP executes in a RISE tenant.",
+      "note": "Exportable, not fixable — the same footing as security_params. server/enrich.py routes SECSTO-* to the provider where the customer cannot act.",
+      "basis": "section_3"
+    },
+    "webdisp_components": {
+      "state": "ticket",
+      "how": "The Web Dispatcher's component / patch level (config store COMP_LEVEL)",
+      "blocked_by": "SAP operates the Web Dispatcher in a RISE tenant, so patching it is theirs; a customer running their own dispatcher in front of the tenant exports and patches it directly.",
+      "note": "MIXED BY TOPOLOGY, classified with webdisp_params: `ticket` never blames the customer for SAP's component, and a customer who owns their dispatcher simply supplies it.",
+      "verified": false,
+      "basis": "infrastructure",
+      "open_question": "That SAP operates the Web Dispatcher in a RISE tenant is inferred, the same as webdisp_params — section 3 carries no Web Dispatcher row. A customer running their own dispatcher owns its patch level outright, which makes this genuinely mixed by topology. Settled by asking one RISE customer who operates their landscape's dispatcher."
     }
   }
 }

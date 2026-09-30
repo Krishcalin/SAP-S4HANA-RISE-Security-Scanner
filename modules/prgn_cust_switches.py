@@ -85,7 +85,7 @@ class PrgnCustSwitchAuditor(BaseAuditor):
         An absent or non-list source yields {} and every check stays silent —
         a customer who did not send this extract is told nothing about it.
         """
-        raw = self.data.get(PRGN_CUST)
+        raw = self.data.get("prgn_cust")
         if not isinstance(raw, list):
             return {}
         out: Dict[str, str] = {}
@@ -98,7 +98,7 @@ class PrgnCustSwitchAuditor(BaseAuditor):
         return out
 
     def _supplied(self) -> bool:
-        return isinstance(self.data.get(PRGN_CUST), list)
+        return isinstance(self.data.get("prgn_cust"), list)
 
     @staticmethod
     def _obj(switch: str) -> Dict[str, Any]:

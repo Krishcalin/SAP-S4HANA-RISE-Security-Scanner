@@ -379,7 +379,7 @@ plenty of the catalogue stays correctly silent on it. That matters, because a
 check that is correctly silent and a check that could never fire look identical
 unless somebody measures. So the suite records which check ids actually produce a
 finding anywhere in it, and publishes the count in
-[docs/CHECK_FIRING.md](docs/CHECK_FIRING.md) — currently 838 of 838.
+[docs/CHECK_FIRING.md](docs/CHECK_FIRING.md) — currently 843 of 843.
 
 ```bash
 python -m pip install -r requirements.txt -r requirements-dev.txt httpx

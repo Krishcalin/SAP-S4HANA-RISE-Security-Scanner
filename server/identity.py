@@ -89,6 +89,11 @@ _UPPERCASE_TYPES = frozenset({
     # name that exports spell "Space Developer", "SPACE_DEVELOPER" or "space developer"
     # for the one role — folding case keeps those one node rather than three.
     "cds_view", "service_group", "cf_role",
+    # SAP Baseline v2.6 config identifiers: a PRGN_CUST customizing switch id
+    # ("US_ASGM_TRANSPORT"), a secure-store diagnostic record ("EncryptionMasterKey")
+    # and a Web Dispatcher component name ("SAP WEB DISPATCHER") are all upper-case
+    # SAP identifiers where case is not semantically distinct.
+    "config_switch", "secure_store_record", "webdisp_component",
     # SAP Security Note numbers (sap_hotnews) and GRC Access Control ruleset objects
     # (grc_access_control). A note number is a numeric SAP identifier ("2934135" — NUMC
     # exports zero-pad it to "0002934135" and the module normalizes it back); a
