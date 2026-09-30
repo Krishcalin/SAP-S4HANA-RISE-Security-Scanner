@@ -623,7 +623,7 @@ Three rows, and already several of the questions from chapter 3 can be asked. Is
 
 ### How many files, and does it matter if some are missing?
 
-The full catalogue runs to **147 logical sources** ([Appendix C](#contents) lists them). Almost nobody supplies all of them on a first run, and that is expected. Every file is optional: the system runs whatever checks it has the information for and records the rest as not assessed.
+The full catalogue runs to **148 logical sources** ([Appendix C](#contents) lists them). Almost nobody supplies all of them on a first run, and that is expected. Every file is optional: the system runs whatever checks it has the information for and records the rest as not assessed.
 
 What is *not* acceptable is for a partial export to produce a clean-looking report. That is the whole subject of chapter [13](#contents).
 
@@ -695,7 +695,7 @@ The DataLoader holds a table matching each expected filename to a named slot. Wh
 
 In most software, asking for something that is not there is an error. Here it is not. If `ral_config.csv` was never supplied, the slot called `ral_config` exists and is empty, and every check that needs it quietly stands aside.
 
-This is the only sensible behaviour when nobody ever supplies all 147 sources — but it creates a serious danger, which the next chapter is entirely about. A system that skips silently produces a short, clean report and looks like good news.
+This is the only sensible behaviour when nobody ever supplies all 148 sources — but it creates a serious danger, which the next chapter is entirely about. A system that skips silently produces a short, clean report and looks like good news.
 
 > **The trap, stated once so you recognise it later**
 >
@@ -733,7 +733,7 @@ Nothing in that report is a lie. It is nonetheless the most dangerous document s
   - In truth 21 of 33 subject areas were never examined, because the files they need were not supplied. Every sentence is accurate. The document is still false.
 
 **With a coverage statement** — “12 findings. 2 critical.”
-  - “You supplied 41 of 147 sources.”
+  - “You supplied 41 of 148 sources.”
   - “21 areas were not assessed.”
   - “1 source cannot be obtained in RISE at all.”
   - The reader concludes: we have looked at a third of the building.
@@ -2075,7 +2075,7 @@ The analysis still runs, and still tells you which scenarios dominate. What it w
 
 **Provenance and caveat.** This book was written from the repository’s documentation and its top-level program, at [github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner](https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner). Module names, the command-line surface, the pipeline order, the corpus-split rule, the gate rules and the deployment-mode behaviour are taken from the source and documentation. Descriptions of the internal structure of individual inspectors, the exact shape of a finding record, and the illustrative code in Appendix E are reconstructions written to be faithful in substance rather than literal in syntax; verify against the source before quoting them. All diagrams are architectural rather than exhaustive.
 
-The counts this document states — 846 checks, 492 written as literals, 354 generated at run time from 6 rule families, 40 modules, 135 custom-code rules, 27 duty-separation risks, 89 profile parameters and 147 logical sources — are derived from the code by `tests/test_architecture_doc.py`, which fails the build if this page and the source disagree. Edition 1.1 corrected three figures that had drifted from the source.
+The counts this document states — 846 checks, 492 written as literals, 354 generated at run time from 6 rule families, 40 modules, 135 custom-code rules, 27 duty-separation risks, 89 profile parameters and 148 logical sources — are derived from the code by `tests/test_architecture_doc.py`, which fails the build if this page and the source disagree. Edition 1.1 corrected three figures that had drifted from the source.
 
 **Published.** This document describes the internal design, the current limitations and the forward direction of the product, and it is meant to be read by anyone — the limitations especially. A design document that only lists what works is marketing.
 

@@ -108,7 +108,7 @@ Cyber System at all; that determination is CIP-002's, and the customer's.
 
 ## What you feed it
 
-147 different export sources, all of them files a Basis or security team can
+148 different export sources, all of them files a Basis or security team can
 produce with standard SAP transactions.
 
 - **[docs/EXPORT_GUIDE.md](docs/EXPORT_GUIDE.md)** — how to produce each one
@@ -118,7 +118,7 @@ You do not need all of them. Give it what you have; it reports what it could
 not assess rather than quietly scoring you on a subset.
 
 It also tells you which missing export is worth producing next, because "supplied
-119 of 147 sources" is true and useless on its own. Each scan ends with something
+119 of 148 sources" is true and useless on its own. Each scan ends with something
 you can act on:
 
 ```

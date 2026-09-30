@@ -99,6 +99,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from modules.base_auditor import BaseAuditor
+from modules import logserv_ocsf
 
 
 class LogReviewAuditor(BaseAuditor):
@@ -369,7 +370,16 @@ class LogReviewAuditor(BaseAuditor):
         if not self._config_rows:
             self._config_rows = self._rows(self.data.get("audit_config"))
 
-        self._audit_log_supplied = bool(raw) or bool(self.data.get("audit_config"))
+        # SAP LogServ (OCSF) is a second source of the SAME audit events, normalised
+        # by modules/logserv_ocsf into the row shape classified below. They are
+        # always events (never filter configuration), so they join the event list
+        # directly. LogServ is a fresher source for this retrospective review — the
+        # analysis is still over the exported window, not a live feed.
+        logserv_rows = logserv_ocsf.to_audit_events(self.data.get("logserv_events"))
+        self._raw_events.extend(logserv_rows)
+
+        self._audit_log_supplied = (bool(raw) or bool(self.data.get("audit_config"))
+                                    or bool(logserv_rows))
 
         self._events: List[Dict[str, Any]] = []
         for row in self._raw_events:

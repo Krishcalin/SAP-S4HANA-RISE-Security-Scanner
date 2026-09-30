@@ -569,7 +569,7 @@ Reads: `audit_config`, `incident_response`, `log_retention`, `logon_events`, `se
 
 ### `log_review` — 18 checks
 
-Reads: `audit_config`, `client_settings`, `logon_events`, `profiles`, `security_audit_log`, `standard_users`, `users` — the sources the MODULE consumes; an individual check below reads some subset of them.
+Reads: `audit_config`, `client_settings`, `logon_events`, `logserv_events`, `profiles`, `security_audit_log`, `standard_users`, `users` — the sources the MODULE consumes; an individual check below reads some subset of them.
 
 | Check | Severity | Title | SAP Baseline |
 |---|---|---|---|
