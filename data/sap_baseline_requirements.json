@@ -1,1093 +1,1364 @@
 {
-  "_meta": {
-    "source": "SAP-samples/frun-csa-policies-best-practices",
-    "licence": "Apache-2.0, Copyright (c) 2020 SAP SE or an SAP affiliate company",
-    "baseline_version": "v2.4",
-    "note": "DERIVED from SAP's published policies: requirement ids, titles, priority tiers and config-store names only. SAP's SQL predicates are NOT reproduced and are NOT executed — they run against Focused Run's configuration database, which we do not have. Our checks read exported files and are our own.",
-    "counts": {
-      "policies": 58,
-      "requirements": 38,
-      "check_items": 351,
-      "by_tier": {
-        "CRITICAL": 97,
-        "STANDARD": 175,
-        "EXTENDED": 79
-      }
-    },
-    "unit_warning": "These are CHECK ITEMS in the CSA policies, not the 'control points' counted in the Baseline document — the widely-quoted 214 (69/92/53) is that other unit. The two do not reconcile; do not publish a percentage of one against the other.",
-    "policy_without_a_requirement": "1OSECUPD (WEBDISP_ALL) is the one policy of 58 that yields no requirement, and it is SAP's file rather than a gap in the builder: its check item carries the POLICY id as its id attribute instead of a requirement-shaped one like SECUPD-O_a.1, so there is nothing to derive a requirement from. Verified against BaselinePolicies/SOS/v2.4/WEBDISP_ALL/1OSECUPD.xml on 2026-08-18. Recorded here so the next reader does not re-open it as our bug."
+ "_meta": {
+  "source": "SAP-samples/frun-csa-policies-best-practices",
+  "licence": "Apache-2.0, Copyright (c) 2020 SAP SE or an SAP affiliate company",
+  "baseline_version": "v2.6",
+  "note": "DERIVED from SAP's published policies: requirement ids, titles, priority tiers and config-store names only. SAP's SQL predicates are NOT reproduced and are NOT executed — they run against Focused Run's configuration database, which we do not have. Our checks read exported files and are our own.",
+  "counts": {
+   "policies": 74,
+   "requirements": 45,
+   "check_items": 670,
+   "by_tier": {
+    "CRITICAL": 159,
+    "STANDARD": 327,
+    "EXTENDED": 184
+   }
   },
-  "requirements": [
-    {
-      "requirement": "AUDIT-A",
-      "family": "AUDIT",
-      "technology": "ABAP",
-      "tier": "STANDARD",
-      "titles": [
-        "Audit Log activated (current values)",
-        "Audit Log number of selection slots (current values)",
-        "Audit Log activated (Profile Parameter)",
-        "Audit Log integrity protection (Profile Parameter)"
-      ],
-      "config_stores": [
-        "ABAP_INSTANCE_PAHI",
-        "AUDIT_CONFIGURATION",
-        "AUDIT_CONFIGURATION_SLOT"
-      ],
-      "check_items": 26,
-      "policies": [
-        "2AAUDIT"
-      ]
-    },
-    {
-      "requirement": "AUDIT-H",
-      "family": "AUDIT",
-      "technology": "HANA",
-      "tier": "CRITICAL",
-      "titles": [
-        "Auditing enabled",
-        "Audit trail target",
-        "sr_audit_trail_type_cstable_override"
-      ],
-      "config_stores": [
-        "HDB_PARAMETER"
-      ],
-      "check_items": 6,
-      "policies": [
-        "1HAUDIT",
-        "2HAUDIT"
-      ]
-    },
-    {
-      "requirement": "AUDIT-J",
-      "family": "AUDIT",
-      "technology": "Java",
-      "tier": "EXTENDED",
-      "titles": [
-        "Enable XML Hardener"
-      ],
-      "config_stores": [
-        "xmlhardener_srv"
-      ],
-      "check_items": 1,
-      "policies": [
-        "3JAUDIT"
-      ]
-    },
-    {
-      "requirement": "AUDIT-P",
-      "family": "AUDIT",
-      "technology": "BTP",
-      "tier": "STANDARD",
-      "titles": [
-        "Audit Settings – BTP"
-      ],
-      "config_stores": [
-        "SCC_CONFIG"
-      ],
-      "check_items": 1,
-      "policies": [
-        "2PAUDIT"
-      ]
-    },
-    {
-      "requirement": "CHANGE-A",
-      "family": "CHANGE",
-      "technology": "ABAP",
-      "tier": "CRITICAL",
-      "titles": [
-        "Global Modifiable Change Option for Production Systems",
-        "Client Change Option for Production Systems",
-        "rec/client (Profile parameter to create customizing table logs)",
-        "Transport Parameter TLOGOCHECK is activated"
-      ],
-      "config_stores": [
-        "ABAP_INSTANCE_PAHI",
-        "CLIENTS",
-        "GLOBAL",
-        "SAP_KERNEL",
-        "TRANSPORT_TOOL"
-      ],
-      "check_items": 18,
-      "policies": [
-        "1ACHANGE",
-        "2ACHANGE",
-        "3ACHANGE"
-      ]
-    },
-    {
-      "requirement": "CRITAU-A",
-      "family": "CRITAU",
-      "technology": "ABAP",
-      "tier": "CRITICAL",
-      "titles": [
-        "Users with profile SAP_ALL",
-        "Profile SAP_ALL added to users",
-        "Users with profile SAP_NEW",
-        "Profile SAP_NEW added to users"
-      ],
-      "config_stores": [
-        "AUTH_COMB_ROLE",
-        "AUTH_COMB_USER",
-        "AUTH_PROFILE_USER",
-        "AUTH_PROFILE_USER_CHANGE_DOC",
-        "TDDAT"
-      ],
-      "check_items": 47,
-      "policies": [
-        "1ACRITA_CSTO",
-        "1ACRITB_CSTO",
-        "1ACRITC_CSTO",
-        "2ACRITD",
-        "2ACRITD_CSTO"
-      ]
-    },
-    {
-      "requirement": "CRITAU-H",
-      "family": "CRITAU",
-      "technology": "HANA",
-      "tier": "CRITICAL",
-      "titles": [
-        "Critical Authorizations (HANA)"
-      ],
-      "config_stores": [
-        "HDB_SYSTEMPRIVILEGES"
-      ],
-      "check_items": 1,
-      "policies": [
-        "1HCRITAU_CSTO"
-      ]
-    },
-    {
-      "requirement": "CRITAU-J",
-      "family": "CRITAU",
-      "technology": "Java",
-      "tier": "STANDARD",
-      "titles": [
-        "Role SAP_J2EE_ADMIN must not be assigned to users other than standard users"
-      ],
-      "config_stores": [
-        "AUTH_ROLE_USER"
-      ],
-      "check_items": 1,
-      "policies": [
-        "2JCRITAU_CSTO"
-      ]
-    },
-    {
-      "requirement": "DISCL-A",
-      "family": "DISCL",
-      "technology": "ABAP",
-      "tier": "STANDARD",
-      "titles": [
-        "Disclosure of unnecessary information about versions or from errors",
-        "Individual error pages for preventing disclosure of unnecessary information"
-      ],
-      "config_stores": [
-        "ABAP_INSTANCE_PAHI"
-      ],
-      "check_items": 3,
-      "policies": [
-        "2ADISCL"
-      ]
-    },
-    {
-      "requirement": "DISCL-J",
-      "family": "DISCL",
-      "technology": "Java",
-      "tier": "STANDARD",
-      "titles": [
-        "Disclosure of unnecessary information about versions or from errors"
-      ],
-      "config_stores": [
-        "Parameters",
-        "http"
-      ],
-      "check_items": 2,
-      "policies": [
-        "2JDISCL"
-      ]
-    },
-    {
-      "requirement": "DISCL-O",
-      "family": "DISCL",
-      "technology": "Other",
-      "tier": "STANDARD",
-      "titles": [
-        "is/HTTP/show_server_header (Parameter, Note 1329326)",
-        "is/HTTP/show_detailed_errors (Parameter, Note 1616535)",
-        "icm/SMTP/show_server_header (Parameter, Note 2045861)",
-        "Authentication handler icm/HTTP/auth_NN recommended as of SAP_BASIS 7.50"
-      ],
-      "config_stores": [
-        "ABAP_INSTANCE_PAHI",
-        "Parameters"
-      ],
-      "check_items": 25,
-      "policies": [
-        "2ADISCL",
-        "2ODISCL"
-      ]
-    },
-    {
-      "requirement": "FILE-A",
-      "family": "FILE",
-      "technology": "ABAP",
-      "tier": "STANDARD",
-      "titles": [
-        "abap/path_normalization (Profile Parameter, Directory Traversal Protection)",
-        "Users with S_DATASET_STAR authorization",
-        "Users with S_PATH_STAR authorization",
-        "Roles with S_DATASET_STAR authorization"
-      ],
-      "config_stores": [
-        "ABAP_INSTANCE_PAHI",
-        "AUTH_COMB_ROLE",
-        "AUTH_COMB_USER"
-      ],
-      "check_items": 5,
-      "policies": [
-        "2AFILE",
-        "3AFILE_CSTO"
-      ]
-    },
-    {
-      "requirement": "MSGSRV-A",
-      "family": "MSGSRV",
-      "technology": "ABAP",
-      "tier": "CRITICAL",
-      "titles": [
-        "File with access control list for message server",
-        "Message server hardening (acl_info content)",
-        "Defined internal port for server communication",
-        "Prohibite external monitor"
-      ],
-      "config_stores": [
-        "ABAP_INSTANCE_PAHI",
-        "MS_SECINFO"
-      ],
-      "check_items": 6,
-      "policies": [
-        "1AMSGSRV",
-        "2AMSGSRV"
-      ]
-    },
-    {
-      "requirement": "MSGSRV-J",
-      "family": "MSGSRV",
-      "technology": "Java",
-      "tier": "CRITICAL",
-      "titles": [
-        "File with access control list for message server",
-        "Defined internal port for server communication",
-        "Prohibite external monitor",
-        "Deactivated administration port for external clients"
-      ],
-      "config_stores": [
-        "Parameters"
-      ],
-      "check_items": 4,
-      "policies": [
-        "1JMSGSRV",
-        "2JMSGSRV"
-      ]
-    },
-    {
-      "requirement": "NETCF-A",
-      "family": "NETCF",
-      "technology": "ABAP",
-      "tier": "STANDARD",
-      "titles": [
-        "Execution option for the RFC authority check",
-        "Block unauthorized remote RFC callbacks",
-        "Profile parameter rfc/selftrust (see notes 2449757, 2614667)",
-        "Profile parameter ixml/dtd_restriction (see notes 2308217, 1712860)"
-      ],
-      "config_stores": [
-        "ABAP_INSTANCE_PAHI",
-        "ABAP_UCON_HTTP_WHITE_LIST",
-        "SICF_SERVICES"
-      ],
-      "check_items": 41,
-      "policies": [
-        "2ANETCF"
-      ]
-    },
-    {
-      "requirement": "NETCF-H",
-      "family": "NETCF",
-      "technology": "HANA",
-      "tier": "CRITICAL",
-      "titles": [
-        "HANA internal communication (listeninterface)"
-      ],
-      "config_stores": [
-        "HDB_PARAMETER"
-      ],
-      "check_items": 2,
-      "policies": [
-        "1HNETCF"
-      ]
-    },
-    {
-      "requirement": "NETCF-P",
-      "family": "NETCF",
-      "technology": "BTP",
-      "tier": "STANDARD",
-      "titles": [
-        "SCC Parameter: isHaActive (SAP Cloud Connector)"
-      ],
-      "config_stores": [
-        "SCC_CONFIG"
-      ],
-      "check_items": 1,
-      "policies": [
-        "2PNETCF"
-      ]
-    },
-    {
-      "requirement": "NETENC-A",
-      "family": "NETENC",
-      "technology": "ABAP",
-      "tier": "STANDARD",
-      "titles": [
-        "snc/enable (Profile Parameter, enable SNC-Module)",
-        "snc/data_protection/min (Profile Parameter, Enforce encryption for SNC)",
-        "snc/data_protection/max (Profile Parameter, Enforce encryption for SNC)",
-        "system/secure_communication (Profile Parameter, SAP Notes 2040644,  2362078)"
-      ],
-      "config_stores": [
-        "ABAP_INSTANCE_PAHI",
-        "COMP_LEVEL"
-      ],
-      "check_items": 16,
-      "policies": [
-        "2ANETENC",
-        "3ANETENC"
-      ]
-    },
-    {
-      "requirement": "NETENC-O",
-      "family": "NETENC",
-      "technology": "Other",
-      "tier": "STANDARD",
-      "titles": [
-        "ICM server port specification (HTTPS vs HTTP)",
-        "ICM server port specification (PROT=HTTPS)",
-        "ICM/HHTP/admin specifiies a PORT",
-        "ICM server port specification (PORT=)"
-      ],
-      "config_stores": [
-        "ABAP_INSTANCE_PAHI",
-        "Parameters"
-      ],
-      "check_items": 6,
-      "policies": [
-        "2ANETENC",
-        "2ONETENC"
-      ]
-    },
-    {
-      "requirement": "NOTEST-J",
-      "family": "NOTEST",
-      "technology": "Java",
-      "tier": "CRITICAL",
-      "titles": [
-        "InvokerServlet globally enabled"
-      ],
-      "config_stores": [
-        "servlet_jsp"
-      ],
-      "check_items": 1,
-      "policies": [
-        "1JNOTEST"
-      ]
-    },
-    {
-      "requirement": "OBSCNT-A",
-      "family": "OBSCNT",
-      "technology": "ABAP",
-      "tier": "STANDARD",
-      "titles": [
-        "Obsolete Client 066 must not exist.",
-        "Template Client 001 must be deleted if not used"
-      ],
-      "config_stores": [
-        "CLIENTS"
-      ],
-      "check_items": 2,
-      "policies": [
-        "2AOBSCNT"
-      ]
-    },
-    {
-      "requirement": "PWDPOL-A",
-      "family": "PWDPOL",
-      "technology": "ABAP",
-      "tier": "CRITICAL",
-      "titles": [
-        "Minimum password length",
-        "Maximum password idle initial lifetime",
-        "Disable downward compatible passwords",
-        "Rule for password length is noncompliant (security policy attribute)"
-      ],
-      "config_stores": [
-        "ABAP_INSTANCE_PAHI",
-        "AUTH_SECURITY_POLICY",
-        "USER_PASSWD_HASH_USAGE"
-      ],
-      "check_items": 55,
-      "policies": [
-        "1APWDPOL",
-        "2APWDPOL",
-        "3APWDPOL"
-      ]
-    },
-    {
-      "requirement": "PWDPOL-H",
-      "family": "PWDPOL",
-      "technology": "HANA",
-      "tier": "CRITICAL",
-      "titles": [
-        "Minimal password length",
-        "Unused initial Password Lifetime",
-        "Unused Productive Password Lifetime",
-        "Usergroup PWD Policy: First PW Change"
-      ],
-      "config_stores": [
-        "HDB_PARAMETER",
-        "HDB_USERGROUP_PARAMETERS"
-      ],
-      "check_items": 12,
-      "policies": [
-        "1HPWDPOL",
-        "2HPWDPOL"
-      ]
-    },
-    {
-      "requirement": "PWDPOL-J",
-      "family": "PWDPOL",
-      "technology": "Java",
-      "tier": "CRITICAL",
-      "titles": [
-        "Minimum Password Length",
-        "Disable user ID as part of password",
-        "Password Expiration Days",
-        "Disable old password in password allowed"
-      ],
-      "config_stores": [
-        "com.sap.security.core.ume.service"
-      ],
-      "check_items": 9,
-      "policies": [
-        "1JPWDPOL",
-        "3JPWDPOL"
-      ]
-    },
-    {
-      "requirement": "RFCGW-A",
-      "family": "RFCGW",
-      "technology": "ABAP",
-      "tier": "CRITICAL",
-      "titles": [
-        "RFC gateway hardening (secinfo content)",
-        "reg_info (RFC gateway hardening)",
-        "Path-like value for ms/acl_info (message server access control list)",
-        "Gateway security options"
-      ],
-      "config_stores": [
-        "ABAP_INSTANCE_PAHI",
-        "GW_REGINFO",
-        "GW_SECINFO"
-      ],
-      "check_items": 11,
-      "policies": [
-        "1ARFCGW",
-        "3ARFCGW"
-      ]
-    },
-    {
-      "requirement": "RFCGW-J",
-      "family": "RFCGW",
-      "technology": "Java",
-      "tier": "CRITICAL",
-      "titles": [
-        "Path-like value for ms/acl_info (message server access control list)",
-        "Gateway security options",
-        "Mode for non existing ACL file",
-        "Enable gateway monitor commands"
-      ],
-      "config_stores": [
-        "Parameters"
-      ],
-      "check_items": 9,
-      "policies": [
-        "1JRFCGW",
-        "3JRFCGW"
-      ]
-    },
-    {
-      "requirement": "SCRIPT-A",
-      "family": "SCRIPT",
-      "technology": "ABAP",
-      "tier": "EXTENDED",
-      "titles": [
-        "Scripting Protection profile parameter (sapgui/nwbc_scripting)",
-        "Scripting Protection profile parameter (sapgui/user_scripting)",
-        "Scripting Protection profile parameter (sapgui/user_scripting_disable_recording)",
-        "Scripting Protection profile parameter (sapgui/user_scripting_force_notification)"
-      ],
-      "config_stores": [
-        "ABAP_INSTANCE_PAHI"
-      ],
-      "check_items": 6,
-      "policies": [
-        "3ASCRIPT"
-      ]
-    },
-    {
-      "requirement": "SECUPD-A",
-      "family": "SECUPD",
-      "technology": "ABAP",
-      "tier": null,
-      "titles": [
-        "Last detected Update older than 1 year",
-        "Component Level older then 24 months"
-      ],
-      "config_stores": [
-        "COMP_LEVEL"
-      ],
-      "check_items": 2,
-      "policies": [
-        "1ASECUPD"
-      ]
-    },
-    {
-      "requirement": "SECUPD-H",
-      "family": "SECUPD",
-      "technology": "HANA",
-      "tier": "CRITICAL",
-      "titles": [
-        "Security Maintenance Status of HANA Version (SPS)",
-        "Last detected HANA Update longer than 1 year ago"
-      ],
-      "config_stores": [
-        "HDB_VERSION"
-      ],
-      "check_items": 2,
-      "policies": [
-        "1HSECUPD"
-      ]
-    },
-    {
-      "requirement": "SECUPD-J",
-      "family": "SECUPD",
-      "technology": "Java",
-      "tier": "CRITICAL",
-      "titles": [
-        "Last detected Update older than 1 year",
-        "Component Level older then 24 months"
-      ],
-      "config_stores": [
-        "COMP_LEVEL"
-      ],
-      "check_items": 2,
-      "policies": [
-        "1JSECUPD"
-      ]
-    },
-    {
-      "requirement": "SECUPD-P",
-      "family": "SECUPD",
-      "technology": "BTP",
-      "tier": "CRITICAL",
-      "titles": [
-        "Last detected Update within 1 year (SAP Cloud Connector)",
-        "Most current SAP Cloud Connector Version (Note 3302250)"
-      ],
-      "config_stores": [
-        "SCC_VERSION"
-      ],
-      "check_items": 2,
-      "policies": [
-        "1PSECUPD",
-        "2PSECUPD"
-      ]
-    },
-    {
-      "requirement": "SESS-J",
-      "family": "SESS",
-      "technology": "Java",
-      "tier": "STANDARD",
-      "titles": [
-        "SystemCookiesDataProtection"
-      ],
-      "config_stores": [
-        "http"
-      ],
-      "check_items": 2,
-      "policies": [
-        "2JSESS"
-      ]
-    },
-    {
-      "requirement": "SSO-A",
-      "family": "SSO",
-      "technology": "ABAP",
-      "tier": "STANDARD",
-      "titles": [
-        "Generate ticket only via https",
-        "Ticket only back to creating host",
-        "Set HTTPonly-Flag for Cookies"
-      ],
-      "config_stores": [
-        "ABAP_INSTANCE_PAHI"
-      ],
-      "check_items": 3,
-      "policies": [
-        "2ASSO"
-      ]
-    },
-    {
-      "requirement": "SSO-J",
-      "family": "SSO",
-      "technology": "Java",
-      "tier": "EXTENDED",
-      "titles": [
-        "Send SAP logon ticket only via HTTPS",
-        "SAP logon ticket set to HttpOnly",
-        "SAP logon ticket lifetime"
-      ],
-      "config_stores": [
-        "com.sap.security.core.ume.service"
-      ],
-      "check_items": 3,
-      "policies": [
-        "3JSSO"
-      ]
-    },
-    {
-      "requirement": "STDUSR-A",
-      "family": "STDUSR",
-      "technology": "ABAP",
-      "tier": "CRITICAL",
-      "titles": [
-        "No Login with automatic user SAP*",
-        "User SAP*",
-        "User DDIC",
-        "User SAPCPIC"
-      ],
-      "config_stores": [
-        "ABAP_INSTANCE_PAHI",
-        "STANDARD_USERS"
-      ],
-      "check_items": 8,
-      "policies": [
-        "1ASTDUSR"
-      ]
-    },
-    {
-      "requirement": "STDUSR-H",
-      "family": "STDUSR",
-      "technology": "HANA",
-      "tier": "STANDARD",
-      "titles": [
-        "SYSTEM user is deactivated"
-      ],
-      "config_stores": [
-        "HDB_SYSTEM_USER"
-      ],
-      "check_items": 1,
-      "policies": [
-        "2HSTDUSR"
-      ]
-    },
-    {
-      "requirement": "TRACES-H",
-      "family": "TRACES",
-      "technology": "HANA",
-      "tier": "CRITICAL",
-      "titles": [
-        "SQL trace level: ALL_WITH_RESULTS"
-      ],
-      "config_stores": [
-        "HDB_PARAMETER"
-      ],
-      "check_items": 1,
-      "policies": [
-        "1HTRACES"
-      ]
-    },
-    {
-      "requirement": "USRCTR-A",
-      "family": "USRCTR",
-      "technology": "ABAP",
-      "tier": "STANDARD",
-      "titles": [
-        "dynp/checkskip1screen (User Control Profile Parameter)",
-        "dynp/confirmskip1screen (User Control Profile Parameter, note 1956086)",
-        "auth/check/calltransaction (User Control Profile Parameter)",
-        "auth/no_check_in_some_cases (note 1723881, User Control Profile Parameter)"
-      ],
-      "config_stores": [
-        "ABAP_INSTANCE_PAHI",
-        "ABAP_SACF_INFO"
-      ],
-      "check_items": 9,
-      "policies": [
-        "2AUSRCTR",
-        "2AUSRCTR_SACF"
-      ]
-    }
-  ],
-  "policies": [
-    {
-      "policy_id": "1ACHANGE",
-      "title": "[BL2.4] Change Protection of Prod System (ABAP)",
-      "file": "1ACHANGE.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "1ACRITA_CSTO",
-      "title": "[BL2.4] No use of critical auth. profile SAP_ALL (ABAP)",
-      "file": "1ACRITA_CSTO.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "1ACRITB_CSTO",
-      "title": "[BL2.4] No use of critical auth. profile SAP_NEW (ABAP)",
-      "file": "1ACRITB_CSTO.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "1ACRITC_CSTO",
-      "title": "[BL2.4] Critical Authorizations (ABAP)",
-      "file": "1ACRITC_CSTO.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "1AMSGSRV",
-      "title": "[BL2.4] Message Server Security (ABAP)",
-      "file": "1AMSGSRV.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "1APWDPOL",
-      "title": "[BL2.4] Password Policy (ABAP)",
-      "file": "1APWDPOL.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "1ARFCGW",
-      "title": "[BL2.4] RFC Gateway Security (ABAP)",
-      "file": "1ARFCGW.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "1ASECUPD",
-      "title": "[BL2.4] Regular Security Updates (ABAP)",
-      "file": "1ASECUPD.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "1ASTDUSR",
-      "title": "[BL2.4] Standard Users (ABAP)",
-      "file": "1ASTDUSR.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "2AAUDIT",
-      "title": "[STANDARD] Audit Settings (ABAP)",
-      "file": "2AAUDIT.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "2ACHANGE",
-      "title": "[BL2.4] Change Protection of Prod System (ABAP)",
-      "file": "2ACHANGE.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "2ACRITD",
-      "title": "[BL2.4] Protection of Password Hashes (ABAP)",
-      "file": "2ACRITD.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "2ACRITD_CSTO",
-      "title": "[BL2.4] Protection of Password Hashes (ABAP)",
-      "file": "2ACRITD_CSTO.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "2ADISCL",
-      "title": "[BL2.4] Information Disclosure (ABAP)",
-      "file": "2ADISCL.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "2AFILE",
-      "title": "[STANDARD] Directory Traversal Protection (ABAP)",
-      "file": "2AFILE.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "2AMSGSRV",
-      "title": "[BL2.4] Message Server Security (ABAP)",
-      "file": "2AMSGSRV.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "2ANETCF",
-      "title": "[BL2.4] Secure Network Configuration (ABAP)",
-      "file": "2ANETCF.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "2ANETENC",
-      "title": "[BL2.4] Encryption of Network Connections (ABAP)",
-      "file": "2ANETENC.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "2AOBSCNT",
-      "title": "[BL2.4] Obsolete Clients (ABAP)",
-      "file": "2AOBSCNT.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "2APWDPOL",
-      "title": "[STANDARD] Password Policy (ABAP)",
-      "file": "2APWDPOL.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "2ASSO",
-      "title": "[BL2.4] Single Sign-On (ABAP)",
-      "file": "2ASSO.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "2AUSRCTR",
-      "title": "[BL2.4] User Control of Action (ABAP)",
-      "file": "2AUSRCTR.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "2AUSRCTR_SACF",
-      "title": "[BL2.4] User Control of Action - SACF (ABAP)",
-      "file": "2AUSRCTR_SACF.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "3ACHANGE",
-      "title": "[BL2.4] Change Protection of Prod System (ABAP)",
-      "file": "3ACHANGE.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "3AFILE_CSTO",
-      "title": "[BL2.4] Directory Traversal Protection (ABAP)",
-      "file": "3AFILE_CSTO.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "3ANETENC",
-      "title": "[BL2.4] Encryption of Network Connections (ABAP)",
-      "file": "3ANETENC.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "3APWDPOL",
-      "title": "[BL2.4] Password Policy (ABAP)",
-      "file": "3APWDPOL.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "3ARFCGW",
-      "title": "[BL2.4] RFC Gateway Security Options (ABAP)",
-      "file": "3ARFCGW.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "3ASCRIPT",
-      "title": "[BL2.4] Scripting Protection (ABAP)",
-      "file": "3ASCRIPT.xml",
-      "stack": "ABAP_ALL"
-    },
-    {
-      "policy_id": "1PSECUPD",
-      "title": "[BL2.4] Regular Security Updates (BTP)",
-      "file": "1PSECUPD.xml",
-      "stack": "BTP_ALL"
-    },
-    {
-      "policy_id": "2PAUDIT",
-      "title": "[BL2.4] Audit Settings (BTP)",
-      "file": "2PAUDIT.xml",
-      "stack": "BTP_ALL"
-    },
-    {
-      "policy_id": "2PNETCF",
-      "title": "[BL2.4] Secure Network Configuration (BTP)",
-      "file": "2PNETCF.xml",
-      "stack": "BTP_ALL"
-    },
-    {
-      "policy_id": "2PSECUPD",
-      "title": "[BL2.4] Regular Security Updates (BTP)",
-      "file": "2PSECUPD.xml",
-      "stack": "BTP_ALL"
-    },
-    {
-      "policy_id": "1HAUDIT",
-      "title": "[BL2.4] Audit Settings (HANA)",
-      "file": "1HAUDIT.xml",
-      "stack": "HANA_ALL"
-    },
-    {
-      "policy_id": "1HCRITAU_CSTO",
-      "title": "[BL2.4] Critical Authorizations (HANA)",
-      "file": "1HCRITAU_CSTO.xml",
-      "stack": "HANA_ALL"
-    },
-    {
-      "policy_id": "1HNETCF",
-      "title": "[BL2.4] Secure Network Configuration (HANA)",
-      "file": "1HNETCF.xml",
-      "stack": "HANA_ALL"
-    },
-    {
-      "policy_id": "1HPWDPOL",
-      "title": "[BL2.4] Password Policy (HANA)",
-      "file": "1HPWDPOL.xml",
-      "stack": "HANA_ALL"
-    },
-    {
-      "policy_id": "1HSECUPD",
-      "title": "[BL2.4] Regular Security Updates (HANA)",
-      "file": "1HSECUPD.xml",
-      "stack": "HANA_ALL"
-    },
-    {
-      "policy_id": "1HTRACES",
-      "title": "[BL2.4] Critical Data in trace files (HANA)",
-      "file": "1HTRACES.xml",
-      "stack": "HANA_ALL"
-    },
-    {
-      "policy_id": "2HAUDIT",
-      "title": "[BL2.4] Audit Settings (HANA)",
-      "file": "2HAUDIT.xml",
-      "stack": "HANA_ALL"
-    },
-    {
-      "policy_id": "2HPWDPOL",
-      "title": "[BL2.4] Password Policy (HANA)",
-      "file": "2HPWDPOL.xml",
-      "stack": "HANA_ALL"
-    },
-    {
-      "policy_id": "2HSTDUSR",
-      "title": "[BL2.4] Standard Users (HANA)",
-      "file": "2HSTDUSR.xml",
-      "stack": "HANA_ALL"
-    },
-    {
-      "policy_id": "1JMSGSRV",
-      "title": "[BL2.4] Message Server Security (JAVA)",
-      "file": "1JMSGSRV.xml",
-      "stack": "JAVA_ALL"
-    },
-    {
-      "policy_id": "1JNOTEST",
-      "title": "[BL2.4] No Testing Functionality in Production (JAVA)",
-      "file": "1JNOTEST.xml",
-      "stack": "JAVA_ALL"
-    },
-    {
-      "policy_id": "1JPWDPOL",
-      "title": "[BLv2.4] Password Policy (JAVA)",
-      "file": "1JPWDPOL.xml",
-      "stack": "JAVA_ALL"
-    },
-    {
-      "policy_id": "1JRFCGW",
-      "title": "[BL2.4] RFC Gateway (JAVA)",
-      "file": "1JRFCGW.xml",
-      "stack": "JAVA_ALL"
-    },
-    {
-      "policy_id": "1JSECUPD",
-      "title": "[BL2.4] Regular Security Updates (JAVA)",
-      "file": "1JSECUPD.xml",
-      "stack": "JAVA_ALL"
-    },
-    {
-      "policy_id": "2JCRITAU_CSTO",
-      "title": "[BL2.4] Critical Authorizations (JAVA)",
-      "file": "2JCRITAU_CSTO.xml",
-      "stack": "JAVA_ALL"
-    },
-    {
-      "policy_id": "2JDISCL",
-      "title": "[BL2.4] Information Disclosure (JAVA)",
-      "file": "2JDISCL.xml",
-      "stack": "JAVA_ALL"
-    },
-    {
-      "policy_id": "2JMSGSRV",
-      "title": "[BL2.4] Message Server Security (JAVA)",
-      "file": "2JMSGSRV.xml",
-      "stack": "JAVA_ALL"
-    },
-    {
-      "policy_id": "2JSESS",
-      "title": "[BL2.4] Session Protection (JAVA)",
-      "file": "2JSESS.xml",
-      "stack": "JAVA_ALL"
-    },
-    {
-      "policy_id": "3JAUDIT",
-      "title": "[BL 2.4] Audit Settings (JAVA)",
-      "file": "3JAUDIT.xml",
-      "stack": "JAVA_ALL"
-    },
-    {
-      "policy_id": "3JPWDPOL",
-      "title": "[BL2.4] Password Policy (JAVA)",
-      "file": "3JPWDPOL.xml",
-      "stack": "JAVA_ALL"
-    },
-    {
-      "policy_id": "3JRFCGW",
-      "title": "[BL2.4] RFC Gateway Security (JAVA)",
-      "file": "3JRFCGW.xml",
-      "stack": "JAVA_ALL"
-    },
-    {
-      "policy_id": "3JSSO",
-      "title": "[BL2.4] Single Sign-On (JAVA)",
-      "file": "3JSSO.xml",
-      "stack": "JAVA_ALL"
-    },
-    {
-      "policy_id": "1OSECUPD",
-      "title": "[BL2.4] Regular Security Updates (WebDispatcher)",
-      "file": "1OSECUPD.xml",
-      "stack": "WEBDISP_ALL"
-    },
-    {
-      "policy_id": "2ODISCL",
-      "title": "[BL2.4] Information Disclosure (WebDispatcher)",
-      "file": "2ODISCL.xml",
-      "stack": "WEBDISP_ALL"
-    },
-    {
-      "policy_id": "2ONETENC",
-      "title": "[BL2.4] Encryption of Network Connections (WebDispatcher)",
-      "file": "2ONETENC.xml",
-      "stack": "WEBDISP_ALL"
-    }
-  ]
+  "unit_warning": "These are CHECK ITEMS in the CSA policies, not the 'control points' counted in the Baseline document — the widely-quoted 214 (69/92/53) is that other unit. The two do not reconcile; do not publish a percentage of one against the other."
+ },
+ "requirements": [
+  {
+   "requirement": "AUDIT-A",
+   "family": "AUDIT",
+   "technology": "ABAP",
+   "tier": "STANDARD",
+   "titles": [
+    "Security Audit Log: enabled = Yes (Runtime Configuration) (≥ 740)",
+    "Security Audit Log: count of active selection slots (currently in use)",
+    "Kernel parameter: Maximum Filters per Profile ≥ 10 (≥ 740)",
+    "Kernel parameter: Integrity Protection Format = X (active) (≥ 740)"
+   ],
+   "config_stores": [
+    "ABAP_INSTANCE_PAHI",
+    "AUDIT_CONFIGURATION",
+    "AUDIT_CONFIGURATION_PARA",
+    "AUDIT_CONFIGURATION_SLOT",
+    "Parameters"
+   ],
+   "check_items": 49,
+   "policies": [
+    "BL260_2AAUDIT"
+   ]
+  },
+  {
+   "requirement": "AUDIT-H",
+   "family": "AUDIT",
+   "technology": "HANA",
+   "tier": "CRITICAL",
+   "titles": [
+    "Auditing enabled global_auditing_state = TRUE (DB_TENANT, global.ini)",
+    "Auditing enabled global_auditing_state = TRUE (SYSTEMDB, nameserver.ini)",
+    "Audit trail target (default_audit_trail_type = SYSLOGPROTOCOL or CSTABLE) (DB_TENANT, global.ini)",
+    "Audit trail target (default_audit_trail_type = SYSLOGPROTOCOL or CSTABLE) (SYSTEMDB, nameserver.ini)"
+   ],
+   "config_stores": [
+    "HDB_AUDIT_POLICIES",
+    "HDB_PARAMETER"
+   ],
+   "check_items": 61,
+   "policies": [
+    "BL260_1HAUDIT",
+    "BL260_2HAUDIT"
+   ]
+  },
+  {
+   "requirement": "AUDIT-J",
+   "family": "AUDIT",
+   "technology": "Java",
+   "tier": "EXTENDED",
+   "titles": [
+    "Java property: enable.xml.hardener = TRUE (enable XML Hardener, see Note 2372626)"
+   ],
+   "config_stores": [
+    "xmlhardener_srv"
+   ],
+   "check_items": 1,
+   "policies": [
+    "BL260_3JAUDIT"
+   ]
+  },
+  {
+   "requirement": "AUDIT-P",
+   "family": "AUDIT",
+   "technology": "BTP",
+   "tier": "STANDARD",
+   "titles": [
+    "auditLevel = SECURITY (Audit Log Level of the Cloud Connector(s) for BTP should be set to Security)"
+   ],
+   "config_stores": [
+    "SCC_CONFIG"
+   ],
+   "check_items": 1,
+   "policies": [
+    "BL260_2PAUDIT"
+   ]
+  },
+  {
+   "requirement": "AUTHASSIGN-A",
+   "family": "AUTHASSIGN",
+   "technology": "ABAP",
+   "tier": "STANDARD",
+   "titles": [
+    "Prohibit user assignments while exporting transports (Customizing switch US_ASGM_TRANSPORT = NO in table PRGN_CUST, see Note 1723881)",
+    "Prohibit user assignments while importing transports (Customizing switch USER_REL_IMPORT = NO in table PRGN_CUST, see Note 571276)"
+   ],
+   "config_stores": [
+    "PRGN_CUST"
+   ],
+   "check_items": 2,
+   "policies": [
+    "BL260_2AAUTHASSIGN"
+   ]
+  },
+  {
+   "requirement": "CHANGE-A",
+   "family": "CHANGE",
+   "technology": "ABAP",
+   "tier": "CRITICAL",
+   "titles": [
+    "Global System Change Option (SE06) NOT MODIFIABLE for Production Systems",
+    "Global System Change Option (SE06) NOT MODIFIABLE for all other Systems (excl DEV)",
+    "Client Change Option (SCC4) has no changes for Production Clients",
+    "Profile parameter: rec/client maintained and != OFF (for client-specific tables, see Note 1916)"
+   ],
+   "config_stores": [
+    "ABAP_INSTANCE_PAHI",
+    "CLIENTS",
+    "GLOBAL",
+    "Parameters",
+    "SAP_KERNEL",
+    "TRANSPORT_TOOL"
+   ],
+   "check_items": 27,
+   "policies": [
+    "BL260_1ACHANGE",
+    "BL260_2ACHANGE",
+    "BL260_3ACHANGE"
+   ]
+  },
+  {
+   "requirement": "CRITAU-A",
+   "family": "CRITAU",
+   "technology": "ABAP",
+   "tier": "CRITICAL",
+   "titles": [
+    "No users assigned the critical authorization profile SAP_ALL",
+    "No DIALOG users assigned the critical authorization profile SAP_ALL",
+    "No SYSTEM users assigned the critical authorization profile SAP_ALL",
+    "No COMMUNICATION users assigned the critical authorization profile SAP_ALL"
+   ],
+   "config_stores": [
+    "AUTH_PROFILE_USER",
+    "AUTH_PROFILE_USER_CHANGE_DOC",
+    "TDDAT",
+    "USER_AUTH_COMB",
+    "Z_AUTH_PROFILE_USER",
+    "Z_AUTH_ROLE_USER"
+   ],
+   "check_items": 66,
+   "policies": [
+    "BL260_1ACRITA",
+    "BL260_1ACRITA_CSTO",
+    "BL260_1ACRITB_CSTO",
+    "BL260_1ACRITC_CSTO",
+    "BL260_2ACRITD",
+    "BL260_2ACRITD_CSTO"
+   ]
+  },
+  {
+   "requirement": "CRITAU-H",
+   "family": "CRITAU",
+   "technology": "HANA",
+   "tier": "CRITICAL",
+   "titles": [
+    "No User with DATA ADMIN (critical privilege)",
+    "No Role with DATA ADMIN (critical privilege)"
+   ],
+   "config_stores": [
+    "Z_HANA_GRANTED_PRIVILEGES"
+   ],
+   "check_items": 2,
+   "policies": [
+    "BL260_1HCRITAU_CSTO"
+   ]
+  },
+  {
+   "requirement": "CRITAU-J",
+   "family": "CRITAU",
+   "technology": "Java",
+   "tier": "STANDARD",
+   "titles": [
+    "Role SAP_J2EE_ADMIN must not be assigned to users other than standard users (run against ABAP system of dual stack)"
+   ],
+   "config_stores": [
+    "AUTH_ROLE_USER"
+   ],
+   "check_items": 1,
+   "policies": [
+    "BL260_2JCRITAU_CSTO"
+   ]
+  },
+  {
+   "requirement": "DISCL-A",
+   "family": "DISCL",
+   "technology": "ABAP",
+   "tier": "STANDARD",
+   "titles": [
+    "Profile parameter: login/show_detailed_errors = 0 (disclosure of unnecessary information about versions or from errors)",
+    "Profile parameter: service/protectedwebmethods = SDEFAULT or ALL (disclosure of unnecessary information with limited list of exceptions, see Note 1439348)",
+    "Parameter: login/show_detailed_errors = 0 (disclosure of unnecessary information about versions or from errors)",
+    "Parameter: service/protectedwebmethods = SDEFAULT or ALL (disclosure of unnecessary information with limited list of exceptions)"
+   ],
+   "config_stores": [
+    "ABAP_INSTANCE_PAHI",
+    "Parameters"
+   ],
+   "check_items": 6,
+   "policies": [
+    "BL260_2ADISCL",
+    "BL260_2ODISCL"
+   ]
+  },
+  {
+   "requirement": "DISCL-H",
+   "family": "DISCL",
+   "technology": "HANA",
+   "tier": "EXTENDED",
+   "titles": [
+    "Parameter: persistence_encryption = on (Enable HANA data at rest encryption) (SYSTEMDB)",
+    "Parameter: log_encryption = on (Enable HANA data at rest encryption) (SYSTEMDB)",
+    "Parameter: backup_encryption = on (Enable HANA data at rest encryption) (SYSTEMDB)",
+    "Scope PERSISTENCE, IS_ENCRYPTION_ACTIVE = TRUE (Enable HANA data at rest encryption) (SYSTEMDB)"
+   ],
+   "config_stores": [
+    "HDB_ENCRYPTION",
+    "HDB_PARAMETER"
+   ],
+   "check_items": 18,
+   "policies": [
+    "BL260_3HDISCL"
+   ]
+  },
+  {
+   "requirement": "DISCL-J",
+   "family": "DISCL",
+   "technology": "Java",
+   "tier": "STANDARD",
+   "titles": [
+    "Java property: UseServerHeader = FALSE (server header must be disabled in the HTTP Provider Service)",
+    "Java property: service/protectedwebmethods = SDEFAULT or ALL (disclosure of unnecessary information with limited list of exceptions, see Note 1439348)"
+   ],
+   "config_stores": [
+    "Parameters",
+    "http"
+   ],
+   "check_items": 2,
+   "policies": [
+    "BL260_2JDISCL"
+   ]
+  },
+  {
+   "requirement": "DISCL-O",
+   "family": "DISCL",
+   "technology": "Other",
+   "tier": "STANDARD",
+   "titles": [
+    "Profile parameter: is/HTTP/show_server_header = FALSE or 0 (see Note 1329326)",
+    "Profile parameter: is/HTTP/show_detailed_errors = FALSE or 0 (see Note 1616535)",
+    "Profile parameter: icm/SMTP/show_server_header = FALSE or 0 (see Note 2045861)",
+    "Profile parameter: icm/HTTP/auth_NN includes PREFIX=/, FILTER=SAP and PERMFILE (SAP_BASIS ≥ 7.40)"
+   ],
+   "config_stores": [
+    "ABAP_INSTANCE_PAHI",
+    "Parameters"
+   ],
+   "check_items": 36,
+   "policies": [
+    "BL260_2ADISCL",
+    "BL260_2ODISCL"
+   ]
+  },
+  {
+   "requirement": "FILE-A",
+   "family": "FILE",
+   "technology": "ABAP",
+   "tier": "STANDARD",
+   "titles": [
+    "Profile parameter: abap/path_normalization != off (Directory Traversal Protection, see Notes 1497003, 2551541, 2562089)",
+    "Profile parameter: abap/path_norm_Windows = 0 (Directory Traversal Protection, see Note 2634476)",
+    "Customizing parameter: UNCONF_PATH_AS_EMPTY = ON (or not existing) (Directory Traversal Protection, see Note 3286256)",
+    "Customizing parameter: REJECT_EMPTY_PATH = ON (Directory Traversal Protection, see Notes 2251231 and 2395138)"
+   ],
+   "config_stores": [
+    "ABAP_INSTANCE_PAHI",
+    "AUDIT_CONFIGURATION_SLOT",
+    "FILECMCUST",
+    "Parameters",
+    "USER_AUTH_COMB"
+   ],
+   "check_items": 16,
+   "policies": [
+    "BL260_2AFILE",
+    "BL260_3AFILE",
+    "BL260_3AFILE_CSTO"
+   ]
+  },
+  {
+   "requirement": "MSGSRV-A",
+   "family": "MSGSRV",
+   "technology": "ABAP",
+   "tier": "CRITICAL",
+   "titles": [
+    "Profile parameter: ms/acl_info path is maintained (Message Server Security, pointing to access control list file for Message Server",
+    "Profile Parameter: ms/server_port_nn uses ACLFILE sub-parameter if parameter defined (Message Server Security, see Note 3272585)",
+    "Message Server ACL should not contain generic entries, such as HOST=* (ACL file, Message Server Security)",
+    "Profile parameter: rdisp/msserv_internal maintained (Message Server Security, for internal port for server communication)"
+   ],
+   "config_stores": [
+    "ABAP_INSTANCE_PAHI",
+    "MS_SECINFO",
+    "Parameters"
+   ],
+   "check_items": 16,
+   "policies": [
+    "BL260_1AMSGSRV",
+    "BL260_2AMSGSRV",
+    "BL260_3AMSGSRV"
+   ]
+  },
+  {
+   "requirement": "MSGSRV-J",
+   "family": "MSGSRV",
+   "technology": "Java",
+   "tier": "CRITICAL",
+   "titles": [
+    "Java property: ms/acl_info path is maintained (Message Server Security, pointing to access control list file for Message Server (SCS instance)",
+    "Java property: ms/server_port_nn uses ACLFILE sub-parameter if it exists (Message Server Security, see Note 3272585) (SCS instance)",
+    "Java property: rdisp/msserv_internal maintained (!= 0) (Message Server Security, for internal port for server communication)",
+    "Java property: ms/monitor = 0 (Message Server Security, to prohibit external monitor)"
+   ],
+   "config_stores": [
+    "Parameters"
+   ],
+   "check_items": 5,
+   "policies": [
+    "BL260_1JMSGSRV",
+    "BL260_2JMSGSRV"
+   ]
+  },
+  {
+   "requirement": "NETCF-A",
+   "family": "NETCF",
+   "technology": "ABAP",
+   "tier": "STANDARD",
+   "titles": [
+    "Profile parameter: auth/rfc_authority_check = 1 6 or 9 (Secure Network Configuration, execution option for the RFC authority check, see Note 2216306)",
+    "Profile parameter: rfc/callback_security_method = 3 (Secure Network Configuration, block unauthorized remote RFC callbacks, see Note 2678501)",
+    "Profile parameter: rfc/selftrust = 0 (Secure Network Configuration, see Notes 2449757, 2614667)",
+    "Profile parameter: ixml/dtd_restriction = expansion or prohibited (Secure Network Configuration) (see Notes 2308217, 1712860)"
+   ],
+   "config_stores": [
+    "ABAP_INSTANCE_PAHI",
+    "ABAP_UCON_HTTP_WHITE_LIST",
+    "Parameters",
+    "SICF_SERVICES"
+   ],
+   "check_items": 48,
+   "policies": [
+    "BL260_2ANETCF",
+    "BL260_2ONETCF"
+   ]
+  },
+  {
+   "requirement": "NETCF-H",
+   "family": "NETCF",
+   "technology": "HANA",
+   "tier": "CRITICAL",
+   "titles": [
+    "HANA internal communication (listeninterface != global [COMMUNICATION], see Note 2183363)",
+    "HANA internal communication (listeninterface .internal [COMMUNICATION], [INTERNAL_HOSTNAME_RESOLUTION] name and value maintained, see Note 2183363)"
+   ],
+   "config_stores": [
+    "HDB_PARAMETER"
+   ],
+   "check_items": 2,
+   "policies": [
+    "BL260_1HNETCF"
+   ]
+  },
+  {
+   "requirement": "NETCF-P",
+   "family": "NETCF",
+   "technology": "BTP",
+   "tier": "STANDARD",
+   "titles": [
+    "SCC Parameter: isHaActive = true (SAP Cloud Connector operated in high availability mode)"
+   ],
+   "config_stores": [
+    "SCC_CONFIG"
+   ],
+   "check_items": 1,
+   "policies": [
+    "BL260_2PNETCF"
+   ]
+  },
+  {
+   "requirement": "NETENC-A",
+   "family": "NETENC",
+   "technology": "ABAP",
+   "tier": "CRITICAL",
+   "titles": [
+    "Profile parameter: system/secure_communication = ON ≥ 7.40 (see SAP Notes 2040644, 2362078)",
+    "Profile parameter: snc/enable = 1 (enable SNC-Module)",
+    "Profile parameter: snc/data_protection/min = 3 (enforce encryption for SNC)",
+    "Profile parameter: snc/data_protection/max = 3 (enforce encryption for SNC)"
+   ],
+   "config_stores": [
+    "ABAP_INSTANCE_PAHI",
+    "Parameters"
+   ],
+   "check_items": 28,
+   "policies": [
+    "BL260_1ANETENC",
+    "BL260_2ANETENC",
+    "BL260_3ANETENC"
+   ]
+  },
+  {
+   "requirement": "NETENC-O",
+   "family": "NETENC",
+   "technology": "Other",
+   "tier": "STANDARD",
+   "titles": [
+    "Profile parameter: icm/server_port_nn uses HTTPS (protect information communicated via ICM Web Dispatcher)",
+    "Profile parameter: icm/HTTP/admin_nn has PORT defined (allow ICM Web Dispatcher administration only on certain port)",
+    "Profile parameter: icm/HTTP/admin_nn has PORT qualified, and HTTPS on that PORT (via icm/server_port_nn)",
+    "Parameter: icm/server_port_nn uses HTTPS (protect information communicated via ICM Web Dispatcher)"
+   ],
+   "config_stores": [
+    "ABAP_INSTANCE_PAHI",
+    "Parameters"
+   ],
+   "check_items": 9,
+   "policies": [
+    "BL260_2ANETENC",
+    "BL260_2ONETENC"
+   ]
+  },
+  {
+   "requirement": "NOTEST-J",
+   "family": "NOTEST",
+   "technology": "Java",
+   "tier": "CRITICAL",
+   "titles": [
+    "Java property: EnableInvokerServletGlobally = FALSE (InvokerServlet globally disabled)"
+   ],
+   "config_stores": [
+    "servlet_jsp"
+   ],
+   "check_items": 1,
+   "policies": [
+    "BL260_1JNOTEST"
+   ]
+  },
+  {
+   "requirement": "OBSCNT-A",
+   "family": "OBSCNT",
+   "technology": "ABAP",
+   "tier": "STANDARD",
+   "titles": [
+    "Obsolete Client 066 must NOT exist (see Note 1749142)",
+    "Template Client 001 must be deleted IF not used (review the context of the situation, these clients are not marked as Live)"
+   ],
+   "config_stores": [
+    "CLIENTS"
+   ],
+   "check_items": 2,
+   "policies": [
+    "BL260_2AOBSCNT"
+   ]
+  },
+  {
+   "requirement": "PWDPOL-A",
+   "family": "PWDPOL",
+   "technology": "ABAP",
+   "tier": "CRITICAL",
+   "titles": [
+    "Profile parameter: login/min_password_lng ≥ 12 (Password Policy)",
+    "Profile parameter: login/password_max_idle_initial between 1 and 14 (recommended 1 to 7) (Password Policy)",
+    "Profile parameter: login/password_downwards_compatibility = 0 (disable downward compatible passwords, see Note 1023437)",
+    "SECPOL attribute: MIN_PASSWORD_LENGTH ≥ 12 (security policy attribute)"
+   ],
+   "config_stores": [
+    "ABAP_INSTANCE_PAHI",
+    "AUTH_SECURITY_POLICY",
+    "Parameters",
+    "USER_PASSWD_HASH_USAGE"
+   ],
+   "check_items": 79,
+   "policies": [
+    "BL260_1APWDPOL",
+    "BL260_2APWDPOL",
+    "BL260_2APWDPOL_HASH",
+    "BL260_3APWDPOL"
+   ]
+  },
+  {
+   "requirement": "PWDPOL-H",
+   "family": "PWDPOL",
+   "technology": "HANA",
+   "tier": "CRITICAL",
+   "titles": [
+    "Password Policy (minimal_password_length ≥ 12) (SYSTEMDB, nameserver.ini)",
+    "Password Policy (maximum_unused_initial_password_lifetime ≤ 14 not 0) (SYSTEMDB, nameserver.ini)",
+    "Password Policy (minimal_password_length ≥ 12) (DB_TENANT, indexserver.ini)",
+    "Password Policy (maximum_unused_initial_password_lifetime ≤ 14 not 0) (DB_TENANT, indexserver.ini)"
+   ],
+   "config_stores": [
+    "HDB_PARAMETER",
+    "HDB_USERGROUP_PARAMETERS"
+   ],
+   "check_items": 35,
+   "policies": [
+    "BL260_1HPWDPOL",
+    "BL260_2HPWDPOL",
+    "BL260_3HPWDPOL"
+   ]
+  },
+  {
+   "requirement": "PWDPOL-J",
+   "family": "PWDPOL",
+   "technology": "Java",
+   "tier": "CRITICAL",
+   "titles": [
+    "Java property: Minimum Password Length ≥ 12 (Password Policy)",
+    "Java property: ume.logon.security_policy.password_expire_days between 1 and 183 (Password Expiration Days)",
+    "Java property: ume.logon.security_policy.userid_in_password_allowed = FALSE (Disable user ID as part of password)",
+    "Java property: ume.logon.security_policy.oldpass_in_newpass_allowed = FALSE (Disable old password in password allowed)"
+   ],
+   "config_stores": [
+    "com.sap.security.core.ume.service"
+   ],
+   "check_items": 9,
+   "policies": [
+    "BL260_1JPWDPOL",
+    "BL260_3JPWDPOL"
+   ]
+  },
+  {
+   "requirement": "RFCGW-A",
+   "family": "RFCGW",
+   "technology": "ABAP",
+   "tier": "CRITICAL",
+   "titles": [
+    "RFC Gateway ACL: reflects gw/sec_info file not found",
+    "RFC gateway ACL: secinfo file entries not fully generic (RFC Gateway hardening)",
+    "RFC Gateway ACL: reflects gw/reg_info file not found",
+    "RFC gateway ACL: reginfo file entries not fully generic (RFC Gateway hardening)"
+   ],
+   "config_stores": [
+    "ABAP_INSTANCE_PAHI",
+    "GW_PRXINFO",
+    "GW_REGINFO",
+    "GW_SECINFO",
+    "Parameters"
+   ],
+   "check_items": 26,
+   "policies": [
+    "BL260_1ARFCGW",
+    "BL260_3ARFCGW"
+   ]
+  },
+  {
+   "requirement": "RFCGW-J",
+   "family": "RFCGW",
+   "technology": "Java",
+   "tier": "CRITICAL",
+   "titles": [
+    "Java property: gw/sec_info (mount path defined to ACL file) (SCS instance)",
+    "Java property: gw/reg_info (mount path defined to ACL file) (SCS instance)",
+    "Java property: gw/reg_no_conn_info as recommended (Gateway security options Kernel lt 7.40) (SCS instance)",
+    "Java property: gw/reg_no_conn_info = 255 (recommended) or uneven (Gateway security options Kernel ≥ 7.40, see Note 2776748) (SCS instance)"
+   ],
+   "config_stores": [
+    "Parameters"
+   ],
+   "check_items": 9,
+   "policies": [
+    "BL260_1JRFCGW",
+    "BL260_3JRFCGW"
+   ]
+  },
+  {
+   "requirement": "SCRIPT-A",
+   "family": "SCRIPT",
+   "technology": "ABAP",
+   "tier": "EXTENDED",
+   "titles": [
+    "Profile parameter: sapgui/nwbc_scripting = FALSE (Scripting Protection, see Note 1816392)",
+    "Profile parameter: sapgui/user_scripting = FALSE (Scripting Protection)",
+    "SAP GUI Scripting Security (IF scripting necessary then sapgui/user_scripting_per_user = TRUE, see Note 2715519, 2565390)",
+    "Profile parameter: sapgui/user_scripting_per_user = TRUE (Scripting Protection)"
+   ],
+   "config_stores": [
+    "ABAP_INSTANCE_PAHI",
+    "Parameters"
+   ],
+   "check_items": 14,
+   "policies": [
+    "BL260_3ASCRIPT"
+   ]
+  },
+  {
+   "requirement": "SECSTO-A",
+   "family": "SECSTO",
+   "technology": "ABAP",
+   "tier": "EXTENDED",
+   "titles": [
+    "Encryption key for new/updated records not Default Key (SECSTORE individual master key, see Note 1902258)",
+    "Profile parameter: rsec/securestorage/keyfile set as expected (SecStoreDBKey.pse key file location, see Note 1902611)"
+   ],
+   "config_stores": [
+    "ABAP_INSTANCE_PAHI",
+    "ABAP_SECSTORE_INFO",
+    "Parameters"
+   ],
+   "check_items": 3,
+   "policies": [
+    "BL260_3ASECSTO"
+   ]
+  },
+  {
+   "requirement": "SECUPD-A",
+   "family": "SECUPD",
+   "technology": "ABAP",
+   "tier": "CRITICAL",
+   "titles": [
+    "Software component level last reported change in CCDB: within last 12 months",
+    "Software component level SP_REL_DATE not older than 24 months",
+    "SAP Kernel date not older than 365 days",
+    "CRYPTOLIB date not older than 365 days"
+   ],
+   "config_stores": [
+    "COMP_LEVEL",
+    "CRYPTOLIB",
+    "SAP_KERNEL"
+   ],
+   "check_items": 5,
+   "policies": [
+    "BL260_1ASECUPD"
+   ]
+  },
+  {
+   "requirement": "SECUPD-H",
+   "family": "SECUPD",
+   "technology": "HANA",
+   "tier": "CRITICAL",
+   "titles": [
+    "Last detected HANA Update in CCDB: within last 12 months",
+    "Security Maintenance Status of HANA SPS Version (see Note 2378962)",
+    "CRYPTOLIB date not older than 365 days",
+    "CRYPTOLIB version ≥ 8.5.39  (see SAP Note 3051787)"
+   ],
+   "config_stores": [
+    "HDB_HOST_INFORMATION",
+    "HDB_VERSION"
+   ],
+   "check_items": 4,
+   "policies": [
+    "BL260_1HSECUPD"
+   ]
+  },
+  {
+   "requirement": "SECUPD-J",
+   "family": "SECUPD",
+   "technology": "Java",
+   "tier": "CRITICAL",
+   "titles": [
+    "Software component level last reported change in CCDB: within last 12 months",
+    "Software component level SP_REL_DATE not older than 24 months"
+   ],
+   "config_stores": [
+    "COMP_LEVEL"
+   ],
+   "check_items": 2,
+   "policies": [
+    "BL260_1JSECUPD"
+   ]
+  },
+  {
+   "requirement": "SECUPD-O",
+   "family": "SECUPD",
+   "technology": "Other",
+   "tier": "CRITICAL",
+   "titles": [
+    "WebDispatcher component level last reported change in CCDB: within last 12 months"
+   ],
+   "config_stores": [
+    "COMP_LEVEL"
+   ],
+   "check_items": 1,
+   "policies": [
+    "BL260_1OSECUPD"
+   ]
+  },
+  {
+   "requirement": "SECUPD-P",
+   "family": "SECUPD",
+   "technology": "BTP",
+   "tier": "STANDARD",
+   "titles": [
+    "Last detected SCC Update in CCDB: within last 12 months",
+    "Most current SAP Cloud Connector Version (see Note 3302250)"
+   ],
+   "config_stores": [
+    "SCC_VERSION"
+   ],
+   "check_items": 2,
+   "policies": [
+    "BL260_2PSECUPD"
+   ]
+  },
+  {
+   "requirement": "SESS-J",
+   "family": "SESS",
+   "technology": "Java",
+   "tier": "STANDARD",
+   "titles": [
+    "Java property: SystemCookiesDataProtection = true (HTTP Service property, Session Protection, see Note 2068872)",
+    "Java property: SystemCookiesHTTPSProtection = true (HTTP Service property, Session Protection, see Note 2068872)"
+   ],
+   "config_stores": [
+    "http"
+   ],
+   "check_items": 2,
+   "policies": [
+    "BL260_2JSESS"
+   ]
+  },
+  {
+   "requirement": "SSO-A",
+   "family": "SSO",
+   "technology": "ABAP",
+   "tier": "STANDARD",
+   "titles": [
+    "Profile parameter: login/ticket_only_by_https = 1 (to generate ticket only via https, see Notes 1531399 and 2068872)",
+    "Profile parameter: login/ticket_only_to_host = 1 (ticket only back to creating host)",
+    "Profile parameter: icf/set_HTTPonly_flag_on_cookies != 1 or 3 (recommended 0) (to set HTTPonly-Flag for Cookies, see Notes 2068872 and 1277022)",
+    "Profile parameter: login/accept_sso2_ticket = 2 or 1 if SAP Kernel lt 916 (to accept SAP Assertion Tickets but reject SAP Logon Tickets, see Note 3584984)"
+   ],
+   "config_stores": [
+    "ABAP_INSTANCE_PAHI",
+    "Parameters"
+   ],
+   "check_items": 10,
+   "policies": [
+    "BL260_2ASSO"
+   ]
+  },
+  {
+   "requirement": "SSO-J",
+   "family": "SSO",
+   "technology": "Java",
+   "tier": "EXTENDED",
+   "titles": [
+    "Java property: ume.logon.security.enforce_secure_cookie = TRUE (send SAP logon ticket only via HTTPS, see Note 2068872)",
+    "Java property: ume.logon.httponlycooki = TRUE (SAP logon ticket set to HttpOnly, see Note 2068872)",
+    "Java property: login.ticket_lifetime ≤ 8 hours (SAP logon ticket lifetime hh:mm)"
+   ],
+   "config_stores": [
+    "com.sap.security.core.ume.service"
+   ],
+   "check_items": 3,
+   "policies": [
+    "BL260_3JSSO"
+   ]
+  },
+  {
+   "requirement": "STDUSR-A",
+   "family": "STDUSR",
+   "technology": "ABAP",
+   "tier": "CRITICAL",
+   "titles": [
+    "Profile parameter: login/no_automatic_user_sapstar = 1 (no login with hardcoded automatic user SAP*)",
+    "Profile parameter: login/create_virtual_user_sapstar = 1 (Kernel ≥ 790) (see Note 3303172, 3633474)",
+    "Profile parameter: login/create_virtual_user_sapstar = 1 (Kernel ≥ 790) (see Note 3303172)",
+    "Standard User: User SAP* is safeguarded overall"
+   ],
+   "config_stores": [
+    "ABAP_INSTANCE_PAHI",
+    "AUTH_PROFILE_USER",
+    "Parameters",
+    "STANDARD_USERS"
+   ],
+   "check_items": 23,
+   "policies": [
+    "BL260_1ASTDUSR",
+    "BL260_1ASTDUSR_CSTO"
+   ]
+  },
+  {
+   "requirement": "STDUSR-H",
+   "family": "STDUSR",
+   "technology": "HANA",
+   "tier": "STANDARD",
+   "titles": [
+    "Standard User: SYSTEM user is deactivated (USER_DEACTIVATED = TRUE)"
+   ],
+   "config_stores": [
+    "HDB_SYSTEM_USER"
+   ],
+   "check_items": 1,
+   "policies": [
+    "BL260_2HSTDUSR"
+   ]
+  },
+  {
+   "requirement": "TRACES-H",
+   "family": "TRACES",
+   "technology": "HANA",
+   "tier": "CRITICAL",
+   "titles": [
+    "SQL trace level != ALL_WITH_RESULTS (DB_TENANT, indexserver.ini)",
+    "SQL trace level != ALL_WITH_RESULTS (SYSTEMDB, nameserver.ini)"
+   ],
+   "config_stores": [
+    "HDB_PARAMETER"
+   ],
+   "check_items": 2,
+   "policies": [
+    "BL260_1HTRACES"
+   ]
+  },
+  {
+   "requirement": "TRUST-A",
+   "family": "TRUST",
+   "technology": "ABAP",
+   "tier": "CRITICAL",
+   "titles": [
+    "Migrated trust relationships should use the latest security method: RFCSLOPT = 3 (see SAP Notes 3157268, 3089413)",
+    "Active users with TRUSTED RFC authorization",
+    "Roles with TRUSTED RFC authorization",
+    "Profile parameter: rfc/selftrust = 0 (block implicit self-trust, see Notes 2449757, 2614667)"
+   ],
+   "config_stores": [
+    "ABAP_INSTANCE_PAHI",
+    "Parameters",
+    "RFCDES_TYPE_3",
+    "RFCDES_TYPE_H",
+    "RFCDES_TYPE_W",
+    "RFCSYSACL",
+    "USER_AUTH_COMB"
+   ],
+   "check_items": 13,
+   "policies": [
+    "BL260_1ATRUST",
+    "BL260_1ATRUST_CSTO",
+    "BL260_2ATRUST",
+    "BL260_3ATRUST"
+   ]
+  },
+  {
+   "requirement": "USRCHAR-A",
+   "family": "USRCHAR",
+   "technology": "ABAP",
+   "tier": "STANDARD",
+   "titles": [
+    "Prohibit that user names can contain ‘wide’ spaces in DEV (Customizing switch BNAME_RESTRICT = XXX or ALL in table PRGN_CUST, see Note 1731549)",
+    "Prohibit that user names can contain ‘wide’ spaces in nonDEV (Customizing switch BNAME_RESTRICT = XXX or ALL in table PRGN_CUST, see Note 1731549)"
+   ],
+   "config_stores": [
+    "PRGN_CUST"
+   ],
+   "check_items": 2,
+   "policies": [
+    "BL260_2AUSRCHAR"
+   ]
+  },
+  {
+   "requirement": "USRCTR-A",
+   "family": "USRCTR",
+   "technology": "ABAP",
+   "tier": "STANDARD",
+   "titles": [
+    "Profile parameter: dynp/checkskip1screen value = ALL and dynp/confirmskip1screen value = OFF or not set (User Control of Action) (see Note 2999707)",
+    "Profile parameter: dynp/checkskip1screen value != ALL IF dynp/confirmskip1screen value = 'ALL' (User Control of Action) (see Note 2999707)",
+    "Profile parameter: dynp/confirmskip1screen value = ALL and dynp/checkskip1screen value = OFF or not set (User Control of Action) (see Note 1956086)",
+    "Profile parameter: dynp/confirmskip1screen value != ALL IF dynp/checkskip1screen value = 'ALL' (User Control of Action) (see Note 1956086)"
+   ],
+   "config_stores": [
+    "ABAP_INSTANCE_PAHI",
+    "ABAP_SACF_INFO",
+    "ABAP_STARTAUTHCHECK",
+    "Parameters"
+   ],
+   "check_items": 24,
+   "policies": [
+    "BL260_2AUSRCTR",
+    "BL260_2AUSRCTR_SACF"
+   ]
+  },
+  {
+   "requirement": "USRTYP-A",
+   "family": "USRTYP",
+   "technology": "ABAP",
+   "tier": "STANDARD",
+   "titles": [
+    "User types of reference users in ABAP (restricted to L reference-type users via customizing switch REF_USER_CHECK = E in table PRGN_CUST)"
+   ],
+   "config_stores": [
+    "PRGN_CUST"
+   ],
+   "check_items": 1,
+   "policies": [
+    "BL260_2AUSRTYP"
+   ]
+  }
+ ],
+ "policies": [
+  {
+   "policy_id": "BL260_1ACHANGE",
+   "title": "[BL2.6.0] Change Protection of Prod System (ABAP)",
+   "file": "BL260_1ACHANGE.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_1ACRITA",
+   "title": "[BL2.6.0] No use of critical auth. profile SAP_ALL (ABAP)",
+   "file": "BL260_1ACRITA.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_1ACRITA_CSTO",
+   "title": "[BL2.6.0] No use of critical auth. profile SAP_ALL (ABAP)",
+   "file": "BL260_1ACRITA_CSTO.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_1ACRITB_CSTO",
+   "title": "[BL2.6.0] No use of critical auth. profile SAP_NEW (ABAP)",
+   "file": "BL260_1ACRITB_CSTO.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_1ACRITC_CSTO",
+   "title": "[BL2.6.0] Critical Authorizations (ABAP)",
+   "file": "BL260_1ACRITC_CSTO.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_1AMSGSRV",
+   "title": "[BL2.6.0] Message Server Security (ABAP)",
+   "file": "BL260_1AMSGSRV.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_1ANETENC",
+   "title": "[BL2.6.0] Encryption of Network Connections (ABAP)",
+   "file": "BL260_1ANETENC.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_1APWDPOL",
+   "title": "[BL2.6.0] Password Policy (ABAP)",
+   "file": "BL260_1APWDPOL.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_1ARFCGW",
+   "title": "[BL2.6.0] RFC Gateway Security (ABAP)",
+   "file": "BL260_1ARFCGW.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_1ASECUPD",
+   "title": "[BL2.6.0] Regular Security Updates (ABAP)",
+   "file": "BL260_1ASECUPD.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_1ASTDUSR",
+   "title": "[BL2.6.0] Standard Users (ABAP)",
+   "file": "BL260_1ASTDUSR.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_1ASTDUSR_CSTO",
+   "title": "[BL2.6.0] Standard Users (ABAP)",
+   "file": "BL260_1ASTDUSR_CSTO.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_1ATRUST",
+   "title": "[BL2.6.0] Trusting relations and trusted destinations (ABAP)",
+   "file": "BL260_1ATRUST.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_1ATRUST_CSTO",
+   "title": "[BL2.6.0] Trusting relations and trusted destinations (ABAP)",
+   "file": "BL260_1ATRUST_CSTO.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_2AAUDIT",
+   "title": "[BL2.6.0] Audit Settings (ABAP)",
+   "file": "BL260_2AAUDIT.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_2AAUTHASSIGN",
+   "title": "[BL2.6.0] Assignment of Authorizations (ABAP)",
+   "file": "BL260_2AAUTHASSIGN.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_2ACHANGE",
+   "title": "[BL2.6.0] Change Protection of Prod System (ABAP)",
+   "file": "BL260_2ACHANGE.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_2ACRITD",
+   "title": "[BL2.6.0] Protection of Password Hashes (ABAP)",
+   "file": "BL260_2ACRITD.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_2ACRITD_CSTO",
+   "title": "[BL2.6.0] Protection of Password Hashes (ABAP)",
+   "file": "BL260_2ACRITD_CSTO.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_2ADISCL",
+   "title": "[BL2.6.0] Information Disclosure (ABAP)",
+   "file": "BL260_2ADISCL.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_2AFILE",
+   "title": "[BL2.6.0] Directory Traversal Protection (ABAP)",
+   "file": "BL260_2AFILE.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_2AMSGSRV",
+   "title": "[BL2.6.0] Message Server Security (ABAP)",
+   "file": "BL260_2AMSGSRV.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_2ANETCF",
+   "title": "[BL2.6.0] Secure Network Configuration (ABAP)",
+   "file": "BL260_2ANETCF.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_2ANETENC",
+   "title": "[BL2.6.0] Encryption of Network Connections (ABAP)",
+   "file": "BL260_2ANETENC.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_2AOBSCNT",
+   "title": "[BL2.6.0] Obsolete Clients (ABAP)",
+   "file": "BL260_2AOBSCNT.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_2APWDPOL",
+   "title": "[BL2.6.0] Password Policy (ABAP)",
+   "file": "BL260_2APWDPOL.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_2APWDPOL_HASH",
+   "title": "[BL2.6.0] Password Policy Hashes (ABAP)",
+   "file": "BL260_2APWDPOL_HASH.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_2ASSO",
+   "title": "[BL2.6.0] Single Sign-On (ABAP)",
+   "file": "BL260_2ASSO.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_2ATRUST",
+   "title": "[BL2.6.0] Trusting relations and trusted destinations (ABAP)",
+   "file": "BL260_2ATRUST.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_2AUSRCHAR",
+   "title": "[BL2.6.0] Allowed character sets for user names (ABAP)",
+   "file": "BL260_2AUSRCHAR.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_2AUSRCTR",
+   "title": "[BL2.6.0] User Control of Action (ABAP)",
+   "file": "BL260_2AUSRCTR.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_2AUSRCTR_SACF",
+   "title": "[BL2.6.0] User Control of Action - SACF (ABAP)",
+   "file": "BL260_2AUSRCTR_SACF.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_2AUSRTYP",
+   "title": "[BL2.6.0] User types of reference users (ABAP)",
+   "file": "BL260_2AUSRTYP.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_3ACHANGE",
+   "title": "[BL2.6.0] Change Protection of Prod System (ABAP)",
+   "file": "BL260_3ACHANGE.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_3AFILE",
+   "title": "[BL2.6.0] Directory Traversal Protection (ABAP)",
+   "file": "BL260_3AFILE.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_3AFILE_CSTO",
+   "title": "[BL2.6.0] Directory Traversal Protection (ABAP)",
+   "file": "BL260_3AFILE_CSTO.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_3AMSGSRV",
+   "title": "[BL2.6.0] Message Server Security (ABAP)",
+   "file": "BL260_3AMSGSRV.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_3ANETENC",
+   "title": "[BL2.6.0] Encryption of Network Connections (ABAP)",
+   "file": "BL260_3ANETENC.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_3APWDPOL",
+   "title": "[BL2.6.0] Password Policy (ABAP)",
+   "file": "BL260_3APWDPOL.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_3ARFCGW",
+   "title": "[BL2.6.0] RFC Gateway Security (ABAP)",
+   "file": "BL260_3ARFCGW.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_3ASCRIPT",
+   "title": "[BL2.6.0] Scripting Protection (ABAP)",
+   "file": "BL260_3ASCRIPT.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_3ASECSTO",
+   "title": "[BL2.6.0] Protection of Secure Store (ABAP)",
+   "file": "BL260_3ASECSTO.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_3ATRUST",
+   "title": "[BL2.6.0] Trusting relations and trusted destinations (ABAP)",
+   "file": "BL260_3ATRUST.xml",
+   "stack": "ABAP_ALL"
+  },
+  {
+   "policy_id": "BL260_2PAUDIT",
+   "title": "[BL2.6.0] Audit Settings (BTP)",
+   "file": "BL260_2PAUDIT.xml",
+   "stack": "BTP_ALL"
+  },
+  {
+   "policy_id": "BL260_2PNETCF",
+   "title": "[BL2.6.0] Secure Network Configuration (BTP)",
+   "file": "BL260_2PNETCF.xml",
+   "stack": "BTP_ALL"
+  },
+  {
+   "policy_id": "BL260_2PSECUPD",
+   "title": "[BL2.6.0] Regular Security Updates (BTP)",
+   "file": "BL260_2PSECUPD.xml",
+   "stack": "BTP_ALL"
+  },
+  {
+   "policy_id": "BL260_1HAUDIT",
+   "title": "[BL2.6.0] Audit Settings (HANA)",
+   "file": "BL260_1HAUDIT.xml",
+   "stack": "HANA_ALL"
+  },
+  {
+   "policy_id": "BL260_1HCRITAU_CSTO",
+   "title": "[BL2.6.0] Critical Authorizations (HANA)",
+   "file": "BL260_1HCRITAU_CSTO.xml",
+   "stack": "HANA_ALL"
+  },
+  {
+   "policy_id": "BL260_1HNETCF",
+   "title": "[BL2.6.0] Secure Network Configuration (HANA)",
+   "file": "BL260_1HNETCF.xml",
+   "stack": "HANA_ALL"
+  },
+  {
+   "policy_id": "BL260_1HPWDPOL",
+   "title": "[BL2.6.0] Password Policy (HANA)",
+   "file": "BL260_1HPWDPOL.xml",
+   "stack": "HANA_ALL"
+  },
+  {
+   "policy_id": "BL260_1HSECUPD",
+   "title": "[BL2.6.0] Regular Security Updates (HANA)",
+   "file": "BL260_1HSECUPD.xml",
+   "stack": "HANA_ALL"
+  },
+  {
+   "policy_id": "BL260_1HTRACES",
+   "title": "[BL2.6.0] Critical Data in trace files (HANA)",
+   "file": "BL260_1HTRACES.xml",
+   "stack": "HANA_ALL"
+  },
+  {
+   "policy_id": "BL260_2HAUDIT",
+   "title": "[BL2.6.0] Audit Settings (HANA)",
+   "file": "BL260_2HAUDIT.xml",
+   "stack": "HANA_ALL"
+  },
+  {
+   "policy_id": "BL260_2HPWDPOL",
+   "title": "[BL2.6.0] Password Policy (HANA)",
+   "file": "BL260_2HPWDPOL.xml",
+   "stack": "HANA_ALL"
+  },
+  {
+   "policy_id": "BL260_2HSTDUSR",
+   "title": "[BL2.6.0] Standard Users (HANA)",
+   "file": "BL260_2HSTDUSR.xml",
+   "stack": "HANA_ALL"
+  },
+  {
+   "policy_id": "BL260_3HDISCL",
+   "title": "[BL2.6.0] Information Disclosure (HANA)",
+   "file": "BL260_3HDISCL.xml",
+   "stack": "HANA_ALL"
+  },
+  {
+   "policy_id": "BL260_3HPWDPOL",
+   "title": "[BL2.6.0] Password Policy (HANA)",
+   "file": "BL260_3HPWDPOL.xml",
+   "stack": "HANA_ALL"
+  },
+  {
+   "policy_id": "BL260_1JMSGSRV",
+   "title": "[BL2.6.0] Message Server Security (JAVA)",
+   "file": "BL260_1JMSGSRV.xml",
+   "stack": "JAVA_ALL"
+  },
+  {
+   "policy_id": "BL260_1JNOTEST",
+   "title": "[BL2.6.0] No Testing Functionality in Production (JAVA)",
+   "file": "BL260_1JNOTEST.xml",
+   "stack": "JAVA_ALL"
+  },
+  {
+   "policy_id": "BL260_1JPWDPOL",
+   "title": "[BL2.6.0] Password Policy (JAVA)",
+   "file": "BL260_1JPWDPOL.xml",
+   "stack": "JAVA_ALL"
+  },
+  {
+   "policy_id": "BL260_1JRFCGW",
+   "title": "[BL2.6.0] RFC Gateway (JAVA)",
+   "file": "BL260_1JRFCGW.xml",
+   "stack": "JAVA_ALL"
+  },
+  {
+   "policy_id": "BL260_1JSECUPD",
+   "title": "[BL2.6.0] Regular Security Updates (JAVA)",
+   "file": "BL260_1JSECUPD.xml",
+   "stack": "JAVA_ALL"
+  },
+  {
+   "policy_id": "BL260_2JCRITAU_CSTO",
+   "title": "[BL2.6.0] Critical Authorizations (JAVA) (via ABAP)",
+   "file": "BL260_2JCRITAU_CSTO.xml",
+   "stack": "JAVA_ALL"
+  },
+  {
+   "policy_id": "BL260_2JDISCL",
+   "title": "[BL2.6.0] Information Disclosure (JAVA)",
+   "file": "BL260_2JDISCL.xml",
+   "stack": "JAVA_ALL"
+  },
+  {
+   "policy_id": "BL260_2JMSGSRV",
+   "title": "[BL2.6.0] Message Server Security (JAVA)",
+   "file": "BL260_2JMSGSRV.xml",
+   "stack": "JAVA_ALL"
+  },
+  {
+   "policy_id": "BL260_2JSESS",
+   "title": "[BL2.6.0] Session Protection (JAVA)",
+   "file": "BL260_2JSESS.xml",
+   "stack": "JAVA_ALL"
+  },
+  {
+   "policy_id": "BL260_3JAUDIT",
+   "title": "[BL2.6.0] Audit Settings (JAVA)",
+   "file": "BL260_3JAUDIT.xml",
+   "stack": "JAVA_ALL"
+  },
+  {
+   "policy_id": "BL260_3JPWDPOL",
+   "title": "[BL2.6.0] Password Policy (JAVA)",
+   "file": "BL260_3JPWDPOL.xml",
+   "stack": "JAVA_ALL"
+  },
+  {
+   "policy_id": "BL260_3JRFCGW",
+   "title": "[BL2.6.0] RFC Gateway Security (JAVA)",
+   "file": "BL260_3JRFCGW.xml",
+   "stack": "JAVA_ALL"
+  },
+  {
+   "policy_id": "BL260_3JSSO",
+   "title": "[BL2.6.0] Single Sign-On (JAVA)",
+   "file": "BL260_3JSSO.xml",
+   "stack": "JAVA_ALL"
+  },
+  {
+   "policy_id": "BL260_1OSECUPD",
+   "title": "[BL2.6.0] Regular Security Updates (WebDispatcher)",
+   "file": "BL260_1OSECUPD.xml",
+   "stack": "WEBDISP_ALL"
+  },
+  {
+   "policy_id": "BL260_2ODISCL",
+   "title": "[BL2.6.0] Information Disclosure (WebDispatcher)",
+   "file": "BL260_2ODISCL.xml",
+   "stack": "WEBDISP_ALL"
+  },
+  {
+   "policy_id": "BL260_2ONETCF",
+   "title": "[BL2.6.0] Secure Network Configuration (WebDispatcher)",
+   "file": "BL260_2ONETCF.xml",
+   "stack": "WEBDISP_ALL"
+  },
+  {
+   "policy_id": "BL260_2ONETENC",
+   "title": "[BL2.6.0] Encryption of Network Connections (WebDispatcher)",
+   "file": "BL260_2ONETENC.xml",
+   "stack": "WEBDISP_ALL"
+  }
+ ]
 }
