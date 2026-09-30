@@ -370,6 +370,16 @@ class DataLoader:
         "ext_os_commands_sap":         ["ext_os_commands_sap.csv", "sxpgcotabe.csv"],
         "background_jobs":             ["background_jobs.csv", "tbtco.csv", "sm37_jobs.csv"],
         "background_job_steps":        ["background_job_steps.csv", "tbtcp.csv", "job_steps.csv"],
+        # PRGN_CUST customizing switches (SAP Baseline v2.6: AUTHASSIGN-A,
+        # USRTYP-A, USRCHAR-A). One row per switch: ID + PATH (SAP's own column
+        # names in the CSA store), as produced by SM30 view PRGN_CUST.
+        "prgn_cust":                   ["prgn_cust.csv", "prgn_cust_switches.csv", "prgncust.csv"],
+        # ABAP secure storage info (config store ABAP_SECSTORE_INFO) — the
+        # encryption status of the secure store (Baseline v2.6 SECSTO-A).
+        "secure_store":                ["secure_store.csv", "abap_secstore_info.csv", "secstore.csv"],
+        # Web Dispatcher component patch level (config store COMP_LEVEL) — the
+        # dispatcher's own patch age (Baseline v2.6 SECUPD-O).
+        "webdisp_components":          ["webdisp_components.csv", "webdisp_comp_level.csv", "webdisp_comp.csv"],
     }
 
     def __init__(self, data_dir: Path):

@@ -51,6 +51,7 @@ class CryptoPostureAuditor(BaseAuditor):
         self.check_crypto_library_version()
         self.check_pse_health()
         self.check_key_management()
+        self.check_secure_store_encryption()
         return self.findings
 
     def check_tls_configuration(self):
@@ -1109,6 +1110,72 @@ class CryptoPostureAuditor(BaseAuditor):
                 ),
                 references=["NIST SP 800-57 — Key Management Recommendations"],
             )
+
+    def check_secure_store_encryption(self):
+        """SECSTO-A: the ABAP secure store's encryption must report OK.
+
+        SAP's Baseline reads the secure storage info (config store
+        ABAP_SECSTORE_INFO): every 'Encryption...' record must report OK. A
+        record that does not is a secure store still on the DEFAULT master key
+        (SAP Note 1902258), so the credentials it protects — RFC destination
+        passwords, the SecStore database key — are recoverable by anyone who can
+        read the store's files, which is the whole risk the store exists to
+        remove. With no secure-store export the check stays silent.
+        """
+        rows = self.data.get("secure_store")
+        if not isinstance(rows, list):
+            return
+
+        def _cell(row, *names):
+            lowered = {str(k).strip().lower(): v for k, v in row.items()}
+            for name in names:
+                val = lowered.get(name.lower())
+                if val not in (None, ""):
+                    return str(val).strip()
+            return ""
+
+        offenders, objects = [], []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            name = _cell(row, "NAME", "KEY", "RECORD", "PARAMETER", "ID")
+            if not name.upper().startswith("ENCRYPTION"):
+                continue
+            value = _cell(row, "VALUE", "STATUS", "STATE", "PATH")
+            if "OK" not in value.upper():
+                offenders.append(f"{name}: {value or '(empty)'} (expected OK)")
+                objects.append({"type": "secure_store_record", "name": name})
+        if not offenders:
+            return
+        self.finding(
+            check_id="SECSTO-001",
+            title="Secure store encryption is not confirmed OK (possible default master key)",
+            severity=self.SEVERITY_MEDIUM,
+            category="Cryptographic Posture",
+            description=(
+                "SAP Baseline SECSTO-A requires every encryption record in the "
+                "ABAP secure store (ABAP_SECSTORE_INFO) to report OK. The "
+                "following do not, which means the secure store is not encrypted "
+                "with an individual master key and is likely still on SAP's "
+                "default key:\n- " + "\n- ".join(offenders) + "\n\nOn the default "
+                "key the secure store no longer protects what it holds: the RFC "
+                "destination passwords and the SecStore database key can be "
+                "recovered by anyone able to read the store."),
+            affected_items=offenders,
+            remediation=(
+                "Generate an individual SecStore master key and re-encrypt the "
+                "secure store (report RSECNOTE / transaction SECSTORE, SAP Note "
+                "1902258), then re-export ABAP_SECSTORE_INFO to confirm every "
+                "encryption record reads OK."),
+            references=[
+                "SAP Security Baseline SECSTO-A",
+                "SAP policy check SECSTO-A_a.1 — "
+                "NAME like 'Encryption%' and VALUE like '%OK%'",
+                "SAP Note 1902258 (SECSTORE individual master key)",
+            ],
+            affected_objects=objects,
+            scope="aggregate",
+        )
 
     @staticmethod
     def _parse_date(date_str: str):

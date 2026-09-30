@@ -54,6 +54,7 @@ from modules.cloudalm_verdicts import CloudAlmVerdictAuditor
 from modules.ucon_exposure import UconExposureAuditor
 from modules.webdisp_security import WebDispatcherAuditor
 from modules.os_security import OSSecurityAuditor
+from modules.prgn_cust_switches import PrgnCustSwitchAuditor
 from modules.baseline_params import BaselineParamAuditor
 from modules.s4_business_authz import S4BusinessAuthzAuditor
 from modules.access_risk_analysis import AccessRiskAnalysisAuditor
@@ -420,6 +421,14 @@ def main():
     if "ecsconfig" in run_modules:
         print("[*] Running ECS Mandatory Configuration Checks...")
         auditor = EcsConfigAuditor(data, baseline_overrides, run_ctx)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- PRGN_CUST customizing switches (Baseline v2.6) ---
+    if "prgncust" in run_modules:
+        print("[*] Running PRGN_CUST Customizing Switch Checks...")
+        auditor = PrgnCustSwitchAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")

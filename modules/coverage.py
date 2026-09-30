@@ -122,6 +122,9 @@ RISE_MODULE_SCOPE: Dict[str, str] = {
     # shell access — the same reason system_trust's ms_acl/saprouttab checks are
     # OS-level, here for the whole family.
     "os_security": "conditional",
+    # PRGN_CUST customizing is client/cross-client config the customer's security
+    # team maintains (SM30), so it is in scope in a RISE tenant.
+    "prgn_cust_switches": "in_scope",
 }
 
 #: The CLI's `--modules` vocabulary, mapped to the module file names this file
@@ -189,6 +192,8 @@ CLI_MODULE_ALIASES: Dict[str, str] = {
     # OS & infrastructure hardening — the host layer, reachable where the customer
     # owns OS root (on-prem / self-managed hyperscaler); self-skips in RISE.
     "osec": "os_security",
+    # PRGN_CUST customizing switches (SAP Baseline v2.6).
+    "prgncust": "prgn_cust_switches",
 }
 
 #: Logical sources a RISE customer cannot produce, because they are read from the

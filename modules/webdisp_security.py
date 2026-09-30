@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -148,6 +149,9 @@ class WebDispatcherAuditor(BaseAuditor):
 
     def run_all_checks(self) -> List[Dict[str, Any]]:
         self.findings = []
+        # Reads its own source (the component patch level), independent of the
+        # profile, so it runs before the profile-coverage early return.
+        self.check_component_patch_age()
         rows = [r for r in (self.data.get("webdisp_params") or [])
                 if isinstance(r, dict)]
         if not rows:
@@ -163,6 +167,80 @@ class WebDispatcherAuditor(BaseAuditor):
         return self.findings
 
     # ── checks ─────────────────────────────────────────────────────────────
+
+    def check_component_patch_age(self):
+        """SECUPD-O: the Web Dispatcher's own patch level must be recent.
+
+        SAP Baseline SECUPD-O reads the internet-facing Web Dispatcher's
+        component level (config store COMP_LEVEL) and requires its last reported
+        change in the configuration history (CD_HIST_DATE) to be within the last
+        365 days. A dispatcher not patched in a year is the least-maintained
+        component on the most exposed edge of the estate, and it is the piece an
+        attacker reaches first. Reads the `webdisp_components` source; a row that
+        records no date cannot be judged and is left alone, and with no export at
+        all the check stays silent.
+        """
+        rows = self.data.get("webdisp_components")
+        if not isinstance(rows, list):
+            return
+        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=365)
+        stale, objects = [], []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            component = _cell(row, ("COMPONENT", "NAME", "COMP", "COMPONENT_NAME")) or "component"
+            raw = _cell(row, ("CD_HIST_DATE", "LAST_CHANGE", "CHANGE_DATE",
+                              "SP_REL_DATE", "LAST_REPORTED"))
+            when = self._parse_date(raw)
+            if when is None:
+                continue
+            if when < cutoff:
+                age = (datetime.now() - when).days
+                stale.append(f"{component}: last change {raw} "
+                             f"({age} days ago; must be within 365)")
+                objects.append({"type": "webdisp_component", "name": component})
+        if not stale:
+            return
+        self.finding(
+            check_id="WDISP-COMP-001",
+            title="Web Dispatcher component has not been patched within 12 months",
+            severity="HIGH",
+            category=self.CATEGORY,
+            description=(
+                "SAP Baseline SECUPD-O requires the internet-facing Web "
+                "Dispatcher's component level to have changed within the last 365 "
+                "days. The following have not:\n- " + "\n- ".join(stale) + "\n\n"
+                "The Web Dispatcher terminates the connection from the internet, "
+                "so a known vulnerability in an unpatched dispatcher is reachable "
+                "before any authentication or backend control applies."),
+            affected_items=stale,
+            remediation=(
+                "Update the Web Dispatcher to a current patch level (SAP Note "
+                "908097 lists releases) and re-export the component level so this "
+                "check can confirm the change date. Where SAP operates the "
+                "dispatcher under RISE, raise the patch currency with SAP ECS."),
+            references=[
+                "SAP Security Baseline SECUPD-O",
+                "SAP policy check SECUPD-O_a.1 — "
+                "TO_DATE(CD_HIST_DATE) >= ADD_DAYS(CURRENT_UTCTIMESTAMP, -365)",
+            ],
+            affected_objects=objects,
+            scope="aggregate",
+        )
+
+    @staticmethod
+    def _parse_date(raw: Any):
+        s = str(raw or "").strip()
+        if not s:
+            return None
+        if "T" in s:
+            s = s.split("T")[0]
+        for fmt in ("%Y-%m-%d", "%Y%m%d", "%d.%m.%Y", "%m/%d/%Y"):
+            try:
+                return datetime.strptime(s[:10], fmt)
+            except (ValueError, IndexError):
+                continue
+        return None
 
     def check_coverage(self):
         """No Web Dispatcher profile, on the component that faces the internet.

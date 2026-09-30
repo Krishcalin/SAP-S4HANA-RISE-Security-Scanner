@@ -220,8 +220,38 @@ def test_an_unrecognised_audit_level_is_not_reported_as_off():
     ("BTP-CC-009", "NETCF-P"),
     ("BTP-CC-010", "AUDIT-P"),
     ("BTP-CC-008", "SECUPD-P"),
+    # v2.6 split DISCL-H (HANA data-at-rest) out of NETENC-A and TRUST-A
+    # (trusted-RFC relationships) out of RFCGW-A; these checks already answered
+    # them and now map to the specific requirement.
+    ("CRYPTO-HANA-001", "DISCL-H"),
+    ("CRYPTO-HANA-002", "DISCL-H"),
+    ("CRYPTO-HANA-004", "DISCL-H"),
+    ("TRUST-001", "TRUST-A"),
+    ("TRUST-002", "TRUST-A"),
+    ("TRUST-003", "TRUST-A"),
+    # v2.6 new checks
+    ("AUTHASSIGN-001", "AUTHASSIGN-A"),
+    ("USRTYP-001", "USRTYP-A"),
+    ("USRCHAR-001", "USRCHAR-A"),
+    ("SECSTO-001", "SECSTO-A"),
+    ("WDISP-COMP-001", "SECUPD-O"),
 ])
 def test_each_new_check_maps_to_the_requirement_it_answers(check_id, requirement):
+    assert sapcontent.requirement_for(check_id) == requirement
+
+
+@pytest.mark.parametrize("check_id,requirement", [
+    # The remap is by exact id, not a broad prefix, so the members that do NOT
+    # answer the split-out requirement stay where they were: CRYPTO-HANA-003
+    # (root-key custody) and -005 (replication TLS, in-transit) are not
+    # data-at-rest; TRUST-004/008 are RFC-destination / gateway-ACL, not trust
+    # relationships.
+    ("CRYPTO-HANA-003", "NETENC-A"),
+    ("CRYPTO-HANA-005", "NETENC-A"),
+    ("TRUST-004", "RFCGW-A"),
+    ("TRUST-008", "RFCGW-A"),
+])
+def test_the_v26_remap_does_not_over_reach(check_id, requirement):
     assert sapcontent.requirement_for(check_id) == requirement
 
 
@@ -293,4 +323,13 @@ def test_the_new_checks_are_documented():
     from server import checkdocs
     for check_id in ("HANADB-PARAM-006", "HANADB-TRACE-001", "HANADB-VER-001",
                      "BTP-CC-009", "BTP-CC-010"):
+        assert checkdocs.check(check_id)["documented"], check_id
+
+
+def test_the_v26_new_checks_are_documented():
+    """The five checks added to answer the v2.6 requirements each carry a KB
+    narrative, so a customer working one is not handed an undescribed finding."""
+    from server import checkdocs
+    for check_id in ("AUTHASSIGN-001", "USRTYP-001", "USRCHAR-001",
+                     "SECSTO-001", "WDISP-COMP-001"):
         assert checkdocs.check(check_id)["documented"], check_id

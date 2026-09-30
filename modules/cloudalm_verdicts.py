@@ -53,6 +53,7 @@ in the report rather than in silence.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -118,8 +119,24 @@ class CloudAlmVerdictAuditor(BaseAuditor):
         self._baseline_cache = data
         return data
 
+    @staticmethod
+    def _normalize_policy_id(pid: Any) -> str:
+        """A version-stable policy id: upper-cased, with SAP's baseline-version
+        prefix stripped.
+
+        SAP renamed the policy id attribute between baseline versions — v2.4's
+        `2AAUDIT` is v2.6's `BL260_2AAUDIT` — while the requirement it carries
+        (AUDIT-A) is unchanged. A Cloud ALM export may name the policy in either
+        form depending on which version the tenant runs, so both the catalogue
+        index and the incoming id are reduced to the same bare id here. The
+        underlying requirement is what the verdict resolves to, and it is stable.
+        """
+        s = str(pid or "").strip().upper()
+        return re.sub(r"^BL\d+_", "", s)
+
     def _policy_index(self) -> Dict[str, Dict[str, Any]]:
-        """`{policy_id: {title, requirement, family, tier}}`.
+        """`{policy_id: {title, requirement, family, tier}}`, keyed on the
+        version-stable id (see `_normalize_policy_id`).
 
         The requirement side comes from the requirement whose `policies` list
         names this policy. Where several do — SAP groups a policy under more
@@ -133,7 +150,7 @@ class CloudAlmVerdictAuditor(BaseAuditor):
         rank = {"CRITICAL": 3, "STANDARD": 2, "EXTENDED": 1}
         index: Dict[str, Dict[str, Any]] = {}
         for policy in baseline.get("policies") or []:
-            pid = str(policy.get("policy_id") or "").strip().upper()
+            pid = self._normalize_policy_id(policy.get("policy_id"))
             if pid:
                 index[pid] = {"title": policy.get("title") or "",
                               "requirement": None, "family": None, "tier": None}
@@ -141,7 +158,7 @@ class CloudAlmVerdictAuditor(BaseAuditor):
             tier = req.get("tier")
             for pid in req.get("policies") or []:
                 entry = index.setdefault(
-                    str(pid).strip().upper(),
+                    self._normalize_policy_id(pid),
                     {"title": "", "requirement": None, "family": None, "tier": None})
                 if rank.get(str(tier).upper(), 0) > rank.get(
                         str(entry["tier"]).upper(), 0):
@@ -216,7 +233,7 @@ class CloudAlmVerdictAuditor(BaseAuditor):
                 BaseAuditor.SEVERITY_MEDIUM: 1}
         items, objects, tiers = [], [], {}
         for v in sorted(failed, key=lambda r: (r["policy"], r["system"])):
-            meta = index.get(v["policy"], {})
+            meta = index.get(self._normalize_policy_id(v["policy"]), {})
             tier = str(meta.get("tier") or "").upper()
             severity = TIER_SEVERITY.get(tier, BaseAuditor.SEVERITY_MEDIUM)
             if rank[severity] > rank[worst]:

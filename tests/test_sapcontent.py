@@ -94,8 +94,11 @@ def test_every_mapping_targets_a_requirement_that_exists():
 
 
 def test_longest_prefix_wins_in_the_mapping():
-    assert requirement_for("TRUST-010") == "MSGSRV-A"   # specific
-    assert requirement_for("TRUST-001") == "RFCGW-A"    # family default
+    assert requirement_for("TRUST-010") == "MSGSRV-A"       # specific override
+    assert requirement_for("TRUST-001") == "TRUST-A"        # v2.6 exact override
+    assert requirement_for("TRUST-005") == "RFCGW-A"        # family default (no override)
+    assert requirement_for("CRYPTO-HANA-001") == "DISCL-H"  # v2.6 exact override
+    assert requirement_for("CRYPTO-SNC-001") == "NETENC-A"  # CRYPTO- family default
     assert requirement_for("BASELINE-004") == "SCRIPT-A"
 
 

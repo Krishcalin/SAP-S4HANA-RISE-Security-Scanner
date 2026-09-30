@@ -116,7 +116,7 @@ def parse_policy(path: Path) -> Dict[str, Any]:
 #: requirement families reach the coverage page), so it must be a conscious act;
 #: the guard makes a new upstream version fail the build instead of ageing
 #: silently.
-BASELINE_VERSION = "v2.4"
+BASELINE_VERSION = "v2.6"
 
 
 def _version_key(name: str):
@@ -313,6 +313,35 @@ CHECK_TO_REQUIREMENT: Dict[str, str] = {
     "BASELINE-008": "SSO-A",
     "BASELINE-003": "NETENC-A",
     "BASELINE-009": "DISCL-A",
+    # ── v2.6 split two requirements out of the ones these checks already
+    # answered. Exact ids (longest-prefix-wins) so only the genuine members move
+    # and the looser family stays where it was.
+    #
+    # DISCL-H (HANA data-at-rest encryption): CRYPTO-HANA-001/002/004 read
+    # persistence / log / backup encryption. NOT -003 (root-key custody) or -005
+    # (system-replication TLS, in-transit) — those are a different subject.
+    # NETENC-A stays covered by CRYPTO-SNC-001/002 and CRYPTO-TLS-*.
+    "CRYPTO-HANA-001": "DISCL-H",
+    "CRYPTO-HANA-002": "DISCL-H",
+    "CRYPTO-HANA-004": "DISCL-H",
+    # TRUST-A (trusted-RFC relationships): TRUST-001 (RFCSYSACL trust from a lower
+    # tier), TRUST-002 (rfc/selftrust), TRUST-003 (RFCSLOPT=3 migration to the
+    # 2020 method). The rest of the TRUST-* family stays on RFCGW-A / MSGSRV-A,
+    # and RFCGW-A remains covered by INTG-GW-001..005.
+    "TRUST-001": "TRUST-A",
+    "TRUST-002": "TRUST-A",
+    "TRUST-003": "TRUST-A",
+    # v2.6 new checks — PRGN_CUST customizing switches
+    # (modules/prgn_cust_switches.py). Each prefix answers exactly one
+    # requirement, so a prefix is as precise as an exact id here.
+    "AUTHASSIGN-": "AUTHASSIGN-A",
+    "USRTYP-": "USRTYP-A",
+    "USRCHAR-": "USRCHAR-A",
+    # v2.6 new checks — secure-store encryption (crypto_posture) and the Web
+    # Dispatcher's own patch age (webdisp_security). WDISP-COMP-001 is an exact
+    # id because the rest of the WDISP- family maps through webdisp_baseline.json.
+    "SECSTO-": "SECSTO-A",
+    "WDISP-COMP-001": "SECUPD-O",
 }
 
 
