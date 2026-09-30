@@ -174,6 +174,18 @@ def test_the_backfill_copies_a_recorded_verdict_and_nothing_else():
             "UPDATE finding_observation SET details = "
             "COALESCE(details, '{}'::jsonb) || %s::jsonb WHERE id=%s",
             (json.dumps({"internet_exposed": True}), obs["id"]))
+        # The seeded database legitimately contains exposed findings:
+        # sample_data publishes an unauthenticated ICF service
+        # (/sap/bc/z_vendor_report) whose handler reaches several ABAP injection
+        # findings, so their latest observation honestly records
+        # internet_exposed=true. This test is about the backfill copying ONE
+        # recorded verdict and inventing none, so it owns its fixture — strip the
+        # key from every OTHER finding's observations, leaving exactly the one
+        # marked above. Without this the assertion counts the real exposure data
+        # and reads it as the backfill over-reaching.
+        conn.execute(
+            "UPDATE finding_observation SET details = details - 'internet_exposed' "
+            "WHERE finding_id <> %s", (fid,))
         conn.execute("DELETE FROM schema_version WHERE version=%s",
                      (migrations.INTERNET_EXPOSED_VERSION,))
         conn.execute("UPDATE finding SET internet_exposed = NULL")
