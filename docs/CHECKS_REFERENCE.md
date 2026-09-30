@@ -6,13 +6,13 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**484** check ids are written as literals in `modules/`, across **39** modules. A further **354** are built at runtime from shipped rule tables, giving **838** in total.
+**489** check ids are written as literals in `modules/`, across **40** modules. A further **354** are built at runtime from shipped rule tables, giving **843** in total.
 
 Each check is published with **what it reads** and **which SAP Security Baseline requirement it answers** — the two things that make a catalogue auditable rather than a number. A competitor publishing a count and no itemised list is making a claim; this is a claim somebody else can check.
 
 ## What this file does not claim
 
-**62 of the 484 titles and 33 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**62 of the 489 titles and 33 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -22,14 +22,14 @@ A check's **identity** is its id. Severity is a judgement about a particular fin
 
 Every check below carries the SAP Security Baseline requirement it answers, where one exists. This is the roll-up, and it reports **three numbers rather than one percentage**, because a single percentage hides the interesting part.
 
-- **28 of 28** requirements that are IN SCOPE for this product are addressed by at least one check here.
-- **10 of 38** published requirements are out of scope, because they are for a stack this product does not read. They are named below, not dropped: the denominator has to be honest in both directions, and a reader comparing 28 against 38 has no way to know that.
+- **35 of 35** requirements that are IN SCOPE for this product are addressed by at least one check here.
+- **10 of 45** published requirements are out of scope, because they are for a stack this product does not read. They are named below, not dropped: the denominator has to be honest in both directions, and a reader comparing 35 against 45 has no way to know that.
 - **0** in-scope requirements are not addressed at all. They are listed below rather than summarised away.
-- **555 of 838** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
+- **544 of 843** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
 
 > ⚠️ These are CHECK ITEMS in the CSA policies, not the 'control points' counted in the Baseline document — the widely-quoted 214 (69/92/53) is that other unit. The two do not reconcile; do not publish a percentage of one against the other.
 
-Baseline version: **v2.4**.
+Baseline version: **v2.6**.
 
 ### Published requirements this catalogue does not address
 
@@ -39,16 +39,16 @@ Baseline version: **v2.4**.
 
 | Requirement | Tier | Technology | Title |
 |---|---|---|---|
-| `AUDIT-J` | EXTENDED | Java | Enable XML Hardener |
-| `CRITAU-J` | STANDARD | Java | Role SAP_J2EE_ADMIN must not be assigned to users other than standard users |
-| `DISCL-J` | STANDARD | Java | Disclosure of unnecessary information about versions or from errors |
-| `MSGSRV-J` | CRITICAL | Java | File with access control list for message server |
-| `NOTEST-J` | CRITICAL | Java | InvokerServlet globally enabled |
-| `PWDPOL-J` | CRITICAL | Java | Minimum Password Length |
-| `RFCGW-J` | CRITICAL | Java | Path-like value for ms/acl_info (message server access control list) |
-| `SECUPD-J` | CRITICAL | Java | Last detected Update older than 1 year |
-| `SESS-J` | STANDARD | Java | SystemCookiesDataProtection |
-| `SSO-J` | EXTENDED | Java | Send SAP logon ticket only via HTTPS |
+| `AUDIT-J` | EXTENDED | Java | Java property: enable.xml.hardener = TRUE (enable XML Hardener, see Note 2372626) |
+| `CRITAU-J` | STANDARD | Java | Role SAP_J2EE_ADMIN must not be assigned to users other than standard users (run against ABAP system of dual stack) |
+| `DISCL-J` | STANDARD | Java | Java property: UseServerHeader = FALSE (server header must be disabled in the HTTP Provider Service) |
+| `MSGSRV-J` | CRITICAL | Java | Java property: ms/acl_info path is maintained (Message Server Security, pointing to access control list file for Message Server (SCS instance) |
+| `NOTEST-J` | CRITICAL | Java | Java property: EnableInvokerServletGlobally = FALSE (InvokerServlet globally disabled) |
+| `PWDPOL-J` | CRITICAL | Java | Java property: Minimum Password Length ≥ 12 (Password Policy) |
+| `RFCGW-J` | CRITICAL | Java | Java property: gw/sec_info (mount path defined to ACL file) (SCS instance) |
+| `SECUPD-J` | CRITICAL | Java | Software component level last reported change in CCDB: within last 12 months |
+| `SESS-J` | STANDARD | Java | Java property: SystemCookiesDataProtection = true (HTTP Service property, Session Protection, see Note 2068872) |
+| `SSO-J` | EXTENDED | Java | Java property: ume.logon.security.enforce_secure_cookie = TRUE (send SAP logon ticket only via HTTPS, see Note 2068872) |
 
 ## Checks by module
 
@@ -288,11 +288,11 @@ Reads: `auth_objects`, `change_documents`, `client_settings`, `code_inventory`, 
 | `CODE-TMS-004` | MEDIUM | Transport imports outside normal change windows (weekends) | `CHANGE-A` |
 | `CODE-TMS-005` | CRITICAL | Transports imported into production directly from development | `CHANGE-A` |
 
-### `crypto_posture` — 19 checks
+### `crypto_posture` — 20 checks
 
 Category: Cryptographic Posture
 
-Reads: `certificate_inventory`, `crypto_library`, `hana_encryption`, `hana_parameters`, `key_management`, `pse_inventory`, `security_params`, `snc_config`, `tls_config` — the sources the MODULE consumes; an individual check below reads some subset of them.
+Reads: `certificate_inventory`, `crypto_library`, `hana_encryption`, `hana_parameters`, `key_management`, `pse_inventory`, `secure_store`, `security_params`, `snc_config`, `tls_config` — the sources the MODULE consumes; an individual check below reads some subset of them.
 
 | Check | Severity | Title | SAP Baseline |
 |---|---|---|---|
@@ -300,10 +300,10 @@ Reads: `certificate_inventory`, `crypto_library`, `hana_encryption`, `hana_param
 | `CRYPTO-CERT-002` | HIGH | *varies* — Certificates expiring within … days | `NETENC-A` |
 | `CRYPTO-CERT-003` | HIGH | Certificates with weak key sizes or algorithms | `NETENC-A` |
 | `CRYPTO-CERT-004` | MEDIUM | Self-signed certificates used in production context | `NETENC-A` |
-| `CRYPTO-HANA-001` | HIGH | HANA data volume encryption is disabled | `NETENC-A` |
-| `CRYPTO-HANA-002` | MEDIUM | HANA log volume encryption is disabled | `NETENC-A` |
+| `CRYPTO-HANA-001` | HIGH | HANA data volume encryption is disabled | `DISCL-H` |
+| `CRYPTO-HANA-002` | MEDIUM | HANA log volume encryption is disabled | `DISCL-H` |
 | `CRYPTO-HANA-003` | MEDIUM | HANA encryption uses internal/default root key management | `NETENC-A` |
-| `CRYPTO-HANA-004` | HIGH | HANA backup encryption is disabled | `NETENC-A` |
+| `CRYPTO-HANA-004` | HIGH | HANA backup encryption is disabled | `DISCL-H` |
 | `CRYPTO-HANA-005` | HIGH | HANA system replication is not TLS-encrypted | `NETENC-A` |
 | `CRYPTO-HANA-006` | INFO | Encryption at rest is operated by SAP on this deployment | `NETENC-A` |
 | `CRYPTO-KEY-001` | MEDIUM | Key management policy gaps | `NETENC-A` |
@@ -315,6 +315,7 @@ Reads: `certificate_inventory`, `crypto_library`, `hana_encryption`, `hana_param
 | `CRYPTO-TLS-001` | HIGH | TLS endpoints allowing deprecated protocol versions | `NETENC-A` |
 | `CRYPTO-TLS-002` | HIGH | TLS cipher suites include weak algorithms | `NETENC-A` |
 | `CRYPTO-TLS-003` | MEDIUM | HTTPS endpoints without HSTS (Strict Transport Security) | `NETENC-A` |
+| `SECSTO-001` | MEDIUM | Secure store encryption is not confirmed OK (possible default master key) | `SECSTO-A` |
 
 ### `data_protection` — 21 checks
 
@@ -630,6 +631,16 @@ Reads: `os_file_permissions`, `os_groups`, `os_services`, `os_users` — the sou
 | `OSEC-USR-001` | HIGH | SAP OS service account holds administrative privilege | — |
 | `OSEC-USR-002` | MEDIUM | SAP Host Agent account sapadm has an interactive login shell | — |
 
+### `prgn_cust_switches` — 3 checks
+
+Category: User & Authorization
+
+| Check | Severity | Title | SAP Baseline |
+|---|---|---|---|
+| `AUTHASSIGN-001` | MEDIUM | User assignments are not blocked while transports move | `AUTHASSIGN-A` |
+| `USRCHAR-001` | MEDIUM | User names may contain 'wide' space characters (BNAME_RESTRICT) | `USRCHAR-A` |
+| `USRTYP-001` | MEDIUM | Reference-user type is not restricted (REF_USER_CHECK not E) | `USRTYP-A` |
+
 ### `resilience_posture` — 9 checks
 
 Reads: `background_jobs`, `backup_catalog`, `hana_parameters`, `recovery_tests` — the sources the MODULE consumes; an individual check below reads some subset of them.
@@ -774,9 +785,9 @@ Reads: `client_settings`, `ms_acl`, `profiles`, `rfc_destinations`, `rfc_trust`,
 | `STDUSR-002` | CRITICAL | Standard users still have SAP default passwords | `STDUSR-A` |
 | `STDUSR-003` | HIGH | Standard users not locked | `STDUSR-A` |
 | `STDUSR-COV-001` | INFO | *varies* | `STDUSR-A` |
-| `TRUST-001` | *varies* — HIGH or MEDIUM | Inbound trusted-RFC relationships (verify no trust from a lower tier) | `RFCGW-A` |
-| `TRUST-002` | HIGH | RFC self-trust enabled | `RFCGW-A` |
-| `TRUST-003` | HIGH | Trusted-RFC relationships not migrated to the current security method | `RFCGW-A` |
+| `TRUST-001` | *varies* — HIGH or MEDIUM | Inbound trusted-RFC relationships (verify no trust from a lower tier) | `TRUST-A` |
+| `TRUST-002` | HIGH | RFC self-trust enabled | `TRUST-A` |
+| `TRUST-003` | HIGH | Trusted-RFC relationships not migrated to the current security method | `TRUST-A` |
 | `TRUST-004` | HIGH | Trusted RFC destination configured with a fixed logon user | `RFCGW-A` |
 | `TRUST-005` | HIGH | SAProuter route table allows wildcard target host/port | `RFCGW-A` |
 | `TRUST-006` | HIGH | Message-server internal/external separation weak | `MSGSRV-A` |
@@ -828,12 +839,13 @@ Reads: `vendor_bank`, `vendor_master` — the sources the MODULE consumes; an in
 | `VBM-DATA-001` | LOW | Bank export contains no account numbers, so no account can be compared | — |
 | `VBM-SOLE-001` | MEDIUM | Payment-relevant partners created and last changed by the same person | — |
 
-### `webdisp_security` — 2 checks
+### `webdisp_security` — 3 checks
 
-Reads: `webdisp_params` — the sources the MODULE consumes; an individual check below reads some subset of them.
+Reads: `webdisp_components`, `webdisp_params` — the sources the MODULE consumes; an individual check below reads some subset of them.
 
 | Check | Severity | Title | SAP Baseline |
 |---|---|---|---|
+| `WDISP-COMP-001` | HIGH | Web Dispatcher component has not been patched within 12 months | `SECUPD-O` |
 | `WDISP-COV-001` | INFO | No Web Dispatcher profile was supplied, so the internet-facing instance was not assessed | — |
 | `WDISP-SSL-001` | LOW | Web Dispatcher does not encrypt traffic to the back-end systems | — |
 
@@ -855,7 +867,7 @@ Transcribed from SAP's WEBDISP_ALL baseline policies (2ODISCL, 2ONETENC). `WDISP
 
 Source: `modules/security_params.py — BASELINE + ECS_RULES`
 
-SAP Baseline: `CHANGE-A`, `FILE-A`, `NETCF-A`, `NETENC-A`, `PWDPOL-A`, `RFCGW-A`, `SCRIPT-A`, `USRCTR-A` — 76 of 89 answer none, which for this family is expected rather than a gap.
+SAP Baseline: `CHANGE-A`, `DISCL-A`, `FILE-A`, `MSGSRV-A`, `NETCF-A`, `NETENC-A`, `PWDPOL-A`, `RFCGW-A`, `SCRIPT-A`, `SSO-A`, `STDUSR-A`, `USRCTR-A` — 65 of 89 answer none, which for this family is expected rather than a gap.
 
 Examples: `PARAM-abap/ext_debugging_possible`, `PARAM-abap/path_norm_Windows`, `PARAM-abap/path_normalization`, `PARAM-auth/check/calltransaction`, `PARAM-auth/no_check_in_some_cases`, `PARAM-auth/object_disabling_active`
 

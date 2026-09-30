@@ -78,6 +78,9 @@ TEAM_BY_PREFIX: List[Tuple[str, str]] = [
     ("JOBCMD-", "basis"),
     ("HANADB-", "basis"),
     ("CRYPTO-", "basis"),
+    # ABAP secure store encryption (Baseline v2.6 SECSTO-A): basis owns the
+    # secure store and its master key, the same ground CRYPTO- routes there for.
+    ("SECSTO-", "basis"),
     ("HOTNEWS-", "basis"),
     ("NET-", "integration"),
     ("INTG-", "integration"),

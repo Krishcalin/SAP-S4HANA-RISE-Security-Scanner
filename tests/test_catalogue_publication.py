@@ -84,7 +84,10 @@ def test_the_dead_prefix_is_gone_and_its_epitaph_is_not():
 
 @pytest.mark.parametrize("parameter,requirement", [
     ("login/min_password_lng", "PWDPOL-A"),
-    ("auth/check/calltransaction", "USRCTR-A"),
+    # v2.6 restructured USRCTR-A: auth/check/calltransaction left it, so this
+    # demonstrates the same title-derivation on a parameter v2.6 DID name —
+    # rsec/securestorage/keyfile reaches the new SECSTO-A requirement.
+    ("rsec/securestorage/keyfile", "SECSTO-A"),
     ("dynp/checkskip1screen", "USRCTR-A"),
     ("snc/enable", "NETENC-A"),
 ])

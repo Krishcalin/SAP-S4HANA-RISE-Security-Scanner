@@ -1,0 +1,3 @@
+NAME,VALUE
+EncryptionMasterKey,Default key in use
+EncryptionAlgorithm,AES256

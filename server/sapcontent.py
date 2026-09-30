@@ -337,6 +337,11 @@ CHECK_TO_REQUIREMENT: Dict[str, str] = {
     "AUTHASSIGN-": "AUTHASSIGN-A",
     "USRTYP-": "USRTYP-A",
     "USRCHAR-": "USRCHAR-A",
+    # v2.6 new checks — secure-store encryption (crypto_posture) and the Web
+    # Dispatcher's own patch age (webdisp_security). WDISP-COMP-001 is an exact
+    # id because the rest of the WDISP- family maps through webdisp_baseline.json.
+    "SECSTO-": "SECSTO-A",
+    "WDISP-COMP-001": "SECUPD-O",
 }
 
 

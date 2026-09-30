@@ -62,11 +62,11 @@ reason for each.
 
 ## Every source, including the ones this guide does not cover
 
-The scanner reads **144** logical sources. All of them now have a procedure: the
+The scanner reads **147** logical sources. All of them now have a procedure: the
 sections up to *SAP Cloud ALM* cover what a first scan needs, and
 [*The remaining sources*](#the-remaining-sources) below covers the rest.
 
-[**`EXPORT_SOURCES.md`**](EXPORT_SOURCES.md) lists all 144 — the filenames the
+[**`EXPORT_SOURCES.md`**](EXPORT_SOURCES.md) lists all 147 — the filenames the
 loader accepts, which checks each one feeds, and whether a procedure exists. It is
 generated from the code, so a source cannot be added to the scanner without
 appearing there, and it will show up as undocumented until somebody writes the
@@ -131,6 +131,35 @@ Required: RFCDEST, RFCTYPE, RFCHOST, RFCUSER, RFCSNC
 Required: ICF_NAME, ICF_ACTIVE, AUTH_REQUIRED
 Optional: HANDLER_CLASS
 ```
+
+### PRGN_CUST Customizing Switches (`prgn_cust.csv`)
+**Transaction:** `SM30` (view `PRGN_CUST`)
+```
+Required: ID, PATH
+```
+The Profile Generator's central switch table. Answers SAP Baseline v2.6
+AUTHASSIGN-A (`US_ASGM_TRANSPORT`, `USER_REL_IMPORT`), USRTYP-A
+(`REF_USER_CHECK`) and USRCHAR-A (`BNAME_RESTRICT`). One row per switch; SAP's
+own column names are `ID` (the switch) and `PATH` (its value).
+
+### ABAP Secure Store Info (`secure_store.csv`)
+**Source:** secure-store diagnostics (config store `ABAP_SECSTORE_INFO`)
+```
+Required: NAME, VALUE
+```
+The ABAP secure store's encryption status. Answers SAP Baseline v2.6 SECSTO-A:
+every `Encryption*` record must report `OK`, i.e. the store is on an individual
+master key rather than SAP's default one.
+
+### Web Dispatcher Component Level (`webdisp_components.csv`)
+**Source:** the Web Dispatcher's component / patch level (config store `COMP_LEVEL`)
+```
+Required: COMPONENT, CD_HIST_DATE
+Optional: VERSION, SP, PATCH, VENDOR, SP_REL_DATE
+```
+The internet-facing dispatcher's own patch age. Answers SAP Baseline v2.6
+SECUPD-O: the last reported change (`CD_HIST_DATE`) must be within the last 365
+days.
 
 > ✅ **`HANDLER_CLASS` IS READ.** It was specified and then consumed by nothing
 > for a while, and this box said so. `modules/reachability.py` now joins on it,
