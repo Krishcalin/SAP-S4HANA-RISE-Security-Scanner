@@ -159,7 +159,7 @@ clean — see chapter 13 of the architecture guide.
 | `ucon_rfc_state` | `ucon_rfc_state.csv`, `ucon_rfc.csv`, `uconcockpit.csv`, `ucon_phase_tool.csv` | `ucon_exposure` | documented |
 | `user_groups` | `user_groups.csv` | `iam_advanced` | documented |
 | `user_roles` | `user_roles.csv`, `agr_users.csv` | `abap_authorizations`, `access_risk_analysis`, `iam_advanced`, `role_governance`, `user_auth_audit` | documented |
-| `users` | `users.csv` | `basis_job_command`, `iam_advanced`, `security_params`, `system_trust`, `user_auth_audit` | documented |
+| `users` | `users.csv` | `basis_job_command`, `iam_advanced`, `log_review`, `security_params`, `system_trust`, `user_auth_audit` | documented |
 | `vendor_bank` | `vendor_bank.csv`, `but0bk.csv`, `lfbk.csv` | `vendor_master` | documented |
 | `vendor_master` | `vendor_master.csv`, `but000.csv`, `lfa1.csv` | `vendor_master` | documented |
 | `webdisp_components` | `webdisp_components.csv`, `webdisp_comp_level.csv`, `webdisp_comp.csv` | `webdisp_security` | documented |

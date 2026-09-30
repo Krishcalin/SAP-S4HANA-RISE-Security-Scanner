@@ -134,6 +134,15 @@ class LogReviewAuditor(BaseAuditor):
     # authorization object or an SAP Note number.
     DIRECT_TABLE_TCODES = {"SE16", "SE16N", "SE17", "SM30", "SM31"}
     AUDIT_CONFIG_TCODES = {"SM19", "RSAU_CONFIG"}
+    # External operating-system command maintenance and execution. SM69 maintains
+    # the command definitions, SM49 runs them; either is a route from an SAP
+    # authorization to a shell on the host, so both are worth reviewing on sight.
+    OS_COMMAND_TCODES = {"SM49", "SM69"}
+    # SAP user types (USR02.USTYP) that are NOT meant to log on interactively: a
+    # System user (B) runs background and RFC work, a Communication user (C) is
+    # for CPIC/RFC only. A dialog logon by either is the account being used for
+    # something it was never provisioned for.
+    NON_DIALOG_USER_TYPES = {"B": "System", "C": "Communication"}
     #: Standard SAP profiles that make their holder privileged.
     PRIVILEGED_PROFILES = {"SAP_ALL", "SAP_NEW", "S_A.SYSTEM"}
     #: SAP-delivered default accounts. Same list the system-trust and basis-job
@@ -201,6 +210,9 @@ class LogReviewAuditor(BaseAuditor):
         self.check_direct_table_access()
         self.check_audit_config_changes()
         self.check_rare_terminals()
+        self.check_os_command_execution()
+        self.check_technical_user_dialog_logons()
+        self.check_password_spraying()
         return self.findings
 
     # ================================================================= plumbing
@@ -313,6 +325,9 @@ class LogReviewAuditor(BaseAuditor):
             tags.add("transaction_start")
         if "table" in text:
             tags.add("table_access")
+        if "external command" in text or "operating system command" in text \
+                or "external os command" in text:
+            tags.add("os_command")
 
         # An explicit result column overrides a text guess about success/failure. It
         # only ever RE-LABELS a logon we already identified — it never invents a class
@@ -335,6 +350,8 @@ class LogReviewAuditor(BaseAuditor):
             tags.add("table_access")
         if tcode in self.AUDIT_CONFIG_TCODES:
             tags.add("audit_config_change")
+        if tcode in self.OS_COMMAND_TCODES:
+            tags.add("os_command")
         return tags
 
     # ------------------------------------------------------------- preparation
@@ -1358,5 +1375,211 @@ class LogReviewAuditor(BaseAuditor):
             references=[
                 "SAP Security Baseline — privileged access review",
                 "NIST SP 800-92 — Guide to Computer Security Log Management",
+            ],
+        )
+
+    # ---------------------------------------------------------- input: user types
+    def _user_types(self) -> Dict[str, str]:
+        """`{USER (upper): USTYP (upper)}` from the users export, or {}.
+
+        Read only to tell a technical account from a person; an absent users
+        export simply means the technical-user pattern stays silent.
+        """
+        out: Dict[str, str] = {}
+        for row in self._rows(self.data.get("users")):
+            name = self._get(row, self.USER_KEYS).upper()
+            ustyp = self._get(row, ("USTYP", "USER_TYPE", "USERTYPE")).upper()
+            if name and ustyp:
+                out[name] = ustyp
+        return out
+
+    # ------------------------------------------------- retrospective patterns (v2)
+    def check_os_command_execution(self):
+        """LREV-PAT-008: external operating-system command activity in the window.
+
+        An external OS command turns an SAP authorization into a shell command on
+        the application-server host, outside every SAP authorization check that
+        follows — one of the few events worth reviewing individually.
+        """
+        if not self._events:
+            return
+        by_user: Dict[str, int] = {}
+        tools: Set[str] = set()
+        for ev in self._events:
+            if "os_command" not in ev["tags"]:
+                continue
+            key = ev["user"] or "(user not stated)"
+            by_user[key] = by_user.get(key, 0) + 1
+            if ev["tcode"] in self.OS_COMMAND_TCODES:
+                tools.add(ev["tcode"])
+        if not by_user:
+            return
+        total = sum(by_user.values())
+        named = {u for u in by_user if u != "(user not stated)"}
+        self.finding(
+            check_id="LREV-PAT-008",
+            title="External operating-system command activity in the reviewed window",
+            severity=self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=self._with_window(
+                "{0} external operating-system command event(s) by {1} account(s) appear "
+                "in the reviewed window{2}. An external OS command runs on the application "
+                "server host outside every SAP authorization check that follows it, so it "
+                "is a direct route from an SAP authorization to the operating system. Each "
+                "event should match an approved operational task, and the command "
+                "definitions (SM69) should be a fixed, reviewed set rather than maintained "
+                "ad hoc."
+            ).format(total, len(by_user),
+                     "; via " + ", ".join(sorted(tools)) if tools else ""),
+            affected_items=[
+                "{0}: {1} event(s)".format(u, n)
+                for u, n in sorted(by_user.items(), key=lambda kv: (-kv[1], kv[0]))
+            ],
+            affected_objects=self._user_objects(named),
+            scope="aggregate",
+            details=self._details({
+                "occurrences": total,
+                "accounts": sorted(by_user),
+                "per_account": by_user,
+                "transactions_seen": sorted(tools),
+            }),
+            remediation=(
+                "Reconcile each external-command event with an approved operational task. "
+                "Restrict the SM49/SM69 transactions and the S_LOG_COM authorization to a "
+                "small named set of operators, keep the SM69 command definitions to a "
+                "reviewed allowlist, and run external commands through a controlled, logged "
+                "process rather than ad hoc."
+            ),
+            references=[
+                "SAP Security Baseline — external operating system commands",
+                "DSAG ERP Auditing Guide — external command execution",
+            ],
+        )
+
+    def check_technical_user_dialog_logons(self):
+        """LREV-PAT-009: interactive logon by an account typed for non-dialog use.
+
+        A System (USTYP B) or Communication (USTYP C) user is provisioned for
+        background / RFC / CPIC work and is not meant to reach a screen; a dialog
+        logon under one is the shape a stolen technical credential takes.
+        """
+        if not self._events:
+            return
+        types = self._user_types()
+        if not types:
+            return
+        label: Dict[str, str] = {}
+        counts: Dict[str, int] = {}
+        for ev in self._events:
+            if "dialog_logon" not in ev["tags"]:
+                continue
+            user = ev["user"]
+            if not user:
+                continue
+            kind = self.NON_DIALOG_USER_TYPES.get(types.get(user, ""))
+            if kind:
+                label[user] = kind
+                counts[user] = counts.get(user, 0) + 1
+        if not label:
+            return
+        self.finding(
+            check_id="LREV-PAT-009",
+            title="Interactive logon by a technical (non-dialog) account",
+            severity=self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=self._with_window(
+                "{0} account(s) typed for non-interactive use had a dialog (interactive) "
+                "logon in the reviewed window: {1}. A System or Communication user exists "
+                "for background, RFC or CPIC work and is not meant to be logged on to a "
+                "screen, so a dialog logon under one is the shape a stolen technical "
+                "credential takes — the account already holds wide, rarely-reviewed "
+                "authorizations and, as a technical user, its password does not expire."
+            ).format(len(label),
+                     ", ".join("{0} ({1})".format(u, label[u]) for u in sorted(label))),
+            affected_items=[
+                "{0}: {1} user, {2} dialog logon(s)".format(u, label[u], counts[u])
+                for u in sorted(label)
+            ],
+            affected_objects=self._user_objects(set(label)),
+            scope="aggregate",
+            details=self._details({
+                "accounts": sorted(label),
+                "types": label,
+                "per_account": counts,
+            }),
+            remediation=(
+                "Confirm each event with the account owner. Keep System and Communication "
+                "users to their type — they should not carry a dialog logon — and where a "
+                "person must act as one, use a named dialog account under an emergency-access "
+                "process instead. Rotate the technical account's credentials if the logon is "
+                "not explained."
+            ),
+            references=[
+                "SAP Security Baseline — user types and technical accounts",
+                "DSAG ERP Auditing Guide — misuse of technical users",
+            ],
+        )
+
+    def check_password_spraying(self):
+        """LREV-PAT-010: one source failing logon against many distinct accounts.
+
+        The reconnaissance half of the failure-then-success pattern: a few common
+        passwords tried thinly across many users from one source, shaped to stay
+        under a per-account lockout. Distinct from LREV-PAT-002, which is a run of
+        failures concentrated on ONE account.
+        """
+        if not self._events:
+            return
+        threshold = int(self.get_config("logreview_spray_distinct_users", 5))
+        by_terminal: Dict[str, Set[str]] = {}
+        for ev in self._events:
+            if "dialog_logon_failure" not in ev["tags"]:
+                continue
+            term = ev["terminal"]
+            if not term or not ev["user"]:
+                continue
+            by_terminal.setdefault(term, set()).add(ev["user"])
+        sprayers = {t: us for t, us in by_terminal.items() if len(us) >= threshold}
+        if not sprayers:
+            return
+        targeted: Set[str] = set()
+        for us in sprayers.values():
+            targeted |= us
+        self.finding(
+            check_id="LREV-PAT-010",
+            title="Failed logons against many accounts from one source (password spraying)",
+            severity=self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=self._with_window(
+                "{0} source terminal(s) each produced failed logons against {1} or more "
+                "distinct accounts in the reviewed window. Failures spread thinly across "
+                "many accounts from one source — rather than concentrated on one — is "
+                "password spraying: a small number of common passwords tried against a "
+                "large set of users, shaped to stay under a per-account lockout. It is the "
+                "reconnaissance this review flags separately from the single-account "
+                "failure-then-success run (LREV-PAT-002)."
+            ).format(len(sprayers), threshold),
+            affected_items=[
+                "{0}: failed logons against {1} account(s)".format(t, len(us))
+                for t, us in sorted(sprayers.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+            ],
+            # The targeted accounts are the objects at risk; the source terminal stays
+            # in details, where a per-run hostname does not churn a graph node.
+            affected_objects=self._user_objects(targeted),
+            scope="aggregate",
+            details=self._details({
+                "distinct_user_threshold": threshold,
+                "per_terminal": {t: sorted(us) for t, us in sprayers.items()},
+            }),
+            remediation=(
+                "Treat each source as a potential intrusion attempt: confirm whether the "
+                "terminal is a legitimate host and block it if not, and check whether any "
+                "targeted account then logged on successfully. Enforce a strong password "
+                "and lockout policy, and multi-factor authentication where possible, so "
+                "spraying does not eventually land."
+            ),
+            references=[
+                "SAP Security Baseline — brute-force protection and password policy",
+                "MITRE ATT&CK T1110.003 — Password Spraying",
             ],
         )
