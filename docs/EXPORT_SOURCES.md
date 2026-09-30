@@ -116,7 +116,7 @@ clean — see chapter 13 of the architecture guide.
 | `payment_runs` | `payment_runs.csv`, `reguh.csv` | `master_data_changes` | documented |
 | `personal_data_inventory` | `personal_data_inventory.csv`, `pdi.csv` | `data_protection` | documented |
 | `posting_periods` | `posting_periods.csv`, `t001b.csv`, `ob52.csv` | `financial_controls` | documented |
-| `prgn_cust` | `prgn_cust.csv`, `prgn_cust_switches.csv`, `prgncust.csv` | — | documented |
+| `prgn_cust` | `prgn_cust.csv`, `prgn_cust_switches.csv`, `prgncust.csv` | `prgn_cust_switches` | documented |
 | `profiles` | `profiles.csv`, `usr04.csv` | `basis_job_command`, `log_review`, `system_trust`, `user_auth_audit` | documented |
 | `pse_inventory` | `pse_inventory.csv`, `strust_pse.csv` | `crypto_posture` | documented |
 | `purpose_of_processing` | `purpose_of_processing.csv`, `pop_config.csv` | `data_protection` | documented |

@@ -635,6 +635,8 @@ Reads: `os_file_permissions`, `os_groups`, `os_services`, `os_users` — the sou
 
 Category: User & Authorization
 
+Reads: `prgn_cust` — the sources the MODULE consumes; an individual check below reads some subset of them.
+
 | Check | Severity | Title | SAP Baseline |
 |---|---|---|---|
 | `AUTHASSIGN-001` | MEDIUM | User assignments are not blocked while transports move | `AUTHASSIGN-A` |
