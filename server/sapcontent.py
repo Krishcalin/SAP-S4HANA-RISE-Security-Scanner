@@ -331,6 +331,12 @@ CHECK_TO_REQUIREMENT: Dict[str, str] = {
     "TRUST-001": "TRUST-A",
     "TRUST-002": "TRUST-A",
     "TRUST-003": "TRUST-A",
+    # v2.6 new checks — PRGN_CUST customizing switches
+    # (modules/prgn_cust_switches.py). Each prefix answers exactly one
+    # requirement, so a prefix is as precise as an exact id here.
+    "AUTHASSIGN-": "AUTHASSIGN-A",
+    "USRTYP-": "USRTYP-A",
+    "USRCHAR-": "USRCHAR-A",
 }
 
 

@@ -91,6 +91,7 @@ AUDITORS: List[Tuple[str, str]] = [
     ("ucon_exposure", "UconExposureAuditor"),
     ("webdisp_security", "WebDispatcherAuditor"),
     ("os_security", "OSSecurityAuditor"),
+    ("prgn_cust_switches", "PrgnCustSwitchAuditor"),
 ]
 
 #: Module KEYS (the CLI's `--modules` vocabulary), for `BaseAuditor.run_context`.

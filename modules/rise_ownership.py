@@ -54,6 +54,12 @@ TEAM_BY_PREFIX: List[Tuple[str, str]] = [
     ("ATC-", "development"),
     ("ABAP-", "development"),
     ("AUTH-", "authorizations"),
+    # PRGN_CUST customizing switches (v2.6): PRGN_CUST is the Profile Generator's
+    # switch table, owned by the authorizations team, so the transport-assignment,
+    # reference-user-type and user-name-character switches all route there.
+    ("AUTHASSIGN-", "authorizations"),
+    ("USRTYP-", "authorizations"),
+    ("USRCHAR-", "authorizations"),
     ("USR-", "identity"),
     ("STDUSR-", "basis"),
     ("IAM-", "identity"),
