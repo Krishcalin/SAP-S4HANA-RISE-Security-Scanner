@@ -1660,6 +1660,13 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
         wildcard_topic_objects: List[Dict[str, Any]] = []
         no_acl_objects: List[Dict[str, Any]] = []
         cross_namespace_objects: List[Dict[str, Any]] = []
+        # A queue that subscribes to two topics under the SAME foreign namespace
+        # (sap/foo and sap/bar while it owns sap/s4) is ONE cross-namespace fact,
+        # not two: the display line and the object are keyed on the namespace, not
+        # the topic. Without this guard the identical line — and an identical graph
+        # object — is emitted once per topic, inflating affected_count and the
+        # "N queue(s)" total for a difference the reader cannot even see.
+        seen_cross_ns: set = set()
 
         for queue in queues:
             if not isinstance(queue, dict):
@@ -1688,7 +1695,9 @@ class BtpCloudSurfaceAuditor(BaseAuditor):
                     # Cross-namespace subscriptions
                     if namespace and isinstance(topic, str):
                         topic_ns = topic.split("/")[0] if "/" in topic else ""
-                        if topic_ns and topic_ns != namespace:
+                        if topic_ns and topic_ns != namespace \
+                                and (name, topic_ns) not in seen_cross_ns:
+                            seen_cross_ns.add((name, topic_ns))
                             cross_namespace.append(
                                 f"Queue: {name} — subscribes to foreign namespace: "
                                 f"{topic_ns} (own: {namespace})"
