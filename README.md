@@ -406,6 +406,7 @@ SESSION_SECRET=$(python -c "import secrets;print(secrets.token_urlsafe(48))") \
 |---|---|
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | How it all works, in plain language |
 | [CHECKS_REFERENCE.md](docs/CHECKS_REFERENCE.md) | Every check, generated from the code |
+| [LOG_USE_CASES.md](docs/LOG_USE_CASES.md) | Log-based threats, violations and correlations, mapped to MITRE ATT&CK and SAP Baseline |
 | [EXPORT_GUIDE.md](docs/EXPORT_GUIDE.md) | How to produce the exports |
 | [EXPORT_SOURCES.md](docs/EXPORT_SOURCES.md) | The full source catalogue |
 | [RELEASE_GATE.md](docs/RELEASE_GATE.md) | Adopting the gate without blocking everyone |
