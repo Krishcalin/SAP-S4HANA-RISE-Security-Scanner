@@ -569,7 +569,47 @@ def build_parser() -> argparse.ArgumentParser:
                          "nothing, write nothing")
     rf.add_argument("--out", default="./extract")
     rf.set_defaults(fn=cmd_rfc)
+
+    ls = sub.add_parser(
+        "logserv",
+        help="collect a time-bounded window of SAP LogServ logs (OCSF) for the "
+             "retrospective log review. The endpoint and token come from "
+             "LOGSERV_URL / LOGSERV_TOKEN in the environment, never the command "
+             "line. Run on a short cron interval for near-real-time coverage")
+    ls.add_argument("--window-hours", type=float, default=24.0,
+                    help="how far back to pull, in hours (default 24)")
+    ls.add_argument("--since", default=None, metavar="ISO8601",
+                    help="explicit window start (UTC, e.g. 2026-01-15T00:00:00Z); "
+                         "overrides --window-hours")
+    ls.add_argument("--until", default=None, metavar="ISO8601",
+                    help="explicit window end (UTC); defaults to now")
+    ls.add_argument("--insecure", action="store_true",
+                    help="do not verify the TLS certificate; recorded in the manifest")
+    ls.add_argument("--ca-file", default=None)
+    ls.add_argument("--timeout", type=float, default=60.0)
+    ls.add_argument("--out", default="./extract")
+    ls.set_defaults(fn=cmd_logserv)
     return p
+
+
+def cmd_logserv(args: argparse.Namespace) -> int:
+    # Imported here, like cmd_btp/cmd_rfc: a subcommand nobody ran costs nothing.
+    from collect import logserv
+
+    since = args.since or logserv.window_since(args.window_hours)
+    verify = not args.insecure
+    if not verify:
+        print("[!] TLS certificate verification is DISABLED for this collection.")
+    try:
+        payload = logserv.fetch(since, args.until, verify_tls=verify,
+                                ca_file=args.ca_file, timeout=args.timeout)
+    except logserv.LogServError as exc:
+        print("[!] %s" % exc, file=sys.stderr)
+        return 1
+    count = logserv.write(Path(args.out), payload)
+    print("[*] wrote %d SAP LogServ event(s) to %s/%s"
+          % (count, args.out, logserv.OUTPUT_FILE))
+    return 0
 
 
 def main(argv=None) -> int:

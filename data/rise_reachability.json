@@ -883,6 +883,12 @@
       "verified": false,
       "basis": "infrastructure",
       "open_question": "That SAP operates the Web Dispatcher in a RISE tenant is inferred, the same as webdisp_params — section 3 carries no Web Dispatcher row. A customer running their own dispatcher owns its patch level outright, which makes this genuinely mixed by topology. Settled by asking one RISE customer who operates their landscape's dispatcher."
+    },
+    "logserv_events": {
+      "state": "yes",
+      "how": "Export a window of OCSF events from SAP LogServ (the RISE log service the customer subscribes to; it forwards/exports to the customer and to SIEM/data-lake destinations)",
+      "note": "Customer-accessible where LogServ is subscribed (an optional paid ECS service). Ingested as a fresher source for the retrospective log review, not a live feed.",
+      "basis": "section_3"
     }
   }
 }
