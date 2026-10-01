@@ -83,6 +83,13 @@ TEAM_BY_PREFIX: List[Tuple[str, str]] = [
     ("TRUST-", "basis"),
     ("JOBCMD-", "basis"),
     ("HANADB-", "basis"),
+    # HANA audit-log review + its correlation: basis owns the HANA database, same as
+    # HANADB-*. ICM / Web Dispatcher log review + its correlation: basis owns the web
+    # tier, same as WDISP-* / PARAM-icm/*. The log evidence goes to the config fixer.
+    ("HANALOG-", "basis"),
+    ("ICMLOG-", "basis"),
+    ("CORR-HANA-", "basis"),
+    ("CORR-ICM-", "basis"),
     ("CRYPTO-", "basis"),
     # ABAP secure store encryption (Baseline v2.6 SECSTO-A): basis owns the
     # secure store and its master key, the same ground CRYPTO- routes there for.
@@ -95,9 +102,14 @@ TEAM_BY_PREFIX: List[Tuple[str, str]] = [
     # complements (INTG-GW-*) and that the config-vs-log correlation (CORR-GW-*) ties
     # together — the fixer of a gateway problem gets the log evidence of it.
     ("GWLOG-", "integration"),
-    # Config-vs-log correlation for the gateway: the active-exploitation indicator
-    # goes to the same team that owns both halves it joins.
+    # Network / firewall log review and its correlation: the network surface is
+    # integration's, same as NET-* / INTG-*.
+    ("NETLOG-", "integration"),
+    # Config-vs-log correlation: the active-exploitation indicator goes to the same
+    # team that owns both halves it joins. Gateway + network → integration; the HANA
+    # and ICM correlations route to basis below, beside their log prefixes.
     ("CORR-GW-", "integration"),
+    ("CORR-NET-", "integration"),
     ("BTP-", "integration"),
     ("RISE-", "integration"),
     ("CAPX-", "development"),

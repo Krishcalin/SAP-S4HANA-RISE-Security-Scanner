@@ -83,7 +83,11 @@ DOMAINS: List[Dict[str, Any]] = [
         "categories": ["Security Baseline Parameters", "Security Parameters",
                        "Login Security", "Password Policy", "Cryptographic Posture",
                        "HANA Database Security", "Transport Security",
-                       "Development Controls"],
+                       "Development Controls",
+                       # The HANA audit-log review: retrospective evidence from the HANA
+                       # audit trail (privileged activity, audit-policy changes, failed
+                       # logons), reviewed alongside the HANA configuration this tile owns.
+                       "HANA Log Review"],
     },
     {
         "id": "event_monitoring",
@@ -169,7 +173,11 @@ DOMAINS: List[Dict[str, Any]] = [
         "categories": ["Network & Integration Layer", "Network & Service Exposure",
                        "Gateway Security", "Gateway Log Review", "RFC Security",
                        "Unified Connectivity (UCON)",
-                       "Web Dispatcher Security"],
+                       "Web Dispatcher Security",
+                       # The ICM / Web Dispatcher and network/firewall log reviews:
+                       # retrospective traffic evidence for the same interface surface
+                       # (see the reach note above — the tile is PARTIAL because of them).
+                       "ICM Log Review", "Network Log Review"],
         "prefixes": {"System Trust & Standard Users": ["TRUST", "PARAM-MS/",
                                               "PARAM-ms/"]},
         # A trust or message-server check that matches no prefix is still

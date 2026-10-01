@@ -67,3 +67,50 @@ def test_no_peers_is_silent():
 def test_findings_in_a_different_system_do_not_cross_correlate():
     peers = [dict(_config(), system="PRD"), dict(_log(), system="QAS")]
     assert "CORR-GW-001" not in {x["check_id"] for x in _run(peers)}
+
+
+# ── HANA / ICM / network correlations ──────────────────────────────────────────
+def _cfg(cid, otype="parameter_name", name="x"):
+    return {"check_id": cid, "affected_objects": [{"type": otype, "name": name}]}
+
+
+def _lg(cid, otype, name):
+    return {"check_id": cid, "affected_objects": [{"type": otype, "name": name}]}
+
+
+def test_hana_config_plus_log_fires_corr_hana_001():
+    peers = [_cfg("HANADB-AUDIT-001"), _lg("HANALOG-002", "hana_user", "SYSTEM")]
+    f = [x for x in _run(peers) if x["check_id"] == "CORR-HANA-001"][0]
+    assert f["severity"] == "CRITICAL" and f["category"] == "HANA Log Review"
+    assert f["details"]["config_findings"] == ["HANADB-AUDIT-001"]
+    assert {"type": "hana_user", "name": "SYSTEM"} in f["affected_objects"]
+
+
+def test_icm_config_plus_log_fires_corr_icm_001():
+    peers = [_cfg("WDISP-004"), _lg("ICMLOG-001", "icf_path", "/sap/admin")]
+    f = [x for x in _run(peers) if x["check_id"] == "CORR-ICM-001"][0]
+    assert f["severity"] == "CRITICAL" and f["category"] == "ICM Log Review"
+
+
+def test_net_config_plus_log_fires_corr_net_001():
+    peers = [_cfg("NET-001"), _lg("NETLOG-003", "endpoint", "8.8.8.8")]
+    f = [x for x in _run(peers) if x["check_id"] == "CORR-NET-001"][0]
+    assert f["severity"] == "CRITICAL" and f["category"] == "Network Log Review"
+
+
+def test_each_area_is_independent():
+    # A HANA config weakness with only a NETWORK log signal must not correlate.
+    peers = [_cfg("HANADB-AUDIT-001"), _lg("NETLOG-001", "endpoint", "h")]
+    ids = {x["check_id"] for x in _run(peers)}
+    assert "CORR-HANA-001" not in ids and "CORR-NET-001" not in ids
+
+
+def test_all_four_areas_can_fire_together():
+    peers = [
+        _config(), _log(),
+        _cfg("HANADB-USER-001"), _lg("HANALOG-001", "hana_user", "SYSTEM"),
+        _cfg("BASELINE-009"), _lg("ICMLOG-003", "icf_path", "/sap/bc/soap/rfc"),
+        _cfg("UCON-002"), _lg("NETLOG-001", "endpoint", "sapprd01"),
+    ]
+    ids = {x["check_id"] for x in _run(peers)}
+    assert ids == {"CORR-GW-001", "CORR-HANA-001", "CORR-ICM-001", "CORR-NET-001"}

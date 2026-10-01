@@ -181,8 +181,19 @@ registered program in `unmapped.program`) feeds the gateway-log review (`GWLOG-*
 external program registrations, ACL denials, and connections a permissive gateway let
 through. Those are kept SEPARATE from the Security Audit Log window — a gateway event
 never inflates the `LREV-*` review — and where they coincide with a gateway
-*configuration* finding they raise the config-vs-log correlation (`CORR-GW-001`). HANA,
-ICM and network classes are reviewed as those detectors land.
+*configuration* finding they raise the config-vs-log correlation (`CORR-GW-001`).
+
+The same file also feeds three more log classes, each kept separate from the SAL
+window and each with its own config-vs-log correlation:
+- **HANA audit trail** (events naming HANA/HDB, or carrying `unmapped.db_user` /
+  `audit_policy`) → `HANALOG-*` (audit-policy changes, privileged DB activity,
+  failed logons) and `CORR-HANA-001`.
+- **ICM / Web Dispatcher HTTP** (events carrying an `http_request.url.path`) →
+  `ICMLOG-*` (administrative-path access, HTTP scanning, remote-execution endpoints)
+  and `CORR-ICM-001`.
+- **Network / firewall** (events with a destination port and a protocol or
+  allow/deny disposition) → `NETLOG-*` (connections to SAP service ports, blocked
+  attempts, a public source on an SAP port) and `CORR-NET-001`.
 
 > ✅ **`HANDLER_CLASS` IS READ.** It was specified and then consumed by nothing
 > for a while, and this box said so. `modules/reachability.py` now joins on it,
