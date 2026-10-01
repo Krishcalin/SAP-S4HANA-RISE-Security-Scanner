@@ -68,6 +68,13 @@ class LogServReviewAuditor(BaseAuditor):
         "4800", "8000", "8001", "8080", "44300", "50000", "50001",  # ICM / Web
         "30013", "30015", "39013", "39015",                 # HANA SQL/index
     })
+    #: The log classes a RISE tenant with LogServ would normally forward. Used only
+    #: by the ingestion-health checks, to tell "that class was never forwarded" from
+    #: "nothing happened in that class".
+    EXPECTED_CLASSES = ("sal", "gateway", "hana", "icm", "network")
+    _CLASS_LABEL = {"sal": "Security Audit Log", "gateway": "RFC gateway",
+                    "hana": "HANA audit", "icm": "ICM / Web Dispatcher",
+                    "network": "network / firewall"}
 
     def run_all_checks(self) -> List[Dict[str, Any]]:
         self._prepare()
@@ -87,6 +94,9 @@ class LogServReviewAuditor(BaseAuditor):
         self.check_network_sensitive_port_access()
         self.check_network_blocked_attempts()
         self.check_network_public_source()
+        # Ingestion health — is LogServ forwarding each class at all?
+        self.check_logserv_class_coverage()
+        self.check_logserv_window_usable()
         return self.findings
 
     # ================================================================= plumbing
@@ -705,4 +715,96 @@ class LogServReviewAuditor(BaseAuditor):
                 "administrator network."),
             references=["SAP Security Baseline — network filtering / ports",
                         "SAP Note 821875 — security settings for the message server"],
+        )
+
+    # ===================================================== ingestion health (LSRV-)
+    # The same question the Security-Audit-Log health checks ask (LREV-SRC/FLT/WIN),
+    # one layer out: before reading a class's events, is LogServ forwarding that
+    # class AT ALL? A clean review of a class LogServ never forwarded is not "nothing
+    # happened" — it is "we could not have seen it". These checks make that the
+    # difference the report states, so a quiet class is never read as a safe one.
+    def _present_classes(self) -> set:
+        """The log classes actually present in the LogServ export this run."""
+        present = {e.get("CLASS") for e in (self._gateway + self._hana
+                                            + self._icm + self._network)}
+        if logserv_ocsf.to_audit_events(self.data.get("logserv_events")):
+            present.add("sal")               # auth / SAL events forwarded via LogServ
+        return {c for c in present if c}
+
+    def check_logserv_class_coverage(self):
+        """LSRV-COV-001: a log class the export does not carry at all.
+
+        Needs a LogServ export (silent without one — absence of LogServ is a
+        posture question for log_monitoring, not an ingestion-health one here).
+        """
+        if not self.data.get("logserv_events"):
+            return
+        present = self._present_classes()
+        absent = [c for c in self.EXPECTED_CLASSES if c not in present]
+        if not absent:
+            return
+        self.finding(
+            check_id="LSRV-COV-001",
+            title="A log class is not being forwarded by SAP LogServ",
+            severity=self.SEVERITY_MEDIUM,
+            category="LogServ Ingestion Health",
+            description=self._with_window(
+                "The SAP LogServ export carried %d of the %d log classes a RISE "
+                "landscape normally forwards. Present: %s. NOT present: %s. Where "
+                "LogServ is the source for a class that is not forwarded, the review "
+                "of that class is blind for the window — a clean result there means "
+                "'never forwarded', not 'nothing happened', and the two must not be "
+                "confused." % (
+                    len(present), len(self.EXPECTED_CLASSES),
+                    ", ".join(sorted(self._CLASS_LABEL.get(c, c) for c in present)) or "none",
+                    ", ".join(self._CLASS_LABEL.get(c, c) for c in absent))),
+            affected_items=["%s: not forwarded in the reviewed window"
+                            % self._CLASS_LABEL.get(c, c) for c in absent],
+            scope="aggregate",
+            details={"present": sorted(present), "absent": absent,
+                     "expected": list(self.EXPECTED_CLASSES)},
+            remediation=(
+                "Confirm which log classes this estate should forward through SAP "
+                "LogServ, and enable forwarding for each absent class that is in "
+                "scope. Until then, record every absent class as a period the "
+                "corresponding review could not see, so a clean class result is read "
+                "as 'not forwarded' rather than 'no activity'."),
+            references=[
+                "SAP LogServ — log types and forwarding configuration",
+                "SAP Security Baseline — logging and monitoring coverage",
+            ],
+        )
+
+    def check_logserv_window_usable(self):
+        """LSRV-WIN-001: LogServ events supplied but none carry a readable time.
+
+        A retrospective review needs a bounded window; events with no timestamp
+        cannot be ordered or placed in time, so the review degrades to a volume
+        count and must say so rather than imply a time-bounded analysis.
+        """
+        raw = self.data.get("logserv_events")
+        if not raw:
+            return
+        events = (self._gateway + self._hana + self._icm + self._network)
+        if not events or self._window is not None:
+            return                      # no system events, or at least one is dated
+        self.finding(
+            check_id="LSRV-WIN-001",
+            title="SAP LogServ events carry no readable timestamps",
+            severity=self.SEVERITY_MEDIUM,
+            category="LogServ Ingestion Health",
+            description=(
+                "%d SAP LogServ system event(s) were supplied, but none carried a "
+                "timestamp this review could read, so the reviewed window cannot be "
+                "bounded and the events cannot be ordered. The class detectors still "
+                "run over volume, but any finding that depends on timing is withheld, "
+                "and the review cannot state the period it covers." % len(events)),
+            affected_items=["%d event(s) with no readable time" % len(events)],
+            scope="aggregate",
+            details={"undated_events": len(events)},
+            remediation=(
+                "Confirm the LogServ export carries the event time — OCSF `time` "
+                "(epoch milliseconds) or the raw `_time` (epoch seconds). Re-pull the "
+                "window once the time field is present so the review can be bounded."),
+            references=["SAP LogServ — log record format and the event time field"],
         )
