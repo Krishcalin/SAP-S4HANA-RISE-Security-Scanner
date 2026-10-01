@@ -352,6 +352,21 @@ class SapHotNewsAuditor(BaseAuditor):
          "released": "2026-07", "exploited": False, "applies_to": "abap",
          "title": "Memory corruption in SAP NetWeaver AS ABAP — authenticated attacker, "
                   "out-of-bounds write"},
+        # September 2026 Patch Day — both CVSS-critical and on the ABAP stack this
+        # scan assesses. `exploited` is False because nothing establishes otherwise:
+        # Onapsis reported no in-the-wild exploitation as of the September 2026 Patch
+        # Day, and neither is in CISA KEV. That is the absence of evidence, not a
+        # clearance.
+        {"note": "3747649", "cve": "CVE-2026-44756", "cvss": 10.0, "priority": "HotNews",
+         "component": "NetWeaver AS ABAP (Extended Passport processing, BC-CST-DP)",
+         "released": "2026-09", "exploited": False, "applies_to": "abap",
+         "title": "Memory corruption in SAP Extended Passport (OVERPASS) — "
+                  "unauthenticated, network-reachable, no user interaction"},
+        {"note": "3759472", "cve": "CVE-2026-58240", "cvss": 9.8, "priority": "HotNews",
+         "component": "NetWeaver Message Server (BC-CST-MS)",
+         "released": "2026-09", "exploited": False, "applies_to": "abap",
+         "title": "Missing authentication on the SAP Message Server (S4GET) — "
+                  "unauthenticated, network-reachable"},
     ]
 
     def run_all_checks(self) -> List[Dict[str, Any]]:

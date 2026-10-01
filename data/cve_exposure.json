@@ -784,6 +784,20 @@
    "nvd_cvss": 9.9,
    "version_match": "unavailable",
    "version_reason": "NVD carries no affected-version data for this CVE"
+  },
+  "3747649": {
+   "cve": "CVE-2026-44756",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+   "nvd_cvss": 10.0,
+   "version_match": "unavailable",
+   "version_reason": "the Extended Passport flaw spans the ABAP kernel and multiple products (S/4HANA, ECC, Web Dispatcher, BW/4HANA); the affected versions are kernel patch levels and product versions, not a scale any CVERS component RELEASE can be compared against"
+  },
+  "3759472": {
+   "cve": "CVE-2026-58240",
+   "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+   "nvd_cvss": 9.8,
+   "version_match": "unavailable",
+   "version_reason": "a message-server (kernel) flaw; the affected versions are kernel patch levels, which cannot be compared against a component RELEASE"
   }
  }
 }
