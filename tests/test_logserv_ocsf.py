@@ -99,3 +99,63 @@ def test_no_logserv_export_leaves_the_review_unchanged():
     # Absent source: the LogServ path contributes nothing and raises nothing.
     ids = {f["check_id"] for f in LogReviewAuditor({}, {}).run_all_checks()}
     assert not any(c.startswith("LREV-PAT") for c in ids)
+
+
+# ── system-log (non-SAL) extraction for the broader log-class detectors ───────
+def _gw(program="ZEVILTP", host="attacker-1", gw="sapprd01", ms=BASE_MS,
+        denied=False, message=None, **extra):
+    """A gateway registered-program OCSF event as LogServ would forward it."""
+    ev = {"class_name": "SAP Gateway", "activity_name": "Register Program",
+          "time": ms,
+          "status_id": 2 if denied else 1,
+          "status": "Denied" if denied else "Success",
+          "message": message or "External program %s registered via reginfo" % program,
+          "src_endpoint": {"hostname": host},
+          "dst_endpoint": {"hostname": gw},
+          "unmapped": {"program": program}}
+    ev.update(extra)
+    return ev
+
+
+def test_gateway_event_is_extracted_as_a_system_event():
+    row = logserv_ocsf.to_system_events([_gw()])[0]
+    assert row["CLASS"] == "gateway" and row["ACTION"] == "register"
+    assert row["PROGRAM"] == "ZEVILTP" and row["GATEWAY_HOST"] == "sapprd01"
+    assert row["SRC_HOST"] == "attacker-1" and row["DECISION"] == "allowed"
+    assert row["DATE"] == "2026-01-15" and row["TIME"] == "10:00:00"
+
+
+def test_gateway_denial_reads_the_acl_verdict():
+    row = logserv_ocsf.to_system_events([_gw(denied=True)])[0]
+    assert row["DECISION"] == "denied" and row["ACTION"] == "deny"
+
+
+def test_gateway_monitor_mode_is_recognised():
+    ev = _gw(message="Program ZX would be denied by secinfo (monitor mode), allowed")
+    assert logserv_ocsf.to_system_events([ev])[0]["DECISION"] == "monitored"
+
+
+def test_gateway_events_do_not_leak_into_the_sal_rows():
+    # The whole point of the split: a gateway event must not become an audit-log
+    # row and inflate the window log_review reviews.
+    assert logserv_ocsf.to_audit_events([_gw()]) == []
+
+
+def test_sal_events_are_not_claimed_as_system_events():
+    assert logserv_ocsf.to_system_events([_auth("ALICE")]) == []
+
+
+def test_a_tcode_event_stays_sal_even_with_gateway_words():
+    # A SAP transaction code is the strongest SAL signal; an event carrying one is
+    # classified by log_review's heuristics, not pulled out as a system event.
+    ev = {"class_name": "SAP Gateway", "time": BASE_MS, "message": "reginfo check",
+          "actor": {"user": {"name": "OPS"}}, "unmapped": {"tcode": "SMGW"}}
+    assert logserv_ocsf.to_system_events([ev]) == []
+    assert logserv_ocsf.to_audit_events([ev])[0]["TCODE"] == "SMGW"
+
+
+def test_gateway_batch_does_not_fire_any_sal_pattern_through_log_review():
+    batch = {"events": [_gw(program="ZTP%d" % i, ms=BASE_MS + i * 60000)
+                        for i in range(8)]}
+    ids = {f["check_id"] for f in LogReviewAuditor({"logserv_events": batch}, {}).run_all_checks()}
+    assert not any(c.startswith("LREV-PAT") for c in ids)

@@ -98,6 +98,9 @@ RISE_MODULE_SCOPE: Dict[str, str] = {
     # A retrospective review reads an export the customer produces themselves from
     # the ABAP application layer, which they keep in RISE.
     "log_review": "in_scope",
+    # The gateway class of the SAP LogServ export — LogServ is the sanctioned RISE
+    # way to get the landscape's logs out, so the gateway log is obtainable in RISE.
+    "logserv_review": "in_scope",
     "fiori_ui": "in_scope",
     "crypto_posture": "partial",
     "hana_db_security": "mostly_out",
@@ -129,6 +132,10 @@ RISE_MODULE_SCOPE: Dict[str, str] = {
     # PRGN_CUST customizing is client/cross-client config the customer's security
     # team maintains (SM30), so it is in scope in a RISE tenant.
     "prgn_cust_switches": "in_scope",
+    # Config-vs-log correlation reads the OTHER auditors' findings, so its scope is
+    # exactly theirs: it is in scope wherever the inputs it joins are (the gateway
+    # config and the gateway log, both obtainable in a RISE tenant).
+    "correlation": "in_scope",
 }
 
 #: The CLI's `--modules` vocabulary, mapped to the module file names this file
@@ -166,6 +173,7 @@ CLI_MODULE_ALIASES: Dict[str, str] = {
     "cva": "abap_sast",
     "logmon": "log_monitoring",
     "logreview": "log_review",
+    "logservreview": "logserv_review",
     "fiori": "fiori_ui",
     "crypto": "crypto_posture",
     "hanadb": "hana_db_security",
@@ -1292,6 +1300,15 @@ def _rank(entry: Dict[str, Any]) -> int:
     return _STATUS_RANK.get(entry.get("status"), len(RAN_STATUSES))
 
 
+#: Auditors that run as a SECOND PASS on every scan rather than through the CLI's
+#: ``--modules`` selection: they read the other auditors' findings, not the raw
+#: export, and are invoked unconditionally after the module ladder (see
+#: sap_scanner.py and server/ingest.py). They are never "requested" and never
+#: "not_run" — they always execute — so the manifest must not mark them not_run
+#: just because the ``--modules`` list (rightly) does not name them.
+SECOND_PASS_MODULES = {"correlation"}
+
+
 def build_manifest(data: Dict[str, Any],
                    modules_run: Optional[Iterable[str]] = None,
                    deployment_mode: str = "on_prem",
@@ -1425,10 +1442,13 @@ def build_manifest(data: Dict[str, Any],
                   "(users); a list in a third vocabulary would report every module "
                   "as not_run.")
         for mod, entry in mods.items():
-            if mod not in ran and entry["status"] != "skipped":
+            if (mod not in ran and mod not in SECOND_PASS_MODULES
+                    and entry["status"] != "skipped"):
                 # Ran-but-not-in-the-list means it was filtered out or it failed.
                 # Either way it did not contribute, and the manifest must say so
                 # rather than imply coverage the run did not deliver.
+                # A SECOND_PASS module is exempt: it runs on every scan regardless
+                # of the --modules list, so "not in the list" does not mean "not run".
                 entry["status"] = "not_run"
 
     counts = {

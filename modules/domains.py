@@ -152,13 +152,22 @@ DOMAINS: List[Dict[str, Any]] = [
     {
         "id": "interface",
         "label": "Interface Traffic Monitoring",
-        "reach": CONFIG_ONLY,
+        # PARTIAL, not CONFIG_ONLY: alongside the interface CONFIGURATION we now also
+        # review an exported window of the SAP LogServ GATEWAY log ("Gateway Log
+        # Review" → GWLOG-*). That is genuine traffic evidence — what registered
+        # through the gateway, what the ACL denied, what a permissive gateway let
+        # through — so the tile is no longer config-only. It is still retrospective,
+        # over an exported window, never live; the scope says so.
+        "reach": PARTIAL,
         "scope": "We read how your interfaces are CONFIGURED — destinations, "
-                 "gateway ACLs, exposed services, stored credentials. We do not "
-                 "see traffic, and nothing here is live.",
-        "blurb": "The interface surface, and what an attacker could reach through it.",
+                 "gateway ACLs, exposed services, stored credentials — AND we review "
+                 "an exported window of the SAP LogServ gateway log (what registered, "
+                 "what the ACL denied or let through). That log review is "
+                 "retrospective, over the window you export; nothing here is live.",
+        "blurb": "The interface surface, what an attacker could reach through it, and "
+                 "what the gateway log shows crossing it.",
         "categories": ["Network & Integration Layer", "Network & Service Exposure",
-                       "Gateway Security", "RFC Security",
+                       "Gateway Security", "Gateway Log Review", "RFC Security",
                        "Unified Connectivity (UCON)",
                        "Web Dispatcher Security"],
         "prefixes": {"System Trust & Standard Users": ["TRUST", "PARAM-MS/",

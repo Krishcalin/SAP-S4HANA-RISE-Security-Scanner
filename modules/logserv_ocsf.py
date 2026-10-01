@@ -43,10 +43,146 @@ _STATUS_FAILURE = 2
 _USER_PATHS = (("actor", "user", "name"), ("user", "name"), ("actor", "user", "uid"))
 _TERMINAL_PATHS = (("src_endpoint", "hostname"), ("src_endpoint", "ip"),
                    ("device", "hostname"), ("device", "ip"))
+#: The destination side — the SAP server the connection reached (the gateway host
+#: for a gateway event). Read defensively, same as the source side.
+_DEST_PATHS = (("dst_endpoint", "hostname"), ("dst_endpoint", "ip"),
+               ("dst_endpoint", "name"))
 #: SAP-specific fields land in `unmapped` (or occasionally at the top level); several
 #: spellings are accepted rather than one asserted, as everywhere else in this repo.
 _CLIENT_KEYS = ("client", "mandt", "sap_client", "MANDT", "CLIENT")
 _TCODE_KEYS = ("tcode", "transaction", "transaction_code", "tcd", "TCODE")
+
+# ── system-log (non-SAL) classes ────────────────────────────────────────────────
+# SAP LogServ forwards far more than the ABAP Security Audit Log: gateway, HANA,
+# ICM / Web Dispatcher and network logs all arrive in the same OCSF stream. Those
+# do NOT fit the Security-Audit-Log row shape (no transaction code, a different
+# actor, an ACL decision rather than an event class), so they are pulled out HERE
+# into a richer "system event" and handed to modules/logserv_review.py, and are
+# deliberately kept OUT of the SAL rows `to_audit_events` builds (see its guard),
+# so a gateway event never inflates the audit-log window log_review reviews.
+#
+# Recognition is by SIGNATURE, not an asserted class_uid: LogServ's mapping of
+# SAP-specific logs is partly vendor-defined, so several markers are accepted. An
+# event that carries a SAP transaction code, or whose text/class is Security-Audit-
+# Log vocabulary, is SAL and is never claimed here — that keeps the existing
+# tcode/message heuristics (e.g. SM69 → LREV-PAT-008) working unchanged.
+_GATEWAY_HINTS = ("gateway", "gwmon", "secinfo", "reginfo", "reg_info", "sec_info",
+                  "registered program", "external program", "started program",
+                  "rfcexec", "tp_name", "reg_program")
+#: Program (external TP) and gateway-host field spellings, read from `unmapped`/top.
+_PROGRAM_KEYS = ("program", "tp_name", "tpname", "tp", "reg_program",
+                 "registered_program", "program_name")
+_GATEWAY_HOST_KEYS = ("gateway_host", "gwhost", "gw_host", "server", "gateway")
+
+
+def _product_blob(event: Dict[str, Any]) -> str:
+    """Lower-cased product / feature / class / category names for signature tests."""
+    parts = [str(event.get("class_name") or ""),
+             str(event.get("category_name") or ""),
+             str(event.get("activity_name") or "")]
+    meta = event.get("metadata")
+    if isinstance(meta, dict):
+        prod = meta.get("product")
+        if isinstance(prod, dict):
+            parts.append(str(prod.get("name") or ""))
+            parts.append(str(prod.get("vendor_name") or ""))
+            feat = prod.get("feature")
+            if isinstance(feat, dict):
+                parts.append(str(feat.get("name") or ""))
+    unmapped = event.get("unmapped")
+    if isinstance(unmapped, dict):
+        parts.extend(str(k) for k in unmapped.keys())
+    return " ".join(parts).lower()
+
+
+def _logserv_class(event: Dict[str, Any]) -> str:
+    """Which non-SAL system-log class this OCSF event belongs to, or "".
+
+    Returns one of {"gateway"} today (HANA / ICM / network are added as those
+    detectors land). An event that looks like a system log but ALSO carries a SAP
+    transaction code is treated as SAL (returns ""), because a tcode is the strongest
+    Security-Audit-Log signal and log_review's own heuristics should keep it.
+    """
+    if _unmapped_or_top(event, _TCODE_KEYS):
+        return ""
+    blob = _product_blob(event) + " " + str(event.get("message") or "").lower()
+    if any(h in blob for h in _GATEWAY_HINTS) or _unmapped_or_top(event, _PROGRAM_KEYS):
+        return "gateway"
+    return ""
+
+
+def _gateway_action(event: Dict[str, Any], decision: str) -> str:
+    """register | start | deny | connect — from the activity name and message."""
+    blob = (str(event.get("activity_name") or "") + " "
+            + str(event.get("message") or "")).lower()
+    if decision == "denied":
+        return "deny"
+    if "regist" in blob:
+        return "register"
+    if "start" in blob:
+        return "start"
+    if "connect" in blob or "connection" in blob:
+        return "connect"
+    return ""
+
+
+def _gateway_decision(event: Dict[str, Any]) -> str:
+    """allowed | denied | monitored — the secinfo/reginfo ACL verdict."""
+    try:
+        status_id = int(event.get("status_id")) if event.get("status_id") is not None else None
+    except (TypeError, ValueError):
+        status_id = None
+    blob = (str(event.get("status") or "") + " "
+            + str(event.get("message") or "") + " "
+            + str(event.get("activity_name") or "")).lower()
+    # Monitor / simulation mode is the dangerous one: a rule that WOULD deny the
+    # connection is only logged, and the connection succeeds anyway. It is told
+    # apart from a real denial by the outcome — monitor mode SUCCEEDS (not a
+    # failure status) despite the deny rule — so it is tested first and gated on
+    # the event not being a hard failure.
+    if (status_id != _STATUS_FAILURE
+            and any(w in blob for w in ("monitor", "simulation", "sim mode",
+                                        "logging only", "would be denied", "permissive"))):
+        return "monitored"
+    if status_id == _STATUS_FAILURE or any(w in blob for w in
+                                           ("deny", "denied", "blocked", "reject", "refused")):
+        return "denied"
+    return "allowed"
+
+
+def to_system_events(raw: Any) -> List[Dict[str, str]]:
+    """Normalise the non-SAL part of a LogServ OCSF batch into system events.
+
+    Each returned dict describes one gateway/HANA/ICM/network log event in a shape
+    modules/logserv_review.py reads:
+        {DATE, TIME, CLASS, ACTION, USER, SRC_HOST, GATEWAY_HOST, PROGRAM,
+         DECISION, STATUS, TEXT}
+    Only events a system-log class claims are returned; SAL events are left for
+    `to_audit_events`. Tolerant and stdlib-only, exactly like the SAL path.
+    """
+    events: List[Dict[str, str]] = []
+    for event in _events_of(raw):
+        cls = _logserv_class(event)
+        if not cls:
+            continue
+        decision = _gateway_decision(event)
+        row: Dict[str, str] = {
+            "CLASS": cls,
+            "ACTION": _gateway_action(event, decision),
+            "USER": _first(event, *_USER_PATHS),
+            "SRC_HOST": _first(event, *_TERMINAL_PATHS),
+            "GATEWAY_HOST": (_first(event, *_DEST_PATHS)
+                             or _unmapped_or_top(event, _GATEWAY_HOST_KEYS)),
+            "PROGRAM": _unmapped_or_top(event, _PROGRAM_KEYS),
+            "DECISION": decision,
+            "STATUS": str(event.get("status") or "").strip(),
+            "TEXT": str(event.get("message") or "").strip(),
+        }
+        when = _when(event)
+        if when:
+            row["DATE"], row["TIME"] = when
+        events.append(row)
+    return events
 
 
 def _events_of(raw: Any) -> List[Dict[str, Any]]:
@@ -167,6 +303,12 @@ def to_audit_events(raw: Any) -> List[Dict[str, str]]:
     """
     rows: List[Dict[str, str]] = []
     for event in _events_of(raw):
+        # A gateway/HANA/ICM/network event is a system log, not a Security Audit
+        # Log row; it is handled by `to_system_events` and must not inflate the
+        # audit-log window log_review reviews. An event carrying a SAP tcode or SAL
+        # vocabulary is NOT claimed there, so the tcode/message heuristics still run.
+        if _logserv_class(event):
+            continue
         when = _when(event)
         row: Dict[str, str] = {
             "USER": _first(event, *_USER_PATHS),
