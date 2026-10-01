@@ -1309,10 +1309,10 @@ Every domain therefore states two things that are easy to confuse and are never 
   - Patch and HotNews
   - Transport security
   - Suspicious user behaviour
+  - Interface traffic monitoring
 
 **Configuration only — the setting, not the activity**
   - Security event monitoring
-  - Interface traffic monitoring
 
 **Not covered**
   - Exploit and 0-day protection
@@ -1923,7 +1923,7 @@ The glossary is the most useful part of this book for a first-time reader; keep 
 
 > **One honest note about counting**
 >
->  The headline “864 checks” needs a footnote. **494** check identifiers are written out individually in the source. A further **354** come from **six families generated at run time** from shipped rule lists — one check per Web Dispatcher rule (14), one per technical parameter (89), one per code rule (135), one per duty-separation risk (99), one per imported code family (10), one per conflicting-duty pair (7). Both numbers are true; stating both is more useful than picking whichever is larger.
+>  The headline “864 checks” needs a footnote. **510** check identifiers are written out individually in the source. A further **354** come from **six families generated at run time** from shipped rule lists — one check per Web Dispatcher rule (14), one per technical parameter (89), one per code rule (135), one per duty-separation risk (99), one per imported code family (10), one per conflicting-duty pair (7). Both numbers are true; stating both is more useful than picking whichever is larger.
 >
 >  These figures are derived from the code rather than typed here, and the test suite fails if this page and the source ever disagree.
 
