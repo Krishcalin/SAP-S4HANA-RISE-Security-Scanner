@@ -38,6 +38,7 @@ from modules.atc_import import AtcImportAuditor
 from modules.abap_sast import AbapSastAuditor
 from modules.log_monitoring import LogMonitoringAuditor
 from modules.log_review import LogReviewAuditor
+from modules.logserv_review import LogServReviewAuditor
 from modules.fiori_ui import FioriUiAuditor
 from modules.crypto_posture import CryptoPostureAuditor
 from modules.hana_db_security import HanaDbSecurityAuditor
@@ -59,6 +60,7 @@ from modules.baseline_params import BaselineParamAuditor
 from modules.s4_business_authz import S4BusinessAuthzAuditor
 from modules.access_risk_analysis import AccessRiskAnalysisAuditor
 from modules.ruleset_coverage import RulesetCoverageAuditor
+from modules.correlation import CorrelationAuditor
 from modules.export_integrity import ExportIntegrityAuditor
 from modules.basis_job_command import BasisJobCommandAuditor
 from modules.report_generator import ReportGenerator
@@ -496,6 +498,18 @@ def main():
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
 
+    # --- SAP LogServ gateway-log review ---
+    # Retrospective review of the RFC gateway class LogServ forwards — external
+    # program registrations, ACL denials, permissive-gateway use over the exported
+    # window. NOT monitoring, NOT live. Complements the gateway CONFIG checks and
+    # feeds the config-vs-log correlation (CORR-GW-*).
+    if "logservreview" in run_modules:
+        print("[*] Running SAP LogServ Gateway-Log Review (retrospective over the exported window)...")
+        auditor = LogServReviewAuditor(data, baseline_overrides, run_ctx)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
     # --- Fiori & UI Layer ---
     if "fiori" in run_modules:
         print("[*] Running Fiori & UI Layer Checks...")
@@ -692,6 +706,19 @@ def main():
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")
+
+    # --- Config-vs-log correlation (second pass over the full finding set) ---
+    # Reads every finding the modules above produced — not the raw export — and adds
+    # CORR-* where a configuration weakness and a log observation coincide (e.g. a
+    # permissive gateway ACL that the gateway log shows being used). Runs here, after
+    # the whole ladder, so the ownership stamp, the FAIR corpus and the report all
+    # include the correlated findings.
+    run_ctx["peer_findings"] = list(all_findings)
+    correlation = CorrelationAuditor(data, baseline_overrides, run_ctx)
+    corr_findings = correlation.run_all_checks()
+    if corr_findings:
+        print(f"[*] Config-vs-log correlation... Found {len(corr_findings)} indicator(s)")
+    all_findings.extend(corr_findings)
 
     # THE CORPUS AS SCANNED. `--severity` is a DISPLAY option — it decides what
     # is listed, not what was found — so everything that makes a claim ABOUT THE

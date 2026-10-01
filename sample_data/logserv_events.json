@@ -1,0 +1,64 @@
+{
+  "events": [
+    {
+      "class_name": "SAP Gateway",
+      "activity_name": "Register Program",
+      "time": 1768471200000,
+      "status_id": 1,
+      "status": "Success",
+      "message": "External program ZBADTP registered via reginfo from an unlisted host",
+      "src_endpoint": { "hostname": "workstation-204" },
+      "dst_endpoint": { "hostname": "sapprd01" },
+      "metadata": { "product": { "name": "SAP NetWeaver Gateway", "feature": { "name": "gwmon" } } },
+      "unmapped": { "program": "ZBADTP" }
+    },
+    {
+      "class_name": "SAP Gateway",
+      "activity_name": "Register Program",
+      "time": 1768474800000,
+      "status_id": 1,
+      "status": "Success",
+      "message": "External program RFCEXEC started via reginfo",
+      "src_endpoint": { "hostname": "sapprd01" },
+      "dst_endpoint": { "hostname": "sapprd01" },
+      "metadata": { "product": { "name": "SAP NetWeaver Gateway" } },
+      "unmapped": { "program": "RFCEXEC" }
+    },
+    {
+      "class_name": "SAP Gateway",
+      "activity_name": "Connect",
+      "time": 1768478400000,
+      "status_id": 2,
+      "status": "Denied",
+      "message": "Connection from external host denied by secinfo",
+      "src_endpoint": { "hostname": "scanner-host-9" },
+      "dst_endpoint": { "hostname": "sapprd01" },
+      "metadata": { "product": { "name": "SAP NetWeaver Gateway" } },
+      "unmapped": { "reginfo": "no match" }
+    },
+    {
+      "class_name": "SAP Gateway",
+      "activity_name": "Connect",
+      "time": 1768478460000,
+      "status_id": 2,
+      "status": "Denied",
+      "message": "Connection from external host denied by secinfo",
+      "src_endpoint": { "hostname": "scanner-host-9" },
+      "dst_endpoint": { "hostname": "sapprd01" },
+      "metadata": { "product": { "name": "SAP NetWeaver Gateway" } },
+      "unmapped": { "secinfo": "no match" }
+    },
+    {
+      "class_name": "SAP Gateway",
+      "activity_name": "Register Program",
+      "time": 1768482000000,
+      "status_id": 1,
+      "status": "Success",
+      "message": "Program ZSHELL would be denied by reginfo but allowed (simulation mode, gw/sim_mode=1)",
+      "src_endpoint": { "hostname": "workstation-371" },
+      "dst_endpoint": { "hostname": "sapprd01" },
+      "metadata": { "product": { "name": "SAP NetWeaver Gateway" } },
+      "unmapped": { "program": "ZSHELL" }
+    }
+  ]
+}

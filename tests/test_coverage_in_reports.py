@@ -97,8 +97,13 @@ def test_the_module_list_matches_the_registry_exactly(partial_manifest):
     """
     pytest.importorskip("psycopg")     # server.ingest needs it; the cli job has none
     from server.ingest import AUDITORS
+    from modules.coverage import SECOND_PASS_MODULES
     registry = set(AUDITORS) if isinstance(AUDITORS, dict) else {k for k, _ in AUDITORS}
-    assert set(partial_manifest["modules"]) == registry
+    # Plus the second-pass auditors: they are NOT in the --modules AUDITORS list
+    # (they run after it, over its findings), but they do run on every scan and the
+    # manifest rightly lists them. The invariant is "the manifest invents and drops
+    # nothing", not "the manifest equals the --modules list".
+    assert set(partial_manifest["modules"]) == registry | SECOND_PASS_MODULES
 
 
 def test_the_manifest_does_not_list_itself(partial_manifest):

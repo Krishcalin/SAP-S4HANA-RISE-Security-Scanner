@@ -90,6 +90,14 @@ TEAM_BY_PREFIX: List[Tuple[str, str]] = [
     ("HOTNEWS-", "basis"),
     ("NET-", "integration"),
     ("INTG-", "integration"),
+    # Gateway LOG review (GWLOG-*): retrospective review of the SAP LogServ gateway
+    # log. Owned by integration, the same team that owns the gateway ACL config it
+    # complements (INTG-GW-*) and that the config-vs-log correlation (CORR-GW-*) ties
+    # together — the fixer of a gateway problem gets the log evidence of it.
+    ("GWLOG-", "integration"),
+    # Config-vs-log correlation for the gateway: the active-exploitation indicator
+    # goes to the same team that owns both halves it joins.
+    ("CORR-GW-", "integration"),
     ("BTP-", "integration"),
     ("RISE-", "integration"),
     ("CAPX-", "development"),

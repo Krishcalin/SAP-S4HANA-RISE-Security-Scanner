@@ -157,7 +157,19 @@ def test_every_auditor_is_visible_to_the_coverage_manifest():
     # requirements (AUTHASSIGN-A, USRTYP-A, USRCHAR-A) from the Profile Generator
     # switch table PRGN_CUST — a customizing surface the scanner did not read
     # until v2.6 added requirements over it.
-    assert len(auditors) == 40, f"auditor count moved to {len(auditors)}"
+    #
+    # 41 since `logserv_review`, the retrospective review of the SAP LogServ GATEWAY
+    # log (GWLOG-*). It is the first auditor whose subject is log TRAFFIC the customer
+    # exports rather than configuration — external program registrations, ACL denials
+    # and permissive-gateway use seen in the gateway log over the exported window.
+    #
+    # 42 since `correlation`, the config-vs-log correlation (CORR-*). It is the first
+    # auditor that reads the OTHER auditors' findings rather than the export, running
+    # as a SECOND PASS to raise an active-exploitation indicator where a configuration
+    # weakness and a log observation of it being used coincide. It is deliberately NOT
+    # in server/ingest.AUDITORS (it runs after them); the manifest still sees it,
+    # which is what this test checks.
+    assert len(auditors) == 42, f"auditor count moved to {len(auditors)}"
 
 
 def test_a_required_source_is_always_one_the_loader_knows():

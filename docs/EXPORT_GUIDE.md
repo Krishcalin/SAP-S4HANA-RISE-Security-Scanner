@@ -175,6 +175,15 @@ so they feed the retrospective `LREV-PAT-*` threat patterns. This is a fresher
 **source** for the exported-window review — not a live feed. Accepts a bare list of
 events or a `{"events": [...]}` wrapper.
 
+The same file also carries the broader LogServ log classes. The **RFC gateway** log
+(events whose product/feature or message names the gateway — `reginfo`/`secinfo`, a
+registered program in `unmapped.program`) feeds the gateway-log review (`GWLOG-*`):
+external program registrations, ACL denials, and connections a permissive gateway let
+through. Those are kept SEPARATE from the Security Audit Log window — a gateway event
+never inflates the `LREV-*` review — and where they coincide with a gateway
+*configuration* finding they raise the config-vs-log correlation (`CORR-GW-001`). HANA,
+ICM and network classes are reviewed as those detectors land.
+
 > ✅ **`HANDLER_CLASS` IS READ.** It was specified and then consumed by nothing
 > for a while, and this box said so. `modules/reachability.py` now joins on it,
 > and the ABAP call graph walks from the class it names to the statement a

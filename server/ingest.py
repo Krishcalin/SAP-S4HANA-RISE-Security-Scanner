@@ -67,6 +67,7 @@ AUDITORS: List[Tuple[str, str]] = [
     ("ecs_config_items", "EcsConfigAuditor"),
     ("log_monitoring", "LogMonitoringAuditor"),
     ("log_review", "LogReviewAuditor"),
+    ("logserv_review", "LogServReviewAuditor"),
     ("fiori_ui", "FioriUiAuditor"),
     ("crypto_posture", "CryptoPostureAuditor"),
     ("hana_db_security", "HanaDbSecurityAuditor"),
@@ -826,6 +827,16 @@ def scan_directory(data_dir: Path, landscape_id: int, system_id: Optional[int],
             data = DataLoader(data_dir).load_all()
 
             findings, module_status, ran = run_auditors(data, conn, run_id)
+            # Second pass: config-vs-log correlation reads the FULL finding set the
+            # auditors just produced (not the raw export) and adds CORR-* findings
+            # where a configuration weakness and a log observation coincide. It runs
+            # here, before enrich, so everything downstream — ownership, persistence,
+            # the run-over-run journey, notifications, graph, CRQ, attack paths —
+            # treats a correlated finding like any other.
+            from modules.correlation import CorrelationAuditor
+            findings.extend(CorrelationAuditor(
+                data, None, {**RUN_CONTEXT, "peer_findings": list(findings)}
+            ).run_all_checks())
             manifest = build_manifest(data, modules_run=ran,
                                       deployment_mode=deployment_mode)
 
