@@ -235,3 +235,51 @@ def test_new_classes_do_not_fire_sal_patterns_through_log_review():
              + [_net(ms=BASE_MS + i) for i in range(6)]}
     ids = {f["check_id"] for f in LogReviewAuditor({"logserv_events": batch}, {}).run_all_checks()}
     assert not any(c.startswith("LREV-PAT") for c in ids)
+
+
+# ── the real OCSF / LogServ contract: class_uid + raw record shape ─────────────
+def test_authoritative_class_uid_is_honoured_without_signature_hints():
+    # 4002 HTTP Activity -> icm, 4001 Network Activity -> network, even when nothing
+    # in the name/message says so.
+    http = {"class_uid": 4002, "time": BASE_MS, "message": "x",
+            "src_endpoint": {"ip": "10.0.0.5"}}
+    net = {"class_uid": 4001, "time": BASE_MS, "message": "x",
+           "dst_endpoint": {"hostname": "sapprd01"}}
+    assert logserv_ocsf.to_system_events([http])[0]["CLASS"] == "icm"
+    assert logserv_ocsf.to_system_events([net])[0]["CLASS"] == "network"
+
+
+def test_gateway_signature_wins_over_a_generic_network_class_uid():
+    ev = {"class_uid": 4001, "time": BASE_MS, "message": "program registered",
+          "unmapped": {"program": "ZTP"}, "dst_endpoint": {"hostname": "sapprd01"}}
+    assert logserv_ocsf.to_system_events([ev])[0]["CLASS"] == "gateway"
+
+
+def _raw(source, raw="an event", host="sapprd01", t=1768471200):
+    # A raw SAP LogServ record (not OCSF-converted): _raw / _time / source / host.
+    return {"_raw": raw, "_time": t, "source": source, "host": host}
+
+
+def test_raw_logserv_record_is_classified_by_its_source_path():
+    cases = {
+        "/usr/sap/PRD/D00/work/gw_log-20260115": "gateway",
+        "/hana/shared/PRD/trace/indexserver_alert.trc": "hana",
+        "/usr/sap/PRD/D00/work/dev_icm": "icm",
+        "/var/log/firewall/flowlog.json": "network",
+    }
+    for source, cls in cases.items():
+        row = logserv_ocsf.to_system_events([_raw(source)])[0]
+        assert row["CLASS"] == cls, source
+        assert row["DEST_HOST"] == "sapprd01" and row["TEXT"] == "an event"
+        assert row["DATE"] == "2026-01-15"      # from the epoch-seconds _time
+
+
+def test_raw_security_audit_log_source_is_sal_not_a_system_event():
+    rec = _raw("/usr/sap/PRD/D00/log/security_audit_20260115", raw="Logon successful")
+    assert logserv_ocsf.to_system_events([rec]) == []       # not a system event
+    assert logserv_ocsf.to_audit_events([rec])[0]["TEXT"] == "Logon successful"
+
+
+def test_raw_epoch_seconds_time_is_read():
+    row = logserv_ocsf.to_system_events([_raw("/x/gw_log", t=1768471200)])[0]
+    assert row["DATE"] == "2026-01-15" and row["TIME"] == "10:00:00"

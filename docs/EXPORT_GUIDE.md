@@ -162,18 +162,26 @@ SECUPD-O: the last reported change (`CD_HIST_DATE`) must be within the last 365
 days.
 
 ### SAP LogServ events (`logserv_events.json`)
-**Source:** SAP LogServ — SAP's RISE log service (OCSF events)
+**Source:** SAP LogServ — SAP's RISE log service. **Two shapes are accepted**, because
+LogServ delivers logs raw and OCSF normalisation is a separate converter:
 ```
-Required: OCSF events, each with `time` (epoch ms), `class_uid`/`class_name`,
-          `actor.user.name` (or `user.name`), `status_id`
-Optional: `src_endpoint.hostname`, `message`, `unmapped.{client,tcode}`
+OCSF-converted events — each with `time` (epoch ms), `class_uid`/`class_name`,
+          `actor.user.name` (or `user.name`), `status_id`;
+          optional `src_endpoint`/`dst_endpoint`, `message`, `unmapped.{client,tcode,...}`
+RAW LogServ records  — `_raw` (the log line), `_time` (epoch SECONDS),
+          `source` (the log file path — identifies the class), `host`
 ```
-A window of SAP LogServ logs in the **OCSF** schema (JSON), either exported/forwarded
-from LogServ or pulled with `python -m collect logserv`. `modules/logserv_ocsf`
-normalises them into the same audit-event shape the Security Audit Log review uses,
-so they feed the retrospective `LREV-PAT-*` threat patterns. This is a fresher
-**source** for the exported-window review — not a live feed. Accepts a bare list of
-events or a `{"events": [...]}` wrapper.
+A window of SAP LogServ logs (JSON), either exported/forwarded from LogServ or pulled
+with `python -m collect logserv`. `modules/logserv_ocsf` normalises either shape:
+Security-Audit-Log / Authentication events feed the retrospective `LREV-PAT-*` threat
+patterns (the same audit-event shape the SAL review uses), and the broader classes
+feed their own detectors (below). This is a fresher **source** for the exported-window
+review — not a live feed. Accepts a bare list of events or a `{"events": [...]}` wrapper.
+
+The OCSF `class_uid`s used are the published, stable ones (Authentication 3002; HTTP
+4002; Network 4001 / DNS 4003 / DHCP 4004 / RDP 4005); SAP gateway and HANA audit have
+no standard OCSF class and are recognised by signature or, for a raw record, by the
+`source` path.
 
 The same file also carries the broader LogServ log classes. The **RFC gateway** log
 (events whose product/feature or message names the gateway — `reginfo`/`secinfo`, a
