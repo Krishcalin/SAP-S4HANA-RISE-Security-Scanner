@@ -219,7 +219,13 @@ DOMAINS: List[Dict[str, Any]] = [
                  "it reports what the log already recorded.",
         "blurb": "Patterns in an exported audit-log window worth a second look.",
         "categories": [],
-        "prefixes": {"Security Audit Log Review": ["LREV-PAT"]},
+        # LREV-PAT: raw threat patterns. LVIO-: the same retrospective window crossed
+        # with the firefighter log and the privileged set to surface a governance
+        # VIOLATION (emergency access outside its process, off-hours privileged
+        # change). Both are "what the log already recorded", so both live here and
+        # not in the audit-log-configuration domain the prefix_default would send
+        # a bare "Security Audit Log Review" category to.
+        "prefixes": {"Security Audit Log Review": ["LREV-PAT", "LVIO-"]},
     },
     {
         "id": "exploit",

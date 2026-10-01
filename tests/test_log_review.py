@@ -504,3 +504,103 @@ def test_the_new_patterns_are_beyond_baseline():
     from server import sapcontent
     for cid in ("LREV-PAT-008", "LREV-PAT-009", "LREV-PAT-010"):
         assert sapcontent.requirement_for(cid) is None
+
+
+# ── Phase 2: log-observed governance violations (LVIO-FF-001 / LVIO-OFH-001) ──
+#
+# The same retrospective window as the patterns above, crossed with the
+# firefighter log and the privileged set to surface a VIOLATION — an access rule
+# broken — rather than a raw threat pattern. Same wording discipline: the
+# FORBIDDEN-word test above runs over these findings too via _full().
+
+def test_firefighter_active_without_a_logged_session_fires_lvio_ff_001():
+    """A firefighter account active in the log with no matching firefighter-log
+    session is emergency access used outside the controlled process — HIGH."""
+    rows = [_ev("2026-05-04", "10:00:00", "FF_ADMIN", EVENT_CLASS="dialog_logon",
+                TEXT="Logon successful")]
+    owners = [{"FFID": "FF_ADMIN", "OWNER": "BOSS", "CONTROLLER": "CTRL",
+               "LOG_REVIEW": "X"}]
+    f = [x for x in _run({"security_audit_log": rows, "audit_config": CONFIG,
+                          "grac_firefighter_owners": owners})
+         if x["check_id"] == "LVIO-FF-001"]
+    assert f, "LVIO-FF-001 did not fire on an unlogged firefighter session"
+    assert f[0]["severity"] == "HIGH"
+    assert f[0]["scope"] == "aggregate"
+    assert f[0]["details"]["active_without_a_logged_session"] == ["FF_ADMIN"]
+
+
+def test_firefighter_active_with_a_logged_session_is_medium():
+    """Active AND logged is a session to reconcile, not an uncontrolled one — MEDIUM."""
+    rows = [_ev("2026-05-04", "10:00:00", "FF_ADMIN", EVENT_CLASS="dialog_logon",
+                TEXT="Logon successful")]
+    ff_log = [{"FF_USER": "FF_ADMIN", "ACTUAL_USER": "ALICE", "REASON": "patch",
+               "REVIEWED": "Y"}]
+    f = [x for x in _run({"security_audit_log": rows, "audit_config": CONFIG,
+                          "firefighter_log": ff_log})
+         if x["check_id"] == "LVIO-FF-001"]
+    assert f and f[0]["severity"] == "MEDIUM"
+    assert f[0]["details"]["active_without_a_logged_session"] == []
+
+
+def test_no_firefighter_data_is_silent_on_lvio_ff_001():
+    rows = [_ev("2026-05-04", "10:00:00", "FF_ADMIN", EVENT_CLASS="dialog_logon")]
+    assert "LVIO-FF-001" not in _cids({"security_audit_log": rows, "audit_config": CONFIG})
+
+
+def test_known_firefighter_never_active_is_silent_on_lvio_ff_001():
+    rows = [_ev("2026-05-04", "10:00:00", "ALICE", EVENT_CLASS="dialog_logon")]
+    owners = [{"FFID": "FF_ADMIN", "OWNER": "BOSS"}]
+    assert "LVIO-FF-001" not in _cids(
+        {"security_audit_log": rows, "audit_config": CONFIG,
+         "grac_firefighter_owners": owners})
+
+
+def test_offhours_privileged_change_fires_lvio_ofh_001():
+    """A privileged account changing the audit configuration at 02:30 is a change
+    action with no reviewer at a desk — HIGH, and distinct from the off-hours
+    LOGON pattern (LREV-PAT-001)."""
+    rows = [_ev("2026-05-04", "02:30:00", "JSMITH", TCODE="SM19",
+                EVENT_CLASS="audit_config_change",
+                TEXT="Audit configuration changed")]
+    f = [x for x in _run({"security_audit_log": rows, "audit_config": CONFIG,
+                          "profiles": PROFILES})
+         if x["check_id"] == "LVIO-OFH-001"]
+    assert f and f[0]["severity"] == "HIGH"
+    assert f[0]["details"]["per_account"] == {"JSMITH": 1}
+
+
+def test_in_hours_privileged_change_is_silent_on_lvio_ofh_001():
+    rows = [_ev("2026-05-04", "10:00:00", "JSMITH", TCODE="SE16",
+                EVENT_CLASS="table_access", TEXT="Table displayed")]
+    assert "LVIO-OFH-001" not in _cids(
+        {"security_audit_log": rows, "audit_config": CONFIG, "profiles": PROFILES})
+
+
+def test_offhours_non_privileged_change_is_silent_on_lvio_ofh_001():
+    rows = [_ev("2026-05-04", "02:30:00", "CLERK", TCODE="SE16",
+                EVENT_CLASS="table_access", TEXT="Table displayed")]
+    assert "LVIO-OFH-001" not in _cids(
+        {"security_audit_log": rows, "audit_config": CONFIG, "profiles": PROFILES})
+
+
+def test_offhours_privileged_logon_without_a_change_is_silent_on_lvio_ofh_001():
+    """A logon is not a change; that off-hours sign-on is LREV-PAT-001's to report."""
+    rows = [_ev("2026-05-04", "02:30:00", "JSMITH", EVENT_CLASS="dialog_logon",
+                TEXT="Logon successful")]
+    ids = _cids({"security_audit_log": rows, "audit_config": CONFIG,
+                 "profiles": PROFILES})
+    assert "LVIO-OFH-001" not in ids
+    assert "LREV-PAT-001" in ids
+
+
+def test_lvio_checks_are_beyond_baseline():
+    from server import sapcontent
+    for cid in ("LVIO-FF-001", "LVIO-OFH-001"):
+        assert sapcontent.requirement_for(cid) is None
+
+
+def test_lvio_routes_to_authorizations_and_suspicious_behaviour():
+    from modules import rise_ownership, domains
+    for cid in ("LVIO-FF-001", "LVIO-OFH-001"):
+        assert rise_ownership.team_for(cid) == "authorizations"
+        assert domains.domain_for(cid, "Security Audit Log Review") == "user_behaviour"
