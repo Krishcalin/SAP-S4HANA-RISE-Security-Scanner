@@ -583,6 +583,14 @@ def build_parser() -> argparse.ArgumentParser:
                          "overrides --window-hours")
     ls.add_argument("--until", default=None, metavar="ISO8601",
                     help="explicit window end (UTC); defaults to now")
+    ls.add_argument("--incremental", action="store_true",
+                    help="resume from the high-water-mark of the last run (a state "
+                         "file in --out), so each cron pull fetches only new events "
+                         "with no gap and no re-pull. --since overrides it")
+    ls.add_argument("--classes", default=None, metavar="LIST",
+                    help="optional server-side filter, e.g. gateway,hana,icm,network")
+    ls.add_argument("--max-pages", type=int, default=1000,
+                    help="safety cap on pages followed via the next-cursor")
     ls.add_argument("--insecure", action="store_true",
                     help="do not verify the TLS certificate; recorded in the manifest")
     ls.add_argument("--ca-file", default=None)
@@ -596,19 +604,30 @@ def cmd_logserv(args: argparse.Namespace) -> int:
     # Imported here, like cmd_btp/cmd_rfc: a subcommand nobody ran costs nothing.
     from collect import logserv
 
-    since = args.since or logserv.window_since(args.window_hours)
+    out = Path(args.out)
+    # Window start: an explicit --since wins; else the saved high-water-mark when
+    # --incremental and a prior run exists; else the rolling --window-hours.
+    resume = logserv.read_since(out) if args.incremental else None
+    since = args.since or resume or logserv.window_since(args.window_hours)
+    if args.incremental and resume and not args.since:
+        print("[*] resuming from high-water-mark %s" % since)
     verify = not args.insecure
     if not verify:
         print("[!] TLS certificate verification is DISABLED for this collection.")
     try:
-        payload = logserv.fetch(since, args.until, verify_tls=verify,
-                                ca_file=args.ca_file, timeout=args.timeout)
+        payload = logserv.fetch_all(since, args.until, verify_tls=verify,
+                                    ca_file=args.ca_file, timeout=args.timeout,
+                                    classes=args.classes, max_pages=args.max_pages)
     except logserv.LogServError as exc:
         print("[!] %s" % exc, file=sys.stderr)
         return 1
-    count = logserv.write(Path(args.out), payload)
-    print("[*] wrote %d SAP LogServ event(s) to %s/%s"
-          % (count, args.out, logserv.OUTPUT_FILE))
+    count = logserv.write(out, payload)
+    logserv.write_manifest(out, since, args.until, count, payload.get("pages", 1))
+    mark = logserv.write_state(out, payload) if args.incremental else None
+    print("[*] wrote %d SAP LogServ event(s) over %d page(s) to %s/%s"
+          % (count, payload.get("pages", 1), args.out, logserv.OUTPUT_FILE))
+    if mark:
+        print("[*] high-water-mark advanced to %s" % mark)
     return 0
 
 
