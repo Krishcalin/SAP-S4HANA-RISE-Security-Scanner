@@ -48,7 +48,7 @@ if str(ROOT) not in sys.path:
 #: the code and cannot drift; `EXPORT_SOURCES.md` is the one this drift was
 #: measured against.
 _GENERATED = {"CHECKS_REFERENCE.md", "CHECK_FIRING.md", "EXPORT_SOURCES.md",
-              "RELEASE_GATE.md"}
+              "RELEASE_GATE.md", "LOG_USE_CASES.md"}
 
 #: `N sources`, `N logical sources`, and `N of M sources` where M is the total.
 #:

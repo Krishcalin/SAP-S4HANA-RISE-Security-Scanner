@@ -244,6 +244,12 @@ jobs:
       - name: docs/CHECKS_REFERENCE.md matches the code
         run: python -m tools.build_checks_reference --check
 
+      # The log-based coverage matrix: severities read from the code, the use-case
+      # set held against the catalogue. A new log check (or a severity change)
+      # without a regenerated matrix fails here rather than drifting silently.
+      - name: docs/LOG_USE_CASES.md matches the code
+        run: python -m tools.build_log_use_cases --check
+
       # The release gate's coverage table drifted twice while it was maintained
       # by hand, under a note claiming it was derived. It is derived now, and
       # this is what keeps that true: a coverage check added without
