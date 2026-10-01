@@ -155,9 +155,13 @@ class ComplianceMapper:
         "Audit Logging": ["logging-monitoring"],
         "Role Design & Governance": ["access-control", "sod", "change-management"],
         "Gateway Security": ["network-security", "secure-config"],
-        # Retrospective review of the SAP LogServ gateway log — network surface seen
-        # through the log, which is logging/monitoring evidence of that surface.
+        # Retrospective review of the SAP LogServ log classes — the subject surface
+        # seen through its log, which is logging/monitoring evidence of that surface.
         "Gateway Log Review": ["network-security", "logging-monitoring",
+                               "incident-response"],
+        "HANA Log Review": ["logging-monitoring", "incident-response", "access-control"],
+        "ICM Log Review": ["network-security", "logging-monitoring", "incident-response"],
+        "Network Log Review": ["network-security", "logging-monitoring",
                                "incident-response"],
         # TRANSPORT AS IN TLS, NOT AS IN THE CHANGE AND TRANSPORT SYSTEM.
         #

@@ -17,18 +17,34 @@ attack paths — then picks up like any other. See server/ingest.py (server path
 and sap_scanner.py (offline path).
 
 RETROSPECTIVE, LIKE ITS INPUTS. The log half is the retrospective review of an
-exported window (GWLOG-*); the correlation adds no live capability. It says a
-weakness was EXERCISED in the window the customer exported, not that anything is
-being watched now.
+exported window; the correlation adds no live capability. It says a weakness was
+EXERCISED in the window the customer exported, not that anything is being watched.
 
-SLICE 1 — GATEWAY. CORR-GW-001 pairs the gateway ACL configuration findings
-(BASELINE-007 gw/acl_mode, INTG-GW-* secinfo/reginfo, PARAM-gw/*) with the gateway
-log review (GWLOG-001 external program registered, GWLOG-003 permissive gateway
-used). HANA / ICM / network correlations follow as those log detectors land.
+ONE METHOD PER AREA, ON PURPOSE. The shared work — bucketing by system, pairing a
+config predicate with a log-signal set, collecting the objects to join on — lives
+in `_pairs`. But each area's `self.finding(check_id="CORR-…")` call is written out
+in its own method with the id as a LITERAL, because the coverage scanner, the
+reference generator and the catalogue all read the id at the `finding()` call site;
+a factored-out emit with `check_id=<variable>` is invisible to them and silently
+drops the check. The four areas:
+  CORR-GW-001   gateway ACL weak/unenforced   + GWLOG-001/003
+  CORR-HANA-001 HANA auditing/privileged weak + HANALOG-001/002
+  CORR-ICM-001  web tier exposed              + ICMLOG-001/003
+  CORR-NET-001  network service exposed       + NETLOG-001/003
 """
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterator, List, Tuple
 
 from modules.base_auditor import BaseAuditor
+
+
+def _prefix_pred(*prefixes):
+    """A config-weakness predicate: check_id matches any of these prefixes/ids
+    (case-insensitive on the lower-cased forms, so PARAM-gw/ matches too)."""
+    lowers = tuple(p.lower() for p in prefixes)
+    def pred(finding):
+        cid = str(finding.get("check_id") or "").lower()
+        return any(cid.startswith(p) for p in lowers)
+    return pred
 
 
 class CorrelationAuditor(BaseAuditor):
@@ -36,25 +52,15 @@ class CorrelationAuditor(BaseAuditor):
 
     CATEGORY = "Gateway Log Review"
 
-    #: Log observations that show the gateway being USED in a way the ACL should
-    #: have stopped. A denial (GWLOG-002) is the ACL WORKING, so it is deliberately
-    #: not a correlation signal — it is not evidence of a weakness being exercised.
-    GATEWAY_LOG_SIGNALS = frozenset({"GWLOG-001", "GWLOG-003"})
-
     def run_all_checks(self) -> List[Dict[str, Any]]:
         peers = (self.run_context or {}).get("peer_findings") or []
-        self.correlate_gateway_exposure_used(peers)
+        self.correlate_gateway(peers)
+        self.correlate_hana(peers)
+        self.correlate_icm(peers)
+        self.correlate_network(peers)
         return self.findings
 
-    # --------------------------------------------------------------- helpers
-    @staticmethod
-    def _is_gateway_config_weakness(finding: Dict[str, Any]) -> bool:
-        """A configuration finding that the gateway ACL is weak or not enforced."""
-        cid = str(finding.get("check_id") or "")
-        return (cid == "BASELINE-007"
-                or cid.startswith("INTG-GW-")
-                or cid.lower().startswith("param-gw/"))
-
+    # --------------------------------------------------------------- shared work
     @staticmethod
     def _system_of(finding: Dict[str, Any]) -> str:
         """The system a finding belongs to, '' when the run has not stamped one yet.
@@ -65,78 +71,147 @@ class CorrelationAuditor(BaseAuditor):
         system on the finding, and the bucket then separates them."""
         return str(finding.get("system") or "")
 
-    # --------------------------------------------------------------- CORR-GW-001
-    def correlate_gateway_exposure_used(self, peers: List[Dict[str, Any]]):
-        """CORR-GW-001: a flagged gateway weakness AND a log event exercising it.
-
-        The configuration findings say the secinfo / reginfo ACL is weak or not
-        enforced; the gateway log shows a program registered or a connection allowed
-        that the ACL should have stopped. Co-existing in one system, they are an
-        active-exploitation indicator — the door the config flagged as unlocked had
-        something walk through it in the reviewed window.
-        """
+    def _pairs(self, peers, config_pred, log_ids, object_types
+               ) -> Iterator[Tuple[str, List[str], List[str], List[Dict[str, str]]]]:
+        """Per system where a config weakness and a matching log signal BOTH appear,
+        yield (system, config_ids, log_ids_found, objects). A denial is the control
+        working and is never in `log_ids`, so it is not a signal here."""
         by_system: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
         for f in peers:
-            if self._is_gateway_config_weakness(f):
+            if config_pred(f):
                 by_system.setdefault(self._system_of(f),
                                      {"config": [], "logs": []})["config"].append(f)
-            elif str(f.get("check_id") or "") in self.GATEWAY_LOG_SIGNALS:
+            elif str(f.get("check_id") or "") in log_ids:
                 by_system.setdefault(self._system_of(f),
                                      {"config": [], "logs": []})["logs"].append(f)
-
         for system, bucket in sorted(by_system.items()):
             if not bucket["config"] or not bucket["logs"]:
                 continue
             config_ids = sorted({f["check_id"] for f in bucket["config"]})
-            log_ids = sorted({f["check_id"] for f in bucket["logs"]})
-            hosts, programs = set(), set()
+            log_ids_found = sorted({f["check_id"] for f in bucket["logs"]})
+            collected = {t: set() for t in object_types}
             for f in bucket["logs"]:
                 for obj in f.get("affected_objects") or []:
-                    if obj.get("type") == "gateway":
-                        hosts.add(obj.get("name"))
-                    elif obj.get("type") == "program":
-                        programs.add(obj.get("name"))
-            objects = ([{"type": "gateway", "name": h} for h in sorted(hosts) if h]
-                       + [{"type": "program", "name": p} for p in sorted(programs) if p])
-            items = ["configuration flagged the gateway ACL: %s" % ", ".join(config_ids),
-                     "the gateway log shows it being used: %s" % ", ".join(log_ids)]
-            if hosts:
-                items.append("gateway host(s): %s" % ", ".join(sorted(h for h in hosts if h)))
+                    if obj.get("type") in collected and obj.get("name"):
+                        collected[obj["type"]].add(obj["name"])
+            objects = [{"type": t, "name": n}
+                       for t in object_types for n in sorted(collected[t])]
+            yield system, config_ids, log_ids_found, objects
+
+    @staticmethod
+    def _describe(subject: str, config_ids, log_ids_found, evidence: str) -> str:
+        return (
+            "The configuration review flagged %s (%s), AND the log over the reviewed "
+            "window shows it being used (%s) — %s. A weakness the configuration flagged "
+            "and the log shows being exercised is an active-exploitation indicator, not "
+            "a theoretical gap, and should be treated as an incident to confirm or rule "
+            "out rather than a hardening backlog item."
+            % (subject, ", ".join(config_ids), ", ".join(log_ids_found), evidence))
+
+    @staticmethod
+    def _items(config_ids, log_ids_found) -> List[str]:
+        return ["configuration flagged: %s" % ", ".join(config_ids),
+                "the log shows it being used: %s" % ", ".join(log_ids_found)]
+
+    @staticmethod
+    def _detail(config_ids, log_ids_found, objects, system) -> Dict[str, Any]:
+        return {"config_findings": config_ids, "log_findings": log_ids_found,
+                "objects": ["%s:%s" % (o["type"], o["name"]) for o in objects],
+                "system": system or None}
+
+    _FIX_LEAD = "Treat this as active use of a known weakness, not a backlog item. "
+
+    # --------------------------------------------------------------- CORR-GW-001
+    def correlate_gateway(self, peers: List[Dict[str, Any]]):
+        for system, config_ids, log_ids_found, objects in self._pairs(
+                peers, _prefix_pred("BASELINE-007", "INTG-GW-", "PARAM-gw/"),
+                frozenset({"GWLOG-001", "GWLOG-003"}), ("gateway", "program")):
             self.finding(
                 check_id="CORR-GW-001",
                 title="RFC gateway exposure is being used, not just misconfigured",
-                severity=self.SEVERITY_CRITICAL,
-                category=self.CATEGORY,
-                description=(
-                    "The configuration review flagged the RFC gateway ACL as weak or "
-                    "not enforced (%s), AND the gateway log over the reviewed window "
-                    "shows that exposure being used (%s) — an external program "
-                    "registered through the gateway, or a connection the ACL should "
-                    "have rejected allowed through. A weakness the configuration "
-                    "flagged and the log shows being exercised is an active-"
-                    "exploitation indicator, not a theoretical gap, and should be "
-                    "treated as an incident to confirm or rule out, not a hardening "
-                    "backlog item." % (", ".join(config_ids), ", ".join(log_ids))),
-                affected_items=items,
-                affected_objects=objects,
-                scope="aggregate",
-                details={
-                    "config_findings": config_ids,
-                    "log_findings": log_ids,
-                    "gateway_hosts": sorted(h for h in hosts if h),
-                    "programs": sorted(p for p in programs if p),
-                    "system": system or None,
-                },
-                remediation=(
-                    "Treat this as active use of a known gateway weakness, not a "
-                    "backlog item: investigate the registered programs and source "
-                    "hosts named in the gateway-log findings, then close the exposure "
-                    "— complete the reginfo / secinfo ACL and move the gateway to "
-                    "enforcing (gw/sim_mode = 0, gw/acl_mode) so the rule that matched "
-                    "rejects the connection rather than only recording it."
-                ),
-                references=[
-                    "SAP Security Baseline — RFC gateway (reginfo / secinfo)",
-                    "SAP Note 1408081 — basic settings for reg_info / sec_info",
-                ],
-            )
+                severity=self.SEVERITY_CRITICAL, category="Gateway Log Review",
+                description=self._describe(
+                    "the RFC gateway ACL as weak or not enforced", config_ids,
+                    log_ids_found,
+                    "an external program registered through the gateway, or a connection "
+                    "the ACL should have rejected allowed through"),
+                affected_items=self._items(config_ids, log_ids_found),
+                affected_objects=objects, scope="aggregate",
+                details=self._detail(config_ids, log_ids_found, objects, system),
+                remediation=self._FIX_LEAD + (
+                    "Investigate the registered programs and source hosts in the "
+                    "gateway-log findings, then complete the reginfo / secinfo ACL and "
+                    "move the gateway to enforcing (gw/sim_mode = 0, gw/acl_mode)."),
+                references=["SAP Security Baseline — RFC gateway (reginfo / secinfo)",
+                            "SAP Note 1408081 — basic settings for reg_info / sec_info"])
+
+    # --------------------------------------------------------------- CORR-HANA-001
+    def correlate_hana(self, peers: List[Dict[str, Any]]):
+        for system, config_ids, log_ids_found, objects in self._pairs(
+                peers, _prefix_pred("HANADB-AUDIT-", "HANADB-USER-", "HANADB-PRIV-"),
+                frozenset({"HANALOG-001", "HANALOG-002"}),
+                ("hana_user", "hana_privilege", "schema")):
+            self.finding(
+                check_id="CORR-HANA-001",
+                title="HANA privileged access is being used against weak auditing",
+                severity=self.SEVERITY_CRITICAL, category="HANA Log Review",
+                description=self._describe(
+                    "HANA auditing or privileged access as weak", config_ids,
+                    log_ids_found,
+                    "a privileged database action, a privilege grant, or a change to the "
+                    "audit configuration itself"),
+                affected_items=self._items(config_ids, log_ids_found),
+                affected_objects=objects, scope="aggregate",
+                details=self._detail(config_ids, log_ids_found, objects, system),
+                remediation=self._FIX_LEAD + (
+                    "Investigate the accounts and privileges in the HANA-log findings, "
+                    "deactivate the SYSTEM user for day-to-day work, and confirm the "
+                    "audit policies that must stay active are enabled."),
+                references=["SAP HANA Security Guide — auditing and the SYSTEM user",
+                            "SAP Security Baseline — HANA privileged access"])
+
+    # --------------------------------------------------------------- CORR-ICM-001
+    def correlate_icm(self, peers: List[Dict[str, Any]]):
+        for system, config_ids, log_ids_found, objects in self._pairs(
+                peers, _prefix_pred("WDISP-", "BASELINE-009", "PARAM-icm/"),
+                frozenset({"ICMLOG-001", "ICMLOG-003"}), ("icf_path", "endpoint")):
+            self.finding(
+                check_id="CORR-ICM-001",
+                title="An exposed web service is being reached, not just exposed",
+                severity=self.SEVERITY_CRITICAL, category="ICM Log Review",
+                description=self._describe(
+                    "the web tier (ICM / Web Dispatcher / ICF) as exposed or under-logged",
+                    config_ids, log_ids_found,
+                    "a successful request to an administrative or remote-execution HTTP path"),
+                affected_items=self._items(config_ids, log_ids_found),
+                affected_objects=objects, scope="aggregate",
+                details=self._detail(config_ids, log_ids_found, objects, system),
+                remediation=self._FIX_LEAD + (
+                    "Investigate the paths and sources in the ICM-log findings, "
+                    "deactivate the services that need not be reachable in SICF, and "
+                    "restrict the rest to an administrator network."),
+                references=["SAP Security Baseline — ICF service exposure (SICF)",
+                            "SAP Note 1422273 — recommended ICF service settings"])
+
+    # --------------------------------------------------------------- CORR-NET-001
+    def correlate_network(self, peers: List[Dict[str, Any]]):
+        for system, config_ids, log_ids_found, objects in self._pairs(
+                peers, _prefix_pred("NET-0", "TRUST-006", "TRUST-010", "UCON-"),
+                frozenset({"NETLOG-001", "NETLOG-003"}), ("endpoint",)):
+            self.finding(
+                check_id="CORR-NET-001",
+                title="An exposed network service is being reached, not just exposed",
+                severity=self.SEVERITY_CRITICAL, category="Network Log Review",
+                description=self._describe(
+                    "a network service as exposed", config_ids, log_ids_found,
+                    "a connection to an SAP service port, in some cases from a public "
+                    "source address"),
+                affected_items=self._items(config_ids, log_ids_found),
+                affected_objects=objects, scope="aggregate",
+                details=self._detail(config_ids, log_ids_found, objects, system),
+                remediation=self._FIX_LEAD + (
+                    "Investigate the sources in the network-log findings, then restrict "
+                    "the SAP service ports to the application tier and an administrator "
+                    "network at the host or network firewall."),
+                references=["SAP Security Baseline — network filtering / ports",
+                            "SAP Note 821875 — security settings for the message server"])
