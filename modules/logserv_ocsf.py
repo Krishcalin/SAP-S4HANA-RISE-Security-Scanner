@@ -23,11 +23,37 @@ TOLERANT BY DESIGN. A single malformed event must not abort the batch: an event
 we cannot read contributes nothing and is skipped, exactly as the loader treats a
 file it cannot decode. Only the standard library is used (OCSF is JSON).
 
-OCSF reference: an event carries `time` (epoch MILLISECONDS), `class_uid` /
-`class_name`, `activity_id`, `status_id` (1 = Success, 2 = Failure), `message`,
-`actor.user.name` / `user.name`, `src_endpoint.{hostname,ip}` / `device.hostname`,
-and an `unmapped` object for vendor fields. SAP client and transaction code, where
-present, ride in `unmapped` (or the message); they are read defensively.
+TWO WIRE SHAPES, BOTH ACCEPTED — because SAP LogServ delivers logs raw and the
+OCSF normalisation is a SEPARATE converter (SAP's own, or a forwarder such as the
+Azure Sentinel / Google SecOps pipelines), so a customer may export either:
+
+  * OCSF-converted events — `time` (epoch MILLISECONDS), `class_uid` / `class_name`,
+    `activity_id`, `status_id` (1 = Success, 2 = Failure), `message`,
+    `actor.user.name` / `user.name`, `src_endpoint.{hostname,ip}`, `dst_endpoint`,
+    and an `unmapped` object for SAP vendor fields; or
+  * RAW LogServ records (the S3 gzip-JSON shape) — `_raw` (the log line), `_time`
+    (epoch SECONDS), `source` (the log file path), `host`. The log CLASS is then
+    read from `source` (e.g. `.../work/gw_log` → gateway, `.../indexserver...` →
+    HANA, `dev_icm` → ICM, `.../firewall/flowlog` → network, a `security_audit`
+    path → SAL).
+
+WHAT IS VERIFIED vs ASSUMED. The OCSF `class_uid`s used here are from the published
+OCSF schema and are stable (Authentication 3002; Network Activity 4001 / DNS 4003 /
+DHCP 4004 / RDP 4005; HTTP Activity 4002). SAP gateway and HANA audit have no
+standard OCSF class, so they are recognised by signature, never by class_uid. The
+raw field names (`_raw`/`_time`/`source`/`host`) are SAP LogServ's documented S3
+shape. The exact LogServ *export API* query parameters remain assumed in
+`collect/logserv.py` (see its note); the adapter does not depend on them.
+
+WHY A ROW, NOT A NEW EVENT MODEL (for the SAL path). `log_review._prepare` turns
+each audit row into `{when,user,client,terminal,tcode,tags}` via `_classify`, which
+reads an event class, the free message text and the transaction code. Emitting a
+row with those same columns lets that classifier do the work. The non-SAL classes
+(gateway / HANA / ICM / network) go through `to_system_events` into a richer event
+instead, and never become SAL rows.
+
+TOLERANT BY DESIGN. A single malformed event must not abort the batch: an event we
+cannot read contributes nothing and is skipped. Only the standard library is used.
 """
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -46,7 +72,7 @@ _TERMINAL_PATHS = (("src_endpoint", "hostname"), ("src_endpoint", "ip"),
 #: The destination side — the SAP server the connection reached (the gateway host
 #: for a gateway event). Read defensively, same as the source side.
 _DEST_PATHS = (("dst_endpoint", "hostname"), ("dst_endpoint", "ip"),
-               ("dst_endpoint", "name"))
+               ("dst_endpoint", "name"), ("host",), ("device", "hostname"))
 #: SAP-specific fields land in `unmapped` (or occasionally at the top level); several
 #: spellings are accepted rather than one asserted, as everywhere else in this repo.
 _CLIENT_KEYS = ("client", "mandt", "sap_client", "MANDT", "CLIENT")
@@ -147,28 +173,80 @@ def _product_blob(event: Dict[str, Any]) -> str:
     return " ".join(parts).lower()
 
 
-def _logserv_class(event: Dict[str, Any]) -> str:
-    """Which non-SAL system-log class this OCSF event belongs to, or "".
+#: Authoritative OCSF class_uid → system-log class, applied BEFORE the name /
+#: signature heuristics. These class_uids are stable in the published OCSF schema
+#: (category 4, Network Activity: 4001 Network / 4003 DNS / 4004 DHCP / 4005 RDP;
+#: 4002 HTTP Activity). SAP gateway and HANA audit have no standard OCSF class, so
+#: they are recognised by signature below and never by class_uid. Authentication
+#: (3002) is deliberately absent: it is a Security Audit Log logon, handled by
+#: to_audit_events, so it must fall through to "".
+_OCSF_CLASS_UID = {4002: "icm", 4001: "network", 4003: "network",
+                   4004: "network", 4005: "network"}
 
-    One of {"gateway", "hana", "icm", "network"}. An event that looks like a system
-    log but ALSO carries a SAP transaction code is treated as SAL (returns ""),
-    because a tcode is the strongest Security-Audit-Log signal and log_review's own
-    heuristics should keep it. Order matters: the most SAP-specific signatures are
-    tested first so a gateway or HANA event is not swallowed by the broad network
-    shape (a gateway event also has a destination).
+#: SAP LogServ also delivers RAW records (not OCSF-converted — the conversion is a
+#: separate step): the log class is then identifiable only from `source`, the log
+#: file path, or a `log_type` field. These substrings map that path to a class.
+#: Gateway / HANA come first so a path naming both wins the more specific one.
+_SOURCE_KEYS = ("source", "log_type", "logtype", "log_source", "_source")
+_SOURCE_CLASS_PATTERNS = (
+    ("gateway", ("gw_", "gwrd", "gateway", "/gw", "secinfo", "reginfo")),
+    ("hana", ("hana", "hdb", "indexserver", "nameserver", "xsengine")),
+    ("icm", ("icm", "web_disp", "webdisp", "/icf", "sicf", "httpaccess")),
+    ("network", ("firewall", "flowlog", "flow_log", "/network", "dns_", "/dns",
+                 "proxy", "packetfilter", "vpcflow")),
+)
+#: A `source` naming the security audit log is SAL, never a system class.
+_SAL_SOURCE_MARKERS = ("audit", "/sal", "rsau", "sm20", "security_audit")
+
+
+def _class_uid_of(event: Dict[str, Any]) -> Optional[int]:
+    try:
+        return int(event["class_uid"]) if event.get("class_uid") is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _source_class(event: Dict[str, Any]) -> str:
+    """gateway|hana|icm|network from a raw LogServ `source` / `log_type`, or ""."""
+    src = _unmapped_or_top(event, _SOURCE_KEYS).lower()
+    if not src or any(m in src for m in _SAL_SOURCE_MARKERS):
+        return ""
+    for cls, needles in _SOURCE_CLASS_PATTERNS:
+        if any(n in src for n in needles):
+            return cls
+    return ""
+
+
+def _logserv_class(event: Dict[str, Any]) -> str:
+    """Which non-SAL system-log class this event belongs to, or "".
+
+    One of {"gateway", "hana", "icm", "network"}. Recognition uses, in order of
+    authority: a SAP transaction code or a security-audit-log `source` (both → "",
+    i.e. SAL); the SAP-specific gateway / HANA signatures (no standard OCSF class);
+    the documented OCSF class_uid; then the name / shape heuristics; and finally,
+    for a RAW LogServ record carrying none of those, the `source` log-file path.
+    Gateway and HANA are tested before the generic network class_uid so a gateway
+    event — which also has a destination — is not swallowed as network.
     """
     if _unmapped_or_top(event, _TCODE_KEYS):
         return ""
-    blob = _product_blob(event) + " " + str(event.get("message") or "").lower()
+    src = _unmapped_or_top(event, _SOURCE_KEYS).lower()
+    if src and any(m in src for m in _SAL_SOURCE_MARKERS):
+        return ""                                  # raw security-audit-log record
+    blob = (_product_blob(event) + " " + str(event.get("message") or "")
+            + " " + str(event.get("_raw") or "")).lower()
     if any(h in blob for h in _GATEWAY_HINTS) or _unmapped_or_top(event, _PROGRAM_KEYS):
         return "gateway"
     if any(h in blob for h in _HANA_HINTS) or _unmapped_or_top(event, _HANA_KEYS):
         return "hana"
+    uid = _class_uid_of(event)
+    if uid in _OCSF_CLASS_UID:
+        return _OCSF_CLASS_UID[uid]
     if any(h in blob for h in _ICM_HINTS) or _http_path(event):
         return "icm"
     if any(h in blob for h in _NETWORK_HINTS) or _has_network_shape(event):
         return "network"
-    return ""
+    return _source_class(event)
 
 
 def _gateway_action(event: Dict[str, Any], decision: str) -> str:
@@ -296,7 +374,7 @@ def to_system_events(raw: Any) -> List[Dict[str, str]]:
             "DEST_HOST": dest,
             "DECISION": "",
             "STATUS": str(event.get("status") or "").strip(),
-            "TEXT": str(event.get("message") or "").strip(),
+            "TEXT": str(event.get("message") or event.get("_raw") or "").strip(),
             # Per-class fields, present and empty unless this class fills them, so a
             # detector can read any of them without a KeyError.
             "PROGRAM": "", "GATEWAY_HOST": "", "OBJECT": "", "AUDIT_POLICY": "",
@@ -394,11 +472,14 @@ def _when(event: Dict[str, Any]) -> Optional[tuple]:
     raw = event.get("time")
     if raw is None:
         raw = event.get("timestamp")
+    if raw is None:
+        raw = event.get("_time")           # the raw SAP LogServ epoch field
     try:
-        ms = int(raw)
+        ms = int(float(raw))
     except (TypeError, ValueError):
         return None
-    # OCSF `time` is milliseconds since epoch. Guard a caller that already sent seconds.
+    # OCSF `time` is milliseconds since epoch; the raw LogServ `_time` is seconds.
+    # Guard either: a value past ~2286 in seconds is really milliseconds.
     seconds = ms / 1000.0 if ms > 10_000_000_000 else float(ms)
     try:
         dt = datetime.fromtimestamp(seconds, tz=timezone.utc)
@@ -465,7 +546,7 @@ def to_audit_events(raw: Any) -> List[Dict[str, str]]:
             "CLIENT": _unmapped_or_top(event, _CLIENT_KEYS),
             "TCODE": _unmapped_or_top(event, _TCODE_KEYS),
             "EVENT_CLASS": _event_class(event),
-            "TEXT": str(event.get("message") or "").strip(),
+            "TEXT": str(event.get("message") or event.get("_raw") or "").strip(),
             "RESULT": str(event.get("status") or "").strip(),
         }
         if when:

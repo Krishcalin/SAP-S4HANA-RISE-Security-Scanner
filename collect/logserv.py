@@ -16,6 +16,16 @@ Credentials never come from argv: `LOGSERV_URL` and `LOGSERV_TOKEN` are read fro
 the environment, the same discipline the ITSM webhook and the other connectors
 use. The exact query parameters follow SAP's LogServ export API; `since`/`until`
 (ISO-8601 UTC) are the time-window filter assumed here.
+
+SHAPES. Whatever this writes is read by `modules/logserv_ocsf`, which accepts BOTH
+the OCSF-converted event shape and the raw LogServ record shape (`_raw`/`_time`/
+`source`/`host`) — LogServ delivers logs raw and OCSF conversion is a separate step,
+so a tenant may forward either. A bare list or a `{"events": [...]}` wrapper is fine.
+
+ASSUMED, AND NOT YET HARDENED. The `since`/`until` parameter names, pagination and an
+incremental high-water-mark (so each cron pull fetches only new events, with no gap
+and no re-pull) are the subject of the puller-hardening slice; today this pulls one
+window and writes one artefact.
 """
 import json
 import os
