@@ -73,10 +73,10 @@ clean — see chapter 13 of the architecture guide.
 | `fiori_catalogs` | `fiori_catalogs.csv`, `flpd_catalogs.csv` | `fiori_ui` | documented |
 | `fiori_spaces` | `fiori_spaces.json`, `spaces_pages.json` | `fiori_ui` | documented |
 | `fiori_tiles` | `fiori_tiles.csv`, `flpd_tiles.csv` | `access_risk_analysis`, `fiori_ui` | documented |
-| `firefighter_log` | `firefighter_log.csv`, `ff_log.csv`, `spm_log.csv` | `iam_advanced` | documented |
+| `firefighter_log` | `firefighter_log.csv`, `ff_log.csv`, `spm_log.csv` | `iam_advanced`, `log_review` | documented |
 | `grac_access_requests` | `grac_access_requests.csv`, `gracreq.csv` | `grc_access_control` | documented |
-| `grac_firefighter_log` | `grac_firefighter_log.csv`, `gracfflog.csv` | `grc_access_control` | documented |
-| `grac_firefighter_owners` | `grac_firefighter_owners.csv`, `gracffowner.csv` | `grc_access_control` | documented |
+| `grac_firefighter_log` | `grac_firefighter_log.csv`, `gracfflog.csv` | `grc_access_control`, `log_review` | documented |
+| `grac_firefighter_owners` | `grac_firefighter_owners.csv`, `gracffowner.csv` | `grc_access_control`, `log_review` | documented |
 | `grac_job_log` | `grac_job_log.csv`, `gractaskexecstmp.csv`, `grac_sync_jobs.csv` | `grc_access_control` | documented |
 | `grac_mitigating_controls` | `grac_mitigating_controls.csv`, `gracmitcnt.csv` | `grc_access_control` | documented |
 | `grac_sod_risks` | `grac_sod_risks.csv`, `gracsodrisk.csv` | `grc_access_control` | documented |

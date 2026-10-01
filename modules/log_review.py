@@ -214,6 +214,10 @@ class LogReviewAuditor(BaseAuditor):
         self.check_os_command_execution()
         self.check_technical_user_dialog_logons()
         self.check_password_spraying()
+        # Half 3 — log-observed governance violations (LVIO-*), the retrospective
+        # window crossed with the firefighter log and the privileged set.
+        self.check_firefighter_used_outside_the_log()
+        self.check_offhours_privileged_change()
         return self.findings
 
     # ================================================================= plumbing
@@ -1591,5 +1595,168 @@ class LogReviewAuditor(BaseAuditor):
             references=[
                 "SAP Security Baseline — brute-force protection and password policy",
                 "MITRE ATT&CK T1110.003 — Password Spraying",
+            ],
+        )
+
+    # ───────────────────── log-observed governance violations (LVIO-*) ──────────
+    # These read the SAME retrospective window as the patterns above, but cross it
+    # with the firefighter log and the privileged set to surface a VIOLATION — an
+    # access rule broken — rather than a raw threat pattern. The LVIO- prefix routes
+    # them to the authorizations team, which owns emergency access and privileged
+    # assignment, not to the log family's data-protection owner.
+    FIREFIGHTER_ID_KEYS = ("FFID", "FF_USER", "FF_ID", "FIREFIGHTER", "FIREFIGHTER_ID")
+    CHANGE_TAGS = frozenset({"table_access", "audit_config_change",
+                             "user_master_change", "debug", "os_command",
+                             "rfc_function_call"})
+
+    def _firefighter_accounts(self) -> Set[str]:
+        """Every known firefighter (emergency-access) account id, from any source.
+
+        Literal source reads (not a loop over a list) so the coverage scanner
+        attributes firefighter_log / grac_firefighter_log / grac_firefighter_owners
+        to LVIO-FF-001 in the export guide and the per-finding evidence badge.
+        """
+        ids: Set[str] = set()
+        for row in self._rows(self.data.get("firefighter_log")):
+            ids.add(self._get(row, self.FIREFIGHTER_ID_KEYS).upper())
+        for row in self._rows(self.data.get("grac_firefighter_log")):
+            ids.add(self._get(row, self.FIREFIGHTER_ID_KEYS).upper())
+        for row in self._rows(self.data.get("grac_firefighter_owners")):
+            ids.add(self._get(row, self.FIREFIGHTER_ID_KEYS).upper())
+        ids.discard("")
+        return ids
+
+    def _firefighter_logged(self) -> Set[str]:
+        """Firefighter accounts that carry at least one recorded session."""
+        logged: Set[str] = set()
+        for row in self._rows(self.data.get("firefighter_log")):
+            logged.add(self._get(row, self.FIREFIGHTER_ID_KEYS).upper())
+        for row in self._rows(self.data.get("grac_firefighter_log")):
+            logged.add(self._get(row, self.FIREFIGHTER_ID_KEYS).upper())
+        logged.discard("")
+        return logged
+
+    def check_firefighter_used_outside_the_log(self):
+        """LVIO-FF-001: a firefighter (emergency-access) account active in the log.
+
+        Emergency access is meant to flow through the firefighter process, where
+        each session is recorded with a reason and a reviewer. An account active in
+        the audit log is a session to reconcile; one active with NO matching session
+        in the firefighter log is emergency access used outside the control — the
+        review cannot approve after the fact what it never saw. Needs both the audit
+        events and the firefighter log; silent without either.
+        """
+        if not self._events:
+            return
+        known = self._firefighter_accounts()
+        if not known:
+            return
+        logged = self._firefighter_logged()
+        active_users = {e["user"] for e in self._events if e["user"]}
+        active_ff = known & active_users
+        if not active_ff:
+            return
+        outside = active_ff - logged
+        items = []
+        for ff in sorted(active_ff):
+            if ff in outside:
+                items.append("%s: active in the audit log, NO matching firefighter-log "
+                             "session" % ff)
+            else:
+                items.append("%s: active in the audit log; reconcile against its "
+                             "firefighter-log session(s)" % ff)
+        self.finding(
+            check_id="LVIO-FF-001",
+            title="Firefighter (emergency-access) account active in the reviewed window",
+            severity=self.SEVERITY_HIGH if outside else self.SEVERITY_MEDIUM,
+            category=self.CATEGORY,
+            description=self._with_window(
+                "{0} firefighter account(s) were active in the audit log over the "
+                "reviewed window{1}. Emergency access is meant to flow through the "
+                "firefighter process so each session carries a reason and a reviewer; "
+                "an account active in the log with no matching firefighter-log session "
+                "is emergency access used outside that control, which the review can "
+                "neither explain nor approve after the fact."
+            ).format(len(active_ff),
+                     "; {0} with no logged session".format(len(outside)) if outside else ""),
+            affected_items=items,
+            affected_objects=self._user_objects(active_ff),
+            scope="aggregate",
+            details=self._details({
+                "firefighter_accounts_active": sorted(active_ff),
+                "active_without_a_logged_session": sorted(outside),
+            }),
+            remediation=(
+                "Reconcile every firefighter session in the audit log against the "
+                "firefighter log's reason and reviewer. Investigate any account active "
+                "with no logged session as emergency access used outside the process, "
+                "and close the route that let it be used without logging."
+            ),
+            references=[
+                "SAP GRC — firefighter / emergency access governance",
+                "SOX ITGC — review of privileged and emergency access",
+            ],
+        )
+
+    def check_offhours_privileged_change(self):
+        """LVIO-OFH-001: a privileged account's CHANGE action outside business hours.
+
+        An off-hours privileged logon (LREV-PAT-001) is worth a look; an off-hours
+        privileged change — a table maintained, the audit configuration altered, a
+        user changed, a debugger attached, an external command run — is the action
+        itself happening when no reviewer is at a desk, which is where an abuse of a
+        privileged account is least likely to be caught.
+        """
+        if not self._timed:
+            return
+        start_h = int(self.get_config("logreview_business_hour_start", 7))
+        end_h = int(self.get_config("logreview_business_hour_end", 19))
+        offenders: Dict[str, int] = {}
+        for ev in self._timed:
+            user = ev["user"]
+            if not user or user not in self._privileged:
+                continue
+            if not (ev["tags"] & self.CHANGE_TAGS):
+                continue
+            hour = ev["when"].hour
+            if hour < start_h or hour >= end_h or ev["when"].weekday() >= 5:
+                offenders[user] = offenders.get(user, 0) + 1
+        if not offenders:
+            return
+        total = sum(offenders.values())
+        self.finding(
+            check_id="LVIO-OFH-001",
+            title="Privileged change action outside business hours",
+            severity=self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=self._with_window(
+                "{0} privileged account(s) performed {1} change action(s) — table "
+                "maintenance, audit-configuration change, user change, debugging or "
+                "external commands — outside business hours in the reviewed window. An "
+                "off-hours privileged change is the action an abused privileged account "
+                "takes when no reviewer is at a desk, and each should match an approved "
+                "change or incident record."
+            ).format(len(offenders), total),
+            affected_items=[
+                "{0}: {1} off-hours change action(s)".format(u, n)
+                for u, n in sorted(offenders.items(), key=lambda kv: (-kv[1], kv[0]))
+            ],
+            affected_objects=self._user_objects(offenders),
+            scope="aggregate",
+            details=self._details({
+                "business_hours": "{0:02d}:00-{1:02d}:00".format(start_h, end_h),
+                "accounts": sorted(offenders),
+                "per_account": offenders,
+                "occurrences": total,
+            }),
+            remediation=(
+                "Reconcile each off-hours privileged change with an approved change or "
+                "incident record. Where privileged change is not meant to happen "
+                "off-hours, grant it through a time-boxed emergency-access process rather "
+                "than standing authorization, so the exception is the thing that is logged."
+            ),
+            references=[
+                "SAP Security Baseline — privileged access review",
+                "SOX ITGC — change control and segregation of duties",
             ],
         )
