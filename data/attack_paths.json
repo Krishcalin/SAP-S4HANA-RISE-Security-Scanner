@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "version": "1.7.0",
+    "version": "1.8.0",
     "description": "SAP attack-path templates. CONTENT, not code: a new path is a new entry here, never a code change. Each template names the checks that evidence each hop, so every hop is grounded in a check that already exists and a path can never claim more than the scanner actually detected.",
     "how_a_path_instantiates": "Every REQUIRED hop must have at least one OPEN finding in the landscape. Optional hops enrich a path but do not gate it. A path is therefore a statement that these conditions CO-EXIST, derived from exported configuration — never a claim that anything was traversed or validated. The console must say so.",
     "cut_semantics": "A hop marked cut=true appears on every variant of the path, so closing it disconnects the path. Non-cut hops reduce exploitability without severing it. This is the mitigate-vs-additional split: it needs no clever algorithm, only that each hop knows whether removing it disconnects.",
@@ -1917,6 +1917,183 @@
             "cap_service"
           ],
           "note": "CAP has no property-level authorization, so the projection IS the access control for these fields: whoever may read the entity reads every column of it. Shares its ending with the other data paths, and for the same reason — a read is not a change, so nothing in the change log sees it."
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-24",
+      "name": "Internet-reached gateway, exercised in the window",
+      "severity": "CRITICAL",
+      "fair_scenario": "SAP-RCE-01",
+      "crosses_tier": true,
+      "summary": "An SAP service port was reached from outside, the RFC gateway ACL does not enforce, and the gateway log shows an external program registered through it — configuration weakness and log evidence of its use, in one window.",
+      "narrative": "The config-only version of this path (SAPPATH-13) ends at 'the ACL could allow program execution'. This one adds what the LogServ window actually recorded: a connection from a public source to an SAP port, and a program registered or allowed through a gateway the ACL was supposed to stop. The log turns a theoretical gateway exposure into an observed one.",
+      "hops": [
+        {
+          "name": "An SAP service port was reached from outside",
+          "checks": [
+            "NETLOG-003",
+            "NETLOG-001"
+          ],
+          "node_types": [
+            "endpoint"
+          ],
+          "required": true,
+          "cut": false
+        },
+        {
+          "name": "The RFC gateway ACL does not enforce",
+          "checks": [
+            "BASELINE-007",
+            "INTG-GW-001",
+            "INTG-GW-002",
+            "PARAM-gw/sec_info",
+            "PARAM-gw/reg_info"
+          ],
+          "node_types": [
+            "gateway",
+            "parameter_name"
+          ],
+          "required": true,
+          "cut": true,
+          "why_cut": "Complete the reginfo / secinfo ACL and set the gateway to enforcing (gw/sim_mode = 0): every unlisted program registration is then rejected, and the route dies whatever reached the port."
+        },
+        {
+          "name": "An external program ran through the gateway",
+          "checks": [
+            "GWLOG-001",
+            "GWLOG-003"
+          ],
+          "node_types": [
+            "program",
+            "gateway"
+          ],
+          "required": true,
+          "cut": false
+        },
+        {
+          "name": "Confirmed active by the config-vs-log correlation",
+          "checks": [
+            "CORR-GW-001"
+          ],
+          "node_types": [
+            "gateway",
+            "program"
+          ],
+          "required": false,
+          "cut": false
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-25",
+      "name": "Web foothold to the database",
+      "severity": "CRITICAL",
+      "fair_scenario": "SAP-DATA-04",
+      "crosses_tier": true,
+      "summary": "The ICM / Web Dispatcher log shows an administrative or remote-execution HTTP path reached, and the HANA audit log shows privileged database activity against weak database controls, in the same window.",
+      "narrative": "Two log classes line up into one story the configuration alone could not tell: a reachable web surface was probed and reached, and privileged HANA activity followed against a database whose auditing and privileged accounts the config review already flagged. The web tier is the cut — close the reachable services and the HTTP route in is gone.",
+      "hops": [
+        {
+          "name": "The web surface was probed and reached",
+          "checks": [
+            "ICMLOG-002",
+            "ICMLOG-001",
+            "ICMLOG-003"
+          ],
+          "node_types": [
+            "icf_path",
+            "endpoint"
+          ],
+          "required": true,
+          "cut": true,
+          "why_cut": "Deactivate in SICF the administrative and remote-execution ICF services that need not be reachable, and restrict the rest to an administrator network: the HTTP way in closes at the edge."
+        },
+        {
+          "name": "Privileged database activity followed",
+          "checks": [
+            "HANALOG-002",
+            "HANALOG-001"
+          ],
+          "node_types": [
+            "hana_user",
+            "hana_privilege"
+          ],
+          "required": true,
+          "cut": false
+        },
+        {
+          "name": "Against weak database controls",
+          "checks": [
+            "HANADB-AUDIT-001",
+            "HANADB-USER-001",
+            "HANADB-PRIV-001"
+          ],
+          "node_types": [
+            "hana_user",
+            "hana_privilege"
+          ],
+          "required": false,
+          "cut": false
+        },
+        {
+          "name": "Confirmed active by the config-vs-log correlations",
+          "checks": [
+            "CORR-ICM-001",
+            "CORR-HANA-001"
+          ],
+          "node_types": [
+            "icf_path",
+            "hana_user"
+          ],
+          "required": false,
+          "cut": false
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-26",
+      "name": "Blind the audit, then act",
+      "severity": "HIGH",
+      "fair_scenario": "SAP-PRIV-03",
+      "crosses_tier": false,
+      "summary": "The HANA audit configuration was changed and privileged database activity followed in the same window — auditing weakened, then used — while the LogServ pipeline had a coverage gap.",
+      "narrative": "Disabling or narrowing an audit policy is the move that precedes privileged misuse: it removes the record that would have caught what comes next. The window shows the policy changed and privileged activity after it, and the ingestion-health check shows a class the pipeline was not forwarding — so the blind spot was real.",
+      "hops": [
+        {
+          "name": "The audit configuration was changed",
+          "checks": [
+            "HANALOG-001"
+          ],
+          "node_types": [
+            "hana_user"
+          ],
+          "required": true,
+          "cut": true,
+          "why_cut": "Restrict ALTER/DROP on audit policies to a named administrator role and re-enable the mandatory policies: a privileged action can no longer be taken unobserved, and the sequence loses its cover."
+        },
+        {
+          "name": "Privileged activity under weakened auditing",
+          "checks": [
+            "HANALOG-002"
+          ],
+          "node_types": [
+            "hana_user",
+            "hana_privilege"
+          ],
+          "required": true,
+          "cut": false
+        },
+        {
+          "name": "And the log pipeline had a coverage gap",
+          "checks": [
+            "LSRV-COV-001"
+          ],
+          "node_types": [
+            "system"
+          ],
+          "required": false,
+          "cut": false
         }
       ]
     }
