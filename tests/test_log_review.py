@@ -442,3 +442,65 @@ def test_rows_without_a_timestamp_still_count_towards_volume():
     pat = [f for f in findings if f["check_id"] == "LREV-PAT-003"][0]
     assert pat["details"]["occurrences"] == 2
     assert pat["details"]["reviewed_window"]["events_without_timestamp"] == 1
+
+
+# ── v2 retrospective threat patterns: LREV-PAT-008/009/010 ───────────────────
+
+def _cids(data):
+    return {f["check_id"] for f in _run(data)}
+
+
+def test_external_os_command_fires_pat_008():
+    rows = [_ev("2026-01-10", "10:00:00", "ADMIN", TCODE="SM49", TERMINAL="h1")]
+    assert "LREV-PAT-008" in _cids({"security_audit_log": rows, "audit_config": CONFIG})
+
+
+def test_os_command_via_message_text_fires_pat_008():
+    rows = [_ev("2026-01-10", "10:00:00", "ADMIN",
+                TEXT="External command ZPING executed", TERMINAL="h1")]
+    assert "LREV-PAT-008" in _cids({"security_audit_log": rows, "audit_config": CONFIG})
+
+
+def test_no_os_command_is_silent_on_pat_008():
+    rows = [_ev("2026-01-10", "10:00:00", "ADMIN", EVENT_CLASS="dialog_logon", TERMINAL="h1")]
+    assert "LREV-PAT-008" not in _cids({"security_audit_log": rows, "audit_config": CONFIG})
+
+
+def test_technical_user_dialog_logon_fires_pat_009():
+    rows = [_ev("2026-01-10", "11:00:00", "BATCHJOB", EVENT_CLASS="dialog_logon", TERMINAL="h2")]
+    users = [{"BNAME": "BATCHJOB", "USTYP": "B"}, {"BNAME": "ALICE", "USTYP": "A"}]
+    f = [x for x in _run({"security_audit_log": rows, "audit_config": CONFIG, "users": users})
+         if x["check_id"] == "LREV-PAT-009"]
+    assert f and f[0]["severity"] == "HIGH"
+    assert f[0]["details"]["types"]["BATCHJOB"] == "System"
+
+
+def test_dialog_user_logon_is_silent_on_pat_009():
+    rows = [_ev("2026-01-10", "11:00:00", "ALICE", EVENT_CLASS="dialog_logon", TERMINAL="h2")]
+    users = [{"BNAME": "ALICE", "USTYP": "A"}]
+    assert "LREV-PAT-009" not in _cids(
+        {"security_audit_log": rows, "audit_config": CONFIG, "users": users})
+
+
+def test_no_users_export_is_silent_on_pat_009():
+    rows = [_ev("2026-01-10", "11:00:00", "BATCHJOB", EVENT_CLASS="dialog_logon", TERMINAL="h2")]
+    assert "LREV-PAT-009" not in _cids({"security_audit_log": rows, "audit_config": CONFIG})
+
+
+def test_password_spraying_fires_pat_010():
+    rows = [_ev("2026-01-10", "12:0%d:00" % i, "USER%d" % i,
+                EVENT_CLASS="dialog_logon_failure", TERMINAL="attacker") for i in range(6)]
+    assert "LREV-PAT-010" in _cids({"security_audit_log": rows, "audit_config": CONFIG})
+
+
+def test_single_account_failures_are_not_spraying():
+    # A run of failures against ONE account is brute force (LREV-PAT-002), not spraying.
+    rows = [_ev("2026-01-10", "12:0%d:00" % i, "VICTIM",
+                EVENT_CLASS="dialog_logon_failure", TERMINAL="attacker") for i in range(6)]
+    assert "LREV-PAT-010" not in _cids({"security_audit_log": rows, "audit_config": CONFIG})
+
+
+def test_the_new_patterns_are_beyond_baseline():
+    from server import sapcontent
+    for cid in ("LREV-PAT-008", "LREV-PAT-009", "LREV-PAT-010"):
+        assert sapcontent.requirement_for(cid) is None
