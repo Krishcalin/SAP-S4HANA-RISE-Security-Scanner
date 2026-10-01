@@ -62,11 +62,11 @@ reason for each.
 
 ## Every source, including the ones this guide does not cover
 
-The scanner reads **147** logical sources. All of them now have a procedure: the
+The scanner reads **148** logical sources. All of them now have a procedure: the
 sections up to *SAP Cloud ALM* cover what a first scan needs, and
 [*The remaining sources*](#the-remaining-sources) below covers the rest.
 
-[**`EXPORT_SOURCES.md`**](EXPORT_SOURCES.md) lists all 147 — the filenames the
+[**`EXPORT_SOURCES.md`**](EXPORT_SOURCES.md) lists all 148 — the filenames the
 loader accepts, which checks each one feeds, and whether a procedure exists. It is
 generated from the code, so a source cannot be added to the scanner without
 appearing there, and it will show up as undocumented until somebody writes the
@@ -160,6 +160,20 @@ Optional: VERSION, SP, PATCH, VENDOR, SP_REL_DATE
 The internet-facing dispatcher's own patch age. Answers SAP Baseline v2.6
 SECUPD-O: the last reported change (`CD_HIST_DATE`) must be within the last 365
 days.
+
+### SAP LogServ events (`logserv_events.json`)
+**Source:** SAP LogServ — SAP's RISE log service (OCSF events)
+```
+Required: OCSF events, each with `time` (epoch ms), `class_uid`/`class_name`,
+          `actor.user.name` (or `user.name`), `status_id`
+Optional: `src_endpoint.hostname`, `message`, `unmapped.{client,tcode}`
+```
+A window of SAP LogServ logs in the **OCSF** schema (JSON), either exported/forwarded
+from LogServ or pulled with `python -m collect logserv`. `modules/logserv_ocsf`
+normalises them into the same audit-event shape the Security Audit Log review uses,
+so they feed the retrospective `LREV-PAT-*` threat patterns. This is a fresher
+**source** for the exported-window review — not a live feed. Accepts a bare list of
+events or a `{"events": [...]}` wrapper.
 
 > ✅ **`HANDLER_CLASS` IS READ.** It was specified and then consumed by nothing
 > for a while, and this box said so. `modules/reachability.py` now joins on it,

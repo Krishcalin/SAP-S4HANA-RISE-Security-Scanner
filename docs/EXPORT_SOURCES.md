@@ -8,7 +8,7 @@
 Every logical source the scanner can read, what it enables, and whether
 [`EXPORT_GUIDE.md`](EXPORT_GUIDE.md) tells you how to produce it.
 
-**147 logical sources, all of them with a written procedure** in the export
+**148 logical sources, all of them with a written procedure** in the export
 guide. This table is the regression detector for that: add a source to the loader
 without writing its procedure and it appears here as *not yet written*.
 
@@ -73,10 +73,10 @@ clean — see chapter 13 of the architecture guide.
 | `fiori_catalogs` | `fiori_catalogs.csv`, `flpd_catalogs.csv` | `fiori_ui` | documented |
 | `fiori_spaces` | `fiori_spaces.json`, `spaces_pages.json` | `fiori_ui` | documented |
 | `fiori_tiles` | `fiori_tiles.csv`, `flpd_tiles.csv` | `access_risk_analysis`, `fiori_ui` | documented |
-| `firefighter_log` | `firefighter_log.csv`, `ff_log.csv`, `spm_log.csv` | `iam_advanced` | documented |
+| `firefighter_log` | `firefighter_log.csv`, `ff_log.csv`, `spm_log.csv` | `iam_advanced`, `log_review` | documented |
 | `grac_access_requests` | `grac_access_requests.csv`, `gracreq.csv` | `grc_access_control` | documented |
-| `grac_firefighter_log` | `grac_firefighter_log.csv`, `gracfflog.csv` | `grc_access_control` | documented |
-| `grac_firefighter_owners` | `grac_firefighter_owners.csv`, `gracffowner.csv` | `grc_access_control` | documented |
+| `grac_firefighter_log` | `grac_firefighter_log.csv`, `gracfflog.csv` | `grc_access_control`, `log_review` | documented |
+| `grac_firefighter_owners` | `grac_firefighter_owners.csv`, `gracffowner.csv` | `grc_access_control`, `log_review` | documented |
 | `grac_job_log` | `grac_job_log.csv`, `gractaskexecstmp.csv`, `grac_sync_jobs.csv` | `grc_access_control` | documented |
 | `grac_mitigating_controls` | `grac_mitigating_controls.csv`, `gracmitcnt.csv` | `grc_access_control` | documented |
 | `grac_sod_risks` | `grac_sod_risks.csv`, `gracsodrisk.csv` | `grc_access_control` | documented |
@@ -101,6 +101,7 @@ clean — see chapter 13 of the architecture guide.
 | `key_management` | `key_management.json` | `crypto_posture` | documented |
 | `log_retention` | `log_retention.json` | `log_monitoring` | documented |
 | `logon_events` | `logon_events.csv`, `logon_stats.csv` | `log_monitoring`, `log_review` | documented |
+| `logserv_events` | `logserv_events.json`, `logserv.json`, `ocsf_events.json` | `log_review` | documented |
 | `me_hotnews` | `me_hotnews.csv`, `hotnews_list.csv`, `sap_for_me_hotnews.csv`, `me_security_notes.csv`, `me_hotnews.xlsx`, `hotnews_list.xlsx`, `sap_for_me_hotnews.xlsx` | `sap_hotnews` | documented |
 | `mitigating_controls` | `mitigating_controls.csv`, `mitigations.csv`, `grc_mitigations.csv` | `access_risk_analysis` | documented |
 | `ms_acl` | `ms_acl.csv`, `ms_acl_info.csv`, `msacl.csv` | `system_trust` | documented · not obtainable in RISE |

@@ -43,6 +43,10 @@ _NOT_AN_AUDITOR = {
     "base_auditor", "data_loader", "__init__", "compliance_mapping", "fair_adapter",
     "finding_kb", "pdf_report", "pdf_writer", "pptx_report", "pptx_writer",
     "report_generator", "risk_prioritizer",
+    # The SAP LogServ OCSF adapter: a pure normaliser that log_review calls to fold
+    # LogServ events into its audit-event window. It emits no findings and reads no
+    # `self.data` of its own, so it is a library, not an auditor.
+    "logserv_ocsf",
     # THIS FILE. It moved here from server/ so the offline reports could reach it,
     # and promptly discovered ITSELF as an auditor — 31 modules where there are
     # 30. A module that lists itself among the things it audits is the kind of

@@ -250,6 +250,10 @@ class DataLoader:
         "dev_access_prod":         ["dev_access_prod.csv"],
         # Logging, Monitoring & IR data sources
         "security_audit_log":      ["security_audit_log.csv", "sm19_filters.csv"],
+        # SAP LogServ events in OCSF (JSON), a fresher source for the SAME
+        # retrospective log review; normalised by modules/logserv_ocsf and folded
+        # into log_review's event window.
+        "logserv_events":          ["logserv_events.json", "logserv.json", "ocsf_events.json"],
         "siem_config":             ["siem_config.json"],
         "log_retention":           ["log_retention.json"],
         "incident_response":       ["incident_response.json", "ir_config.json"],
