@@ -2718,5 +2718,65 @@
   "module": "correlation",
   "risk": "This is a CORRELATION finding: it is raised only when the configuration review and the log review agree. The configuration findings (BASELINE-007 gw/acl_mode, INTG-GW-* secinfo/reginfo, PARAM-gw/*) report that the RFC gateway ACL is weak or not enforced; the gateway log review (GWLOG-001, GWLOG-003) shows that exposure being used in the same system over the exported window - an external program registered through the gateway, or a connection the ACL should have rejected allowed through. A weakness the configuration flagged is a theoretical gap; the same weakness with a log event showing it exercised is an active-exploitation indicator. That is a different and higher-severity statement, and it should be handled as an incident to confirm or rule out rather than as a hardening backlog item.",
   "mitigation": "1. Treat this as active use of a known gateway weakness, not a backlog item.\n2. Investigate the registered programs and source hosts named in the underlying gateway-log findings (GWLOG-001 / GWLOG-003).\n3. Close the exposure the configuration findings describe: complete the reginfo / secinfo ACL and move the gateway to enforcing (gw/sim_mode = 0, gw/acl_mode set), so the rule that matched rejects the connection rather than only recording it.\n4. Confirm closure by re-reviewing the window: the config findings should clear and the gateway log should show the connections now denied."
+ },
+ "HANALOG-001": {
+  "module": "logserv_review",
+  "risk": "Reviews the HANA audit trail (via SAP LogServ) over the exported window and reports a change to the HANA audit configuration itself - a policy altered, disabled or dropped. The audit policy is the record that a privileged database action happened; removing or narrowing it stops that record being written, and disabling auditing is a classic first move before privileged misuse, because it blinds the one control that would have recorded what came next. A change here is not necessarily malicious, but each one should match an approved administrative task, and a change nobody can account for is an incident.",
+  "mitigation": "1. Reconcile each HANA audit-policy change against an approved change record.\n2. Confirm the policies that must stay active are enabled (logon, system privileges, structured-privilege access, user administration).\n3. Restrict ALTER/DROP on audit policies to a single named administrator role.\n4. Investigate any change that cannot be accounted for as the possible prelude to privileged misuse."
+ },
+ "HANALOG-002": {
+  "module": "logserv_review",
+  "risk": "Reports privileged HANA database activity in the exported window - actions by a standard HANA super-user (SYSTEM and the like) or any grant/revoke of a privilege. The SYSTEM user is the HANA equivalent of SAP_ALL and should be dormant in normal operation; a privilege grant changes who can do what in the database. Activity by these accounts, or changes to the privilege model, are the database actions most worth reconciling, because they are both the most powerful and the ones an attacker uses to entrench access.",
+  "mitigation": "1. Reconcile each privileged database action with an approved task.\n2. Deactivate the SYSTEM user for day-to-day work; give named administrators their own accounts so super-user activity is the rare, explained exception.\n3. Review every privilege grant for least privilege, and revoke standing grants that are not needed.\n4. Investigate any privileged action with no matching change or incident record."
+ },
+ "HANALOG-003": {
+  "module": "logserv_review",
+  "risk": "Reports failed HANA database logons in the exported window. A run of failures against a database account is either an application wired with a stale credential - noise that hides real signal - or an attempt to guess a password, and the two have to be told apart rather than left in the log. Failures against SYSTEM or an administrator account matter most, because that is where a successful guess would do the most damage.",
+  "mitigation": "1. Reconcile each run of failed logons.\n2. Fix the application or job that holds a stale database credential.\n3. Investigate failures against SYSTEM or an admin account as an attempt to guess the password, and confirm none later succeeded.\n4. Confirm HANA password-policy lockout is configured so repeated failures lock the account."
+ },
+ "ICMLOG-001": {
+  "module": "logserv_review",
+  "risk": "Reviews the ICM / Web Dispatcher HTTP log over the exported window and reports a successful request to an administrative web path - an ICF administration console or a system service. These are the paths that, if reachable and reached, hand an attacker the application: configuration, user administration, or a diagnostic console. A successful request to one is not proof of compromise, but it should match an approved administrator and a trusted source, and a request from anywhere else is the exposure being used.",
+  "mitigation": "1. Confirm each administrative path should be reachable at all; deactivate the ones that need not be in SICF.\n2. For those that must stay, restrict them to an administrator network and require authentication.\n3. Reconcile the sources in the log against that administrator network.\n4. Treat a successful administrative request from an untrusted source as an incident."
+ },
+ "ICMLOG-002": {
+  "module": "logserv_review",
+  "risk": "Reports a source making many failed (4xx/5xx) HTTP requests in the exported window - the signature of a scan enumerating which ICF paths exist. Scanning itself is reconnaissance rather than a breach, but it is the step before one: it finds the exposed path that a later request will use. The value is in knowing which source scanned, which paths it probed, and whether any request to those paths later succeeded.",
+  "mitigation": "1. Investigate each scanning source and whether any request it made succeeded.\n2. Rate-limit or block the source at the Web Dispatcher or reverse proxy.\n3. Confirm the paths it probed are deactivated in SICF where they are not needed.\n4. Where a probed path is legitimate, confirm it requires authentication."
+ },
+ "ICMLOG-003": {
+  "module": "logserv_review",
+  "risk": "Reports a successful request to a remote-execution HTTP endpoint in the exported window - SOAP/RFC over HTTP, the web-service runtime, the XML/web RFC gateways. These endpoints turn an HTTP request into a function call inside SAP, so an exposed one reachable from an untrusted source is the shortest path from the network to remote code execution. A successful request to one should match a known calling system; one from anywhere else is how exposure becomes execution.",
+  "mitigation": "1. Confirm each remote-execution endpoint must be exposed over HTTP at all; deactivate those that need not be in SICF.\n2. For those that must stay, require authentication and restrict them to the systems that call them.\n3. Reconcile the sources in the log against that list, and investigate any other source.\n4. Prefer UCON and a tightened reginfo/secinfo where RFC exposure is genuinely required."
+ },
+ "NETLOG-001": {
+  "module": "logserv_review",
+  "risk": "Reviews the network / firewall log over the exported window and reports allowed connections to SAP service ports - the dispatcher (32NN), gateway (33NN), message server (36NN), HANA SQL (3NN13/15) and ICM/web ports. These are meant to be reachable only from the application tier and from administrators; a connection to one tells you which segment can reach it, which is exactly the reachability an attacker uses to pivot from a foothold to the SAP system. A connection is not a breach, but the set of segments that can open one is the attack surface, and it should be as small as the architecture allows.",
+  "mitigation": "1. Confirm every segment that can reach an SAP service port should be able to.\n2. Restrict the dispatcher, gateway, message-server and HANA ports to the application tier and an administrator network with host or network firewall rules.\n3. Pay particular attention to the message server and gateway ports, which are the classic pivot points.\n4. Re-review the log after tightening to confirm only expected segments remain."
+ },
+ "NETLOG-002": {
+  "module": "logserv_review",
+  "risk": "Reports blocked connection attempts in the exported window. A block is the firewall working, so this is a lower-severity signal, but a run of blocks from one source is worth telling apart: it is either a rule filtering legitimate traffic - an operational problem that will recur - or something probing the perimeter for a way in. Left unexamined, the first wastes effort chasing phantom outages and the second is the reconnaissance before an attack.",
+  "mitigation": "1. Reconcile each blocked source against expected traffic.\n2. Allow a legitimate source explicitly where a rule is over-broad.\n3. Treat a persistent unknown source as perimeter probing and investigate it.\n4. Confirm the blocking rule is the intended one and is logging enough to make this judgement."
+ },
+ "NETLOG-003": {
+  "module": "logserv_review",
+  "risk": "Reports a connection to an SAP service port from a public (non-private, internet-routable) source address in the exported window. An SAP dispatcher, gateway, message-server or HANA port reachable from a public address is directly exposed to the internet - the single exposure these ports must never have, because every unauthenticated protocol-level weakness in those services becomes remotely reachable. This is the highest-severity network signal: it is not reconnaissance or a theoretical path, it is the port being reached from the internet.",
+  "mitigation": "1. Treat a public source on an SAP service port as a directly internet-exposed service and block it at the perimeter immediately.\n2. Confirm the port is reachable only from the application tier and an administrator network.\n3. Audit the perimeter firewall / security-group rules that allowed the public source.\n4. Investigate whether the exposure was used while it was open."
+ },
+ "CORR-HANA-001": {
+  "module": "correlation",
+  "risk": "A correlation finding, raised only when the configuration review and the HANA audit-log review agree. The configuration side reports weak HANA auditing or privileged access (HANADB-AUDIT-*, HANADB-USER-*, HANADB-PRIV-*); the log side shows that access being used - a privileged database action, a privilege grant, or a change to the audit configuration itself (HANALOG-001/002). A weakness the configuration flagged, with log evidence of it being exercised, is an active-exploitation indicator rather than a theoretical gap, and should be handled as an incident to confirm or rule out.",
+  "mitigation": "1. Treat this as active use of a known HANA weakness, not a backlog item.\n2. Investigate the accounts and privileges named in the HANA-log findings.\n3. Deactivate the SYSTEM user for day-to-day work and confirm the audit policies that must stay active are enabled.\n4. Reconcile the privileged actions against approved tasks, and escalate any that cannot be accounted for."
+ },
+ "CORR-ICM-001": {
+  "module": "correlation",
+  "risk": "A correlation finding, raised only when the configuration review and the ICM / Web Dispatcher log review agree. The configuration side reports the web tier as exposed or under-logged (WDISP-*, BASELINE-009, PARAM-icm/*); the log side shows a successful request to an administrative or remote-execution HTTP path (ICMLOG-001/003). An exposed web service the configuration flagged, with log evidence that something reached it, is an active-exploitation indicator rather than a theoretical gap, and should be handled as an incident.",
+  "mitigation": "1. Treat this as an exposed web service being reached, not a backlog item.\n2. Investigate the paths and sources named in the ICM-log findings.\n3. Deactivate the services that need not be reachable in SICF, and restrict the rest to an administrator network with authentication.\n4. Confirm whether any request that reached a remote-execution endpoint succeeded."
+ },
+ "CORR-NET-001": {
+  "module": "correlation",
+  "risk": "A correlation finding, raised only when the configuration review and the network log review agree. The configuration side reports a network service as exposed (NET-*, TRUST-006/010, UCON-*); the log side shows a connection to an SAP service port, in some cases from a public source address (NETLOG-001/003). An exposed service the configuration flagged, with log evidence of a connection to it, is an active-exploitation indicator rather than a theoretical gap, and a public source makes it an immediate one.",
+  "mitigation": "1. Treat this as an exposed network service being reached, not a backlog item.\n2. Investigate the sources named in the network-log findings; block any public source at the perimeter immediately.\n3. Restrict the SAP service ports to the application tier and an administrator network at the host or network firewall.\n4. Audit the perimeter rules that allowed the connection."
  }
 }

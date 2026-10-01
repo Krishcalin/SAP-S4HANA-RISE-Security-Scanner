@@ -74,6 +74,58 @@ _PROGRAM_KEYS = ("program", "tp_name", "tpname", "tp", "reg_program",
                  "registered_program", "program_name")
 _GATEWAY_HOST_KEYS = ("gateway_host", "gwhost", "gw_host", "server", "gateway")
 
+#: HANA database audit log. Recognised by product/class/message naming HANA, or by
+#: SAP HANA audit fields carried in `unmapped`.
+_HANA_HINTS = ("hana", "hdb", "saphana", "indexserver", "nameserver", "hdbsql",
+               "audit policy", "sql trace", "database audit")
+_HANA_KEYS = ("audit_policy", "audit_policy_name", "db_user", "dbuser", "db_object",
+              "schema", "privilege", "grantee", "sql_statement", "hana_user")
+_AUDIT_POLICY_KEYS = ("audit_policy", "audit_policy_name", "policy", "policy_name")
+_DB_OBJECT_KEYS = ("db_object", "object", "object_name", "schema_object", "view",
+                   "table_name")
+_PRIVILEGE_KEYS = ("privilege", "system_privilege", "granted_privilege", "object_privilege")
+
+#: ICM / Web Dispatcher / ICF HTTP request log. Recognised by product/class naming
+#: the web tier, or by an HTTP request path being present.
+_ICM_HINTS = ("icm", "web dispatcher", "webdisp", "icf", "sicf", "http activity",
+              "web resources", "http request", "message server http")
+_PATH_PATHS = (("http_request", "url", "path"), ("http_request", "url", "text"),
+               ("url", "path"), ("url", "text"), ("web_resources", "url", "path"))
+_PATH_KEYS = ("url", "path", "http_path", "uri", "resource", "icf_path", "service_path")
+_HTTP_METHOD_PATHS = (("http_request", "http_method"), ("http_request", "method"))
+_HTTP_STATUS_PATHS = (("http_response", "code"), ("http_response", "status_code"),
+                      ("status_code",))
+
+#: Network / firewall / proxy / DNS log. Recognised by product/class, or by a
+#: destination port with a connection/deny shape.
+_NETWORK_HINTS = ("firewall", "network activity", "proxy", "dns activity", "netfilter",
+                  "packet filter", "network traffic", "connection log")
+_PORT_PATHS = (("dst_endpoint", "port"), ("dst_port",), ("dst_endpoint", "svc_name"))
+_PROTOCOL_PATHS = (("connection_info", "protocol_name"), ("connection_info", "protocol"),
+                   ("protocol",), ("network_protocol",))
+_DISPOSITION_PATHS = (("disposition",), ("action",), ("network_endpoint", "disposition"))
+
+
+def _dig_any(event: Dict[str, Any], paths) -> str:
+    for path in paths:
+        val = _dig(event, path)
+        if val:
+            return val
+    return ""
+
+
+def _http_path(event: Dict[str, Any]) -> str:
+    """The requested HTTP/ICF path, from OCSF http_request or an unmapped field."""
+    return _dig_any(event, _PATH_PATHS) or _unmapped_or_top(event, _PATH_KEYS)
+
+
+def _has_network_shape(event: Dict[str, Any]) -> bool:
+    """A destination port plus a protocol or a connect/deny disposition — enough to
+    treat an event as a network-log line even when nothing names the product."""
+    port = _dig_any(event, _PORT_PATHS)
+    proto = _dig_any(event, _PROTOCOL_PATHS)
+    return bool(port and (proto or _dig_any(event, _DISPOSITION_PATHS)))
+
 
 def _product_blob(event: Dict[str, Any]) -> str:
     """Lower-cased product / feature / class / category names for signature tests."""
@@ -98,16 +150,24 @@ def _product_blob(event: Dict[str, Any]) -> str:
 def _logserv_class(event: Dict[str, Any]) -> str:
     """Which non-SAL system-log class this OCSF event belongs to, or "".
 
-    Returns one of {"gateway"} today (HANA / ICM / network are added as those
-    detectors land). An event that looks like a system log but ALSO carries a SAP
-    transaction code is treated as SAL (returns ""), because a tcode is the strongest
-    Security-Audit-Log signal and log_review's own heuristics should keep it.
+    One of {"gateway", "hana", "icm", "network"}. An event that looks like a system
+    log but ALSO carries a SAP transaction code is treated as SAL (returns ""),
+    because a tcode is the strongest Security-Audit-Log signal and log_review's own
+    heuristics should keep it. Order matters: the most SAP-specific signatures are
+    tested first so a gateway or HANA event is not swallowed by the broad network
+    shape (a gateway event also has a destination).
     """
     if _unmapped_or_top(event, _TCODE_KEYS):
         return ""
     blob = _product_blob(event) + " " + str(event.get("message") or "").lower()
     if any(h in blob for h in _GATEWAY_HINTS) or _unmapped_or_top(event, _PROGRAM_KEYS):
         return "gateway"
+    if any(h in blob for h in _HANA_HINTS) or _unmapped_or_top(event, _HANA_KEYS):
+        return "hana"
+    if any(h in blob for h in _ICM_HINTS) or _http_path(event):
+        return "icm"
+    if any(h in blob for h in _NETWORK_HINTS) or _has_network_shape(event):
+        return "network"
     return ""
 
 
@@ -150,13 +210,73 @@ def _gateway_decision(event: Dict[str, Any]) -> str:
     return "allowed"
 
 
+def _status_failed(event: Dict[str, Any]) -> bool:
+    try:
+        status_id = int(event.get("status_id")) if event.get("status_id") is not None else None
+    except (TypeError, ValueError):
+        status_id = None
+    blob = (str(event.get("status") or "") + " " + str(event.get("message") or "")).lower()
+    return status_id == _STATUS_FAILURE or any(
+        w in blob for w in ("fail", "error", "denied", "unsuccessful", "reject", "refused"))
+
+
+def _hana_action(event: Dict[str, Any]) -> str:
+    """audit_change | grant | revoke | alter | connect | read | drop — the DB action."""
+    blob = (str(event.get("activity_name") or "") + " "
+            + str(event.get("message") or "")).lower()
+    if "audit" in blob and any(w in blob for w in
+                               ("chang", "alter", "disab", "drop", "polic", "creat")):
+        return "audit_change"
+    for needle, name in (("grant", "grant"), ("revoke", "revoke"), ("alter", "alter"),
+                         ("logon", "connect"), ("connect", "connect"),
+                         ("select", "read"), ("read", "read"), ("access", "read"),
+                         ("drop", "drop"), ("delete", "drop")):
+        if needle in blob:
+            return name
+    return ""
+
+
+def _icm_decision(event: Dict[str, Any]) -> str:
+    """allowed | denied, from the HTTP response code (>=400 is a refused/failed request)."""
+    code = _dig_any(event, _HTTP_STATUS_PATHS)
+    try:
+        if code and int(code) >= 400:
+            return "denied"
+        if code:
+            return "allowed"
+    except (TypeError, ValueError):
+        pass
+    return "denied" if _status_failed(event) else "allowed"
+
+
+def _network_decision(event: Dict[str, Any]) -> str:
+    """allowed | denied, from the firewall disposition or the status."""
+    disp = _dig_any(event, _DISPOSITION_PATHS).lower()
+    if any(w in disp for w in ("deni", "deny", "drop", "block", "reject", "refus")):
+        return "denied"
+    if any(w in disp for w in ("allow", "accept", "permit", "pass")):
+        return "allowed"
+    return "denied" if _status_failed(event) else "allowed"
+
+
+def _network_action(event: Dict[str, Any], decision: str) -> str:
+    if decision == "denied":
+        return "deny"
+    blob = (str(event.get("activity_name") or "") + " "
+            + str(event.get("message") or "")).lower()
+    if "connect" in blob or "connection" in blob or "session" in blob:
+        return "connect"
+    return ""
+
+
 def to_system_events(raw: Any) -> List[Dict[str, str]]:
     """Normalise the non-SAL part of a LogServ OCSF batch into system events.
 
     Each returned dict describes one gateway/HANA/ICM/network log event in a shape
-    modules/logserv_review.py reads:
-        {DATE, TIME, CLASS, ACTION, USER, SRC_HOST, GATEWAY_HOST, PROGRAM,
-         DECISION, STATUS, TEXT}
+    modules/logserv_review.py reads. Common keys: CLASS, ACTION, USER, SRC_HOST,
+    DEST_HOST, DECISION, STATUS, TEXT (+ DATE/TIME when the event carried a time).
+    Per-class keys: gateway adds PROGRAM/GATEWAY_HOST; HANA adds OBJECT/AUDIT_POLICY/
+    PRIVILEGE; ICM adds PATH/HTTP_METHOD/HTTP_STATUS; network adds PORT/PROTOCOL.
     Only events a system-log class claims are returned; SAL events are left for
     `to_audit_events`. Tolerant and stdlib-only, exactly like the SAL path.
     """
@@ -165,19 +285,48 @@ def to_system_events(raw: Any) -> List[Dict[str, str]]:
         cls = _logserv_class(event)
         if not cls:
             continue
-        decision = _gateway_decision(event)
+        dest = (_first(event, *_DEST_PATHS)
+                or _unmapped_or_top(event, _GATEWAY_HOST_KEYS))
         row: Dict[str, str] = {
             "CLASS": cls,
-            "ACTION": _gateway_action(event, decision),
-            "USER": _first(event, *_USER_PATHS),
+            "ACTION": "",
+            "USER": (_first(event, *_USER_PATHS)
+                     or _unmapped_or_top(event, ("db_user", "dbuser", "hana_user"))),
             "SRC_HOST": _first(event, *_TERMINAL_PATHS),
-            "GATEWAY_HOST": (_first(event, *_DEST_PATHS)
-                             or _unmapped_or_top(event, _GATEWAY_HOST_KEYS)),
-            "PROGRAM": _unmapped_or_top(event, _PROGRAM_KEYS),
-            "DECISION": decision,
+            "DEST_HOST": dest,
+            "DECISION": "",
             "STATUS": str(event.get("status") or "").strip(),
             "TEXT": str(event.get("message") or "").strip(),
+            # Per-class fields, present and empty unless this class fills them, so a
+            # detector can read any of them without a KeyError.
+            "PROGRAM": "", "GATEWAY_HOST": "", "OBJECT": "", "AUDIT_POLICY": "",
+            "PRIVILEGE": "", "PATH": "", "HTTP_METHOD": "", "HTTP_STATUS": "",
+            "PORT": "", "PROTOCOL": "",
         }
+        if cls == "gateway":
+            decision = _gateway_decision(event)
+            row["DECISION"] = decision
+            row["ACTION"] = _gateway_action(event, decision)
+            row["PROGRAM"] = _unmapped_or_top(event, _PROGRAM_KEYS)
+            row["GATEWAY_HOST"] = dest
+        elif cls == "hana":
+            row["DECISION"] = "denied" if _status_failed(event) else "allowed"
+            row["ACTION"] = _hana_action(event)
+            row["OBJECT"] = _unmapped_or_top(event, _DB_OBJECT_KEYS)
+            row["AUDIT_POLICY"] = _unmapped_or_top(event, _AUDIT_POLICY_KEYS)
+            row["PRIVILEGE"] = _unmapped_or_top(event, _PRIVILEGE_KEYS)
+        elif cls == "icm":
+            row["PATH"] = _http_path(event)
+            row["HTTP_METHOD"] = _dig_any(event, _HTTP_METHOD_PATHS)
+            row["HTTP_STATUS"] = _dig_any(event, _HTTP_STATUS_PATHS)
+            row["DECISION"] = _icm_decision(event)
+            row["ACTION"] = row["HTTP_METHOD"].lower() or "request"
+        elif cls == "network":
+            row["PORT"] = _dig_any(event, _PORT_PATHS)
+            row["PROTOCOL"] = _dig_any(event, _PROTOCOL_PATHS)
+            decision = _network_decision(event)
+            row["DECISION"] = decision
+            row["ACTION"] = _network_action(event, decision)
         when = _when(event)
         if when:
             row["DATE"], row["TIME"] = when

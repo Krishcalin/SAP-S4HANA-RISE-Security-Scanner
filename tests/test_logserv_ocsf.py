@@ -159,3 +159,79 @@ def test_gateway_batch_does_not_fire_any_sal_pattern_through_log_review():
                         for i in range(8)]}
     ids = {f["check_id"] for f in LogReviewAuditor({"logserv_events": batch}, {}).run_all_checks()}
     assert not any(c.startswith("LREV-PAT") for c in ids)
+
+
+# ── HANA / ICM / network classification and extraction ────────────────────────
+def _hana(user="SYSTEM", action="GRANT", obj="SYS.USERS", policy="", ok=True, ms=BASE_MS,
+          message=None):
+    msg = message or "%s executed %s on %s" % (user, action, obj)
+    unmapped = {"db_user": user, "db_object": obj}
+    if policy:
+        unmapped["audit_policy"] = policy
+    return {"class_name": "SAP HANA Audit", "activity_name": action, "time": ms,
+            "status_id": 1 if ok else 2, "message": msg, "unmapped": unmapped}
+
+
+def _icm(path="/sap/bc/soap/rfc", status=200, src="10.1.2.3", method="POST", ms=BASE_MS):
+    return {"class_name": "ICM HTTP Activity", "time": ms,
+            "http_request": {"url": {"path": path}, "http_method": method},
+            "http_response": {"code": status},
+            "src_endpoint": {"ip": src}, "message": "HTTP %s %s" % (method, path)}
+
+
+def _net(src="203.0.113.9", dst="sapprd01", port=3300, proto="TCP", disp="Allowed",
+         ms=BASE_MS):
+    return {"class_name": "Firewall", "activity_name": "Connect", "time": ms,
+            "src_endpoint": {"ip": src}, "dst_endpoint": {"hostname": dst, "port": port},
+            "connection_info": {"protocol_name": proto}, "disposition": disp,
+            "message": "connection %s:%s" % (dst, port)}
+
+
+def test_hana_event_is_classified_and_extracted():
+    row = logserv_ocsf.to_system_events([_hana(policy="GLOBAL_AUDIT",
+                                               message="audit policy GLOBAL_AUDIT altered")])[0]
+    assert row["CLASS"] == "hana" and row["ACTION"] == "audit_change"
+    assert row["AUDIT_POLICY"] == "GLOBAL_AUDIT" and row["USER"] == "SYSTEM"
+
+
+def test_hana_grant_and_failed_logon_decisions():
+    grant = logserv_ocsf.to_system_events([_hana(action="GRANT")])[0]
+    assert grant["ACTION"] == "grant" and grant["DECISION"] == "allowed"
+    fail = logserv_ocsf.to_system_events([_hana(action="CONNECT", ok=False,
+                                                message="SYSTEM logon failed")])[0]
+    assert fail["DECISION"] == "denied" and fail["ACTION"] == "connect"
+
+
+def test_icm_event_is_classified_and_extracted():
+    row = logserv_ocsf.to_system_events([_icm(path="/sap/bc/webdynpro/admin",
+                                              status=200)])[0]
+    assert row["CLASS"] == "icm" and row["PATH"] == "/sap/bc/webdynpro/admin"
+    assert row["HTTP_STATUS"] == "200" and row["DECISION"] == "allowed"
+
+
+def test_icm_4xx_is_a_denied_request():
+    assert logserv_ocsf.to_system_events([_icm(status=403)])[0]["DECISION"] == "denied"
+
+
+def test_network_event_is_classified_and_extracted():
+    row = logserv_ocsf.to_system_events([_net(port=3300, proto="TCP")])[0]
+    assert row["CLASS"] == "network" and row["PORT"] == "3300"
+    assert row["PROTOCOL"] == "TCP" and row["DECISION"] == "allowed"
+
+
+def test_network_denied_disposition():
+    row = logserv_ocsf.to_system_events([_net(disp="Denied")])[0]
+    assert row["DECISION"] == "denied" and row["ACTION"] == "deny"
+
+
+def test_new_classes_never_become_sal_rows():
+    for ev in (_hana(), _icm(), _net()):
+        assert logserv_ocsf.to_audit_events([ev]) == []
+
+
+def test_new_classes_do_not_fire_sal_patterns_through_log_review():
+    batch = {"events": [_hana(ms=BASE_MS + i) for i in range(6)]
+             + [_icm(ms=BASE_MS + i) for i in range(6)]
+             + [_net(ms=BASE_MS + i) for i in range(6)]}
+    ids = {f["check_id"] for f in LogReviewAuditor({"logserv_events": batch}, {}).run_all_checks()}
+    assert not any(c.startswith("LREV-PAT") for c in ids)

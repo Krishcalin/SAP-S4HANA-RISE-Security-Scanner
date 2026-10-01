@@ -7,10 +7,23 @@
       "status_id": 1,
       "status": "Success",
       "message": "External program ZBADTP registered via reginfo from an unlisted host",
-      "src_endpoint": { "hostname": "workstation-204" },
-      "dst_endpoint": { "hostname": "sapprd01" },
-      "metadata": { "product": { "name": "SAP NetWeaver Gateway", "feature": { "name": "gwmon" } } },
-      "unmapped": { "program": "ZBADTP" }
+      "src_endpoint": {
+        "hostname": "workstation-204"
+      },
+      "dst_endpoint": {
+        "hostname": "sapprd01"
+      },
+      "metadata": {
+        "product": {
+          "name": "SAP NetWeaver Gateway",
+          "feature": {
+            "name": "gwmon"
+          }
+        }
+      },
+      "unmapped": {
+        "program": "ZBADTP"
+      }
     },
     {
       "class_name": "SAP Gateway",
@@ -19,10 +32,20 @@
       "status_id": 1,
       "status": "Success",
       "message": "External program RFCEXEC started via reginfo",
-      "src_endpoint": { "hostname": "sapprd01" },
-      "dst_endpoint": { "hostname": "sapprd01" },
-      "metadata": { "product": { "name": "SAP NetWeaver Gateway" } },
-      "unmapped": { "program": "RFCEXEC" }
+      "src_endpoint": {
+        "hostname": "sapprd01"
+      },
+      "dst_endpoint": {
+        "hostname": "sapprd01"
+      },
+      "metadata": {
+        "product": {
+          "name": "SAP NetWeaver Gateway"
+        }
+      },
+      "unmapped": {
+        "program": "RFCEXEC"
+      }
     },
     {
       "class_name": "SAP Gateway",
@@ -31,10 +54,20 @@
       "status_id": 2,
       "status": "Denied",
       "message": "Connection from external host denied by secinfo",
-      "src_endpoint": { "hostname": "scanner-host-9" },
-      "dst_endpoint": { "hostname": "sapprd01" },
-      "metadata": { "product": { "name": "SAP NetWeaver Gateway" } },
-      "unmapped": { "reginfo": "no match" }
+      "src_endpoint": {
+        "hostname": "scanner-host-9"
+      },
+      "dst_endpoint": {
+        "hostname": "sapprd01"
+      },
+      "metadata": {
+        "product": {
+          "name": "SAP NetWeaver Gateway"
+        }
+      },
+      "unmapped": {
+        "reginfo": "no match"
+      }
     },
     {
       "class_name": "SAP Gateway",
@@ -43,10 +76,20 @@
       "status_id": 2,
       "status": "Denied",
       "message": "Connection from external host denied by secinfo",
-      "src_endpoint": { "hostname": "scanner-host-9" },
-      "dst_endpoint": { "hostname": "sapprd01" },
-      "metadata": { "product": { "name": "SAP NetWeaver Gateway" } },
-      "unmapped": { "secinfo": "no match" }
+      "src_endpoint": {
+        "hostname": "scanner-host-9"
+      },
+      "dst_endpoint": {
+        "hostname": "sapprd01"
+      },
+      "metadata": {
+        "product": {
+          "name": "SAP NetWeaver Gateway"
+        }
+      },
+      "unmapped": {
+        "secinfo": "no match"
+      }
     },
     {
       "class_name": "SAP Gateway",
@@ -55,10 +98,240 @@
       "status_id": 1,
       "status": "Success",
       "message": "Program ZSHELL would be denied by reginfo but allowed (simulation mode, gw/sim_mode=1)",
-      "src_endpoint": { "hostname": "workstation-371" },
-      "dst_endpoint": { "hostname": "sapprd01" },
-      "metadata": { "product": { "name": "SAP NetWeaver Gateway" } },
-      "unmapped": { "program": "ZSHELL" }
+      "src_endpoint": {
+        "hostname": "workstation-371"
+      },
+      "dst_endpoint": {
+        "hostname": "sapprd01"
+      },
+      "metadata": {
+        "product": {
+          "name": "SAP NetWeaver Gateway"
+        }
+      },
+      "unmapped": {
+        "program": "ZSHELL"
+      }
+    },
+    {
+      "class_name": "SAP HANA Audit",
+      "activity_name": "ALTER AUDIT POLICY",
+      "time": 1768485600000,
+      "status_id": 1,
+      "message": "Audit policy GLOBAL_POLICY altered by SYSTEM",
+      "unmapped": {
+        "db_user": "SYSTEM",
+        "audit_policy": "GLOBAL_POLICY"
+      }
+    },
+    {
+      "class_name": "SAP HANA Audit",
+      "activity_name": "GRANT",
+      "time": 1768485660000,
+      "status_id": 1,
+      "message": "SYSTEM granted system privilege DATA ADMIN to BPADMIN",
+      "unmapped": {
+        "db_user": "SYSTEM",
+        "privilege": "DATA ADMIN",
+        "db_object": "SYS.USERS"
+      }
+    },
+    {
+      "class_name": "SAP HANA Audit",
+      "activity_name": "CONNECT",
+      "time": 1768485720000,
+      "status_id": 2,
+      "message": "Database logon failed for APPUSER",
+      "unmapped": {
+        "db_user": "APPUSER"
+      }
+    },
+    {
+      "class_name": "ICM HTTP Activity",
+      "time": 1768485780000,
+      "http_request": {
+        "url": {
+          "path": "/sap/bc/webdynpro/sap/wd_analyze_config_user"
+        },
+        "http_method": "GET"
+      },
+      "http_response": {
+        "code": 200
+      },
+      "src_endpoint": {
+        "ip": "10.20.1.50"
+      },
+      "message": "GET admin webdynpro"
+    },
+    {
+      "class_name": "ICM HTTP Activity",
+      "time": 1768485840000,
+      "http_request": {
+        "url": {
+          "path": "/sap/bc/soap/rfc"
+        },
+        "http_method": "POST"
+      },
+      "http_response": {
+        "code": 200
+      },
+      "src_endpoint": {
+        "ip": "10.20.1.51"
+      },
+      "message": "POST soap rfc"
+    },
+    {
+      "class_name": "ICM HTTP Activity",
+      "time": 1768485900000,
+      "http_request": {
+        "url": {
+          "path": "/probe/path0"
+        },
+        "http_method": "GET"
+      },
+      "http_response": {
+        "code": 404
+      },
+      "src_endpoint": {
+        "ip": "203.0.113.77"
+      },
+      "message": "GET 404 scan"
+    },
+    {
+      "class_name": "ICM HTTP Activity",
+      "time": 1768485901000,
+      "http_request": {
+        "url": {
+          "path": "/probe/path1"
+        },
+        "http_method": "GET"
+      },
+      "http_response": {
+        "code": 404
+      },
+      "src_endpoint": {
+        "ip": "203.0.113.77"
+      },
+      "message": "GET 404 scan"
+    },
+    {
+      "class_name": "ICM HTTP Activity",
+      "time": 1768485902000,
+      "http_request": {
+        "url": {
+          "path": "/probe/path2"
+        },
+        "http_method": "GET"
+      },
+      "http_response": {
+        "code": 404
+      },
+      "src_endpoint": {
+        "ip": "203.0.113.77"
+      },
+      "message": "GET 404 scan"
+    },
+    {
+      "class_name": "ICM HTTP Activity",
+      "time": 1768485903000,
+      "http_request": {
+        "url": {
+          "path": "/probe/path3"
+        },
+        "http_method": "GET"
+      },
+      "http_response": {
+        "code": 404
+      },
+      "src_endpoint": {
+        "ip": "203.0.113.77"
+      },
+      "message": "GET 404 scan"
+    },
+    {
+      "class_name": "ICM HTTP Activity",
+      "time": 1768485904000,
+      "http_request": {
+        "url": {
+          "path": "/probe/path4"
+        },
+        "http_method": "GET"
+      },
+      "http_response": {
+        "code": 404
+      },
+      "src_endpoint": {
+        "ip": "203.0.113.77"
+      },
+      "message": "GET 404 scan"
+    },
+    {
+      "class_name": "ICM HTTP Activity",
+      "time": 1768485905000,
+      "http_request": {
+        "url": {
+          "path": "/probe/path5"
+        },
+        "http_method": "GET"
+      },
+      "http_response": {
+        "code": 404
+      },
+      "src_endpoint": {
+        "ip": "203.0.113.77"
+      },
+      "message": "GET 404 scan"
+    },
+    {
+      "class_name": "Firewall",
+      "activity_name": "Connect",
+      "time": 1768486320000,
+      "src_endpoint": {
+        "ip": "10.20.1.10"
+      },
+      "dst_endpoint": {
+        "hostname": "sapprd01",
+        "port": 3300
+      },
+      "connection_info": {
+        "protocol_name": "TCP"
+      },
+      "disposition": "Allowed",
+      "message": "connection to gateway port"
+    },
+    {
+      "class_name": "Firewall",
+      "activity_name": "Connect",
+      "time": 1768486380000,
+      "src_endpoint": {
+        "ip": "10.20.9.9"
+      },
+      "dst_endpoint": {
+        "hostname": "sapprd01",
+        "port": 3200
+      },
+      "connection_info": {
+        "protocol_name": "TCP"
+      },
+      "disposition": "Denied",
+      "message": "blocked connection"
+    },
+    {
+      "class_name": "Firewall",
+      "activity_name": "Connect",
+      "time": 1768486440000,
+      "src_endpoint": {
+        "ip": "198.51.100.23"
+      },
+      "dst_endpoint": {
+        "hostname": "sapprd01",
+        "port": 3600
+      },
+      "connection_info": {
+        "protocol_name": "TCP"
+      },
+      "disposition": "Allowed",
+      "message": "connection from external address to message server port"
     }
   ]
 }

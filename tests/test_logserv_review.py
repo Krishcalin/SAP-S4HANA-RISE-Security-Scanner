@@ -92,3 +92,99 @@ def test_an_allowed_registration_is_not_a_denial_or_permissive():
     ids = _ids(_run([_gw()]))
     assert "GWLOG-001" in ids
     assert "GWLOG-002" not in ids and "GWLOG-003" not in ids
+
+
+# ── HANA / ICM / network detectors ────────────────────────────────────────────
+def _hana(user="SYSTEM", action="GRANT", obj="", policy="", ok=True, ms=BASE_MS, message=None):
+    um = {"db_user": user}
+    if obj:
+        um["db_object"] = obj
+    if policy:
+        um["audit_policy"] = policy
+    return {"class_name": "SAP HANA Audit", "activity_name": action, "time": ms,
+            "status_id": 1 if ok else 2,
+            "message": message or "%s %s" % (user, action), "unmapped": um}
+
+
+def _icm(path="/x", status=200, src="10.0.0.1", method="GET", ms=BASE_MS):
+    return {"class_name": "ICM HTTP", "time": ms,
+            "http_request": {"url": {"path": path}, "http_method": method},
+            "http_response": {"code": status}, "src_endpoint": {"ip": src},
+            "message": "%s %s" % (method, path)}
+
+
+def _net(src="10.0.0.2", dst="sapprd01", port=3300, disp="Allowed", ms=BASE_MS):
+    return {"class_name": "Firewall", "activity_name": "Connect", "time": ms,
+            "src_endpoint": {"ip": src}, "dst_endpoint": {"hostname": dst, "port": port},
+            "connection_info": {"protocol_name": "TCP"}, "disposition": disp,
+            "message": "conn %s:%s" % (dst, port)}
+
+
+def test_hana_audit_change_fires_hanalog_001():
+    f = _by_id(_run([_hana(action="ALTER", policy="GLOBAL",
+                           message="audit policy GLOBAL altered")]), "HANALOG-001")
+    assert f["severity"] == "HIGH" and "GLOBAL" in f["details"]["policies"]
+
+
+def test_hana_privileged_activity_fires_hanalog_002():
+    f = _by_id(_run([_hana(user="SYSTEM", action="SELECT", obj="SYS.USERS")]), "HANALOG-002")
+    assert f["severity"] == "HIGH"
+    assert any(o["type"] == "hana_user" and o["name"] == "SYSTEM" for o in f["affected_objects"])
+
+
+def test_hana_grant_by_ordinary_user_still_fires_hanalog_002():
+    ids = _ids(_run([_hana(user="APPADMIN", action="GRANT")]))
+    assert "HANALOG-002" in ids
+
+
+def test_hana_failed_logon_fires_hanalog_003():
+    f = _by_id(_run([_hana(user="APP", action="CONNECT", ok=False,
+                           message="logon failed")]), "HANALOG-003")
+    assert f["severity"] == "MEDIUM"
+
+
+def test_ordinary_hana_read_by_normal_user_is_silent():
+    assert "HANALOG-002" not in _ids(_run([_hana(user="APPUSER", action="SELECT")]))
+
+
+def test_icm_admin_path_fires_icmlog_001():
+    f = _by_id(_run([_icm(path="/sap/bc/webdynpro/sap/wd_analyze/admin", status=200)]),
+               "ICMLOG-001")
+    assert f["severity"] == "HIGH"
+
+
+def test_icm_scanning_fires_icmlog_002():
+    events = [_icm(path="/probe%d" % i, status=404, src="203.0.113.5") for i in range(6)]
+    f = _by_id(_run(events), "ICMLOG-002")
+    assert f["severity"] == "MEDIUM"
+
+
+def test_icm_remote_execution_fires_icmlog_003():
+    assert "ICMLOG-003" in _ids(_run([_icm(path="/sap/bc/soap/rfc", status=200)]))
+
+
+def test_icm_ordinary_request_is_silent():
+    assert not (_ids(_run([_icm(path="/sap/public/bc/ur", status=200)]))
+                & {"ICMLOG-001", "ICMLOG-003"})
+
+
+def test_network_sensitive_port_fires_netlog_001():
+    assert "NETLOG-001" in _ids(_run([_net(port=3300, disp="Allowed")]))
+
+
+def test_network_blocked_fires_netlog_002():
+    assert "NETLOG-002" in _ids(_run([_net(disp="Denied")]))
+
+
+def test_network_public_source_fires_netlog_003():
+    f = _by_id(_run([_net(src="8.8.8.8", port=3600, disp="Allowed")]), "NETLOG-003")
+    assert f["severity"] == "HIGH"
+
+
+def test_private_source_on_sap_port_is_not_public():
+    assert "NETLOG-003" not in _ids(_run([_net(src="10.1.1.1", port=3300)]))
+
+
+def test_window_note_spans_all_classes():
+    f = _by_id(_run([_hana()]), "HANALOG-002")
+    assert "Reviewed window: 2026-01-15" in f["description"]
