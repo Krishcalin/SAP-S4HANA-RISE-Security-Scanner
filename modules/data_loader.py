@@ -300,6 +300,12 @@ class DataLoader:
         # SAP Security Notes / HotNews data sources
         "applied_notes":           ["applied_notes.csv", "snote_status.csv", "implemented_notes.csv"],
         "sap_security_notes":      ["sap_security_notes.json", "hotnews_catalog.json"],
+        # Optional customer declaration of which non-ABAP stacks are present
+        # (java/bi/btp/solman/commerce) and whether the landscape is internet-facing.
+        # A small JSON dict read by modules/sap_hotnews.py (HOTNEWS-017) to elevate a
+        # note on a stack the customer confirms exists from "can't assess" to a real
+        # risk. Absent = unknown, the existing INFO behaviour.
+        "landscape_profile":       ["landscape_profile.json", "landscape.json"],
         # The customer's OWN SAP-for-Me HotNews list — the per-customer,
         # product-scoped HotNews table (columns: SAP Component / Number / Version
         # / Title / Released On / Link), downloaded from SAP for Me as CSV or
