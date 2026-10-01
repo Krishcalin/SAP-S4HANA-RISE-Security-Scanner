@@ -65,6 +65,12 @@ TEAM_BY_PREFIX: List[Tuple[str, str]] = [
     ("IAM-", "identity"),
     ("ARA-", "authorizations"),
     ("RG-", "authorizations"),
+    # Log-observed governance violations (LVIO-*): the audit window crossed with
+    # the firefighter log and the privileged set. Routed to authorizations, not to
+    # the LREV-/LOG- data_protection owner, because the thing to fix is an access
+    # rule broken — emergency access used outside its process, or a privileged
+    # account changing the system off-hours — which the authorizations team owns.
+    ("LVIO-", "authorizations"),
     ("GRC-", "identity"),
     ("S4AUTHZ-", "authorizations"),
     ("PARAM-", "basis"),
