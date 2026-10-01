@@ -2778,5 +2778,15 @@
   "module": "correlation",
   "risk": "A correlation finding, raised only when the configuration review and the network log review agree. The configuration side reports a network service as exposed (NET-*, TRUST-006/010, UCON-*); the log side shows a connection to an SAP service port, in some cases from a public source address (NETLOG-001/003). An exposed service the configuration flagged, with log evidence of a connection to it, is an active-exploitation indicator rather than a theoretical gap, and a public source makes it an immediate one.",
   "mitigation": "1. Treat this as an exposed network service being reached, not a backlog item.\n2. Investigate the sources named in the network-log findings; block any public source at the perimeter immediately.\n3. Restrict the SAP service ports to the application tier and an administrator network at the host or network firewall.\n4. Audit the perimeter rules that allowed the connection."
+ },
+ "LSRV-COV-001": {
+  "module": "logserv_review",
+  "risk": "Reports a log class that the SAP LogServ export does not carry at all over the reviewed window. This is the ingestion-health layer under every log review: before a class's events can be read, LogServ has to be forwarding that class. A class that is in scope but not forwarded makes the corresponding review BLIND for the window - and a blind review returns a clean result, which reads exactly like 'nothing happened'. That is the most dangerous failure mode a log-based control has, because an absent record is taken as evidence of absence. Telling 'never forwarded' apart from 'no activity' is the whole point of this check.",
+  "mitigation": "1. Confirm which log classes this estate should forward through SAP LogServ (Security Audit Log, gateway, HANA audit, ICM/Web Dispatcher, network).\n2. Enable forwarding for each absent class that is in scope, in the LogServ configuration.\n3. Until a class is forwarded, record the window as a period its review could not see, so a clean class result is read as 'not forwarded' rather than 'no activity'.\n4. Re-pull the window and confirm the class now appears."
+ },
+ "LSRV-WIN-001": {
+  "module": "logserv_review",
+  "risk": "SAP LogServ events were supplied, but none carried a timestamp this review could read. A retrospective review needs a bounded window: without a time, events cannot be ordered or placed in the window, so every finding that depends on timing - off-hours activity, a run of failures, a sequence - cannot be formed, and the review cannot even state the period it covers. The class detectors still run over volume, but the analysis has silently degraded from 'what happened when' to 'how many', and a reader who does not know that will over-trust the result.",
+  "mitigation": "1. Confirm the LogServ export carries the event time: OCSF `time` (epoch milliseconds) or the raw LogServ `_time` (epoch seconds).\n2. Fix the export/forwarder so the time field is present and populated.\n3. Re-pull the window once the time is present, so the review can be bounded and the time-dependent findings can form."
  }
 }

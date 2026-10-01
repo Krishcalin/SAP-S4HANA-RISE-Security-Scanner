@@ -6,7 +6,7 @@
 > outstanding. A great deal has shipped since they were written, and this document
 > has not been rewritten phase by phase:
 >
-> - **42 audit modules** (these documents say 23), 864 check ids, 148 logical sources.
+> - **42 audit modules** (these documents say 23), 866 check ids, 148 logical sources.
 > - **Connected mode exists** — `collect/` with four read-only collectors:
 >   `sapcontrol` (sapstartsrv SOAP), `icf` (HTTP service surface + OData
 >   catalogue), `rfc` (users, roles, authorisations) and `btp` (platform REST
