@@ -101,7 +101,12 @@ DOMAINS: List[Dict[str, Any]] = [
                  "correctly and retained long enough to answer a question later. "
                  "We do not monitor events — nothing here is live.",
         "blurb": "Whether your logging is capable of seeing an incident.",
-        "categories": ["Logging, Monitoring & IR", "Audit Logging"],
+        # "LogServ Ingestion Health" sits here for the same reason the LREV source /
+        # filter / window checks do: it asks whether the log COULD have told us —
+        # whether LogServ is forwarding each class at all — which is a logging-
+        # capability question, retrospective and never live.
+        "categories": ["Logging, Monitoring & IR", "Audit Logging",
+                       "LogServ Ingestion Health"],
         "prefixes": {"Security Audit Log Review": ["LREV-SRC", "LREV-FLT",
                                                    "LREV-WIN", "LREV-ECS"]},
         # Audit-log checks that are not a behavioural pattern are about

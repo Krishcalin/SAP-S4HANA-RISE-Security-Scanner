@@ -163,6 +163,9 @@ class ComplianceMapper:
         "ICM Log Review": ["network-security", "logging-monitoring", "incident-response"],
         "Network Log Review": ["network-security", "logging-monitoring",
                                "incident-response"],
+        # Whether SAP LogServ is forwarding each log class at all — a logging-
+        # coverage question, the layer that makes every log review credible.
+        "LogServ Ingestion Health": ["logging-monitoring", "incident-response"],
         # TRANSPORT AS IN TLS, NOT AS IN THE CHANGE AND TRANSPORT SYSTEM.
         #
         # The name is a false friend in an SAP context and it mapped as one: the
