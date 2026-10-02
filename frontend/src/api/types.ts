@@ -1588,6 +1588,13 @@ export interface TopRisksView {
 
 // ── Perceived Threats (server/perceived_threats.py roll_up) ───────────────────
 /** One finding observed from SAP LogServ, as roll_up projects it. */
+export interface AttackTag {
+  /** ATT&CK technique id (e.g. "T1562.001"), or null for a tactic-only mapping. */
+  technique: string | null
+  technique_name: string | null
+  tactic: string
+  confidence: string
+}
 export interface ThreatRow {
   id: number
   check_id: string
@@ -1597,6 +1604,8 @@ export interface ThreatRow {
   category: string | null
   sid: string | null
   state: string
+  /** MITRE ATT&CK mapping for this observed-behaviour detection, or null. */
+  attack: AttackTag | null
 }
 /** A log-class group (or a health group), with its severity counts and rows. */
 export interface ThreatGroup {

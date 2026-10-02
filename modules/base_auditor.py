@@ -12,6 +12,7 @@ import datetime
 # import time and defers its `coverage`/`abap_sast` reads into functions,
 # so there is no cycle back through BaseAuditor.
 from modules.owasp_mapping import map_finding
+from modules.mitre_mapping import map_mitre
 
 
 class BaseAuditor:
@@ -580,6 +581,11 @@ class BaseAuditor:
         # an unmapped finding travels with the REASON it is unmapped rather than
         # silently having no standards fields.
         f["owasp"] = map_finding(check_id, (details or {}).get("cwe"))
+        # ATT&CK mapping, attached the same way and for the same reason: one
+        # place, every check. Only the observed-behaviour (LogServ) detections
+        # carry a technique; every other finding travels with the reason it is
+        # unmapped (ATT&CK describes adversary actions, not configuration).
+        f["mitre"] = map_mitre(check_id)
         # WHETHER THE DATA BEHIND THIS FINDING WAS COMPLETE, attached here for
         # the same reason as the standards mapping above: one place, every
         # check, no module having to remember.
