@@ -202,14 +202,13 @@ def test_the_crq_screen_does_not_render_a_failed_fetch_as_an_empty_estate():
     src = (ROOT / "frontend" / "src" / "routes" / "CrqInputs.tsx").read_text(
         encoding="utf-8")
 
-    assert ".catch(() => { if (live) setScapes([]) })" not in src, \
-        "the landscape fetch swallows its error again; a failure reads as 'none'"
-
-    # The landscape effect must reach setFailure, so the banner explains itself.
-    effect = src[src.index("landscapes()"):]
+    # Single-landscape product: the screen resolves the one org landscape via
+    # orgLandscape(). A FAILED resolve must reach setFailure, so the banner
+    # explains itself rather than rendering a failure as "you have no estate".
+    effect = src[src.index("orgLandscape()"):]
     effect = effect[:effect.index("useEffect", 1)] if "useEffect" in effect[1:] else effect
     assert "setFailure" in effect, \
-        "a failed landscape fetch sets no failure message"
+        "a failed landscape resolve sets no failure message"
     assert "not that you have none" in src, \
         "the message no longer distinguishes 'could not load' from 'you have none'"
 

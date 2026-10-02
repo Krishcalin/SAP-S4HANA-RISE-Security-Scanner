@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import {
-  ApiError, landscapes as fetchLandscapes, systems as fetchSystems, upload,
+  ApiError, orgLandscape, systems as fetchSystems, upload,
 } from '../api/client'
-import type { Landscape, SapSystem, UploadResult } from '../api/types'
+import type { SapSystem, UploadResult } from '../api/types'
 import { useSession } from '../lib/session'
 import { useTitle } from '../lib/title'
 // Aliased: this module already exports a component called `Upload`.
@@ -66,7 +66,6 @@ export function Upload() {
   useTitle('Upload')
   const { user } = useSession()
 
-  const [landscapes, setLandscapes] = useState<Landscape[] | null>(null)
   const [systems, setSystems] = useState<SapSystem[]>([])
   const [refError, setRefError] = useState<string | null>(null)
 
@@ -87,25 +86,20 @@ export function Upload() {
 
   useEffect(() => {
     let stopped = false
-    // Landscapes are NOT scoped (a landscape carries no findings of its own) while
-    // systems are, so a scoped analyst gets every landscape and only their own
-    // systems. Both are needed before the form means anything, so one failure
-    // fails the pair rather than half-populating it.
-    Promise.all([fetchLandscapes(), fetchSystems()])
-      .then(([ls, ss]) => {
+    // Single-landscape product: resolve the one organization landscape (no
+    // picker) and the systems in scope. Both are needed before the form means
+    // anything, so one failure fails the pair rather than half-populating it.
+    Promise.all([orgLandscape(), fetchSystems()])
+      .then(([l, ss]) => {
         if (stopped) return
-        setLandscapes(ls)
+        setLandscapeId(String(l.id))
         setSystems(ss)
-        // Preselect only when there is no choice to make. Guessing between two
-        // landscapes would file a scan against the wrong estate on a mis-click.
-        if (ls.length === 1) setLandscapeId(String(ls[0].id))
       })
       .catch((err) => {
         if (!stopped) {
-          setLandscapes([])
           setRefError(err instanceof ApiError
             ? err.message
-            : 'Could not load landscapes and systems.')
+            : 'Could not load the organization landscape and systems.')
         }
       })
     return () => { stopped = true }
@@ -150,7 +144,6 @@ export function Upload() {
     )
   }
 
-  const noLandscape = landscapes !== null && landscapes.length === 0
   const totalSize = files.reduce((n, f) => n + f.size, 0)
 
   return (
@@ -173,14 +166,6 @@ export function Upload() {
       {refError && (
         <div className="banner banner-bad" role="alert">
           <strong>Could not load the form.</strong> {refError}
-        </div>
-      )}
-
-      {noLandscape && !refError && (
-        <div className="banner banner-warn">
-          No landscape is configured. An admin must create one before anything can
-          be uploaded — a run belongs to a landscape, and there is nothing to file
-          this one under.
         </div>
       )}
 
@@ -221,26 +206,6 @@ export function Upload() {
 
       <form className="max-w-[620px] rounded-lg border border-cardline bg-panel p-4"
             onSubmit={submit}>
-        <label className="block text-[12px] text-ink3" htmlFor="landscape">Landscape</label>
-        <select id="landscape" className="field mt-1 mb-3.5" required
-                value={landscapeId} disabled={busy || landscapes === null}
-                onChange={(e) => setLandscapeId(e.target.value)}>
-          {landscapes === null ? (
-            <option value="">Loading…</option>
-          ) : landscapes.length === 0 ? (
-            <option value="" disabled>
-              No landscape configured — an admin must create one first
-            </option>
-          ) : (
-            <>
-              <option value="" disabled>Choose a landscape</option>
-              {landscapes.map((l) => (
-                <option key={l.id} value={l.id}>{l.name} ({l.deployment_mode})</option>
-              ))}
-            </>
-          )}
-        </select>
-
         <label className="block text-[12px] text-ink3" htmlFor="system">
           System (optional — leave blank to register later)
         </label>
@@ -286,7 +251,7 @@ export function Upload() {
         </p>
 
         <button type="submit" className="btn"
-                disabled={busy || noLandscape || landscapes === null}>
+                disabled={busy || !landscapeId}>
           {busy ? 'Uploading…' : 'Upload and scan'}
         </button>
         {busy && (
