@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "version": "1.7.0",
+    "version": "1.9.0",
     "description": "SAP attack-path templates. CONTENT, not code: a new path is a new entry here, never a code change. Each template names the checks that evidence each hop, so every hop is grounded in a check that already exists and a path can never claim more than the scanner actually detected.",
     "how_a_path_instantiates": "Every REQUIRED hop must have at least one OPEN finding in the landscape. Optional hops enrich a path but do not gate it. A path is therefore a statement that these conditions CO-EXIST, derived from exported configuration — never a claim that anything was traversed or validated. The console must say so.",
     "cut_semantics": "A hop marked cut=true appears on every variant of the path, so closing it disconnects the path. Non-cut hops reduce exploitability without severing it. This is the mitigate-vs-additional split: it needs no clever algorithm, only that each hop knows whether removing it disconnects.",
@@ -8,6 +8,7 @@
     "sources": [
       "CISA AA19-122A (10KBLAZE) — SAP Gateway, SAProuter and Message Server ACL exposure",
       "CVE-2025-31324 — SAP NetWeaver Visual Composer unauthenticated RCE (CISA KEV, 15 May 2025)",
+      "CVE-2025-42999 — SAP NetWeaver Visual Composer insecure deserialization, chained with CVE-2025-31324 (note 3604119, CISA KEV)",
       "SAP Help — Trusted system RFC and authorization object S_RFCACL",
       "SAP Help — Protecting standard users (SAP*, DDIC, EARLYWATCH)",
       "SAP BTP connectivity documentation — principal propagation via Cloud Connector",
@@ -1917,6 +1918,283 @@
             "cap_service"
           ],
           "note": "CAP has no property-level authorization, so the projection IS the access control for these fields: whoever may read the entity reads every column of it. Shares its ending with the other data paths, and for the same reason — a read is not a change, so nothing in the change log sees it."
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-24",
+      "name": "Internet-reached gateway, exercised in the window",
+      "severity": "CRITICAL",
+      "fair_scenario": "SAP-RCE-01",
+      "crosses_tier": true,
+      "summary": "An SAP service port was reached from outside, the RFC gateway ACL does not enforce, and the gateway log shows an external program registered through it — configuration weakness and log evidence of its use, in one window.",
+      "narrative": "The config-only version of this path (SAPPATH-13) ends at 'the ACL could allow program execution'. This one adds what the LogServ window actually recorded: a connection from a public source to an SAP port, and a program registered or allowed through a gateway the ACL was supposed to stop. The log turns a theoretical gateway exposure into an observed one.",
+      "hops": [
+        {
+          "name": "An SAP service port was reached from outside",
+          "checks": [
+            "NETLOG-003",
+            "NETLOG-001"
+          ],
+          "node_types": [
+            "endpoint"
+          ],
+          "required": true,
+          "cut": false
+        },
+        {
+          "name": "The RFC gateway ACL does not enforce",
+          "checks": [
+            "BASELINE-007",
+            "INTG-GW-001",
+            "INTG-GW-002",
+            "PARAM-gw/sec_info",
+            "PARAM-gw/reg_info"
+          ],
+          "node_types": [
+            "gateway",
+            "parameter_name"
+          ],
+          "required": true,
+          "cut": true,
+          "why_cut": "Complete the reginfo / secinfo ACL and set the gateway to enforcing (gw/sim_mode = 0): every unlisted program registration is then rejected, and the route dies whatever reached the port."
+        },
+        {
+          "name": "An external program ran through the gateway",
+          "checks": [
+            "GWLOG-001",
+            "GWLOG-003"
+          ],
+          "node_types": [
+            "program",
+            "gateway"
+          ],
+          "required": true,
+          "cut": false
+        },
+        {
+          "name": "Confirmed active by the config-vs-log correlation",
+          "checks": [
+            "CORR-GW-001"
+          ],
+          "node_types": [
+            "gateway",
+            "program"
+          ],
+          "required": false,
+          "cut": false
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-25",
+      "name": "Web foothold to the database",
+      "severity": "CRITICAL",
+      "fair_scenario": "SAP-DATA-04",
+      "crosses_tier": true,
+      "summary": "The ICM / Web Dispatcher log shows an administrative or remote-execution HTTP path reached, and the HANA audit log shows privileged database activity against weak database controls, in the same window.",
+      "narrative": "Two log classes line up into one story the configuration alone could not tell: a reachable web surface was probed and reached, and privileged HANA activity followed against a database whose auditing and privileged accounts the config review already flagged. The web tier is the cut — close the reachable services and the HTTP route in is gone.",
+      "hops": [
+        {
+          "name": "The web surface was probed and reached",
+          "checks": [
+            "ICMLOG-002",
+            "ICMLOG-001",
+            "ICMLOG-003"
+          ],
+          "node_types": [
+            "icf_path",
+            "endpoint"
+          ],
+          "required": true,
+          "cut": true,
+          "why_cut": "Deactivate in SICF the administrative and remote-execution ICF services that need not be reachable, and restrict the rest to an administrator network: the HTTP way in closes at the edge."
+        },
+        {
+          "name": "Privileged database activity followed",
+          "checks": [
+            "HANALOG-002",
+            "HANALOG-001"
+          ],
+          "node_types": [
+            "hana_user",
+            "hana_privilege"
+          ],
+          "required": true,
+          "cut": false
+        },
+        {
+          "name": "Against weak database controls",
+          "checks": [
+            "HANADB-AUDIT-001",
+            "HANADB-USER-001",
+            "HANADB-PRIV-001"
+          ],
+          "node_types": [
+            "hana_user",
+            "hana_privilege"
+          ],
+          "required": false,
+          "cut": false
+        },
+        {
+          "name": "Confirmed active by the config-vs-log correlations",
+          "checks": [
+            "CORR-ICM-001",
+            "CORR-HANA-001"
+          ],
+          "node_types": [
+            "icf_path",
+            "hana_user"
+          ],
+          "required": false,
+          "cut": false
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-26",
+      "name": "Blind the audit, then act",
+      "severity": "HIGH",
+      "fair_scenario": "SAP-PRIV-03",
+      "crosses_tier": false,
+      "summary": "The HANA audit configuration was changed and privileged database activity followed in the same window — auditing weakened, then used — while the LogServ pipeline had a coverage gap.",
+      "narrative": "Disabling or narrowing an audit policy is the move that precedes privileged misuse: it removes the record that would have caught what comes next. The window shows the policy changed and privileged activity after it, and the ingestion-health check shows a class the pipeline was not forwarding — so the blind spot was real.",
+      "hops": [
+        {
+          "name": "The audit configuration was changed",
+          "checks": [
+            "HANALOG-001"
+          ],
+          "node_types": [
+            "hana_user"
+          ],
+          "required": true,
+          "cut": true,
+          "why_cut": "Restrict ALTER/DROP on audit policies to a named administrator role and re-enable the mandatory policies: a privileged action can no longer be taken unobserved, and the sequence loses its cover."
+        },
+        {
+          "name": "Privileged activity under weakened auditing",
+          "checks": [
+            "HANALOG-002"
+          ],
+          "node_types": [
+            "hana_user",
+            "hana_privilege"
+          ],
+          "required": true,
+          "cut": false
+        },
+        {
+          "name": "And the log pipeline had a coverage gap",
+          "checks": [
+            "LSRV-COV-001"
+          ],
+          "node_types": [
+            "system"
+          ],
+          "required": false,
+          "cut": false
+        }
+      ]
+    },
+    {
+      "id": "SAPPATH-27",
+      "name": "Visual Composer metadata uploader to a web shell",
+      "summary": "An unauthenticated upload to the Visual Composer Metadata Uploader on NetWeaver AS Java drops a web shell and runs as the host — the actively-exploited CVE-2025-31324 / CVE-2025-42999 chain.",
+      "narrative": "SAPPATH-14 made the general case — unpatched, actively exploited, reachable without credentials — and said in as many words that CVE-2025-31324 was cited in this file's sources and no template had used it. This is that template. The chain is specific and public: an unauthenticated POST to /developmentserver/metadatauploader on the Visual Composer framework (AS Java) writes a file into the webroot (CVE-2025-31324, note 3594142, CVSS 10.0, CISA KEV since April 2025), and the companion deserialization defect (CVE-2025-42999, note 3604119) turns the same reach into code execution where the upload alone was constrained. The awkward part for an ABAP-centric scan is that Visual Composer is a Java-stack component: an S/4HANA SNOTE export carries no evidence that it is patched, so the note can only surface here as a catalogue entry this scan can neither confirm nor deny. The path therefore gates on what this scan CAN see — an exposed, credential-free web surface and a missing, actively-exploited note — and carries the Visual Composer specifics as the enrichment that names which door, with a cut a customer can take the same afternoon.",
+      "fair_scenario": "SAP-RCE-01",
+      "severity": "CRITICAL",
+      "crosses_tier": false,
+      "hops": [
+        {
+          "name": "An unauthenticated web surface is exposed at the perimeter",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "NET-005",
+            "NET-004",
+            "WDISP-008",
+            "WDISP-011",
+            "INTG-WS-003",
+            "RISE-007",
+            "BASELINE-006"
+          ],
+          "node_types": [
+            "icf_path",
+            "endpoint",
+            "parameter_name"
+          ],
+          "why_cut": "The metadata uploader is reached over HTTP(S) through the Web Dispatcher and the ICF. Blocking the /developmentserver/metadatauploader path at the Web Dispatcher, or deactivating the ICF node, removes the route to the vulnerable code without waiting for a Java maintenance window — which is exactly the interim mitigation SAP published for CVE-2025-31324, and the cut a customer can take this afternoon."
+        },
+        {
+          "name": "A published fix for the chain is missing",
+          "required": true,
+          "cut": true,
+          "checks": [
+            "HOTNEWS-003",
+            "HOTNEWS-001",
+            "HOTNEWS-006"
+          ],
+          "node_types": [
+            "sap_note"
+          ],
+          "why_cut": "Applying the note removes the vulnerability rather than making it harder to reach. For this chain that is SAP notes 3594142 (CVE-2025-31324, the unauthenticated upload) and 3604119 (CVE-2025-42999, the deserialization that follows it); HOTNEWS-003 flags the actively-exploited notes to apply first."
+        },
+        {
+          "name": "It needs no credentials",
+          "required": true,
+          "cut": false,
+          "checks": [
+            "HOTNEWS-007"
+          ],
+          "node_types": [
+            "sap_note"
+          ],
+          "note": "This is what separates the chain from a patch backlog: the metadata uploader asks for no logon, so anyone who can reach the port can try it. An unpatched note needing a privileged session is a queue item; one exploitable by anybody who can reach the service is an open door."
+        },
+        {
+          "name": "Visual Composer is a Java-stack component this ABAP export cannot assess",
+          "required": false,
+          "cut": true,
+          "checks": [
+            "HOTNEWS-005"
+          ],
+          "node_types": [
+            "sap_note"
+          ],
+          "why_cut": "Patch VCFRAMEWORK on the AS Java stack with notes 3594142 and 3604119. Visual Composer is a Java-stack component, so an S/4HANA SNOTE export carries no evidence either way and the note surfaces here only as an entry this scan can neither confirm nor deny (HOTNEWS-005) — the path still stands on the required hops above. Confirm the patch on the AS Java stack itself, where the fix actually lands."
+        },
+        {
+          "name": "The upload yields command execution as the host",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "AUTH-003",
+            "JOBCMD-CMD-001",
+            "HANADB-USER-001"
+          ],
+          "node_types": [
+            "os_command",
+            "auth_object",
+            "hana_user"
+          ],
+          "note": "What the web shell is worth once it runs. A foothold on a host that also holds an OS-command bridge and a live database superuser is a different loss from the same foothold on a hardened one."
+        },
+        {
+          "name": "The upload and the web shell would not be seen",
+          "required": false,
+          "cut": false,
+          "checks": [
+            "LOG-SIEM-002",
+            "ICMLOG-001",
+            "NET-008",
+            "LOG-AUD-010"
+          ],
+          "node_types": [
+            "parameter_name"
+          ],
+          "note": "The chain is being used against estates like this one, so whether a POST to the metadata uploader and the file it drops would produce a record is a live question, not a hypothetical."
         }
       ]
     }

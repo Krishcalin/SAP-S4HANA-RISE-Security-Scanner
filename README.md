@@ -10,7 +10,7 @@
 <p align="center">
   <a href="https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner/actions/workflows/tests.yml"><img src="https://github.com/Krishcalin/SAP-S4HANA-RISE-Security-Scanner/actions/workflows/tests.yml/badge.svg" alt="tests"/></a>
   <img src="https://img.shields.io/badge/python-3.8%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python 3.8+"/>
-  <img src="https://img.shields.io/badge/checks-865%20in%2042%20modules-red?style=flat-square" alt="865 checks in 42 modules"/>
+  <img src="https://img.shields.io/badge/checks-867%20in%2042%20modules-red?style=flat-square" alt="867 checks in 42 modules"/>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT licensed"/>
 </p>
 
@@ -74,7 +74,7 @@ Python packages.
 
 ## What it checks
 
-**865 checks across 42 modules.** Every one is listed, with what it reads and
+**867 checks across 42 modules.** Every one is listed, with what it reads and
 which SAP baseline requirement it answers, in
 **[docs/CHECKS_REFERENCE.md](docs/CHECKS_REFERENCE.md)** — a file generated from
 the code, so it cannot drift from what actually runs.
@@ -379,7 +379,7 @@ plenty of the catalogue stays correctly silent on it. That matters, because a
 check that is correctly silent and a check that could never fire look identical
 unless somebody measures. So the suite records which check ids actually produce a
 finding anywhere in it, and publishes the count in
-[docs/CHECK_FIRING.md](docs/CHECK_FIRING.md) — currently 865 of 865.
+[docs/CHECK_FIRING.md](docs/CHECK_FIRING.md) — currently 867 of 867.
 
 ```bash
 python -m pip install -r requirements.txt -r requirements-dev.txt httpx

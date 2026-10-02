@@ -83,9 +83,14 @@ def test_no_gateway_log_is_silent():
 
 
 def test_a_pure_sal_event_is_not_a_gateway_event():
+    # An Authentication (SAL) event produces no system-class detector finding; it is
+    # a logon for the SAL review, not a gateway/HANA/ICM/network event. (The
+    # ingestion-health check LSRV-COV-001 does fire — correctly reporting that the
+    # system classes were not forwarded — which is a different concern.)
     auth = {"class_uid": 3002, "class_name": "Authentication", "time": BASE_MS,
             "status_id": 1, "actor": {"user": {"name": "ALICE"}}}
-    assert LogServReviewAuditor({"logserv_events": {"events": [auth]}}).run_all_checks() == []
+    ids = _ids(LogServReviewAuditor({"logserv_events": {"events": [auth]}}).run_all_checks())
+    assert not any(c.startswith(("GWLOG", "HANALOG", "ICMLOG", "NETLOG")) for c in ids)
 
 
 def test_an_allowed_registration_is_not_a_denial_or_permissive():
@@ -188,3 +193,38 @@ def test_private_source_on_sap_port_is_not_public():
 def test_window_note_spans_all_classes():
     f = _by_id(_run([_hana()]), "HANALOG-002")
     assert "Reviewed window: 2026-01-15" in f["description"]
+
+
+# ── ingestion health (LSRV-*) ──────────────────────────────────────────────────
+def test_lsrv_coverage_reports_the_classes_not_forwarded():
+    f = _by_id(_run([_gw()]), "LSRV-COV-001")      # only the gateway class present
+    assert f["severity"] == "MEDIUM" and f["category"] == "LogServ Ingestion Health"
+    assert f["details"]["present"] == ["gateway"]
+    assert set(f["details"]["absent"]) == {"sal", "hana", "icm", "network"}
+
+
+def test_lsrv_coverage_is_silent_when_every_class_is_forwarded():
+    auth = {"class_uid": 3002, "class_name": "Authentication", "time": BASE_MS,
+            "status_id": 1, "actor": {"user": {"name": "A"}}}
+    events = [auth, _gw(), _hana(), _icm(), _net()]
+    assert "LSRV-COV-001" not in _ids(_run(events))
+
+
+def test_lsrv_coverage_silent_without_a_logserv_export():
+    assert "LSRV-COV-001" not in _ids(LogServReviewAuditor({}).run_all_checks())
+
+
+def test_lsrv_window_fires_on_undated_events():
+    gw = {"class_name": "SAP Gateway", "activity_name": "Register Program",
+          "message": "program ZX registered", "unmapped": {"program": "ZX"}}  # no time
+    f = _by_id(_run([gw]), "LSRV-WIN-001")
+    assert f["severity"] == "MEDIUM" and f["details"]["undated_events"] == 1
+
+
+def test_lsrv_routes_to_data_protection_and_event_monitoring():
+    from modules import rise_ownership, domains
+    from server import sapcontent
+    for cid in ("LSRV-COV-001", "LSRV-WIN-001"):
+        assert rise_ownership.team_for(cid) == "data_protection"
+        assert domains.domain_for(cid, "LogServ Ingestion Health") == "event_monitoring"
+        assert sapcontent.requirement_for(cid) is None

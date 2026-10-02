@@ -127,6 +127,7 @@ TEAM_BY_PREFIX: List[Tuple[str, str]] = [
     ("DPP-", "data_protection"),
     ("LOG-", "data_protection"),
     ("LREV-", "data_protection"),   # audit-log retrospective review — same owner as LOG-
+    ("LSRV-", "data_protection"),   # SAP LogServ ingestion health — the log-pipeline owner
     ("FIN-", "data_protection"),
     ("MDC-", "data_protection"),
     ("VBM-", "data_protection"),
