@@ -79,6 +79,30 @@ def cmd_rederive_paths(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_recompute_crq(args: argparse.Namespace) -> int:
+    """Re-price the latest completed scan from the saved CRQ answers, no rescan.
+
+    The /crq screen's saved figures only reach the board /risk page when a scan
+    stores a crq_result. This re-runs the pricing against the findings already in
+    the database, so a change to the financial answers shows on /risk without the
+    customer still having their (consumed) export. Same shape as rederive-paths.
+    """
+    from server import crq
+    land = db.one("SELECT id, name FROM landscape WHERE name = %s", (args.landscape,))
+    if land is None:
+        print(f"no such landscape: {args.landscape}")
+        return 2
+    result = crq.recompute_latest(land["id"])
+    if not result.get("computed"):
+        print(f"{land['name']}: {result.get('reason', 'not recomputed')}")
+        return 2
+    pf = result.get("portfolio") or {}
+    print(f"{land['name']}: re-priced run {result.get('run_id')} — "
+          f"ALE P90 {pf.get('ale_p90')}, mean {pf.get('mean_ale')}, "
+          f"{result.get('scenarios')} scenarios")
+    return 0
+
+
 def cmd_init_db(args: argparse.Namespace) -> int:
     db.init_schema()
     print("schema applied")
@@ -366,10 +390,15 @@ def cmd_add_tenant(args: argparse.Namespace) -> int:
 
 def cmd_scan(args: argparse.Namespace) -> int:
     """Scan a directory directly — the air-gapped path, no upload, no browser."""
-    land = db.one("SELECT * FROM landscape WHERE name = %s", (args.landscape,))
-    if land is None:
-        print(f"no such landscape: {args.landscape}", file=sys.stderr)
-        return 1
+    if getattr(args, "landscape", None):
+        land = db.one("SELECT * FROM landscape WHERE name = %s", (args.landscape,))
+        if land is None:
+            print(f"no such landscape: {args.landscape}", file=sys.stderr)
+            return 1
+    else:
+        # Single-landscape product: default to the one organization landscape.
+        land = db.one("SELECT * FROM landscape WHERE id = %s",
+                      (db.singleton_landscape_id(),))
 
     system_id = None
     if args.sid and args.client:
@@ -578,6 +607,12 @@ def main(argv=None) -> int:
     rp.add_argument("landscape")
     rp.set_defaults(fn=cmd_rederive_paths)
 
+    rc = sub.add_parser(
+        "recompute-crq",
+        help="Re-price the latest scan from saved CRQ answers, without a rescan.")
+    rc.add_argument("landscape")
+    rc.set_defaults(fn=cmd_recompute_crq)
+
     cu = sub.add_parser("create-user", help="Create a console account with a role.")
     cu.add_argument("username")
     cu.add_argument("role", choices=sorted(auth.ROLE_RANK), nargs="?", default="viewer")
@@ -637,7 +672,8 @@ def main(argv=None) -> int:
     aten.set_defaults(fn=cmd_add_tenant)
 
     sc = sub.add_parser("scan", help="Scan an export directory and store the run.")
-    sc.add_argument("landscape")
+    sc.add_argument("landscape", nargs="?",
+                    help="Landscape name. Omit for the single organization landscape.")
     sc.add_argument("data_dir")
     sc.add_argument("--sid", default=None)
     sc.add_argument("--client", default=None)

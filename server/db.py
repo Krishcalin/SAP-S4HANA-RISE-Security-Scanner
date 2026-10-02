@@ -7,6 +7,7 @@ finding query must go through.
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
@@ -53,6 +54,51 @@ def init_schema() -> None:
         conn.execute(sql)
         conn.commit()
     log.info("schema applied")
+
+
+# --------------------------------------------------------------------------- #
+#  The single organization landscape                                          #
+# --------------------------------------------------------------------------- #
+#
+# MonitorRisk is installed per company (on-prem / private cloud), so a deployment
+# assesses exactly ONE organization = ONE landscape. The schema keeps landscape
+# as a grouping key (see schema.sql:5-18) so this is enforced at the app layer,
+# not by a DB constraint — a few test fixtures still insert extra landscape rows
+# to prove row-scoping, which only works while the table can hold more than one.
+
+#: Name and deployment mode of the org landscape, created on first use.
+ORG_LANDSCAPE_NAME = os.getenv("ORG_NAME", "Organization")
+#: Must be one of the landscape.deployment_mode CHECK values.
+ORG_DEPLOYMENT_MODE = os.getenv("DEPLOYMENT_MODE", "on_prem")
+
+
+def singleton_landscape_id(conn: Optional[psycopg.Connection] = None) -> int:
+    """The id of the one organization landscape, created on first use if absent.
+
+    Resolves deterministically when several rows exist (e.g. a demo database):
+    the ORG_NAME match if present, otherwise the lowest id. A clean per-company
+    install starts with none and this creates exactly one.
+    """
+    def _resolve(c: psycopg.Connection) -> int:
+        row = c.execute("SELECT id FROM landscape WHERE name = %s",
+                        (ORG_LANDSCAPE_NAME,)).fetchone()
+        if row:
+            return int(row["id"])
+        row = c.execute("SELECT id FROM landscape ORDER BY id LIMIT 1").fetchone()
+        if row:
+            return int(row["id"])
+        row = c.execute(
+            "INSERT INTO landscape (name, deployment_mode) VALUES (%s, %s) "
+            "ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id",
+            (ORG_LANDSCAPE_NAME, ORG_DEPLOYMENT_MODE)).fetchone()
+        return int(row["id"])
+
+    if conn is not None:
+        return _resolve(conn)
+    with connection() as c:
+        rid = _resolve(c)
+        c.commit()
+        return rid
 
 
 def query(sql: str, params: Sequence[Any] = ()) -> List[Dict[str, Any]]:
