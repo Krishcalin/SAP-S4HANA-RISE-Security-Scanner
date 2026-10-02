@@ -20,6 +20,7 @@ import { Csf } from './routes/Csf'
 import { CsfFunction } from './routes/CsfFunction'
 import { PathDetail } from './routes/PathDetail'
 import { Paths } from './routes/Paths'
+import { PerceivedThreats } from './routes/PerceivedThreats'
 import { Risk } from './routes/Risk'
 import { Trend } from './routes/Trend'
 import { Dashboard } from './routes/Dashboard'
@@ -94,6 +95,7 @@ export default function App() {
           {/* /paths/:id takes an id, so it has no nav entry either: it is reached by
               clicking a row on /paths, which links every row it renders. */}
           <Route path="/paths/:id" element={<PathDetail />} />
+          <Route path="/perceived-threats" element={<PerceivedThreats />} />
           <Route path="/risk" element={<Risk />} />
           {/* /runs/:id takes an id, so it has no nav entry: it is reached from the
               dashboard's recent runs and from the receipt the upload screen shows. */}

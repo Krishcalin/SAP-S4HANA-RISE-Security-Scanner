@@ -107,6 +107,7 @@ _SCREEN_ENDPOINTS = [
     ("/api/trend", ("sla", "aging", "mttr", "burndown", "backlog_by_tier",
                     "technical_debt", "teams", "domains")),             # was /trend
     ("/api/risk", ("portfolio", "scenarios", "trend")),                 # was /risk
+    ("/api/perceived-threats", ("groups", "health", "measured", "totals")),
     ("/api/paths", ("summary", "paths", "chokepoints", "closed",
                     "template_count")),                                 # was /paths
     ("/api/coverage", ("requirements_published", "requirements_covered",
