@@ -111,6 +111,14 @@ function Framework({ framework }: { framework: ComplianceFramework }) {
           )}
         </>
       )}
+      <div className="mt-2.5">
+        {/* Per-control status (gap / clear / not-tested) + the evidence — the
+            auditor's view, a drill-down from this gap map. */}
+        <Link className="text-[12px] text-accent hover:underline"
+              to={`/compliance/${framework.id}`}>
+          Per-control audit evidence →
+        </Link>
+      </div>
     </section>
   )
 }

@@ -17,6 +17,7 @@ import { DomainDetail } from './routes/DomainDetail'
 import { Domains } from './routes/Domains'
 import { TopRisks } from './routes/TopRisks'
 import { Compliance } from './routes/Compliance'
+import { ComplianceEvidence } from './routes/ComplianceEvidence'
 import { Csf } from './routes/Csf'
 import { CsfFunction } from './routes/CsfFunction'
 import { PathDetail } from './routes/PathDetail'
@@ -83,6 +84,7 @@ export default function App() {
               reached from the twelve tiles on /domains. */}
           <Route path="/domains/:id" element={<DomainDetail />} />
           <Route path="/compliance" element={<Compliance />} />
+          <Route path="/compliance/:framework" element={<ComplianceEvidence />} />
           <Route path="/csf" element={<Csf />} />
           {/* /csf/:fn takes a Function id, so it has no nav entry: it is
               reached from the six Function tiles on /csf, and from the CSF

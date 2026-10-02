@@ -36,6 +36,7 @@ import type {
   ExportValue,
   RemediationPlan,
   ComplianceView,
+  ControlEvidenceView,
   CsfView, Dashboard, DomainsView, FindingDetail, FindingFilters, TopRisksView,
   CustomCodeView,
   PerceivedThreatsView,
@@ -553,6 +554,10 @@ export function crqTrend(limit = 12): Promise<{ points: CrqTrendPoint[] }> {
 // reads the console and never exports a report saw none of it.
 export function compliance(): Promise<ComplianceView> {
   return get<ComplianceView>('/compliance')
+}
+
+export function complianceEvidence(framework: string): Promise<ControlEvidenceView> {
+  return get<ControlEvidenceView>(`/compliance/${encodeURIComponent(framework)}/evidence`)
 }
 
 // ══ Top risks, per domain ═══════════════════════════════════════════════════

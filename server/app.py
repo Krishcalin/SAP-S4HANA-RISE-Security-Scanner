@@ -50,7 +50,7 @@ from starlette.types import Scope
 
 from server import (analytics, auth, checkdocs, crq, custom_code, db, export,
                     graph, ingest, perceived_threats, queries, sapcontent)
-from modules import domains, nist_csf, platforms, compliance_mapping
+from modules import domains, nist_csf, platforms, compliance_mapping, control_status
 #: SESSION_COOKIE is imported but not USED here any more — the routes that set and
 #: cleared it were the Jinja form's sign-in and sign-out, and the SPA uses
 #: /api/auth/login and /api/auth/logout instead. It stays as a deliberate
@@ -1378,6 +1378,28 @@ def api_compliance(user: Dict[str, Any] = Depends(current_user)):
                  "with it: this product reads configuration exports, not the "
                  "control environment. No percentage is computed."),
     }
+
+
+@app.get("/api/compliance/{framework}/evidence")
+def api_compliance_evidence(framework: str,
+                            user: Dict[str, Any] = Depends(current_user)):
+    """Per-control audit evidence for one framework: a status (gap / clear /
+    not-tested / not-mapped) and the findings that prove it.
+
+    Generalises the CSF status recipe to every framework, so an auditor gets the
+    same honest three-state answer for SOX/ITGC, CIS Controls, DORA and the rest,
+    not just a count. "Clear" means the feeding checks RAN and found nothing — an
+    observation, never an assertion of compliance; "not tested" means they did
+    not run. No percentage is computed. Scoped per system; reuses the report
+    finding projection so the evidence matches an exported report.
+    """
+    scope = auth.scope_for(user)
+    result = control_status.assess_framework(
+        framework, export.findings_for_report(scope),
+        coverage=queries.latest_coverage(scope))
+    if result is None:
+        raise HTTPException(status_code=404, detail="unknown compliance framework")
+    return result
 
 
 @app.get("/api/csf/{function_id}")
