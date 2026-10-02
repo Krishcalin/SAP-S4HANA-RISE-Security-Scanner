@@ -22,6 +22,7 @@ import { CsfFunction } from './routes/CsfFunction'
 import { PathDetail } from './routes/PathDetail'
 import { Paths } from './routes/Paths'
 import { PerceivedThreats } from './routes/PerceivedThreats'
+import { Misconfiguration, Vulnerabilities } from './routes/Posture'
 import { Risk } from './routes/Risk'
 import { Trend } from './routes/Trend'
 import { Dashboard } from './routes/Dashboard'
@@ -89,6 +90,8 @@ export default function App() {
               strip on the dashboard. */}
           <Route path="/csf/:fn" element={<CsfFunction />} />
           <Route path="/findings" element={<Findings />} />
+          <Route path="/vulnerabilities" element={<Vulnerabilities />} />
+          <Route path="/misconfiguration" element={<Misconfiguration />} />
           {/* /findings/:id takes an id, so it has no nav entry: it is reached by
               clicking a row on /findings, which links both the check id and the
               title of every row it renders. */}

@@ -109,6 +109,8 @@ _SCREEN_ENDPOINTS = [
     ("/api/risk", ("portfolio", "scenarios", "trend")),                 # was /risk
     ("/api/perceived-threats", ("groups", "health", "measured", "totals")),
     ("/api/custom-code", ("groups", "health", "objects", "measured", "totals")),
+    ("/api/vulnerabilities", ("kind", "groups", "measured", "totals")),
+    ("/api/misconfiguration", ("kind", "groups", "measured", "totals")),
     ("/api/paths", ("summary", "paths", "chokepoints", "closed",
                     "template_count")),                                 # was /paths
     ("/api/coverage", ("requirements_published", "requirements_covered",

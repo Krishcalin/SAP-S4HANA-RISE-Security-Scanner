@@ -1670,6 +1670,36 @@ export interface CustomCodeView {
   }
 }
 
+// Vulnerabilities / Mis-Configuration lenses, from GET /api/vulnerabilities and
+// /api/misconfiguration (server/finding_classes.py roll_up over the same finding
+// projection the domains screen uses). A partition of findings by check-id
+// prefix + category; SoD, compliance, governance, log observations and meta are
+// in neither.
+export interface PostureRow {
+  id: number
+  check_id: string
+  severity: string
+  priority_tier: string | null
+  title: string
+  category: string | null
+  sid: string | null
+  state: string
+}
+export interface PostureGroup {
+  id: string
+  label: string
+  blurb: string
+  counts: Record<string, number>
+  total: number
+  findings: PostureRow[]
+}
+export interface PostureView {
+  kind: 'vulnerability' | 'misconfiguration'
+  groups: PostureGroup[]
+  measured: Measured | null
+  totals: { findings: number; counts: Record<string, number> }
+}
+
 export interface SecurityDomain {
   id: string
   /** The buyer's word, verbatim. The honesty lives in `scope`. */

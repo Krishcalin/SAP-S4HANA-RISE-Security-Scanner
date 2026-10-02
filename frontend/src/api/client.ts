@@ -39,6 +39,7 @@ import type {
   CsfView, Dashboard, DomainsView, FindingDetail, FindingFilters, TopRisksView,
   CustomCodeView,
   PerceivedThreatsView,
+  PostureView,
   FindingHistory, FindingPage, GeneratedPassword, Health, Journey, Landscape,
   Me, PathView, PathsOverview, RequirementDoc, ResolvedView, RiskView,
   RunDiff, SapSystem, SaveViewResult, SavedView, ScanRun, SecurityDomain,
@@ -571,6 +572,14 @@ export function perceivedThreats(): Promise<PerceivedThreatsView> {
 
 export function customCode(): Promise<CustomCodeView> {
   return get<CustomCodeView>('/custom-code')
+}
+
+export function vulnerabilities(): Promise<PostureView> {
+  return get<PostureView>('/vulnerabilities')
+}
+
+export function misconfiguration(): Promise<PostureView> {
+  return get<PostureView>('/misconfiguration')
 }
 
 // ══ The twelve security domains ═════════════════════════════════════════════
