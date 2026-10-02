@@ -48,7 +48,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import Scope
 
-from server import analytics, auth, checkdocs, crq, db, export, graph, ingest, queries, sapcontent
+from server import (analytics, auth, checkdocs, crq, db, export, graph, ingest,
+                    perceived_threats, queries, sapcontent)
 from modules import domains, nist_csf, platforms, compliance_mapping
 #: SESSION_COOKIE is imported but not USED here any more — the routes that set and
 #: cleared it were the Jinja form's sign-in and sign-out, and the SPA uses
@@ -1603,6 +1604,22 @@ def api_top_risks(user: Dict[str, Any] = Depends(current_user)):
     — see queries.top_risks_by_domain.
     """
     return queries.top_risks_by_domain(auth.scope_for(user))
+
+
+@app.get("/api/perceived-threats")
+def api_perceived_threats(user: Dict[str, Any] = Depends(current_user)):
+    """Everything observed from SAP LogServ, in one place.
+
+    The retrospective log detections — audit-log behaviour patterns, access
+    violations, per-class log review (gateway / HANA / ICM / network) and the
+    config-vs-log correlation — grouped by log class, plus a section on whether
+    LogServ is forwarding each class at all. Scoped per system like every read;
+    reuses the same finding projection the domains screen does, so the two agree.
+    """
+    scope = auth.scope_for(user)
+    findings = queries.findings_for_domains(scope)
+    return perceived_threats.roll_up(findings,
+                                     coverage=queries.latest_coverage(scope))
 
 
 @app.get("/api/domains/{domain_id}")

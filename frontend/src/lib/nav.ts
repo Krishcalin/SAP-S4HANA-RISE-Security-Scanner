@@ -1,5 +1,5 @@
 import {
-  Calculator, CircleAlert, FileQuestion, ListOrdered, ScrollText, CircleDollarSign, Landmark, LayoutDashboard, LayoutGrid, Scissors, ShieldCheck, TrendingUp, Upload, UserCog, Waypoints, type LucideIcon,
+  Calculator, CircleAlert, FileQuestion, ListOrdered, ScrollText, CircleDollarSign, Landmark, LayoutDashboard, LayoutGrid, Scissors, ShieldCheck, Siren, TrendingUp, Upload, UserCog, Waypoints, type LucideIcon,
 } from 'lucide-react'
 import type { Role } from '../api/types'
 
@@ -34,6 +34,10 @@ export const NAV_MAIN: NavItem[] = [
   { to: '/findings', label: 'Findings', icon: CircleAlert },
   { to: '/trend', label: 'Trend', icon: TrendingUp },
   { to: '/paths', label: 'Risk Paths', icon: Waypoints },
+  // Directly under Risk Paths: paths are what the CONFIG could permit; this is
+  // what the LOGS actually observed happening (SAP LogServ retrospective review),
+  // grouped by log class, plus whether LogServ is forwarding each class.
+  { to: '/perceived-threats', label: 'Perceived Threats', icon: Siren },
   // Directly under the paths it cuts. The shortest worklist the product makes:
   // one fix, one or more paths gone.
   { to: '/chokepoints', label: 'Choke Points', icon: Scissors },

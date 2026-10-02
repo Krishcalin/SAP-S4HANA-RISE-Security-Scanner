@@ -1586,6 +1586,35 @@ export interface TopRisksView {
   measured: Measured | null
 }
 
+// ── Perceived Threats (server/perceived_threats.py roll_up) ───────────────────
+/** One finding observed from SAP LogServ, as roll_up projects it. */
+export interface ThreatRow {
+  id: number
+  check_id: string
+  severity: string
+  priority_tier: string | null
+  title: string
+  category: string | null
+  sid: string | null
+  state: string
+}
+/** A log-class group (or a health group), with its severity counts and rows. */
+export interface ThreatGroup {
+  id: string
+  label: string
+  blurb: string
+  counts: Record<string, number>
+  total: number
+  findings: ThreatRow[]
+}
+/** GET /api/perceived-threats — server/perceived_threats.py roll_up. */
+export interface PerceivedThreatsView {
+  groups: ThreatGroup[]
+  health: ThreatGroup[]
+  measured: Measured | null
+  totals: { threats: number; health: number; counts: Record<string, number> }
+}
+
 export interface SecurityDomain {
   id: string
   /** The buyer's word, verbatim. The honesty lives in `scope`. */
