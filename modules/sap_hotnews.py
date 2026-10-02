@@ -2051,6 +2051,7 @@ class SapHotNewsAuditor(BaseAuditor):
             )
 
         self._report_workaround(assessable, present)
+        self._report_manual_step(assessable, present)
         self._report_exposure_coverage(unassessed, bool(components), has_applied)
 
     # ── documented workarounds this scanner can actually look for ───────────
@@ -2117,6 +2118,128 @@ class SapHotNewsAuditor(BaseAuditor):
             details={"unmitigated_notes": len(offenders)},
             scope="aggregate",
         )
+
+    # ── documented MANUAL post-implementation steps, on notes already applied ──
+
+    def _report_manual_step(self, assessable: List[Dict[str, Any]],
+                            present: Set[str]) -> None:
+        """HOTNEWS-016: a note is recorded as implemented, but a documented
+        MANUAL post-implementation step is not actually in place.
+
+        SNOTE marks a note 'Completely Implemented' once its automatic correction
+        instructions are applied — it cannot see whether the human then did the
+        manual post-implementation activities the note's own text requires (an
+        authorization to withdraw, a profile parameter to set, a service to lock
+        down). A note can therefore read as applied in the export while the hole
+        it closes is still open, which is the one state HOTNEWS-004 (incomplete)
+        and HOTNEWS-014 (fix not installed) do not catch: here the SNOTE part is
+        genuinely done.
+
+        Source discipline is identical to the workaround check (HOTNEWS-009):
+        ONLY entries whose `manual_step` carries a NAMED SOURCE are checked. An
+        invented manual step is the worst thing this check could emit — it would
+        tell a customer a patched note is not safe, or let a real gap pass — so
+        the shipped table is transcribed from SAP note text one entry at a time,
+        each with its source, and is intentionally sparse. The mechanism verifies
+        only steps that map to config this scanner already reads; a step it
+        cannot assess from the supplied exports is silently skipped, never
+        reported as done.
+        """
+        exposure = self._exposure_data()
+        offenders = []
+        for entry in assessable:
+            note = self._norm_note(entry["note"])
+            if note not in present:              # only notes recorded as applied
+                continue
+            step = (exposure.get(note) or {}).get("manual_step") or {}
+            if not step.get("source"):
+                continue
+            gap = self._manual_step_gap(step)
+            if gap:
+                offenders.append("%s — the note's manual step is to %s, but %s"
+                                 % (self._label(entry),
+                                    step.get("statement", "complete it"), gap))
+        if not offenders:
+            return
+        self.finding(
+            check_id="HOTNEWS-016",
+            title="Note recorded as implemented, but a documented manual step is not in place",
+            severity=self.SEVERITY_HIGH,
+            category=self.CATEGORY,
+            description=(
+                "%d note(s) are recorded as implemented in the SNOTE export, but a "
+                "MANUAL post-implementation step the note itself requires is not in "
+                "place on this system. SNOTE confirms its automatic corrections, not "
+                "the manual activities — an authorization to withdraw, a parameter to "
+                "set — so a note can read as applied while the vulnerability it closes "
+                "is still reachable. This is distinct from an incomplete implementation "
+                "(HOTNEWS-004) and from a fix that was never installed (HOTNEWS-014): "
+                "here the automatic part is genuinely done and only the manual step is "
+                "missing. Each item names the exact gap so it can be closed without a "
+                "patch window." % len(offenders)),
+            affected_items=offenders,
+            remediation=(
+                "1. Open each note in the SAP Launchpad and read its "
+                "Post-Implementation / manual-activities section — that text is "
+                "authoritative.\n"
+                "2. Perform the named manual step (withdraw the authorization, set "
+                "the parameter) and restart the instance if the step requires it.\n"
+                "3. Re-run to confirm both the note's status and the manual step.\n"
+                "4. Record the step as part of the note's completion, so a later "
+                "role or parameter rebuild that reverses it is caught."),
+            references=[
+                "SAP Security Patch Day — the note's Post-Implementation section "
+                "carries the manual steps",
+            ],
+            details={"manual_steps_outstanding": len(offenders)},
+            scope="aggregate",
+        )
+
+    def _manual_step_gap(self, step: Dict[str, Any]) -> Optional[str]:
+        """Describe the gap if a manual step is NOT in place, else None.
+
+        None also means 'not assessable from the supplied exports' — the caller
+        must never read None as 'the step was done'. Two kinds are verifiable,
+        both against config this scanner already loads:
+
+          authorization_absent  the step is to remove an authorization; it is not
+                                 done if any role still grants it (role_auth_values)
+          parameter_value       the step is to set a profile parameter; it is not
+                                 done if the parameter is absent or holds another
+                                 value (security_params)
+        """
+        kind = step.get("kind")
+        if kind == "authorization_absent":
+            rows = self.data.get("role_auth_values")
+            if not isinstance(rows, list):
+                return None
+            holders = self._roles_granting(rows, step["object"], step["field"],
+                                           step["value"])
+            if holders:
+                return ("%s %s=%s is still granted by %d role(s): %s"
+                        % (step["object"], step["field"], step["value"],
+                           len(holders), ", ".join(sorted(holders)[:6])))
+            return None
+        if kind == "parameter_value":
+            params = self.data.get("security_params")
+            if not isinstance(params, list):
+                return None
+            name = str(step.get("parameter", "")).strip().lower()
+            want = str(step.get("value", "")).strip()
+            actual = None
+            for row in params:
+                if (isinstance(row, dict)
+                        and str(row.get("NAME", "")).strip().lower() == name):
+                    actual = str(row.get("VALUE", "")).strip()
+                    break
+            if actual is None:
+                return "%s is not set (the step requires %s)" % (
+                    step.get("parameter"), want)
+            if actual.strip().lower() != want.strip().lower():
+                return "%s = %s, not the required %s" % (
+                    step.get("parameter"), actual, want)
+            return None
+        return None
 
     @staticmethod
     def _roles_granting(rows: List[Any], obj: str, field: str,
