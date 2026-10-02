@@ -103,6 +103,14 @@ class SapHotNewsAuditor(BaseAuditor):
 
     CATEGORY = "SAP Security Notes (HotNews)"
 
+    #: `landscape_profile` is a pure enrichment, not a required input. Without it
+    #: HOTNEWS-017 simply does not fire and every other note check is fully valid
+    #: from the catalogue and the applied-notes export — so its absence must not
+    #: badge any HotNews finding incomplete. This is the honest direction (the
+    #: finding IS complete without it), not a silence: a declared stack only ever
+    #: adds HOTNEWS-017, it never changes what the other checks could assess.
+    OPTIONAL_SOURCES = frozenset({"landscape_profile"})
+
     # SNOTE implementation states that mean a note is addressed on this system.
     ADDRESSED_STATUSES = {
         "completely implemented", "fully implemented", "implemented",
@@ -902,6 +910,19 @@ class SapHotNewsAuditor(BaseAuditor):
         hits.sort(key=lambda e: (not e.get("exploited"), -float(e.get("cvss") or 0)))
         if not hits:
             return
+        # A stack the customer has DECLARED present is no longer "adjacent, can't
+        # assess" — it is confirmed in the landscape, so an actively-exploited or
+        # critical note for it this ABAP export can't prove patched is a real,
+        # elevated risk (HOTNEWS-017), not an INFO footnote. The rest stay INFO.
+        declared = self._declared_stacks()
+        declared_hits = [e for e in hits
+                         if str(e.get("applies_to") or "abap").strip().lower() in declared]
+        other_hits = [e for e in hits if e not in declared_hits]
+        if declared_hits:
+            self._report_declared_stack_exposure(declared_hits, self._internet_facing())
+        if not other_hits:
+            return
+        hits = other_hits
         exploited = sum(1 for e in hits if e.get("exploited"))
         items = []
         for e in hits:
@@ -940,6 +961,91 @@ class SapHotNewsAuditor(BaseAuditor):
             ],
             details={"unassessable_notes": [e["note"] for e in hits],
                      "exploited_among_them": exploited},
+        )
+
+    #: Non-ABAP stacks a customer can declare present, so an adjacent-stack note
+    #: stops being an INFO footnote and becomes an assessable risk.
+    _DECLARABLE_STACKS = ("java", "bi", "btp", "solman", "commerce", "me")
+
+    def _declared_stacks(self) -> set:
+        """The non-ABAP stacks the customer has declared present in landscape_profile.
+
+        Accepts either a `stacks_present` list or per-stack boolean flags
+        (`java`/`java_stack`/`java_present`). ABAP is always implied and not listed."""
+        lp = self.data.get("landscape_profile")
+        if not isinstance(lp, dict):
+            return set()
+        stacks = {str(s).strip().lower() for s in (lp.get("stacks_present") or [])
+                  if str(s).strip()}
+        for s in self._DECLARABLE_STACKS:
+            if lp.get(s) or lp.get(s + "_stack") or lp.get(s + "_present"):
+                stacks.add(s)
+        return {s for s in stacks if s and s != "abap"}
+
+    def _internet_facing(self) -> bool:
+        """Whether the customer declared this landscape internet-facing."""
+        lp = self.data.get("landscape_profile")
+        if not isinstance(lp, dict):
+            return False
+        val = lp.get("internet_facing", lp.get("exposure"))
+        if isinstance(val, bool):
+            return val
+        return str(val or "").strip().lower() in ("true", "yes", "1", "internet",
+                                                  "internet_facing", "external", "public")
+
+    def _report_declared_stack_exposure(self, hits, internet_facing):
+        """HOTNEWS-017: a critical/exploited note on a stack the customer declared
+        present, which this ABAP export cannot prove patched.
+
+        This is the exposure-declaration upgrade: once the customer says "yes, the
+        Java / BI / BTP stack is here", an actively-exploited CVSS-10 note like
+        CVE-2025-31324 is no longer an INFO disclosure — it is a critical item to
+        verify on a stack we now know exists, and if the landscape is internet-facing
+        an unauthenticated one is an emergency.
+        """
+        hits.sort(key=lambda e: (not e.get("exploited"), -float(e.get("cvss") or 0)))
+        any_exploited = any(e.get("exploited") for e in hits)
+        severity = self.SEVERITY_CRITICAL if (any_exploited or internet_facing) \
+            else self.SEVERITY_HIGH
+        stacks = sorted({str(e.get("applies_to") or "").strip().lower() for e in hits})
+        facing = (" The landscape is declared internet-facing, so an unauthenticated "
+                  "note here is directly exposed and should be treated as an emergency."
+                  if internet_facing else "")
+        items = []
+        for e in hits:
+            tag = " [EXPLOITED IN THE WILD]" if e.get("exploited") else ""
+            items.append("%s (declared stack: %s)%s"
+                         % (self._label(e), str(e.get("applies_to") or "").lower(), tag))
+        self.finding(
+            check_id="HOTNEWS-017",
+            title="Critical note on a declared-present stack this export cannot confirm patched",
+            severity=severity,
+            category=self.CATEGORY,
+            description=(
+                "%d catalogue note(s) target a stack the landscape profile declares "
+                "PRESENT (%s), and %d of them fix vulnerabilities exploited in the wild. "
+                "An S/4HANA ABAP SNOTE export carries no patch evidence for those "
+                "stacks, so this scan cannot confirm they are patched — but the stack "
+                "is confirmed to exist, which turns 'not assessable here' from an INFO "
+                "footnote into a critical item to verify on the owning system.%s"
+                % (len(hits), ", ".join(stacks),
+                   sum(1 for e in hits if e.get("exploited")), facing)),
+            affected_items=items,
+            affected_objects=self._note_objects(hits),
+            scope="aggregate",
+            remediation=(
+                "Run the patch check on the declared stack's own tooling (AS Java / BI "
+                "/ BTP / Solution Manager) and confirm each note is implemented; treat "
+                "the actively-exploited ones as urgent, and an internet-facing "
+                "unauthenticated note as an incident until proven patched."),
+            references=[
+                "SAP Security Patch Day",
+                "CISA Known Exploited Vulnerabilities Catalog",
+            ],
+            details={"declared_stacks": sorted(self._declared_stacks()),
+                     "internet_facing": internet_facing,
+                     "notes": [e["note"] for e in hits],
+                     "exploited_among_them": sum(1 for e in hits if e.get("exploited"))},
         )
 
     # ================================================================
