@@ -37,6 +37,7 @@ import type {
   RemediationPlan,
   ComplianceView,
   CsfView, Dashboard, DomainsView, FindingDetail, FindingFilters, TopRisksView,
+  CustomCodeView,
   PerceivedThreatsView,
   PostureView,
   FindingHistory, FindingPage, GeneratedPassword, Health, Journey, Landscape,
@@ -567,6 +568,10 @@ export function topRisks(): Promise<TopRisksView> {
 // ══ Perceived Threats — everything observed from SAP LogServ ═════════════════
 export function perceivedThreats(): Promise<PerceivedThreatsView> {
   return get<PerceivedThreatsView>('/perceived-threats')
+}
+
+export function customCode(): Promise<CustomCodeView> {
+  return get<CustomCodeView>('/custom-code')
 }
 
 export function vulnerabilities(): Promise<PostureView> {

@@ -1122,6 +1122,41 @@ def findings_for_domains(scope: Optional[Sequence[int]]) -> List[Dict[str, Any]]
         params)
 
 
+def custom_code_findings(scope: Optional[Sequence[int]]) -> List[Dict[str, Any]]:
+    """Open ABAP / custom-code findings for the Custom Code screen.
+
+    Both our native scanner (check ids ABAP-*) and the imported SAP ATC/CVA
+    verdicts (ATC-*) live under the one host category "Code & Transport
+    Security", which it SHARES with transport checks — so this filters by the
+    custom-code check-id namespaces, not by category. The offending object comes
+    from `f.subject` (set to [{type,name}] by both emitters); the taint
+    `confidence` and `internet_exposed` flag live in `details`, which belongs to a
+    PARTICULAR run, so they are read from the newest observation (as the finding
+    detail query does) rather than from `finding`. jsonb comes back as list/dict.
+    Scoped per system like every read.
+    """
+    # The % in the LIKE patterns is bound as a parameter, not written inline:
+    # psycopg parses a literal % in a parameterised query as a placeholder. These
+    # two params precede the scope params that _scoped appends.
+    where = ["f.state NOT IN ('resolved','false_positive')",
+             "(f.check_id LIKE %s OR f.check_id LIKE %s)"]
+    params: List[Any] = ["ABAP-%", "ATC-%"]
+    _scoped(where, params, scope)
+    return db.query(
+        "SELECT f.id, f.check_id, f.severity, f.priority_tier, "
+        "       f.state, cd.category, cd.title, s.sid, f.subject, "
+        "(SELECT o.details FROM finding_observation o "
+        "  WHERE o.finding_id = f.id ORDER BY o.scan_run_id DESC LIMIT 1) "
+        "  AS details "
+        "FROM finding f "
+        "JOIN check_definition cd ON cd.check_id = f.check_id "
+        "LEFT JOIN sap_system s ON s.id = f.system_id "
+        f"WHERE {' AND '.join(where)} "
+        "ORDER BY CASE f.severity WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1 "
+        "         WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 ELSE 4 END, f.check_id",
+        params)
+
+
 def evidence_gaps(scope: Optional[Sequence[int]]) -> Dict[str, Any]:
     """Which unsupplied export would make the most findings decidable.
 

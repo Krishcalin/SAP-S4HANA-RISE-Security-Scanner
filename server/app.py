@@ -48,8 +48,9 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import Scope
 
-from server import (analytics, auth, checkdocs, crq, db, export, finding_classes,
-                    graph, ingest, perceived_threats, queries, sapcontent)
+from server import (analytics, auth, checkdocs, crq, custom_code, db, export,
+                    finding_classes, graph, ingest, perceived_threats, queries,
+                    sapcontent)
 from modules import domains, nist_csf, platforms, compliance_mapping
 #: SESSION_COOKIE is imported but not USED here any more — the routes that set and
 #: cleared it were the Jinja form's sign-in and sign-out, and the SPA uses
@@ -1620,6 +1621,23 @@ def api_perceived_threats(user: Dict[str, Any] = Depends(current_user)):
     findings = queries.findings_for_domains(scope)
     return perceived_threats.roll_up(findings,
                                      coverage=queries.latest_coverage(scope))
+
+
+@app.get("/api/custom-code")
+def api_custom_code(user: Dict[str, Any] = Depends(current_user)):
+    """The ABAP / custom-code security posture, in one place.
+
+    Our native SAST findings (ABAP-*) and the imported SAP ATC/CVA verdicts
+    (ATC-*), grouped by weakness (CWE family) with a native-vs-ATC split, the
+    worst-offending Z-objects, and a scan coverage & trust section — so an empty
+    weakness reads as "not looked for", not "clean". Scoped per system like every
+    read. Populated only when an abapGit source export (and/or an ATC export) was
+    scanned; otherwise the screen shows its honest empty states.
+    """
+    scope = auth.scope_for(user)
+    findings = queries.custom_code_findings(scope)
+    return custom_code.roll_up(findings,
+                               coverage=queries.latest_coverage(scope))
 
 
 @app.get("/api/vulnerabilities")

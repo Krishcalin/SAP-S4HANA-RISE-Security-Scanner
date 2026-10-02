@@ -12,6 +12,7 @@ import { Chokepoints } from './routes/Chokepoints'
 import { Coverage } from './routes/Coverage'
 import { RequirementDetail } from './routes/RequirementDetail'
 import { CrqInputs } from './routes/CrqInputs'
+import { CustomCode } from './routes/CustomCode'
 import { DomainDetail } from './routes/DomainDetail'
 import { Domains } from './routes/Domains'
 import { TopRisks } from './routes/TopRisks'
@@ -76,6 +77,7 @@ export default function App() {
           <Route path="/chokepoints" element={<Chokepoints />} />
           <Route path="/requirements/:id" element={<RequirementDetail />} />
           <Route path="/crq" element={<CrqInputs />} />
+          <Route path="/custom-code" element={<CustomCode />} />
           <Route path="/top-risks" element={<TopRisks />} />
           <Route path="/domains" element={<Domains />} />
           {/* /domains/:id takes a domain id, so it has no nav entry: it is
