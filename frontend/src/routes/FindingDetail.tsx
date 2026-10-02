@@ -430,8 +430,7 @@ export function FindingDetail() {
                       </tr>
                     </thead>
                     <tbody>
-                      {arr(details['taint_flow']).map((raw, i) => {
-                        const hop = obj(raw) ?? {}
+                      {flattenTaintFlow(arr(details['taint_flow'])).map(({ hop, depth }, i) => {
                         const role = str(hop['role'])
                         // A `file` appears only on a step that is in a DIFFERENT
                         // artefact from the finding — a call reaching in from
@@ -439,6 +438,9 @@ export function FindingDetail() {
                         // the reader looks at line 20 of the file they are
                         // already in, which is an unrelated statement.
                         const file = str(hop['file'])
+                        // `depth` > 0 is a nested caller step: how the value the
+                        // call passed became tainted further up. Indented and
+                        // dimmed so the main source->sink line stays legible.
                         return (
                           <tr key={i} className="hover:bg-panel2">
                             <td className={`${TD} font-mono text-[12px]`}>
@@ -451,7 +453,12 @@ export function FindingDetail() {
                                 : <span className="pill st">{role}</span>}
                             </td>
                             <td className={`${TD} font-mono text-[12px]`}>{str(hop['var'])}</td>
-                            <td className={`${TD} font-mono text-[12px]`}>{str(hop['code'])}</td>
+                            <td className={`${TD} font-mono text-[12px]`}>
+                              <span className={depth ? 'text-ink3' : undefined}
+                                    style={depth ? { paddingLeft: depth * 16 } : undefined}>
+                                {depth ? '↳ ' : ''}{str(hop['code'])}
+                              </span>
+                            </td>
                           </tr>
                         )
                       })}
@@ -854,6 +861,19 @@ function obj(v: unknown): Record<string, unknown> | null {
 }
 function arr(v: unknown): unknown[] {
   return Array.isArray(v) ? v : []
+}
+/** Flatten the taint flow, expanding each hop's nested `caller_flow` into
+ *  indented rows so the reader sees the whole path a value took across
+ *  procedure boundaries, not just the immediate call. */
+function flattenTaintFlow(steps: unknown[], depth = 0): Array<{ hop: Record<string, unknown>; depth: number }> {
+  const out: Array<{ hop: Record<string, unknown>; depth: number }> = []
+  for (const raw of steps) {
+    const hop = obj(raw) ?? {}
+    out.push({ hop, depth })
+    const sub = arr(hop['caller_flow'])
+    if (sub.length) out.push(...flattenTaintFlow(sub, depth + 1))
+  }
+  return out
 }
 function num(v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null
