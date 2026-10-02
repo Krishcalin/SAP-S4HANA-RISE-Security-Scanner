@@ -38,6 +38,7 @@ import type {
   ComplianceView,
   CsfView, Dashboard, DomainsView, FindingDetail, FindingFilters, TopRisksView,
   PerceivedThreatsView,
+  PostureView,
   FindingHistory, FindingPage, GeneratedPassword, Health, Journey, Landscape,
   Me, PathView, PathsOverview, RequirementDoc, ResolvedView, RiskView,
   RunDiff, SapSystem, SaveViewResult, SavedView, ScanRun, SecurityDomain,
@@ -566,6 +567,14 @@ export function topRisks(): Promise<TopRisksView> {
 // ══ Perceived Threats — everything observed from SAP LogServ ═════════════════
 export function perceivedThreats(): Promise<PerceivedThreatsView> {
   return get<PerceivedThreatsView>('/perceived-threats')
+}
+
+export function vulnerabilities(): Promise<PostureView> {
+  return get<PostureView>('/vulnerabilities')
+}
+
+export function misconfiguration(): Promise<PostureView> {
+  return get<PostureView>('/misconfiguration')
 }
 
 // ══ The twelve security domains ═════════════════════════════════════════════

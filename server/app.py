@@ -48,8 +48,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import Scope
 
-from server import (analytics, auth, checkdocs, crq, db, export, graph, ingest,
-                    perceived_threats, queries, sapcontent)
+from server import (analytics, auth, checkdocs, crq, db, export, finding_classes,
+                    graph, ingest, perceived_threats, queries, sapcontent)
 from modules import domains, nist_csf, platforms, compliance_mapping
 #: SESSION_COOKIE is imported but not USED here any more — the routes that set and
 #: cleared it were the Jinja form's sign-in and sign-out, and the SPA uses
@@ -1620,6 +1620,28 @@ def api_perceived_threats(user: Dict[str, Any] = Depends(current_user)):
     findings = queries.findings_for_domains(scope)
     return perceived_threats.roll_up(findings,
                                      coverage=queries.latest_coverage(scope))
+
+
+@app.get("/api/vulnerabilities")
+def api_vulnerabilities(user: Dict[str, Any] = Depends(current_user)):
+    """Known flaws that need a fix — missing SAP Security Notes and exploitable
+    custom-code weaknesses — grouped by source. Scoped per system; reuses the
+    same finding projection the domains screen does, so the views agree."""
+    scope = auth.scope_for(user)
+    findings = queries.findings_for_domains(scope)
+    return finding_classes.roll_up(findings, "vulnerability",
+                                   coverage=queries.latest_coverage(scope))
+
+
+@app.get("/api/misconfiguration")
+def api_misconfiguration(user: Dict[str, Any] = Depends(current_user)):
+    """Insecure settings — parameters, policy, interfaces, authorizations and
+    other configuration weaker than the baseline — grouped by subject. Scoped
+    per system; reuses the same finding projection the domains screen does."""
+    scope = auth.scope_for(user)
+    findings = queries.findings_for_domains(scope)
+    return finding_classes.roll_up(findings, "misconfiguration",
+                                   coverage=queries.latest_coverage(scope))
 
 
 @app.get("/api/domains/{domain_id}")

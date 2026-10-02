@@ -1,5 +1,5 @@
 import {
-  Calculator, CircleAlert, FileQuestion, ListOrdered, ScrollText, CircleDollarSign, Landmark, LayoutDashboard, LayoutGrid, Scissors, ShieldCheck, Siren, TrendingUp, Upload, UserCog, Waypoints, type LucideIcon,
+  Calculator, CircleAlert, FileQuestion, ListOrdered, ScrollText, CircleDollarSign, Landmark, LayoutDashboard, LayoutGrid, Scissors, ShieldAlert, ShieldCheck, Siren, SlidersHorizontal, TrendingUp, Upload, UserCog, Waypoints, type LucideIcon,
 } from 'lucide-react'
 import type { Role } from '../api/types'
 
@@ -32,6 +32,12 @@ export interface NavItem {
 export const NAV_MAIN: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/findings', label: 'Findings', icon: CircleAlert },
+  // Directly under the queue: the same findings split into the two posture
+  // questions a reviewer actually asks — "what is a flaw that needs patching or
+  // fixing" vs "what is set up insecurely". SoD, compliance and the log
+  // observations are deliberately in neither.
+  { to: '/vulnerabilities', label: 'Vulnerabilities', icon: ShieldAlert },
+  { to: '/misconfiguration', label: 'Mis-Configuration', icon: SlidersHorizontal },
   { to: '/trend', label: 'Trend', icon: TrendingUp },
   { to: '/paths', label: 'Risk Paths', icon: Waypoints },
   // Directly under Risk Paths: paths are what the CONFIG could permit; this is
