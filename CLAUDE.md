@@ -575,7 +575,7 @@ every run writes a manifest saying what it could not reach.
 | file | role |
 |---|---|
 | `identity.py` | **The load-bearing module.** `AffectedObject`, normalization, `compute_fingerprint`, `extract_nodes`. Read its docstring before changing anything about finding identity. |
-| `schema.sql` | 28 tables. Single-tenant (no `tenant_id`); `landscape` preserves the option. Idempotent — re-running it upgrades an existing deployment. |
+| `schema.sql` | 28 tables. Single-organization per deployment (no `tenant_id`): one `landscape` = the company, resolved by `db.singleton_landscape_id` and enforced at the app layer (the table stays plural-capable so row-scoping tests can insert a second). Idempotent — re-running it upgrades an existing deployment. |
 | `db.py` | psycopg pool, `scope_clause` (**the one place** row scoping is expressed), `audit`. |
 | `auth.py` | PBKDF2 passwords, sessions, ranked roles, per-system scope, password change/reset and the forced-change flag. |
 | `api_auth.py` | The **only** sign-in surface: `APIRouter(prefix="/api")` serving `/auth/me`, `/auth/login`, `/auth/logout`, `/account`, `/account/password`, `/account/reset/{user_id}`. Also owns both auth dependencies — `current_user` and `require(role)` — and `SESSION_COOKIE`. Unlike the rest of the write API these take **JSON bodies, not forms**, as a CSRF control. |

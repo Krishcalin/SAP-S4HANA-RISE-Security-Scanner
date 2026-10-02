@@ -211,3 +211,57 @@ def test_the_recompute_endpoint_requires_analyst_and_refreshes_the_result(analys
     # The board read now sees a portfolio row for the latest run.
     latest = crq.latest(None)
     assert latest is not None
+
+
+# ── Part A (finish): the board view is bound to the org landscape ────────────
+
+@pg
+def test_the_board_view_is_bound_to_the_organization_landscape():
+    """Single-landscape product: /risk shows the ORGANIZATION's latest run, not the
+    globally-latest across a stray landscape (a demo estate, leftover test data)
+    that would otherwise hijack the board view."""
+    from server import crq, db
+
+    db.init_schema()
+    with db.pool().connection() as conn:
+        org = db.singleton_landscape_id(conn)
+        _seed_completed_run(conn, org, ["ORG-RISK-1"])
+        stray = _landscape(conn)
+        _, stray_run = _seed_completed_run(conn, stray, ["STRAY-RISK-1"])
+        # Make the stray the globally-newest run, so an UNBOUND view would show it.
+        conn.execute("UPDATE scan_run SET started_at = now() + interval '1 hour' "
+                     "WHERE id = %s", (stray_run,))
+        conn.commit()
+    crq.recompute_latest(org)
+    crq.recompute_latest(stray)
+
+    bound = crq.latest(None, landscape_id=org)
+    assert bound is not None
+    assert db.one("SELECT landscape_id FROM scan_run WHERE id = %s",
+                  (bound["run_id"],))["landscape_id"] == org, \
+        "the board view is not bound to the organization landscape"
+
+    # And the unbounded query DID return the stray — proving the binding is what
+    # protects the board view from a stray landscape's newer scan.
+    unbound = crq.latest(None)
+    assert db.one("SELECT landscape_id FROM scan_run WHERE id = %s",
+                  (unbound["run_id"],))["landscape_id"] == stray
+
+
+@pg
+def test_set_org_renames_the_single_landscape():
+    import argparse
+    from server import cli, db
+
+    db.init_schema()
+    org = db.singleton_landscape_id()
+    old = db.one("SELECT name, deployment_mode FROM landscape WHERE id = %s", (org,))
+    try:
+        cli.cmd_set_org(argparse.Namespace(name="Acme GmbH (slc test)",
+                                           mode="rise_pce"))
+        row = db.one("SELECT name, deployment_mode FROM landscape WHERE id = %s", (org,))
+        assert row["name"] == "Acme GmbH (slc test)"
+        assert row["deployment_mode"] == "rise_pce"
+    finally:
+        db.execute("UPDATE landscape SET name = %s, deployment_mode = %s WHERE id = %s",
+                   (old["name"], old["deployment_mode"], org))
