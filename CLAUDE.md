@@ -61,15 +61,15 @@ product became client-server**, deliberately and one-way. It has NOT been relaxe
 
 Background and the full plan: [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md),
 [`docs/BUILD_ROADMAP.md`](docs/BUILD_ROADMAP.md).
-- **868 checks across 42 audit modules.** Measure, never estimate — and know which number you
+- **876 checks across 42 audit modules.** Measure, never estimate — and know which number you
   are quoting. `modules/` holds 81 files, of which **42 emit findings**; the rest are rule
   tables, loaders, importers and report writers. 41 of the 42 are `sap_scanner.py`'s
   `--modules` choices; the 42nd, `correlation`, runs as a SECOND PASS over the other modules'
   findings (config-vs-log `CORR-*`), not through `--modules`. Check IDs: **514** are written as
-  literals and **354** appear once the
+  literals and **362** appear once the
   six runtime-generated families resolve against their shipped rulesets — `PARAM-<parameter>`
-  (89), `ABAP-<rule>` (135), `ARA-<risk>` (99), `WDISP-<nnn>` (14), `ATC-<family>` (10) and
-  `IAM-<sod rule>` (7). The two sets do not overlap, so they add to 868.
+  (89), `ABAP-<rule>` (143), `ARA-<risk>` (99), `WDISP-<nnn>` (14), `ATC-<family>` (10) and
+  `IAM-<sod rule>` (7). The two sets do not overlap, so they add to 876.
   Every figure here comes from `modules/coverage.py`; if you are about to type one from memory,
   run it instead — this paragraph was wrong in eight places until somebody did.
   ⚠️ **Counting `self.finding(` alone undercounts by 29** and silently misses every `AUTH-*`
@@ -78,7 +78,7 @@ Background and the full plan: [`docs/PIVOT_PLAN.md`](docs/PIVOT_PLAN.md),
   Keep the README badge and `docs/CHECKS_REFERENCE.md` in sync when you add checks —
   `docs/CHECKS_REFERENCE.md` is GENERATED from the code by
   `tools/build_checks_reference.py`, and the `purity` CI job fails if it drifts.
-  It covers all 868 ids — 514 literal plus 354 from six runtime families —
+  It covers all 876 ids — 514 literal plus 362 from six runtime families —
   and renders a title or severity the code computes per finding as *varies*
   rather than freezing one branch as fact. Do not hand-edit it; change the
   check and regenerate.
@@ -719,7 +719,7 @@ wrong in that way.
 | `grcac` | grc_access_control | **GRC Access Control**: EAM/Firefighter usage+ownership, ARM access-request workflow, GRC-native SoD violations, mitigating controls, SoD ruleset governance |
 | `rolegov` | role_governance | **role design**: SU24 proposal hygiene for custom tcodes, ungenerated profiles (AGR_1016), derived-role authorization-value drift vs parent |
 | `atc` | atc_import | SAP's own ATC/CVA results, ingested rather than re-derived |
-| `cva` | abap_sast | **our** ABAP/CDS/BDEF scanner — **135 rules dispatched by file type** (ABAP/CDS/RAP, JS/UI5 and BTP descriptors — the split is in `modules/abap_sast_rules.py`, which is the only place worth counting), statement lexer, taint refinement with call-graph awareness across the scanned tree (`modules/abap_callgraph.py` decides whether a procedure parameter is caller-controlled, and what ABAP's own visibility rules allow us to conclude; it is NOT interprocedural data-flow and must not be described as such). `ABAP-XSS-006` is retired and `ABAP-AUTH-003` is handled in the engine, so 116 of the 118 fire from the rule table |
+| `cva` | abap_sast | **our** ABAP/CDS/BDEF scanner — **143 rules dispatched by file type** (ABAP/CDS/RAP, JS/UI5 and BTP descriptors — the split is in `modules/abap_sast_rules.py`, which is the only place worth counting), statement lexer, taint refinement with call-graph awareness across the scanned tree (`modules/abap_callgraph.py` decides whether a procedure parameter is caller-controlled, and what ABAP's own visibility rules allow us to conclude; it is NOT interprocedural data-flow and must not be described as such). `ABAP-XSS-006` is retired and `ABAP-AUTH-003` is handled in the engine, so 124 of the 126 fire from the rule table |
 | `logreview` | log_review | retrospective SM20 review: what the audit log actually recorded |
 | `capxsuaa` | cap_xsuaa | **CAP project as written** (`--cap-src`): `xs-security.json` exactly + CDS model lexically. Traces scope ← role-template ← role-collection ← IdP group; `CAPX-TOK-001` closes the application-override blind spot `BTP-TOK-*` declares |
 | `codeinv` | code_inventory_report | custom-code estate: size by type, unreachable, dormant, unknown-kept-separate |

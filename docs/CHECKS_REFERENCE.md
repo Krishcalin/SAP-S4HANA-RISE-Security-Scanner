@@ -6,7 +6,7 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**514** check ids are written as literals in `modules/`, across **42** modules. A further **354** are built at runtime from shipped rule tables, giving **868** in total.
+**514** check ids are written as literals in `modules/`, across **42** modules. A further **362** are built at runtime from shipped rule tables, giving **876** in total.
 
 Each check is published with **what it reads** and **which SAP Security Baseline requirement it answers** — the two things that make a catalogue auditable rather than a number. A competitor publishing a count and no itemised list is making a claim; this is a claim somebody else can check.
 
@@ -25,7 +25,7 @@ Every check below carries the SAP Security Baseline requirement it answers, wher
 - **35 of 35** requirements that are IN SCOPE for this product are addressed by at least one check here.
 - **10 of 45** published requirements are out of scope, because they are for a stack this product does not read. They are named below, not dropped: the denominator has to be honest in both directions, and a reader comparing 35 against 45 has no way to know that.
 - **0** in-scope requirements are not addressed at all. They are listed below rather than summarised away.
-- **567 of 868** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
+- **575 of 876** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
 
 > ⚠️ These are CHECK ITEMS in the CSA policies, not the 'control points' counted in the Baseline document — the widely-quoted 214 (69/92/53) is that other unit. The two do not reconcile; do not publish a percentage of one against the other.
 
@@ -916,9 +916,9 @@ Examples: `PARAM-abap/ext_debugging_possible`, `PARAM-abap/path_norm_Windows`, `
 
 One id per judged profile parameter. `PARAM-000`, `PARAM-MISSING` and `PARAM-MISSING-OTHER` are fixed ids and appear in the literal table.
 
-### `ABAP-<rule id>` — 135
+### `ABAP-<rule id>` — 143
 
-Source: `modules/abap_sast.py — ALL_ABAP_SAST_RULES (118) + ALL_JS_RULES (7) + ALL_BTP_CONFIG_RULES (8) + CROSS_ARTIFACT_RULES (3)`
+Source: `modules/abap_sast.py — ALL_ABAP_SAST_RULES (126) + ALL_JS_RULES (7) + ALL_BTP_CONFIG_RULES (8) + CROSS_ARTIFACT_RULES (3)`
 
 Examples: `ABAP-AMDP-001`, `ABAP-AMDP-002`, `ABAP-AMDP-003`, `ABAP-AMDP-004`, `ABAP-AMDP-005`, `ABAP-AUTH-001`
 

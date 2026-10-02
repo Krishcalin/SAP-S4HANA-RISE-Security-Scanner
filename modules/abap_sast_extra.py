@@ -718,10 +718,152 @@ INTERNAL_TABLE_RULES: List[Dict[str, Any]] = [
 # `from ... import CDS_RULES` in abap_sast.py pointing at the same list.
 CDS_RULES.extend(RAP_BDEF_RULES[:2])
 
+# --------------------------------------------------------------------------- #
+#  Legacy kernel / function-module sinks                                      #
+# --------------------------------------------------------------------------- #
+# A pack of specific, rarely-benign legacy sinks the vendored corpus does not
+# name: the classic RFC-based OS-command and file function modules, two ADBC
+# query entry points, and two obsolete statements. These are PRESENCE rules,
+# not taint sinks — each token is a documented dangerous API whose use in custom
+# code warrants review, so there is no dynamic operand to grade and no
+# `[^)]*`-in-a-name hazard. Function-module names are matched exactly as CALL
+# FUNCTION operands; every name is a real SAP FM / statement (the RFC_REMOTE_*
+# family is documented in "Exploiting SAP Internals", BH-EU-07, and SAP Help's
+# RFC documentation). New ids take the next free number in each existing family.
+LEGACY_SINK_RULES: List[Dict[str, Any]] = [
+    {
+        "id": "ABAP-CMDI-006",
+        "category": "OS Command Injection",
+        "name": "RFC_REMOTE_EXEC — remote OS command execution",
+        "severity": "HIGH",
+        "pattern": r"CALL\s+FUNCTION\s+['\"]RFC_REMOTE_EXEC['\"]",
+        "cwe": "CWE-78",
+        "description": (
+            "RFC_REMOTE_EXEC starts an operating-system program on the called "
+            "system and pipes an internal table into its standard input. A command "
+            "or argument influenced by input is OS command execution across the "
+            "RFC boundary."),
+        "recommendation": (
+            "Avoid RFC_REMOTE_EXEC. Where an external command is unavoidable, run "
+            "it through SXPG_COMMAND_EXECUTE restricted to an allowlisted SM49 "
+            "command with a dedicated authorization, never with caller text."),
+    },
+    {
+        "id": "ABAP-CMDI-007",
+        "category": "OS Command Injection",
+        "name": "RFC_REMOTE_PIPE — remote OS command execution",
+        "severity": "HIGH",
+        "pattern": r"CALL\s+FUNCTION\s+['\"]RFC_REMOTE_PIPE['\"]",
+        "cwe": "CWE-78",
+        "description": (
+            "RFC_REMOTE_PIPE starts an operating-system program on the called "
+            "system, pipes an internal table into its standard input and waits for "
+            "it to finish. A caller-influenced command runs at OS level on the "
+            "target host."),
+        "recommendation": (
+            "Avoid RFC_REMOTE_PIPE. Use SXPG_COMMAND_EXECUTE with an allowlisted "
+            "SM49 command and a dedicated authorization instead of a free-form "
+            "remote program call."),
+    },
+    {
+        "id": "ABAP-PATH-007",
+        "category": "Directory Traversal",
+        "name": "RFC_REMOTE_FILE — remote file read/write",
+        "severity": "HIGH",
+        "pattern": r"CALL\s+FUNCTION\s+['\"]RFC_REMOTE_FILE['\"]",
+        "cwe": "CWE-22",
+        "description": (
+            "RFC_REMOTE_FILE reads or writes a text file on the called system by "
+            "path. A caller-influenced file name can traverse directories and read "
+            "or overwrite arbitrary server-side files."),
+        "recommendation": (
+            "Avoid RFC_REMOTE_FILE for caller-supplied paths. Resolve the path "
+            "through a logical file name and validate it with FILE_VALIDATE_NAME "
+            "before any file access."),
+    },
+    {
+        "id": "ABAP-PATH-008",
+        "category": "Directory Traversal",
+        "name": "C_RSTRB_READ_BUFFERED — unvalidated server file read",
+        "severity": "MEDIUM",
+        "pattern": r"CALL\s+FUNCTION\s+['\"]C_RSTRB_READ_BUFFERED['\"]",
+        "cwe": "CWE-22",
+        "description": (
+            "C_RSTRB_READ_BUFFERED reads a server-side file whose name is passed "
+            "in. Without physical-path validation a caller-influenced name can "
+            "traverse directories to read files outside the intended location."),
+        "recommendation": (
+            "Validate the file name with FILE_VALIDATE_NAME against a logical file "
+            "name before the call, and read only through the validated path."),
+    },
+    {
+        "id": "ABAP-SQLI-017",
+        "category": "SQL Injection",
+        "name": "get_persistent_by_query — Object Services query filter",
+        "severity": "HIGH",
+        "pattern": r"get_persistent_by_query\s*\(",
+        "cwe": "CWE-89",
+        "description": (
+            "get_persistent_by_query runs an Object Services query whose filter is "
+            "supplied as text. A filter built from input is an injectable query "
+            "against the persistent class's table."),
+        "recommendation": (
+            "Pass query values through the query manager's parameter binding "
+            "rather than concatenating them into the filter string."),
+    },
+    {
+        "id": "ABAP-SQLI-018",
+        "category": "SQL Injection",
+        "name": "execute_procedure — ADBC stored-procedure call",
+        "severity": "HIGH",
+        "pattern": r"execute_procedure\s*\(",
+        "cwe": "CWE-89",
+        "description": (
+            "CL_SQL_STATEMENT->execute_procedure calls a database procedure through "
+            "ADBC (native SQL). A procedure name or parameter built from input is a "
+            "native-SQL injection that bypasses Open SQL's safeguards."),
+        "recommendation": (
+            "Call database procedures by a fixed name and bind parameters with "
+            "SET_PARAM rather than concatenating values into the statement."),
+    },
+    {
+        "id": "ABAP-CONF-010",
+        "category": "Insecure Configuration",
+        "name": "EDITOR-CALL — obsolete interactive editor statement",
+        "severity": "MEDIUM",
+        "pattern": r"\bEDITOR-CALL\b",
+        "cwe": "CWE-477",
+        "description": (
+            "EDITOR-CALL is an obsolete statement that opens the ABAP editor on an "
+            "internal table or program at runtime. It has no place in a modern "
+            "transaction and can expose or alter data and program text "
+            "interactively."),
+        "recommendation": (
+            "Remove EDITOR-CALL. Use an ALV or Dynpro UI for data display and entry "
+            "and the Workbench for program maintenance."),
+    },
+    {
+        "id": "ABAP-CONF-011",
+        "category": "Insecure Configuration",
+        "name": "FTP_CONNECT — cleartext FTP connection",
+        "severity": "MEDIUM",
+        "pattern": r"CALL\s+FUNCTION\s+['\"]FTP_CONNECT['\"]",
+        "cwe": "CWE-319",
+        "description": (
+            "FTP_CONNECT opens an FTP session, which transmits credentials and data "
+            "in cleartext over the network where they can be intercepted or "
+            "altered."),
+        "recommendation": (
+            "Use an encrypted transport (SFTP or FTPS) instead of FTP, and hold "
+            "credentials in the secure store rather than passing them in code."),
+    },
+]
+
 EXTRA_ABAP_RULES: List[Dict[str, Any]] = (
     AMDP_RULES + NATIVE_SQL_RULES + CDS_RULES + MISC_RULES
     + DYNAMIC_SQL_RULES + CROSS_CLIENT_RULES + AMDP_EXTRA_RULES
     + RAP_BDEF_RULES[2:] + DYNAMIC_TOKEN_EXTRA_RULES + INTERNAL_TABLE_RULES
+    + LEGACY_SINK_RULES
 )
 
 
