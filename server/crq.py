@@ -243,6 +243,50 @@ def compute_and_store(conn, run_id: int, landscape_id: int,
             "scenarios": len(summary.get("scenarios") or [])}
 
 
+def recompute_latest(landscape_id: int) -> Dict[str, Any]:
+    """Re-price the latest completed scan for a landscape, in place, no rescan.
+
+    The board /risk page reads the crq_result the LAST SCAN stored. Saving CRQ
+    answers on the /crq screen does not touch that stored row, so a freshly
+    answered estate still shows "no currency figure" until the next scan. This
+    closes that gap: it re-runs the exact same pricing (compute_and_store, which
+    reads the latest saved answers itself) against the findings already in the
+    database and replaces the stored result. The same idea as cmd_rederive_paths
+    does for attack paths.
+
+    WHY DELETE-THEN-INSERT. crq_result has no unique key on scan_run_id, so a
+    second compute_and_store on the same run would APPEND a duplicate portfolio
+    row and a second set of scenario rows, and the trend chart assumes one
+    portfolio row per run. The run's old rows are removed first, mirroring how
+    graph.store_paths rewrites a run's evidence.
+
+    Identity is preserved: the result stays attached to the SAME run_id and its
+    original started_at, so the trend point keeps the scan's date. The inputs
+    fingerprint changes (new answers/model version), so the console correctly
+    breaks the trend line at the re-priced point rather than drawing it as a
+    security improvement. revenue is NOT passed — sap_revenue comes from the saved
+    answers, exactly as on the scan path.
+
+    Returns the compute_and_store result, or {"computed": False, "reason": ...}
+    when there is no completed run to attribute the pricing to.
+    """
+    from server import queries
+    with db.pool().connection() as conn:
+        run = conn.execute(
+            "SELECT id FROM scan_run WHERE landscape_id = %s AND status = 'complete' "
+            "ORDER BY started_at DESC LIMIT 1", (landscape_id,)).fetchone()
+        if run is None:
+            return {"computed": False, "run_id": None,
+                    "reason": "no completed scan to re-price; run a scan first"}
+        run_id = run["id"]
+        findings = queries.findings_for_crq(None, landscape_id)
+        conn.execute("DELETE FROM crq_result WHERE scan_run_id = %s", (run_id,))
+        result = compute_and_store(conn, run_id, landscape_id, findings)
+        conn.commit()
+    result["run_id"] = run_id
+    return result
+
+
 # --------------------------------------------------------------------------- #
 #  Reads                                                                      #
 # --------------------------------------------------------------------------- #

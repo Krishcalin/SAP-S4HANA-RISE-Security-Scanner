@@ -43,7 +43,7 @@ arrivals somebody noticed.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 #: The catalogue's illustrative contact rate, from `data/fair_scenarios.json`'s
 #: own `_meta`. The denominator of the ratio, and the thing being replaced.
@@ -65,16 +65,35 @@ RULE_OF_THREE_BOUND = 3.0 / 3.0
 #: Answers this model understands. Deliberately short: every question a customer
 #: cannot answer is a question that gets guessed at, and a guess entered by the
 #: customer is still a guess — it has just acquired their name.
-ANSWERS = {
-    "observed_contacts_per_year": (
-        "Attempts against SAP seen in a year — blocked logons, rejected RFC "
-        "calls, gateway denials, WAF blocks in front of Fiori. From the SIEM, "
-        "the Security Audit Log or the reverse proxy. This is the one that "
-        "calibrates: it counts arrivals, not the arrivals somebody noticed."),
-    "sap_security_incidents_3y": (
-        "Material SAP security incidents in three years. A CROSS-CHECK, never "
-        "the frequency itself — see the zero trap in this module's docstring."),
-}
+#:
+#: Same shape as fair_loss_model.PARAMETERS (key/label/unit/group/help/feeds) so
+#: the /crq form renders these in their own "Threat Exposure" section with no
+#: frontend change — they answer "how OFTEN", which is what turns a loss
+#: magnitude into an ANNUAL figure, and the form had no field for them before.
+#: `feeds` is empty because these calibrate frequency rather than pricing a
+#: loss-magnitude module.
+FREQUENCY_PARAMETERS: List[Dict[str, Any]] = [
+    {"key": "observed_contacts_per_year",
+     "label": "Attack attempts against SAP seen in a year",
+     "unit": "count", "group": "Threat Exposure",
+     "help": "Attempts against SAP seen in a year — blocked logons, rejected RFC "
+             "calls, gateway denials, WAF blocks in front of Fiori. From the SIEM, "
+             "the Security Audit Log or the reverse proxy. This is the one that "
+             "calibrates: it counts arrivals, not the arrivals somebody noticed.",
+     "feeds": []},
+    {"key": "sap_security_incidents_3y",
+     "label": "Material SAP security incidents in the last three years",
+     "unit": "count", "group": "Threat Exposure",
+     "help": "A CROSS-CHECK on the figure above, never the frequency itself: a "
+             "count of material incidents that actually landed, used only to flag "
+             "when the model and your own experience disagree.",
+     "feeds": []},
+]
+
+#: Back-compat: ANSWERS stays a {key: help} dict (consumers import it, and
+#: crq.py imports it as FREQUENCY_KEYS and takes set() of its keys). Derived from
+#: the parameter list so the two can never drift.
+ANSWERS = {p["key"]: p["help"] for p in FREQUENCY_PARAMETERS}
 
 
 class Calibration(dict):

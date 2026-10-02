@@ -148,9 +148,16 @@ function Body({ view }: { view: RiskView }) {
     )
   }
 
-  // Attempted but not simulated. Saying so beats a blank page, which reads as
-  // "nothing to report".
-  if (crq.ale_p90 === null) {
+  // Attempted but not simulated BECAUSE THE ENGINE WAS NOT FOUND — a deployment
+  // fact, and the ONLY case this banner should claim. An engine that ran but
+  // produced no annual figure is a calibration gap (no frequency answers pop the
+  // annual figure even though the simulation ran), handled below with the "supply
+  // your figures" guidance. The old condition fired here for BOTH, so an
+  // uncalibrated landscape was told "the Monte-Carlo engine was not locatable" —
+  // reading as a broken install when the engine ran fine. engine_found is written
+  // on every row (true on the normal path, false only when no engine resolved);
+  // an older row without it is not treated as a missing engine.
+  if (crq.ale_p90 === null && crq.detail.engine_found === false) {
     return (
       <div className="banner banner-warn">
         <strong className="font-[650]">Scenario inputs were built but not simulated.</strong>{' '}
@@ -177,7 +184,13 @@ function Body({ view }: { view: RiskView }) {
   // correct: "we have no record of where this number came from" is not "it was
   // the customer's". The routing and the scenario table below still render,
   // because those are driven by findings and are real.
-  if (!isPriced(crq)) {
+  //
+  // `ale_p90 === null` also lands here now (the engine ran — a genuinely missing
+  // engine was caught above): no frequency answers means no annualised figure
+  // can be shown even when the loss side is priced, and the remedy is the same
+  // /crq screen, so the guidance and the findings-driven routing below are the
+  // right response rather than a blank or a false engine error.
+  if (!isPriced(crq) || crq.ale_p90 === null) {
     return (
       <>
         <div className="banner banner-warn">

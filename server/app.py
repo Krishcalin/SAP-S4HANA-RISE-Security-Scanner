@@ -769,7 +769,7 @@ def _extract(files: List[UploadFile], dest: Path) -> int:
 @app.post("/api/upload")
 async def api_upload(request: Request,
                      files: List[UploadFile] = File(...),
-                     landscape_id: int = Form(...),
+                     landscape_id: Optional[int] = Form(None),
                      system_id: Optional[int] = Form(None),
                      sid: Optional[str] = Form(None),
                      client: Optional[str] = Form(None),
@@ -777,6 +777,11 @@ async def api_upload(request: Request,
     if len(files) > settings.max_upload_files:
         raise HTTPException(413, f"too many files (max {settings.max_upload_files})")
 
+    # Single-landscape product: default to the one organization landscape when the
+    # caller does not name one (the upload screen no longer has a picker). An
+    # explicit id is still honoured for back-compat and the integrity guard below.
+    if landscape_id is None:
+        landscape_id = db.singleton_landscape_id()
     landscape = db.one("SELECT * FROM landscape WHERE id = %s", (landscape_id,))
     if landscape is None:
         raise HTTPException(404, "unknown landscape")
@@ -1132,6 +1137,21 @@ def api_landscapes(user: Dict[str, Any] = Depends(current_user)):
     return {"landscapes": queries.list_landscapes()}
 
 
+@app.get("/api/landscape")
+def api_landscape(user: Dict[str, Any] = Depends(current_user)):
+    """The single organization landscape this deployment assesses.
+
+    MonitorRisk is installed per company (on-prem / private cloud), so there is
+    exactly one landscape = the organization. This resolves it, creating the
+    default org landscape on first use, and is what the upload and risk screens
+    use in place of a landscape picker. Not scoped, matching /api/landscapes: a
+    landscape carries no findings of its own.
+    """
+    land_id = db.singleton_landscape_id()
+    return db.one("SELECT id, name, deployment_mode, rr_version FROM landscape "
+                  "WHERE id = %s", (land_id,))
+
+
 @app.get("/api/paths/{path_id}")
 def api_path(path_id: int, user: Dict[str, Any] = Depends(current_user)):
     """One path with its evidence, and which findings sit on a CUT hop.
@@ -1391,10 +1411,16 @@ def api_crq_parameters(landscape_id: int,
     duplicating that catalogue in TypeScript would let the two drift — at which
     point the screen would be explaining a model the server no longer runs.
     """
+    from modules import fair_frequency_model as freq_model
     from modules import fair_loss_model as loss_model
     latest = crq.latest_parameters(landscape_id)
     return {
-        "parameters": loss_model.PARAMETERS,
+        # Loss (magnitude) questions first, then the frequency questions. Both
+        # carry key/label/unit/group/help/feeds, so the form groups them into
+        # their sections (… Insurance, then "Threat Exposure") with no frontend
+        # change. The frequency fields are what let the model produce an ANNUAL
+        # figure rather than only a per-event magnitude.
+        "parameters": loss_model.PARAMETERS + freq_model.FREQUENCY_PARAMETERS,
         "mam_modules": {k: {"name": n, "kind": kind}
                         for k, (n, kind) in loss_model.MAM_MODULES.items()},
         "spread": dict(loss_model.SPREAD),
@@ -1418,7 +1444,23 @@ def api_crq_save_parameters(landscape_id: int = Form(...),
         raise HTTPException(status_code=400, detail="answers_json must be an object")
     new_id = crq.save_parameters(landscape_id, answers, currency, note,
                                  created_by=user.get("username"))
-    return {"id": new_id, "landscape_id": landscape_id}
+    # Saving re-prices the latest completed scan in place, so the board /risk page
+    # reflects the new figures immediately instead of only after the next scan.
+    # Best-effort: a landscape with no completed scan yet just records the answers.
+    recompute = crq.recompute_latest(landscape_id)
+    return {"id": new_id, "landscape_id": landscape_id, "recompute": recompute}
+
+
+@app.post("/api/crq/recompute")
+def api_crq_recompute(landscape_id: int = Form(...),
+                      user: Dict[str, Any] = Depends(require("analyst"))):
+    """Re-price the latest completed scan from the saved answers, with no rescan.
+
+    Analyst or above, mirroring the save endpoint: this writes the board number.
+    The /risk page and dashboard read the refreshed crq_result with no further
+    action. Returns computed:false (not an error) when there is no completed scan.
+    """
+    return crq.recompute_latest(landscape_id)
 
 
 @app.post("/api/crq/quantify")

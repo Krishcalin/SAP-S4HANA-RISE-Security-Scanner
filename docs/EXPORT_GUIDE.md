@@ -62,11 +62,11 @@ reason for each.
 
 ## Every source, including the ones this guide does not cover
 
-The scanner reads **148** logical sources. All of them now have a procedure: the
+The scanner reads **149** logical sources. All of them now have a procedure: the
 sections up to *SAP Cloud ALM* cover what a first scan needs, and
 [*The remaining sources*](#the-remaining-sources) below covers the rest.
 
-[**`EXPORT_SOURCES.md`**](EXPORT_SOURCES.md) lists all 148 — the filenames the
+[**`EXPORT_SOURCES.md`**](EXPORT_SOURCES.md) lists all 149 — the filenames the
 loader accepts, which checks each one feeds, and whether a procedure exists. It is
 generated from the code, so a source cannot be added to the scanner without
 appearing there, and it will show up as undocumented until somebody writes the
@@ -996,6 +996,41 @@ SAP's per-customer scoping, and the two are diffed independently.
 > every field the scanner reads (note number, CVE, component, title, link) is in
 > the exported table. No note number is ever invented: it comes from the Number
 > column, or is read out of the me.sap.com link.
+
+### Landscape profile (`landscape_profile.json`) — **declarative**
+**Source:** you. There is no SAP export for this — it is a short statement of
+which non-ABAP stacks your RISE landscape actually runs, and whether it is
+reachable from the internet.
+
+Also accepted: `landscape.json`
+
+Why it matters: an S/4HANA ABAP SNOTE export carries no patch evidence for the
+AS Java, BusinessObjects, BTP, Solution Manager, Commerce or SAP-for-Me stacks.
+A catalogue note for one of those stacks is therefore normally reported as an
+INFO disclosure the ABAP export "can neither confirm nor deny" (**HOTNEWS-005**).
+The moment you declare the stack present, that note stops being unassessable —
+the stack is confirmed to exist — and an actively-exploited or CVSS-critical note
+for it becomes a real item to verify (**HOTNEWS-017**), raised to CRITICAL when
+any such note is exploited in the wild or the landscape is internet-facing. This
+is the file that turns, for example, the Visual Composer line (CVE-2025-31324 /
+CVE-2025-42999 on AS Java) from a footnote into a tracked exposure.
+
+```json
+{
+  "stacks_present": ["java", "bi", "btp", "solman", "commerce", "me"],
+  "internet_facing": true
+}
+```
+
+| Key (any of) | Meaning |
+|---|---|
+| `stacks_present` | List of non-ABAP stacks present. Accepted names: `java`, `bi`, `btp`, `solman`, `commerce`, `me`. `abap` is always implied and ignored here. |
+| `java` · `java_stack` · `java_present` (and the same for each stack above) | Boolean form of the same declaration, if you prefer flags to a list |
+| `internet_facing` · `exposure` | Whether the landscape is reachable from the internet (`true`/`false`, or `internet`/`external`/`public`) |
+
+Declaring nothing is the safe default: with no profile, every non-ABAP note
+stays an INFO disclosure and nothing is elevated. Declaring a stack you do not
+run only adds items to verify — it never suppresses a finding.
 
 ## SAP HANA database exports (the `hana_db_security` module)
 

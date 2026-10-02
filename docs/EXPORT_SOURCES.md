@@ -8,7 +8,7 @@
 Every logical source the scanner can read, what it enables, and whether
 [`EXPORT_GUIDE.md`](EXPORT_GUIDE.md) tells you how to produce it.
 
-**148 logical sources, all of them with a written procedure** in the export
+**149 logical sources, all of them with a written procedure** in the export
 guide. This table is the regression detector for that: add a source to the loader
 without writing its procedure and it appears here as *not yet written*.
 
@@ -99,6 +99,7 @@ clean — see chapter 13 of the architecture guide.
 | `integration_alerts` | `integration_alerts.json`, `alert_config.json` | `integration_layer` | documented |
 | `integration_topology` | `integration_topology.json`, `system_map.json` | `integration_layer` | documented |
 | `key_management` | `key_management.json` | `crypto_posture` | documented |
+| `landscape_profile` | `landscape_profile.json`, `landscape.json` | `sap_hotnews` | documented |
 | `log_retention` | `log_retention.json` | `log_monitoring` | documented |
 | `logon_events` | `logon_events.csv`, `logon_stats.csv` | `log_monitoring`, `log_review` | documented |
 | `logserv_events` | `logserv_events.json`, `logserv.json`, `ocsf_events.json` | `log_review`, `logserv_review` | documented |

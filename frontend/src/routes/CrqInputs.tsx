@@ -20,15 +20,14 @@
  *     must not silently write that into the history the trend chart is drawn from.
  */
 import { useCallback, useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router'
 
 import {
-  ApiError, crqControls, crqParameters, crqQuantify, crqTrend, landscapes,
-  saveCrqParameters,
+  ApiError, crqControls, crqParameters, crqQuantify, crqTrend, orgLandscape,
+  recomputeCrq, saveCrqParameters,
 } from '../api/client'
 import type {
   CrqControlsView, CrqParameter, CrqParametersView, CrqQuantifyResult,
-  CrqTrendPoint, Landscape,
+  CrqTrendPoint,
 } from '../api/types'
 import { LossExceedance, RiskTrend } from '../components/CrqCharts'
 import {
@@ -67,9 +66,8 @@ function unitHint(unit: string): string {
 
 export function CrqInputs() {
   useTitle('Risk Quantification')
-  const [params, setParams] = useSearchParams()
-  const [scapes, setScapes] = useState<Landscape[] | null>(null)
-  const selected = Number(params.get('landscape') || 0)
+  // Single-landscape product: resolve the one organization landscape, no picker.
+  const [selected, setSelected] = useState(0)
   const [view, setView] = useState<CrqParametersView | null>(null)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [result, setResult] = useState<CrqQuantifyResult | null>(null)
@@ -81,28 +79,18 @@ export function CrqInputs() {
 
   useEffect(() => {
     let live = true
-    landscapes()
-      .then((ls) => {
-        if (!live) return
-        setScapes(ls)
-        if (!selected && ls.length) {
-          setParams({ landscape: String(ls[0].id) }, { replace: true })
-        }
-      })
+    orgLandscape()
+      .then((l) => { if (live) setSelected(l.id) })
       .catch((e: unknown) => {
-        // AN EMPTY LIST IS AN ANSWER; A FAILED REQUEST IS NOT.
-        // This used to swallow the error and set [], so a landscape endpoint
-        // that was down, forbidden or timing out rendered as "no landscapes" —
-        // the same could-not-look-reads-as-nothing-there the rest of this
-        // product spends its effort refusing to do.
+        // A FAILED REQUEST IS NOT AN EMPTY ESTATE. If the resolve fails, say so
+        // rather than render "nothing to quantify".
         if (!live) return
         const status = e instanceof ApiError ? e.status : 0
-        setScapes([])
-        setFailure(`The landscape list could not be loaded${status ? ` (HTTP ${status})` : ''}.`
-          + ' This screen cannot tell which estate to quantify — it is not that you have none.')
+        setFailure(`The organization landscape could not be resolved`
+          + `${status ? ` (HTTP ${status})` : ''}. This screen cannot tell which `
+          + `estate to quantify — it is not that you have none.`)
       })
     return () => { live = false }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -164,8 +152,17 @@ export function CrqInputs() {
     setFailure(null)
     saveCrqParameters(selected, numeric(), '')
       .then((r) => {
-        setSaved(`Saved as revision ${r.id}. Earlier revisions are kept, so any `
-          + `figure computed from them stays explainable.`)
+        // Saving also re-prices the latest completed scan server-side, so the
+        // board Risk page reflects these figures immediately. `recompute` says
+        // whether a completed scan existed to re-price.
+        const re = (r as { recompute?: { computed?: boolean } }).recompute
+        setSaved(`Saved as revision ${r.id}. `
+          + (re?.computed
+            ? 'The Risk page has been updated with these figures. '
+            : 'There is no completed scan to price yet — run a scan and the Risk '
+              + 'page will use these figures. ')
+          + 'Earlier revisions are kept, so any figure computed from them stays '
+          + 'explainable.')
         return crqParameters(selected).then(setView)
       })
       .catch((e: unknown) => {
@@ -173,6 +170,27 @@ export function CrqInputs() {
         setFailure(status === 403
           ? 'Your account may view these figures but not record a revision.'
           : `The revision could not be saved${status ? ` (HTTP ${status})` : ''}.`)
+      })
+      .finally(() => setBusy(false))
+  }
+
+  // Re-price the board Risk page from the LAST SAVED answers, no new revision.
+  // Useful after a fresh scan changed the findings, or to force /risk to refresh.
+  function recomputeStored() {
+    setBusy(true)
+    setFailure(null)
+    setSaved(null)
+    recomputeCrq(selected)
+      .then((r) => {
+        setSaved(r.computed
+          ? 'The Risk page has been re-priced from the saved figures.'
+          : `Nothing to re-price yet: ${r.reason ?? 'run a scan first'}.`)
+      })
+      .catch((e: unknown) => {
+        const status = e instanceof ApiError ? e.status : 0
+        setFailure(status === 403
+          ? 'Your account may view these figures but not re-price the board number.'
+          : `The Risk page could not be re-priced${status ? ` (HTTP ${status})` : ''}.`)
       })
       .finally(() => setBusy(false))
   }
@@ -194,39 +212,10 @@ export function CrqInputs() {
           ? 'Open findings, priced in your currency using the FAIR model. Every '
             + 'figure below is arithmetic on the numbers you supply — nothing '
             + 'here is a benchmark, an industry average, or a number we invented.'
-          : 'Answer as much of the question set below as you can, then Recompute. '
+          : 'Answer as much of the question set below as you can, then Save. '
             + 'Until you do, no currency figure is presented as this '
             + 'organisation’s exposure.'}
       </p>
-
-      {scapes && scapes.length > 1 && (
-        <div className="flex items-center gap-2.5 mb-4">
-          <label className="text-[12px] text-ink2" htmlFor="crq-landscape">
-            Landscape
-          </label>
-          <select
-            id="crq-landscape"
-            className="field"
-            value={selected || ''}
-            onChange={(e) => setParams({ landscape: e.target.value })}
-          >
-            {scapes.map((l) => (
-              <option key={l.id} value={l.id}>{l.name}</option>
-            ))}
-          </select>
-          <span className="text-[12px] text-ink3">
-            Financial figures are recorded per landscape — one estate, one set of
-            assumptions.
-          </span>
-        </div>
-      )}
-
-      {scapes && scapes.length === 0 && (
-        <div className="banner banner-warn">
-          There are no landscapes yet, so there is nothing to quantify. Create one
-          with <code>server.cli add-landscape</code> and upload a scan first.
-        </div>
-      )}
 
       {failure && <div className="banner banner-bad" role="alert">{failure}</div>}
       {saved && <div className="banner banner-ok">{saved}</div>}
@@ -239,16 +228,25 @@ export function CrqInputs() {
           <Questions view={view} answers={answers} setAnswers={setAnswers} />
 
           <div className="flex flex-wrap items-center gap-2.5 mt-4">
-            <button className="btn" onClick={recompute} disabled={busy}>
-              {busy ? 'Running…' : 'Recompute'}
+            <button className="btn" onClick={save} disabled={busy}>
+              {busy ? 'Working…' : 'Save & update Risk page'}
             </button>
-            <button className="btn btn-ghost" onClick={save} disabled={busy}>
-              Save as a revision
+            <button className="btn btn-ghost" onClick={recompute} disabled={busy}>
+              Preview figure
             </button>
-            <span className="text-[12px] text-ink3">
-              Recomputing changes nothing that is stored. Only saving does.
-            </span>
+            <button className="btn btn-ghost" onClick={recomputeStored} disabled={busy}>
+              Recompute Risk page
+            </button>
           </div>
+          <p className="text-[12px] text-ink3 mt-2 max-w-[80ch]">
+            <strong className="font-[650]">Preview</strong> shows a figure here
+            from the current answers without storing it.{' '}
+            <strong className="font-[650]">Save</strong> records the figures and
+            re-prices the board Risk page from them.{' '}
+            <strong className="font-[650]">Recompute Risk page</strong> re-prices
+            the Risk page from the last saved figures — useful after a new scan —
+            without recording a new revision.
+          </p>
 
           {view.latest && (
             <p className="text-[12px] text-ink3 mt-2.5">

@@ -696,6 +696,12 @@
       "how": "SLD content, or the transport-domain view in STMS",
       "basis": "application_layer"
     },
+    "landscape_profile": {
+      "state": "yes",
+      "how": "The customer's own declaration of which non-ABAP stacks (AS Java, BI, BTP, Solution Manager, Commerce, SAP-for-Me) the landscape runs and whether it is internet-facing — a short JSON file they author, not an SAP export",
+      "basis": "governance_artefact",
+      "note": "NOT AN SAP EXPORT. It is a statement the customer makes about their own landscape, so 'reachable' is always true: there is nothing to request from SAP. Absent means the elevation stays off and every non-ABAP catalogue note remains an INFO disclosure (HOTNEWS-005) rather than a declared-stack exposure (HOTNEWS-017)."
+    },
     "system_component": {
       "state": "yes",
       "how": "System > Status, or the component-level export SNOTE uses",

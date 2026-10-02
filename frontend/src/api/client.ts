@@ -271,6 +271,14 @@ export async function systems(): Promise<SapSystem[]> {
 export async function landscapes(): Promise<Landscape[]> {
   return (await get<{ landscapes: Landscape[] }>('/landscapes')).landscapes
 }
+/** The single organization landscape this deployment assesses (created on first
+ *  use). MonitorRisk is installed per company, so screens resolve this one
+ *  landscape instead of offering a picker. */
+export function orgLandscape(): Promise<
+  Pick<Landscape, 'id' | 'name' | 'deployment_mode' | 'rr_version'>
+> {
+  return get('/landscape')
+}
 
 // ══ findings ════════════════════════════════════════════════════════════════
 
@@ -511,6 +519,14 @@ export function saveCrqParameters(
     answers_json: JSON.stringify(answers),
     note,
   })
+}
+/** Re-price the latest completed scan from the saved answers, in place, so the
+ *  board /risk page reflects them without a full re-scan. `computed:false` (with
+ *  a reason) is a normal response when no scan has run yet, not an error. */
+export function recomputeCrq(
+  landscapeId: number,
+): Promise<{ computed: boolean; reason?: string; run_id: number | null }> {
+  return post('/crq/recompute', { landscape_id: String(landscapeId) })
 }
 export function crqQuantify(
   landscapeId: number, answers: Record<string, number> | null, simulations = 20000,
