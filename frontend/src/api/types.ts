@@ -1615,6 +1615,61 @@ export interface PerceivedThreatsView {
   totals: { threats: number; health: number; counts: Record<string, number> }
 }
 
+// Custom Code: the ABAP/custom-code posture, from GET /api/custom-code
+// (server/custom_code.py roll_up over queries.custom_code_findings). Native
+// scanner findings (ABAP-*) and imported SAP ATC/CVA verdicts (ATC-*), grouped
+// by weakness, with the worst objects and a scan coverage/trust section.
+export interface CustomCodeRow {
+  id: number
+  check_id: string
+  severity: string
+  priority_tier: string | null
+  title: string
+  object: string | null
+  sid: string | null
+  state: string
+  /** 'native' = our scanner, 'atc' = imported from SAP's ATC/CVA. */
+  provenance: 'native' | 'atc'
+  /** Taint verdict, native rules only: 'confirmed' | 'tentative' | null. */
+  confidence: string | null
+  /** true reachable from outside, false internal, null unknown. */
+  internet_exposed: boolean | null
+}
+export interface CustomCodeGroup {
+  id: string
+  label: string
+  blurb: string
+  cwe?: string | null
+  counts: Record<string, number>
+  total: number
+  native: number
+  atc: number
+  findings: CustomCodeRow[]
+}
+export interface CustomCodeObject {
+  name: string
+  total: number
+  counts: Record<string, number>
+  native: number
+  atc: number
+  worst: string | null
+}
+export interface CustomCodeView {
+  groups: CustomCodeGroup[]
+  health: CustomCodeGroup[]
+  objects: CustomCodeObject[]
+  measured: Measured | null
+  totals: {
+    findings: number
+    trust: number
+    objects: number
+    counts: Record<string, number>
+    provenance: { native: number; atc: number }
+    confidence: { confirmed: number; tentative: number; unknown: number }
+    exposure: { exposed: number; internal: number; unknown: number }
+  }
+}
+
 export interface SecurityDomain {
   id: string
   /** The buyer's word, verbatim. The honesty lives in `scope`. */

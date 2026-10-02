@@ -1,5 +1,5 @@
 import {
-  Calculator, CircleAlert, FileQuestion, ListOrdered, ScrollText, CircleDollarSign, Landmark, LayoutDashboard, LayoutGrid, Scissors, ShieldCheck, Siren, TrendingUp, Upload, UserCog, Waypoints, type LucideIcon,
+  Calculator, CircleAlert, FileCode2, FileQuestion, ListOrdered, ScrollText, CircleDollarSign, Landmark, LayoutDashboard, LayoutGrid, Scissors, ShieldCheck, Siren, TrendingUp, Upload, UserCog, Waypoints, type LucideIcon,
 } from 'lucide-react'
 import type { Role } from '../api/types'
 
@@ -56,6 +56,11 @@ export const NAV_MAIN: NavItem[] = [
   // each". The findings list cannot answer it — its first five rows can
   // all sit in one domain.
   { to: '/top-risks', label: 'Top5Risk', icon: ListOrdered },
+  // Directly under the finding roll-ups: the custom-code slice (our ABAP SAST plus
+  // the imported SAP ATC/CVA verdicts), grouped by weakness with the worst objects
+  // ranked. One category deep enough — a scanner, a statement lexer, taint — to
+  // earn its own roll-up rather than disappearing into the generic queue.
+  { to: '/custom-code', label: 'Custom Code', icon: FileCode2 },
   { to: '/crq', label: 'Quantify Risk', icon: Calculator },
   // Every framework this product maps. NIST CSF keeps its own entry below
   // because it has its own module and a Function-level screen; the other
