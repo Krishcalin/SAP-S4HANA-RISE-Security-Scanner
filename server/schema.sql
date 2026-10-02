@@ -2,19 +2,24 @@
 --  MonitorRisk — schema
 --  PostgreSQL 16
 --
---  SINGLE-TENANT PER DEPLOYMENT (decided 2026-08-05).
+--  SINGLE-ORGANIZATION PER DEPLOYMENT (single-tenant; decided 2026-08-05,
+--  made the product model 2026-10).
 --
---  One deployment serves one customer. There is deliberately no tenant_id
---  column: carrying one "just in case" invites row filters that are written
---  but never enforced, which is worse than not having the column.
+--  MonitorRisk is installed on-prem / private-cloud for ONE company, so a
+--  deployment assesses exactly one organization = one `landscape`. There is
+--  deliberately no tenant_id column: carrying one "just in case" invites row
+--  filters that are written but never enforced, which is worse than not having
+--  the column.
 --
---  Optionality is preserved cheaply instead, by the `landscape` level below.
---  A consultancy can hold several customers' landscapes in one deployment
---  today, and a future multi-tenant build is one ALTER plus a backfill from
---  landscape -> tenant, because every row already reaches a landscape through
---  sap_system. What that would NOT give us is cross-customer benchmarking,
---  which the research says not to promise anyway (a benchmark over a handful
---  of customers is fiction).
+--  The `landscape` table is NOT constrained to a single row, on purpose: a few
+--  row-scoping tests insert a second landscape to prove narrowing and isolation,
+--  and keeping the table plural-capable lets them. "One landscape" is therefore
+--  enforced at the application layer (db.singleton_landscape_id, and the upload /
+--  risk screens that resolve it) rather than by a DB constraint. Every row still
+--  reaches a landscape through sap_system, so a future multi-tenant build remains
+--  one ALTER plus a landscape -> tenant backfill — but cross-customer benchmarking
+--  is not a promise this product makes (a benchmark over a handful of customers
+--  is fiction).
 -- =====================================================================
 
 -- ---------------------------------------------------------------------

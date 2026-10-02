@@ -399,11 +399,15 @@ def api_risk(user: Dict[str, Any] = Depends(current_user)):
     Neither incumbent produces a currency figure at all, which makes this the
     cleanest differentiated screen in the product.
     """
+    # Single-landscape product: the board shows the ORGANIZATION's latest run, not
+    # the globally-latest across any stray landscape (a demo estate, leftover test
+    # data) that would otherwise hijack this screen.
     scope = auth.scope_for(user)
-    latest = crq.latest(scope)
+    land = db.singleton_landscape_id()
+    latest = crq.latest(scope, landscape_id=land)
     return {"portfolio": latest,
             "scenarios": crq.scenarios_for_run(latest["run_id"]) if latest else [],
-            "trend": crq.trend(scope)}
+            "trend": crq.trend(scope, landscape_id=land)}
 
 
 @app.get("/api/paths")
@@ -1035,7 +1039,8 @@ def api_set_state(finding_id: int, state: str = Form(...), reason: str = Form(""
 def api_dashboard(user: Dict[str, Any] = Depends(current_user)):
     """The landing screen's four panels, in one round trip."""
     scope = auth.scope_for(user)
-    latest_crq = crq.latest(scope)
+    # The organization's latest CRQ, same as the Risk board (not a stray landscape).
+    latest_crq = crq.latest(scope, landscape_id=db.singleton_landscape_id())
     return {
         "summary": queries.dashboard_summary(scope),
         "systems": queries.list_systems(scope),
@@ -1531,7 +1536,8 @@ def api_crq_trend(user: Dict[str, Any] = Depends(current_user), limit: int = 12)
     drawn straight through such a change asserts the two ends are comparable.
     They are not. Break the line where `inputs_fingerprint` changes.
     """
-    return {"points": crq.trend(auth.scope_for(user), limit=max(2, min(limit, 60)))}
+    return {"points": crq.trend(auth.scope_for(user), limit=max(2, min(limit, 60)),
+                                 landscape_id=db.singleton_landscape_id())}
 
 
 
