@@ -16,6 +16,19 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence
 
+from modules.mitre_mapping import map_mitre
+
+
+def _attack(check_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    """A slim ATT&CK tag for a row — technique (or None for tactic-only), its
+    name, the tactic and the confidence — or None when the check carries no
+    mapping. The LogServ families all map, so a threat row shows its technique."""
+    m = map_mitre(check_id)
+    if m.get("basis") is None:
+        return None
+    return {"technique": m.get("technique"), "technique_name": m.get("technique_name"),
+            "tactic": m.get("tactic"), "confidence": m.get("confidence")}
+
 #: Severity buckets, worst first.
 _SEVERITIES = ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")
 
@@ -123,6 +136,7 @@ def roll_up(findings: Sequence[Dict[str, Any]],
             "severity": f.get("severity"), "priority_tier": f.get("priority_tier"),
             "title": f.get("title"), "category": f.get("category"),
             "sid": f.get("sid"), "state": f.get("state"),
+            "attack": _attack(f.get("check_id")),
         })
         b["total"] += 1
         sev = str(f.get("severity") or "").upper()

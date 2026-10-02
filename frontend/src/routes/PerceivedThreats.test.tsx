@@ -29,7 +29,10 @@ function row(over: Record<string, unknown> = {}) {
   return {
     id: 1, check_id: 'LREV-PAT-001', severity: 'HIGH', priority_tier: 'P2',
     title: 'Off-hours privileged logon', category: 'Security Audit Log Review',
-    sid: 'PRD', state: 'open', ...over,
+    sid: 'PRD', state: 'open',
+    attack: { technique: 'T1078', technique_name: 'Valid Accounts',
+              tactic: 'Initial Access', confidence: 'high' },
+    ...over,
   }
 }
 function group(id: string, label: string, over: Record<string, unknown> = {}) {
@@ -51,7 +54,8 @@ function fullView(over: Record<string, unknown> = {}) {
       group('ingestion', 'LogServ ingestion health', {
         total: 1, counts: { ...ZERO, MEDIUM: 1 },
         findings: [row({ id: 2, check_id: 'LSRV-COV-001', severity: 'MEDIUM',
-                         priority_tier: 'P3', title: 'Gateway log not forwarded' })],
+                         priority_tier: 'P3', title: 'Gateway log not forwarded',
+                         attack: null })],
       }),
       group('audit_coverage', 'Audit-log coverage'),
     ],
@@ -82,6 +86,8 @@ describe('Perceived Threats', () => {
     expect(await screen.findByText(/Off-hours privileged logon/)).toBeInTheDocument()
     expect(screen.getByText('Audit-log behaviour')).toBeInTheDocument()
     expect(screen.getByText('P2')).toBeInTheDocument()
+    // the MITRE ATT&CK technique badge for this observed behaviour
+    expect(screen.getByText('T1078')).toBeInTheDocument()
   })
 
   it('renders the LogServ coverage & health section with its own findings', async () => {
