@@ -138,7 +138,7 @@ clean — see chapter 13 of the architecture guide.
 | `saprouttab` | `saprouttab.csv`, `route_permission.csv` | `system_trust` | documented · not obtainable in RISE |
 | `secure_store` | `secure_store.csv`, `abap_secstore_info.csv`, `secstore.csv` | `crypto_posture` | documented |
 | `security_audit_log` | `security_audit_log.csv`, `sm19_filters.csv` | `ecs_config_items`, `log_monitoring`, `log_review` | documented |
-| `security_params` | `security_params.csv`, `rsparam.csv`, `profile_params.csv` | `abap_authorizations`, `baseline_params`, `crypto_posture`, `data_protection`, `log_monitoring`, `security_params`, `snc_posture`, `system_trust` | documented |
+| `security_params` | `security_params.csv`, `rsparam.csv`, `profile_params.csv` | `abap_authorizations`, `baseline_params`, `crypto_posture`, `data_protection`, `log_monitoring`, `sap_hotnews`, `security_params`, `snc_posture`, `system_trust` | documented |
 | `security_policies` | `security_policies.csv`, `secpol.csv`, `secpolattr.csv` | `security_params` | documented |
 | `sensitive_fields` | `sensitive_fields.csv`, `pii_fields.csv` | `data_protection` | documented |
 | `siem_config` | `siem_config.json` | `log_monitoring` | documented |
