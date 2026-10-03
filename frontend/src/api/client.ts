@@ -566,6 +566,14 @@ export function complianceDrift(framework: string): Promise<ControlDriftView> {
   return get<ControlDriftView>(`/compliance/${encodeURIComponent(framework)}/drift`)
 }
 
+/** The per-control evidence pack is a DOWNLOAD, not data: the endpoint returns an
+ *  HTML file as an attachment, so a plain <a href> fetches it with the session
+ *  cookie (same-origin) and the browser saves it. This lives here so API paths
+ *  stay in one place even when the consumer is an anchor rather than `fetch`. */
+export function evidencePackHref(framework: string): string {
+  return `${API_BASE}/compliance/${encodeURIComponent(framework)}/evidence-pack.html`
+}
+
 // ══ Top risks, per domain ═══════════════════════════════════════════════════
 //
 // A DIFFERENT QUESTION FROM `findings()`, which answers "what is worst in the

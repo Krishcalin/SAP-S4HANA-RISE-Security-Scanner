@@ -190,3 +190,43 @@ def build(scope: Optional[Sequence[int]], fmt: str) -> bytes:
             PPTXReportGenerator(findings, meta, kb,
                                 full_findings=findings).generate(str(out))
         return out.read_bytes()
+
+
+#: The evidence pack is one HTML file, served as a download. It is deliberately not
+#: in FORMATS: that is the estate-wide findings report (pdf/pptx), and this is a
+#: per-FRAMEWORK, per-control document with a different input and a different shape.
+EVIDENCE_PACK_MEDIA_TYPE = "text/html; charset=utf-8"
+
+
+def build_evidence_pack(scope: Optional[Sequence[int]],
+                        framework_id: str) -> Optional[bytes]:
+    """The per-control audit evidence for one framework, as a standalone HTML file.
+
+    Returns None when the framework is unknown, so the caller answers 404 rather
+    than shipping an empty document. Reuses EXACTLY what the /evidence and /drift
+    endpoints read — the report finding projection, the latest coverage manifest,
+    and the previous complete scan — so a downloaded pack cannot disagree with the
+    screen it mirrors. Status and drift are decided in modules.control_status; this
+    only renders what they return, so the honest-by-construction guarantees (clear
+    is not compliant, not-tested stays distinct, no percentage, drift recomputed at
+    both scans) hold here too.
+    """
+    from modules import control_status, evidence_pack
+
+    findings = findings_for_report(scope)
+    coverage = queries.latest_coverage(scope)
+    assessed = control_status.assess_framework(framework_id, findings, coverage)
+    if assessed is None:
+        return None
+
+    before_findings, before_cov = queries.previous_scan(scope)
+    drifted = control_status.drift(framework_id, findings, coverage,
+                                   before_findings, before_cov)
+
+    systems = queries.list_systems(scope)
+    meta = {
+        "generated": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
+        "scope": "the whole estate" if scope is None else f"{len(scope)} system(s)",
+        "systems": len(systems),
+    }
+    return evidence_pack.render(assessed, drifted, meta).encode("utf-8")

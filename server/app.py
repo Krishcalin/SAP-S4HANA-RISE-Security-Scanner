@@ -1430,6 +1430,29 @@ def api_compliance_drift(framework: str,
     return result
 
 
+@app.get("/api/compliance/{framework}/evidence-pack.html")
+def api_compliance_evidence_pack(framework: str,
+                                 user: Dict[str, Any] = Depends(current_user)):
+    """The per-control evidence (status + drift + the findings that prove each gap)
+    for one framework, as a self-contained HTML file an auditor keeps.
+
+    The on-screen ComplianceEvidence view as a downloadable document — same data,
+    same promises: clear is an observation not a certification, not-tested stays a
+    distinct state, no percentage, drift recomputed at both scans. Scoped like
+    every other read; returned as an attachment so a browser downloads it rather
+    than rendering it in place.
+    """
+    scope = auth.scope_for(user)
+    payload = export.build_evidence_pack(scope, framework)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="unknown compliance framework")
+    return Response(
+        content=payload,
+        media_type=export.EVIDENCE_PACK_MEDIA_TYPE,
+        headers={"Content-Disposition":
+                 f'attachment; filename="monitorrisk-evidence-{framework}.html"'})
+
+
 @app.get("/api/csf/{function_id}")
 def api_csf_function(function_id: str,
                      user: Dict[str, Any] = Depends(current_user)):
