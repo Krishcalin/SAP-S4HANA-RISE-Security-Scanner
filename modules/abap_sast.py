@@ -1964,7 +1964,67 @@ class RiseTaintAnalyzer(TaintAnalyzer):
                 }
                 if ev.file and ev.file != self._artefact:
                     hop["file"] = ev.file
+                else:
+                    # Same artefact: chase the actual back to how it became
+                    # tainted in the caller — a nested, bounded sub-trace of real
+                    # statements, so the reader sees the whole path, not just the
+                    # one PERFORM in front of them. A cross-file caller is left as
+                    # the single hop: its source text is not in this analyser.
+                    sub = self._caller_subchain(ev.actual or name, ev.line,
+                                                1, set())
+                    if sub:
+                        hop["caller_flow"] = sub
                 out.append(hop)
+            out.append(step)
+        return out
+
+    #: How many caller hops deep the evidence sub-trace chases a value. Small on
+    #: purpose: a reviewer reads a handful of hops, and the walk is bounded and
+    #: single-pass (no fixpoint), exactly as the call graph's charter permits.
+    _MAX_CALLER_DEPTH = 4
+
+    def _caller_subchain(self, actual: str, call_line: int, depth: int,
+                         visited: set) -> List[Dict[str, Any]]:
+        """How ``actual`` — the value a caller passed at ``call_line`` — became
+        tainted in that caller, as a nested sub-trace of REAL statements.
+
+        It reuses the base intra-procedural walk over the caller's own scope (this
+        analyser already holds the whole artefact), drops the walk's synthetic
+        terminal sink (that point IS the call hop above this sub-chain), and, where
+        the value is itself a caller-tainted parameter, recurses to prepend the
+        next call hop. Bounded by depth and a visited set; SAME ARTEFACT ONLY.
+
+        It never invents a step: every entry names a statement that exists, and an
+        actual that is non-literal but not provably a source there adds nothing
+        beyond the call hop already shown.
+        """
+        if depth >= self._MAX_CALLER_DEPTH or not actual:
+            return []
+        key = (str(actual).lower(), call_line)
+        if key in visited:
+            return []
+        visited = visited | {key}
+        base = super()._trace_var(str(actual), call_line)
+        if (base and base[-1].get("role") == "sink"
+                and base[-1].get("line") == call_line):
+            base = base[:-1]        # the pass point, already shown as the call hop
+        out: List[Dict[str, Any]] = []
+        for step in base:
+            if step.get("role") == "source":
+                nm = str(step.get("var") or "").lower()
+                ev = self._param_evidence.get((step.get("line"), nm))
+                if (ev is not None and ev.verdict == CALLER_TAINTED and ev.line
+                        and (not ev.file or ev.file == self._artefact)):
+                    sub_hop: Dict[str, Any] = {
+                        "line": ev.line, "role": "call",
+                        "var": ev.actual or nm,
+                        "code": ev.code or self._raw_line(ev.line),
+                    }
+                    deeper = self._caller_subchain(ev.actual or nm, ev.line,
+                                                   depth + 1, visited)
+                    if deeper:
+                        sub_hop["caller_flow"] = deeper
+                    out.append(sub_hop)
             out.append(step)
         return out
 

@@ -1650,6 +1650,13 @@ export interface TopRisksView {
 
 // ── Perceived Threats (server/perceived_threats.py roll_up) ───────────────────
 /** One finding observed from SAP LogServ, as roll_up projects it. */
+export interface AttackTag {
+  /** ATT&CK technique id (e.g. "T1562.001"), or null for a tactic-only mapping. */
+  technique: string | null
+  technique_name: string | null
+  tactic: string
+  confidence: string
+}
 export interface ThreatRow {
   id: number
   check_id: string
@@ -1659,6 +1666,8 @@ export interface ThreatRow {
   category: string | null
   sid: string | null
   state: string
+  /** MITRE ATT&CK mapping for this observed-behaviour detection, or null. */
+  attack: AttackTag | null
 }
 /** A log-class group (or a health group), with its severity counts and rows. */
 export interface ThreatGroup {
@@ -1730,6 +1739,36 @@ export interface CustomCodeView {
     confidence: { confirmed: number; tentative: number; unknown: number }
     exposure: { exposed: number; internal: number; unknown: number }
   }
+}
+
+// Vulnerabilities / Mis-Configuration lenses, from GET /api/vulnerabilities and
+// /api/misconfiguration (server/finding_classes.py roll_up over the same finding
+// projection the domains screen uses). A partition of findings by check-id
+// prefix + category; SoD, compliance, governance, log observations and meta are
+// in neither.
+export interface PostureRow {
+  id: number
+  check_id: string
+  severity: string
+  priority_tier: string | null
+  title: string
+  category: string | null
+  sid: string | null
+  state: string
+}
+export interface PostureGroup {
+  id: string
+  label: string
+  blurb: string
+  counts: Record<string, number>
+  total: number
+  findings: PostureRow[]
+}
+export interface PostureView {
+  kind: 'vulnerability' | 'misconfiguration'
+  groups: PostureGroup[]
+  measured: Measured | null
+  totals: { findings: number; counts: Record<string, number> }
 }
 
 export interface SecurityDomain {

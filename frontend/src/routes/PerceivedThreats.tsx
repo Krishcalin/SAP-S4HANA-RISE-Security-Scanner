@@ -49,6 +49,13 @@ function Row({ f }: { f: ThreatRow }) {
       </span>
       <span className="min-w-0">
         <Link className={LINK} to={`/findings/${f.id}`}>{f.title}</Link>
+        {f.attack && (
+          <span className="ml-2 align-middle text-[10px] font-mono px-1.5 py-0.5 rounded border border-line text-ink3"
+                title={`MITRE ATT&CK: ${f.attack.technique_name ?? f.attack.tactic}`
+                  + ` · ${f.attack.tactic} · confidence ${f.attack.confidence}`}>
+            {f.attack.technique ?? f.attack.tactic}
+          </span>
+        )}
         <span className="block text-[11px] text-ink3 font-mono truncate">
           {f.check_id}{f.sid ? <> · {f.sid}</> : null}
         </span>

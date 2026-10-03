@@ -111,6 +111,8 @@ _SCREEN_ENDPOINTS = [
     ("/api/compliance/soxitgc/evidence", ("id", "name", "subtitle", "controls", "totals")),
     ("/api/compliance/soxitgc/drift", ("id", "name", "has_baseline", "controls", "totals")),
     ("/api/custom-code", ("groups", "health", "objects", "measured", "totals")),
+    ("/api/vulnerabilities", ("kind", "groups", "measured", "totals")),
+    ("/api/misconfiguration", ("kind", "groups", "measured", "totals")),
     ("/api/paths", ("summary", "paths", "chokepoints", "closed",
                     "template_count")),                                 # was /paths
     ("/api/coverage", ("requirements_published", "requirements_covered",
