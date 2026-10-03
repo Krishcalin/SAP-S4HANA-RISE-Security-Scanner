@@ -125,6 +125,12 @@
       "how": "STMS",
       "basis": "section_3"
     },
+    "transport_objects": {
+      "state": "yes",
+      "how": "SE16/SE16N on E070 (request headers) and E071 (object entries); SE09/SE10 object list per request",
+      "note": "The object directory is application-layer content the customer reads from their own ABAP system; the transport domain setup around it is SAP's.",
+      "basis": "application_layer"
+    },
     "custom_code_scan": {
       "state": "yes",
       "how": "ATC / Code Vulnerability Analyzer result export",

@@ -34,6 +34,7 @@ from modules.btp_cloud_surface import BtpCloudSurfaceAuditor
 from modules.integration_layer import IntegrationLayerAuditor
 from modules.data_protection import DataProtectionAuditor
 from modules.code_transport import CodeTransportAuditor
+from modules.transport_content import TransportContentAuditor
 from modules.atc_import import AtcImportAuditor
 from modules.abap_sast import AbapSastAuditor
 from modules.log_monitoring import LogMonitoringAuditor
@@ -455,6 +456,14 @@ def main():
     if "codetrans" in run_modules:
         print("[*] Running Code & Transport Security Checks...")
         auditor = CodeTransportAuditor(data, baseline_overrides, run_ctx)
+        findings = auditor.run_all_checks()
+        all_findings.extend(findings)
+        print(f"    Found {len(findings)} issue(s)")
+
+    # --- Transport content (what each transport carries: E070/E071) ---
+    if "transobj" in run_modules:
+        print("[*] Running Transport Content Checks...")
+        auditor = TransportContentAuditor(data, baseline_overrides, run_ctx)
         findings = auditor.run_all_checks()
         all_findings.extend(findings)
         print(f"    Found {len(findings)} issue(s)")

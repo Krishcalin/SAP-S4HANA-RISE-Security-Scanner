@@ -8,7 +8,7 @@
 Every logical source the scanner can read, what it enables, and whether
 [`EXPORT_GUIDE.md`](EXPORT_GUIDE.md) tells you how to produce it.
 
-**149 logical sources, all of them with a written procedure** in the export
+**150 logical sources, all of them with a written procedure** in the export
 guide. This table is the regression detector for that: add a source to the loader
 without writing its procedure and it appears here as *not yet written*.
 
@@ -154,7 +154,8 @@ clean — see chapter 13 of the architecture guide.
 | `table_logging` | `table_logging.csv`, `dd09l.csv` | `log_monitoring` | documented |
 | `tls_config` | `tls_config.csv`, `icm_ssl.csv` | `crypto_posture` | documented |
 | `tolerance_groups` | `tolerance_groups.csv`, `t043t.csv`, `oba4.csv` | `financial_controls` | documented |
-| `transport_history` | `transport_history.csv`, `stms_log.csv`, `import_history.csv` | `code_transport` | documented |
+| `transport_history` | `transport_history.csv`, `stms_log.csv`, `import_history.csv` | `code_transport`, `transport_content` | documented |
+| `transport_objects` | `transport_objects.csv`, `e071.csv`, `e070.csv` | `transport_content` | documented |
 | `transport_routes` | `transport_routes.csv`, `tms_routes.csv` | `code_transport` | documented |
 | `transports` | `transports.csv`, `se09.csv` | `network_services` | documented |
 | `ucon_http_allowlist` | `ucon_http_allowlist.csv`, `http_whitelist.csv`, `abap_ucon_http_white_list.csv` | `ucon_exposure` | documented |
