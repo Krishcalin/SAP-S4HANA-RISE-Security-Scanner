@@ -109,6 +109,7 @@ _SCREEN_ENDPOINTS = [
     ("/api/risk", ("portfolio", "scenarios", "trend")),                 # was /risk
     ("/api/perceived-threats", ("groups", "health", "measured", "totals")),
     ("/api/compliance/soxitgc/evidence", ("id", "name", "subtitle", "controls", "totals")),
+    ("/api/compliance/soxitgc/drift", ("id", "name", "has_baseline", "controls", "totals")),
     ("/api/custom-code", ("groups", "health", "objects", "measured", "totals")),
     ("/api/paths", ("summary", "paths", "chokepoints", "closed",
                     "template_count")),                                 # was /paths

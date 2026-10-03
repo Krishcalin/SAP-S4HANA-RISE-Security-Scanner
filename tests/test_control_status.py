@@ -91,3 +91,46 @@ def test_gaps_sort_before_clear_and_worst_first():
     # the GAP control (APD) comes before any non-gap one
     assert statuses.index(cs.GAP) < min(
         (i for i, s in enumerate(statuses) if s != cs.GAP), default=len(statuses))
+
+
+# ── drift ────────────────────────────────────────────────────────────────────
+
+def _apd(r):
+    return next(c for c in r["controls"] if c["id"] == "APD")
+
+
+def test_drift_remediated_when_a_gap_clears():
+    # before: APD had the AUTH gap; now: it is gone and the checks looked.
+    r = cs.drift("soxitgc", [], None, [_AUTH_GAP], None)
+    apd = _apd(r)
+    assert apd["was"] == cs.GAP and apd["status"] == cs.CLEAR
+    assert apd["change"] == cs.REMEDIATED
+    assert r["has_baseline"] is True
+
+
+def test_drift_newly_failing_when_a_clear_control_gains_a_finding():
+    r = cs.drift("soxitgc", [_AUTH_GAP], None, [], None)
+    assert _apd(r)["change"] == cs.NEWLY_FAILING
+
+
+def test_drift_stopped_testing_when_coverage_drops():
+    # before: clear (coverage unknown -> looked); now: nothing ran -> not tested.
+    r = cs.drift("soxitgc", [], {"modules": {}}, [], None)
+    assert _apd(r)["change"] == cs.STOPPED_TESTING
+
+
+def test_drift_reports_no_baseline_when_there_is_no_previous_scan():
+    r = cs.drift("soxitgc", [_AUTH_GAP], None, None, None)
+    assert r["has_baseline"] is False
+    assert all(c["change"] == cs.NO_BASELINE for c in r["controls"])
+    assert r["totals"]["by_change"][cs.NO_BASELINE] == r["totals"]["controls"]
+
+
+def test_drift_unknown_framework_is_none():
+    assert cs.drift("not-a-framework", [], None, [], None) is None
+
+
+def test_drift_orders_actionable_changes_first():
+    # one newly-failing (APD gains a gap), everything else unchanged.
+    r = cs.drift("soxitgc", [_AUTH_GAP], None, [], None)
+    assert r["controls"][0]["change"] == cs.NEWLY_FAILING

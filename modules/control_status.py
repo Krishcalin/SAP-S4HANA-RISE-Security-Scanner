@@ -148,3 +148,76 @@ def assess_framework(framework_id: str, findings: Sequence[Dict[str, Any]],
             "measured": (coverage or {}).get("measured"),
         },
     }
+
+
+# ── Control drift: how each control's status changed since the previous scan ──
+NEWLY_FAILING = "newly_failing"      # was clear / not-tested, now a gap
+REMEDIATED = "remediated"            # was a gap, now clear
+STILL_FAILING = "still_failing"      # a gap at both scans
+STOPPED_TESTING = "stopped_testing"  # was gap / clear, now not-tested (coverage dropped)
+STARTED_TESTING = "started_testing"  # was not-tested, now gap / clear
+UNCHANGED = "unchanged"
+NO_BASELINE = "no_baseline"          # no previous complete scan to compare against
+
+_CHANGE_ORDER = {NEWLY_FAILING: 0, STOPPED_TESTING: 1, STILL_FAILING: 2,
+                 REMEDIATED: 3, STARTED_TESTING: 4, UNCHANGED: 5, NO_BASELINE: 6}
+
+
+def _classify_change(was: Optional[str], now: str) -> str:
+    if was is None:
+        return NO_BASELINE
+    if was == now:
+        return STILL_FAILING if now == GAP else UNCHANGED
+    if now == GAP:
+        return NEWLY_FAILING
+    if was == GAP and now == CLEAR:
+        return REMEDIATED
+    if now == NOT_TESTED:
+        return STOPPED_TESTING
+    if was == NOT_TESTED:
+        return STARTED_TESTING
+    return UNCHANGED
+
+
+def drift(framework_id: str,
+          now_findings: Sequence[Dict[str, Any]],
+          now_coverage: Optional[Dict[str, Any]],
+          before_findings: Optional[Sequence[Dict[str, Any]]],
+          before_coverage: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Per-control status change between the previous scan and now, or None if the
+    framework is unknown.
+
+    `before_findings` is None when there is no previous complete scan to compare
+    against — every control then reports NO_BASELINE rather than a fabricated
+    "newly failing". Status at each scan is recomputed with its own coverage
+    manifest, so a control that changed only because an export stopped arriving
+    reads as `stopped_testing`, not a remediation or a new gap.
+    """
+    now = assess_framework(framework_id, now_findings, now_coverage)
+    if now is None:
+        return None
+    has_baseline = before_findings is not None
+    before = (assess_framework(framework_id, before_findings, before_coverage)
+              if has_baseline else None)
+    was_status = {c["id"]: c["status"] for c in (before["controls"] if before else [])}
+
+    tally = {k: 0 for k in _CHANGE_ORDER}
+    controls: List[Dict[str, Any]] = []
+    for c in now["controls"]:
+        was = was_status.get(c["id"]) if has_baseline else None
+        change = _classify_change(was, c["status"]) if has_baseline else NO_BASELINE
+        tally[change] += 1
+        controls.append({"id": c["id"], "name": c["name"],
+                         "status": c["status"], "was": was, "change": change})
+    controls.sort(key=lambda c: (_CHANGE_ORDER.get(c["change"], 9), c["id"]))
+
+    return {
+        "id": now["id"], "name": now["name"], "subtitle": now["subtitle"],
+        "has_baseline": has_baseline,
+        "controls": controls,
+        "totals": {
+            "controls": len(controls),
+            "by_change": tally,
+            "measured": (now_coverage or {}).get("measured"),
+        },
+    }

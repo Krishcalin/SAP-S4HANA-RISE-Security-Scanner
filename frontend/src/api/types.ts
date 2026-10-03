@@ -1415,6 +1415,31 @@ export interface ControlEvidenceView {
   }
 }
 
+// Control drift, from GET /api/compliance/{framework}/drift — how each control's
+// status changed since the previous complete scan.
+export type ControlChange =
+  'newly_failing' | 'remediated' | 'still_failing'
+  | 'stopped_testing' | 'started_testing' | 'unchanged' | 'no_baseline'
+export interface ControlDriftEntry {
+  id: string
+  name: string
+  status: ControlStatus
+  was: ControlStatus | null
+  change: ControlChange
+}
+export interface ControlDriftView {
+  id: string
+  name: string
+  subtitle: string
+  has_baseline: boolean
+  controls: ControlDriftEntry[]
+  totals: {
+    controls: number
+    by_change: Record<ControlChange, number>
+    measured: Measured | null
+  }
+}
+
 export interface CsfView {
   measured: Measured | null
   framework: string

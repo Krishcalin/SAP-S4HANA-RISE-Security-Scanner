@@ -37,6 +37,7 @@ import type {
   RemediationPlan,
   ComplianceView,
   ControlEvidenceView,
+  ControlDriftView,
   CsfView, Dashboard, DomainsView, FindingDetail, FindingFilters, TopRisksView,
   CustomCodeView,
   PerceivedThreatsView,
@@ -558,6 +559,10 @@ export function compliance(): Promise<ComplianceView> {
 
 export function complianceEvidence(framework: string): Promise<ControlEvidenceView> {
   return get<ControlEvidenceView>(`/compliance/${encodeURIComponent(framework)}/evidence`)
+}
+
+export function complianceDrift(framework: string): Promise<ControlDriftView> {
+  return get<ControlDriftView>(`/compliance/${encodeURIComponent(framework)}/drift`)
 }
 
 // ══ Top risks, per domain ═══════════════════════════════════════════════════

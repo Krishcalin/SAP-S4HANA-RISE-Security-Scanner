@@ -11,9 +11,11 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const complianceEvidence = vi.fn()
+const complianceDrift = vi.fn()
 
 vi.mock('../api/client', () => ({
   complianceEvidence: (...a: unknown[]) => complianceEvidence(...a),
+  complianceDrift: (...a: unknown[]) => complianceDrift(...a),
   ApiError: class ApiError extends Error {
     status: number
     constructor(status: number, message: string) { super(message); this.status = status }
@@ -45,6 +47,26 @@ function view(over: Record<string, unknown> = {}) {
   }
 }
 
+function driftView(over: Record<string, unknown> = {}) {
+  return {
+    id: 'soxitgc', name: 'SOX / ITGC', subtitle: 'IT general-control domains',
+    has_baseline: true,
+    controls: [
+      { id: 'APD', name: 'Access to Programs and Data', status: 'gap',
+        was: 'clear', change: 'newly_failing' },
+      { id: 'CO', name: 'Computer Operations', status: 'clear', was: 'clear',
+        change: 'unchanged' },
+      { id: 'PC', name: 'Program Changes', status: 'not_tested', was: 'not_tested',
+        change: 'unchanged' },
+    ],
+    totals: { controls: 3, measured: null,
+              by_change: { newly_failing: 1, remediated: 0, still_failing: 0,
+                           stopped_testing: 0, started_testing: 0, unchanged: 2,
+                           no_baseline: 0 } },
+    ...over,
+  }
+}
+
 function draw() {
   return render(
     <MemoryRouter initialEntries={['/compliance/soxitgc']}>
@@ -55,7 +77,10 @@ function draw() {
   )
 }
 
-beforeEach(() => { vi.clearAllMocks() })
+beforeEach(() => {
+  vi.clearAllMocks()
+  complianceDrift.mockResolvedValue(driftView())
+})
 
 describe('Compliance evidence', () => {
   it('shows a gap control with its finding evidence', async () => {
@@ -75,6 +100,14 @@ describe('Compliance evidence', () => {
     expect(screen.getAllByText('Not tested').length).toBeGreaterThan(0)
     // the standing honesty sentence
     expect(screen.getByText(/Clear is not a certification/)).toBeInTheDocument()
+  })
+
+  it('summarises control drift since the previous scan and badges the change', async () => {
+    complianceEvidence.mockResolvedValue(view())
+    complianceDrift.mockResolvedValue(driftView())
+    draw()
+    expect(await screen.findByText(/Since the previous scan/)).toBeInTheDocument()
+    expect(screen.getByText(/↑ newly failing/)).toBeInTheDocument()
   })
 
   it('reports an unknown framework', async () => {

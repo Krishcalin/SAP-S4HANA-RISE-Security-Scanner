@@ -1402,6 +1402,28 @@ def api_compliance_evidence(framework: str,
     return result
 
 
+@app.get("/api/compliance/{framework}/drift")
+def api_compliance_drift(framework: str,
+                         user: Dict[str, Any] = Depends(current_user)):
+    """How each control's status changed since the PREVIOUS complete scan —
+    newly failing, remediated, still failing, stopped / started testing.
+
+    Continuous controls monitoring, offline edition. Status is recomputed at both
+    scans with that scan's own coverage, so a control that changed only because an
+    export stopped arriving reads as 'stopped testing', not a remediation or a new
+    gap. When no system in scope has a second complete scan yet, every control is
+    'no baseline' rather than a fabricated change.
+    """
+    scope = auth.scope_for(user)
+    before_findings, before_cov = queries.previous_scan(scope)
+    result = control_status.drift(
+        framework, export.findings_for_report(scope),
+        queries.latest_coverage(scope), before_findings, before_cov)
+    if result is None:
+        raise HTTPException(status_code=404, detail="unknown compliance framework")
+    return result
+
+
 @app.get("/api/csf/{function_id}")
 def api_csf_function(function_id: str,
                      user: Dict[str, Any] = Depends(current_user)):
