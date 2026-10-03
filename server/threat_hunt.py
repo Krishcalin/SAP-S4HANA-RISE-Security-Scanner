@@ -52,13 +52,24 @@ def _catalog() -> Dict[str, Any]:
     return {k: v for k, v in doc.items() if k != "_meta"}
 
 
-def _exploited_missing(findings: Sequence[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
-    """Note number -> {note, cvss} for every actively-exploited missing note, read
-    from the per-note facts sap_hotnews stamps into the missing-note findings.
-    Deduped across HOTNEWS-001/002/003 (a note appears on the priority finding and
-    the exploited one)."""
+# HOTNEWS-005 is the "this export can neither confirm nor deny" disclosure for
+# adjacent-stack notes the customer has NOT declared present. Facts stamped there
+# are exploited notes we cannot place in the estate — real exposure only if the
+# stack exists, which we cannot claim. So they feed the "declare to assess" list,
+# never the huntable threats. Every other finding (HOTNEWS-001/002/003 = ABAP
+# missing, HOTNEWS-017 = declared-stack present) is genuine exposure.
+_UNASSESSABLE_CHECK = "HOTNEWS-005"
+
+
+def _collect_exploited(findings: Sequence[Dict[str, Any]],
+                       unassessable: bool) -> Dict[str, Dict[str, Any]]:
+    """Exploited-note facts, from EITHER the genuinely-exposed findings
+    (unassessable=False: ABAP-missing + declared-stack) OR the unassessable
+    HOTNEWS-005 disclosure (unassessable=True). Deduped by note number."""
     out: Dict[str, Dict[str, Any]] = {}
     for f in findings:
+        if (f.get("check_id") == _UNASSESSABLE_CHECK) != unassessable:
+            continue
         for fact in (f.get("details") or {}).get("missing_note_facts") or []:
             if not fact.get("exploited"):
                 continue
@@ -81,7 +92,13 @@ def roll_up(findings: Sequence[Dict[str, Any]],
             coverage: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Hunt packs for the actively-exploited notes the estate has not applied."""
     catalog = _catalog()
-    exploited = _exploited_missing(findings)
+    # Patch status is only ASSESSED if the applied-notes export was supplied. When
+    # it was not, sap_hotnews raises HOTNEWS-000 and emits no missing-note facts, so
+    # an empty hunt view would otherwise read as reassurance — the same guard
+    # patch_currency makes. Here it means "exploited exposure was not determined".
+    ids = {f.get("check_id") for f in findings}
+    assessed = "HOTNEWS-000" not in ids and bool(findings)
+    exploited = _collect_exploited(findings, unassessable=False)
 
     # Per-log supplied status, computed once.
     supplied_cache: Dict[str, Optional[bool]] = {
@@ -140,14 +157,32 @@ def roll_up(findings: Sequence[Dict[str, Any]],
     logs = [{"id": src, "label": _LOG_LABEL[src], "module": _LOG_MODULE[src],
              "supplied": supplied_cache.get(src)} for src in _LOG_MODULE]
 
+    # Exploited notes on stacks the customer has NOT declared present (HOTNEWS-005).
+    # Authored packs may exist, but we cannot claim the stack is even there, so
+    # these are offered as "declare the stack to assess", never as confirmed
+    # exposure or huntable threats. Exclude any note already a real threat.
+    undeclared: List[Dict[str, Any]] = []
+    for note, meta in _collect_exploited(findings, unassessable=True).items():
+        if note in exploited:
+            continue
+        entry = catalog.get(note)
+        undeclared.append({"note": note, "cvss": meta.get("cvss"),
+                           "cve": (entry or {}).get("cve"),
+                           "name": (entry or {}).get("name"),
+                           "has_pack": entry is not None})
+    undeclared.sort(key=lambda u: (-(u["cvss"] or 0), str(u["note"])))
+
     return {
+        "assessed": assessed,
         "threats": threats,
         "without_pack": without_pack,
+        "undeclared": undeclared,
         "logs": logs,
         "totals": {
             "exploited_missing": len(exploited),
             "with_pack": len(threats),
             "without_pack": len(without_pack),
+            "undeclared": len(undeclared),
             "huntable_now": sum(1 for t in threats if t["huntable"] is True),
             "measured": (coverage or {}).get("measured"),
         },

@@ -125,8 +125,18 @@ class TransportContentAuditor(BaseAuditor):
         return obj_name.split("/", 1)[0].strip().upper()
 
     def _is_prod(self, system: str) -> bool:
-        s = (system or "").upper()
-        return any(p in s for p in self._PROD_INDICATORS)
+        """Whether a transport target names a production system.
+
+        Matches the PRD/PROD words AND the SAP `P<nn>` convention (P01, PP1, PRP,
+        PRD): production SIDs very commonly start with P and contain no "PRD"/"PROD"
+        substring, so a word-only test silently missed them — the finding read clean
+        for a transport of copies into `P01`. Erring toward flagging is the safe
+        direction here, and it also agrees with code_transport.py's own
+        production-target test, which already treats a leading/〈contained〉 P as prod."""
+        s = (system or "").upper().strip()
+        if not s:
+            return False
+        return s.startswith("P") or any(p in s for p in self._PROD_INDICATORS)
 
     # ────────────────────────────────────────────────────── CODE-TMS-006
     def check_auth_check_deactivation(self, objects):

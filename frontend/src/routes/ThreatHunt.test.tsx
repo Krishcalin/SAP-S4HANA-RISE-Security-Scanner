@@ -30,6 +30,7 @@ const LOGS = [
 
 function view(over: Record<string, unknown> = {}) {
   return {
+    assessed: true,
     threats: [{
       note: '3594142', cve: 'CVE-2025-31324', name: 'VC Metadata Uploader',
       summary: 'Unauthenticated upload to AS Java.', campaign: 'Mass-exploited in 2025.', cvss: 10.0,
@@ -40,16 +41,18 @@ function view(over: Record<string, unknown> = {}) {
       log_sources: ['logserv_events'], huntable: true,
     }],
     without_pack: [{ note: '9999999', cvss: 8.1 }],
+    undeclared: [],
     logs: LOGS,
-    totals: { exploited_missing: 2, with_pack: 1, without_pack: 1, huntable_now: 1, measured: null },
+    totals: { exploited_missing: 2, with_pack: 1, without_pack: 1, undeclared: 0, huntable_now: 1, measured: null },
     ...over,
   }
 }
 
-function empty() {
+function empty(over: Record<string, unknown> = {}) {
   return {
-    threats: [], without_pack: [], logs: LOGS,
-    totals: { exploited_missing: 0, with_pack: 0, without_pack: 0, huntable_now: 0, measured: null },
+    assessed: true, threats: [], without_pack: [], undeclared: [], logs: LOGS,
+    totals: { exploited_missing: 0, with_pack: 0, without_pack: 0, undeclared: 0, huntable_now: 0, measured: null },
+    ...over,
   }
 }
 
@@ -87,6 +90,25 @@ describe('Threat Hunt', () => {
     threatHunt.mockResolvedValue(empty())
     draw()
     expect(await screen.findByText(/No actively-exploited SAP note is unapplied/)).toBeInTheDocument()
+  })
+
+  it('does not read an empty view as clean when patch status was not assessed', async () => {
+    threatHunt.mockResolvedValue(empty({ assessed: false }))
+    draw()
+    // phrase unique to the banner ("Patch status not assessed" also appears in the intro line)
+    expect(await screen.findByText(/No applied-notes export was supplied/)).toBeInTheDocument()
+    // the reassuring "all clear" banner must NOT appear on an unassessed estate
+    expect(screen.queryByText(/No actively-exploited SAP note is unapplied/)).not.toBeInTheDocument()
+  })
+
+  it('offers undeclared-stack exploited notes as "declare the stack to assess"', async () => {
+    threatHunt.mockResolvedValue(view({
+      threats: [], undeclared: [{ note: '3594142', cvss: 10.0, cve: 'CVE-2025-31324',
+                                  name: 'VC Metadata Uploader', has_pack: true }],
+      totals: { exploited_missing: 0, with_pack: 0, without_pack: 0, undeclared: 1, huntable_now: 0, measured: null },
+    }))
+    draw()
+    expect(await screen.findByText(/Declare the stack in the landscape profile to assess/)).toBeInTheDocument()
   })
 
   it('reports a load failure instead of a blank screen', async () => {

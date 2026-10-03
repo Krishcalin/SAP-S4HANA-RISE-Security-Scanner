@@ -141,3 +141,50 @@ def test_totals_reconcile():
     r = th.roll_up([_finding([_fact(_LOGSERV_NOTE), _fact("9999999")])], _COV_LOGSERV)
     t = r["totals"]
     assert t["exploited_missing"] == t["with_pack"] + t["without_pack"] == 2
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  Adjacent-stack exploited notes (audit fix): declared → threat, undeclared →
+#  "declare to assess"; and the not-assessed signal
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _f(cid, facts):
+    return {"check_id": cid, "details": {"missing_note_facts": facts}}
+
+
+def test_declared_stack_exploited_note_surfaces_as_a_threat():
+    # HOTNEWS-017 = the customer DECLARED the stack present -> genuine exposure, so
+    # the authored pack (e.g. CVE-2025-31324) must reach the hunt view.
+    r = th.roll_up([_f("HOTNEWS-017", [_fact(_LOGSERV_NOTE)])], _COV_LOGSERV)
+    assert [t["note"] for t in r["threats"]] == [_LOGSERV_NOTE]
+    assert r["threats"][0]["cve"] == "CVE-2025-31324"
+    assert r["undeclared"] == []
+
+
+def test_unassessable_exploited_note_is_undeclared_not_a_threat():
+    # HOTNEWS-005 = stack NOT declared -> we cannot claim exposure; it is offered as
+    # "declare the stack to assess", never as a huntable threat.
+    r = th.roll_up([_f("HOTNEWS-005", [_fact(_LOGSERV_NOTE)])], _COV_LOGSERV)
+    assert r["threats"] == []
+    assert [u["note"] for u in r["undeclared"]] == [_LOGSERV_NOTE]
+    assert r["undeclared"][0]["cve"] == "CVE-2025-31324" and r["undeclared"][0]["has_pack"]
+    assert r["totals"]["undeclared"] == 1
+
+
+def test_a_declared_note_is_not_also_listed_as_undeclared():
+    # If the same note appears both missing/declared AND in the unassessable
+    # disclosure, it is a threat and must not be double-listed as undeclared.
+    r = th.roll_up([_f("HOTNEWS-017", [_fact(_LOGSERV_NOTE)]),
+                    _f("HOTNEWS-005", [_fact(_LOGSERV_NOTE)])], _COV_LOGSERV)
+    assert [t["note"] for t in r["threats"]] == [_LOGSERV_NOTE]
+    assert r["undeclared"] == []
+
+
+def test_not_assessed_when_no_applied_notes_export():
+    r = th.roll_up([{"check_id": "HOTNEWS-000", "details": {}}], _COV_LOGSERV)
+    assert r["assessed"] is False
+
+
+def test_assessed_true_when_patch_findings_are_present():
+    r = th.roll_up([_f("HOTNEWS-017", [_fact(_LOGSERV_NOTE)])], _COV_LOGSERV)
+    assert r["assessed"] is True
