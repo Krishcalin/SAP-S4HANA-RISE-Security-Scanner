@@ -48,6 +48,7 @@ import type {
   FindingHistory, FindingPage, GeneratedPassword, Health, Journey, Landscape,
   Me, PathView, PathsOverview, RequirementDoc, ResolvedView, RiskView,
   RunDiff, SapSystem, SaveViewResult, SavedView, ScanRun, SecurityDomain,
+  SecurityMonitorView,
   TotpConfirmed, TotpEnrolment, TotpStatus, TransitionResult, UploadResult
 } from './types'
 
@@ -613,6 +614,11 @@ export function vulnerabilities(): Promise<PostureView> {
 
 export function misconfiguration(): Promise<PostureView> {
   return get<PostureView>('/misconfiguration')
+}
+
+// ══ Security Monitor — the per-domain, per-check posture on one screen ═══════
+export function securityMonitor(): Promise<SecurityMonitorView> {
+  return get<SecurityMonitorView>('/security-monitor')
 }
 
 // ══ The twelve security domains ═════════════════════════════════════════════

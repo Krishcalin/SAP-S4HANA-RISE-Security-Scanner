@@ -28,6 +28,7 @@ import { ThreatHunt } from './routes/ThreatHunt'
 import { RemediationRoadmap } from './routes/RemediationRoadmap'
 import { Misconfiguration, Vulnerabilities } from './routes/Posture'
 import { Risk } from './routes/Risk'
+import { SecurityMonitor } from './routes/SecurityMonitor'
 import { Trend } from './routes/Trend'
 import { Dashboard } from './routes/Dashboard'
 import { EvidenceGaps } from './routes/EvidenceGaps'
@@ -113,6 +114,7 @@ export default function App() {
           {/* /runs/:id takes an id, so it has no nav entry: it is reached from the
               dashboard's recent runs and from the receipt the upload screen shows. */}
           <Route path="/runs/:id" element={<RunDetail />} />
+          <Route path="/security-monitor" element={<SecurityMonitor />} />
           <Route path="/trend" element={<Trend />} />
           <Route path="/upload" element={<Upload />} />
           <Route path="/v/:slug" element={<SavedView />} />
