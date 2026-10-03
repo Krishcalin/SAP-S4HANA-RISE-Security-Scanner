@@ -1,5 +1,5 @@
 import {
-  Calculator, CalendarClock, CircleAlert, Crosshair, FileCode2, FileQuestion, ListOrdered, ScrollText, CircleDollarSign, Landmark, LayoutDashboard, LayoutGrid, Scissors, ShieldAlert, ShieldCheck, Siren, SlidersHorizontal, TrendingUp, Upload, UserCog, Waypoints, Wrench, type LucideIcon,
+  Calculator, CalendarClock, CircleAlert, Crosshair, FileCode2, FileQuestion, Gauge, ListOrdered, ScrollText, CircleDollarSign, Landmark, LayoutDashboard, LayoutGrid, Scissors, ShieldAlert, ShieldCheck, Siren, SlidersHorizontal, TrendingUp, Upload, UserCog, Waypoints, Wrench, type LucideIcon,
 } from 'lucide-react'
 import type { Role } from '../api/types'
 
@@ -31,6 +31,11 @@ export interface NavItem {
 
 export const NAV_MAIN: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+  // Directly under the dashboard: posture on one screen, read the way the
+  // market's security monitors present it — the twelve domains as a strip, each
+  // with its honest state, and the firing checks inside as cards tagged with who
+  // fixes them, under a severity-weighted band and the annualised-loss headline.
+  { to: '/security-monitor', label: 'Security Monitor', icon: Gauge },
   { to: '/findings', label: 'Findings', icon: CircleAlert },
   // Directly under the queue: the same findings split into the two posture
   // questions a reviewer actually asks — "what is a flaw that needs patching or

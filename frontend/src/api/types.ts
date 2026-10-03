@@ -1908,6 +1908,62 @@ export interface PostureView {
   totals: { findings: number; counts: Record<string, number> }
 }
 
+// ── Security Monitor (server/security_monitor.py roll_up) ────────────────────
+// The per-domain, per-check posture on one screen — the twelve domains as a strip
+// (each with its reach + 4-state honesty, from domains.roll_up), and within each
+// the checks that fired as cards tagged with who fixes them. A posture band and the
+// annualised-loss headline sit above it. Reuses the same finding projection /domains
+// does, so the two reconcile by construction.
+/** One firing check inside a domain — its finding count, severity spread and owner. */
+export interface SecurityMonitorCheck {
+  check_id: string
+  title: string | null
+  /** The worst severity present, or null for an (impossible) empty card. */
+  worst: Severity | null
+  total: number
+  counts: Record<string, number>
+  /** Who can act: customer_fixable = yours, ticket_to_sap = a SAP service request
+   *  under RISE. The difference between an action and noise, so it is a badge. */
+  owner: RemediationOwner
+}
+/** One domain tab: its reach/state honesty carried from domains.roll_up, plus the
+ *  firing-check cards. An empty `checks` is read through `state`, never as "clean". */
+export interface SecurityMonitorDomain {
+  id: string
+  label: string
+  reach: DomainReach
+  scope: string | null
+  blurb: string | null
+  state: DomainState
+  total: number
+  counts: Record<string, number>
+  checks: SecurityMonitorCheck[]
+}
+export interface SecurityMonitorView {
+  measured: Measured | null
+  /** Severity-weighted density over the checks that ran — NOT a compliance %.
+   *  Null when no manifest backed a denominator, so the screen prints counts. */
+  posture: { score: number; band: string; assessed: number
+             basis: string; anchor: string } | null
+  /** The organization's latest CRQ headline. `priced` false means the shipped
+   *  illustrative catalogue was used — not this estate's own figures. */
+  risk: { ale_p90: number | null; ale_mean: number | null; currency: string
+          priced: boolean; unrouted: number | null
+          input_finding_count: number | null } | null
+  domains: SecurityMonitorDomain[]
+  totals: {
+    findings: number
+    counts: Record<string, number>
+    gaps: number
+    domains: number
+    assessed: number
+    clear: number
+    not_assessed: number
+    corpus: number
+    unplaced: number
+  }
+}
+
 export interface SecurityDomain {
   id: string
   /** The buyer's word, verbatim. The honesty lives in `scope`. */

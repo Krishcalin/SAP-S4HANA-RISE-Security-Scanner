@@ -108,6 +108,7 @@ _SCREEN_ENDPOINTS = [
                     "technical_debt", "teams", "domains")),             # was /trend
     ("/api/risk", ("portfolio", "scenarios", "trend")),                 # was /risk
     ("/api/perceived-threats", ("groups", "health", "measured", "totals")),
+    ("/api/security-monitor", ("posture", "risk", "domains", "totals", "measured")),
     ("/api/compliance/soxitgc/evidence", ("id", "name", "subtitle", "controls", "totals")),
     ("/api/compliance/soxitgc/drift", ("id", "name", "has_baseline", "controls", "totals")),
     ("/api/custom-code", ("groups", "health", "objects", "measured", "totals")),

@@ -50,7 +50,8 @@ from starlette.types import Scope
 
 from server import (analytics, auth, checkdocs, crq, custom_code, db, export,
                     finding_classes, graph, ingest, patch_currency,
-                    perceived_threats, queries, sapcontent, threat_hunt)
+                    perceived_threats, queries, sapcontent, security_monitor,
+                    threat_hunt)
 from modules import domains, nist_csf, platforms, compliance_mapping, control_status
 #: SESSION_COOKIE is imported but not USED here any more — the routes that set and
 #: cleared it were the Jinja form's sign-in and sign-out, and the SPA uses
@@ -1788,6 +1789,50 @@ def api_misconfiguration(user: Dict[str, Any] = Depends(current_user)):
     findings = queries.findings_for_domains(scope)
     return finding_classes.roll_up(findings, "misconfiguration",
                                    coverage=queries.latest_coverage(scope))
+
+
+@app.get("/api/security-monitor")
+def api_security_monitor(user: Dict[str, Any] = Depends(current_user)):
+    """The estate's posture on one screen: the twelve security domains as a strip,
+    each carrying its honest state, and within each the checks that fired as
+    per-check cards tagged with who fixes them. A severity-weighted posture band
+    and the annualised-loss headline sit above it.
+
+    Scoped per system; reuses the same finding projection the domains screen does,
+    so the strip here and the /domains tiles can never disagree. The owner badge
+    needs the deployment mode (a RISE customer cannot fix a bad parameter they can
+    see), read from the one organization landscape; the $-risk headline is the same
+    latest CRQ the Risk board and dashboard show, never a stray landscape's.
+    """
+    scope = auth.scope_for(user)
+    findings = queries.findings_for_domains(scope)
+    coverage = queries.latest_coverage(scope)
+
+    land = db.singleton_landscape_id()
+    row = db.one("SELECT deployment_mode FROM landscape WHERE id = %s", (land,))
+    mode = (row or {}).get("deployment_mode") or "on_prem"
+
+    # The annualised loss is the organization's latest CRQ, projected to the few
+    # fields the headline needs. `priced` is load-bearing: a figure the customer
+    # did not price is the shipped illustrative catalogue, and the screen must say
+    # so rather than present it as this estate's exposure (see lib/pricing.ts).
+    risk = None
+    latest = crq.latest(scope, landscape_id=land)
+    if latest:
+        detail = latest.get("detail") or {}
+        loss_model = detail.get("loss_model") if isinstance(detail, dict) else None
+        params = crq.latest_parameters(land)
+        risk = {
+            "ale_p90": latest.get("ale_p90"),
+            "ale_mean": latest.get("ale_mean"),
+            "currency": (params or {}).get("currency") or "USD",
+            "priced": bool((loss_model or {}).get("applied")),
+            "unrouted": latest.get("unrouted_count"),
+            "input_finding_count": latest.get("input_finding_count"),
+        }
+
+    return security_monitor.roll_up(findings, coverage=coverage,
+                                    deployment_mode=mode, risk=risk)
 
 
 @app.get("/api/domains/{domain_id}")
