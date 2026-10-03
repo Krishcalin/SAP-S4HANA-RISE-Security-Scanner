@@ -1941,6 +1941,14 @@ export interface SecurityMonitorDomain {
 }
 export interface SecurityMonitorView {
   measured: Measured | null
+  /** The system-header strip: how much of the estate, against which standard,
+   *  and how many export sources were supplied. Any field may be null. */
+  context: {
+    systems: number | null
+    standard: string | null
+    sources_supplied: number | null
+    sources_known: number | null
+  }
   /** Severity-weighted density over the checks that ran — NOT a compliance %.
    *  Null when no manifest backed a denominator, so the screen prints counts. */
   posture: { score: number; band: string; assessed: number
@@ -1955,6 +1963,8 @@ export interface SecurityMonitorView {
     findings: number
     counts: Record<string, number>
     gaps: number
+    /** Every check id the catalogue can emit — the denominator for "not assessed". */
+    checks_total: number
     domains: number
     assessed: number
     clear: number

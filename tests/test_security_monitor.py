@@ -136,6 +136,15 @@ def test_posture_is_none_without_a_manifest_to_divide_by():
     assert "posture" in view and "risk" in view
 
 
+def test_context_and_checks_total_are_carried():
+    view = sm.roll_up([_f(1, *_AUTH)], standard="SAP Security Baseline v2.6")
+    assert view["context"]["standard"] == "SAP Security Baseline v2.6"
+    assert {"systems", "sources_supplied", "sources_known"} <= set(view["context"])
+    # checks_total is the catalogue size (a product fact), the not-assessed denominator.
+    assert isinstance(view["totals"]["checks_total"], int)
+    assert view["totals"]["checks_total"] >= view["totals"]["gaps"]
+
+
 def test_empty_estate_still_lists_all_twelve_domains():
     view = sm.roll_up([])
     assert len(view["domains"]) == 12
@@ -178,11 +187,11 @@ def test_the_endpoint_answers_with_the_shape_it_promises(analyst):
     resp = c.get("/api/security-monitor")
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    for key in ("posture", "risk", "domains", "totals", "measured"):
+    for key in ("posture", "risk", "domains", "totals", "measured", "context"):
         assert key in body, f"missing {key}"
     assert len(body["domains"]) == 12
-    for key in ("findings", "counts", "gaps", "domains", "assessed", "clear",
-                "not_assessed", "corpus", "unplaced"):
+    for key in ("findings", "counts", "gaps", "checks_total", "domains", "assessed",
+                "clear", "not_assessed", "corpus", "unplaced"):
         assert key in body["totals"], f"totals missing {key}"
 
 

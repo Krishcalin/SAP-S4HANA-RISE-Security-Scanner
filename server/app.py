@@ -1832,7 +1832,8 @@ def api_security_monitor(user: Dict[str, Any] = Depends(current_user)):
         }
 
     return security_monitor.roll_up(findings, coverage=coverage,
-                                    deployment_mode=mode, risk=risk)
+                                    deployment_mode=mode, risk=risk,
+                                    standard=f"SAP Security Baseline {sapcontent.BASELINE_VERSION}")
 
 
 @app.get("/api/domains/{domain_id}")

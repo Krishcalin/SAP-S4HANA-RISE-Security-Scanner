@@ -368,4 +368,138 @@ body {
   .rp-node, .rp-dim, .rp-halo { transition: none; }
 }
 
+/* ── Security Monitor ─────────────────────────────────────────────────────────
+   The posture monitor's own furniture, ported from the approved design: a
+   system-header strip, a two-column summary band (posture tiles + rating + the
+   $-headline, and a per-domain security-level panel), pill-count tabs, filter
+   chips, railed per-check cards and a detail drawer. Built on the SAME tokens as
+   the rest of the console (so it follows the OS theme with no toggle of its own);
+   the soft severity backgrounds are fixed rgba of the severity colours, exactly
+   as the .sev-* pills above already are, because they read in both themes. */
+.sm-sev { --sm-crit-s:rgba(244,63,94,.14); --sm-high-s:rgba(251,146,60,.14);
+  --sm-med-s:rgba(234,179,8,.15); --sm-low-s:rgba(56,189,248,.14);
+  --sm-ok-s:rgba(34,197,94,.14); --sm-na-s:rgba(136,147,158,.16); }
+
+.sm-ctx { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:2px 0 4px; }
+.sm-syspick { display:inline-flex; align-items:center; gap:9px; background:var(--panel);
+  border:1px solid var(--line); border-radius:10px; padding:7px 12px; font-weight:600; color:var(--ink); }
+.sm-dot { width:8px; height:8px; border-radius:50%; background:var(--ok); box-shadow:0 0 0 3px rgba(34,197,94,.18); }
+.sm-meta { color:var(--ink-faint); font-size:12.5px; display:flex; gap:7px; flex-wrap:wrap; align-items:center; }
+.sm-meta b { color:var(--ink-dim); font-weight:600; }
+.sm-sep { color:var(--line); }
+
+.sm-summary { display:grid; grid-template-columns:1.35fr 1fr; gap:16px; margin-top:14px; }
+.sm-card { background:var(--panel); border:1px solid var(--card-line); border-radius:var(--radius);
+  box-shadow:0 1px 2px rgba(0,0,0,.05), 0 10px 26px -16px rgba(0,0,0,.22); }
+.sm-pad { padding:16px 18px; }
+.sm-ptitle { font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-faint); }
+
+.sm-tiles { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line);
+  border-radius:var(--radius); overflow:hidden; }
+.sm-tile { background:var(--panel); padding:15px 16px; display:flex; flex-direction:column; gap:3px; }
+.sm-tile .sm-n { font-size:30px; font-weight:800; letter-spacing:-.03em; line-height:1.05;
+  font-variant-numeric:tabular-nums; color:var(--ink); }
+.sm-tile .sm-l { font-size:11.5px; color:var(--ink-faint); font-weight:600; }
+.sm-tile.sm-full { grid-column:span 4; flex-direction:row; align-items:center; justify-content:space-between;
+  flex-wrap:wrap; gap:10px; background:var(--panel-2); }
+.sm-c-crit { color:var(--crit); } .sm-c-high { color:var(--high); } .sm-c-med { color:var(--med); }
+.sm-c-low { color:var(--low); } .sm-c-ok { color:var(--ok); } .sm-c-na { color:var(--ink-faint); }
+
+.sm-sevbar { display:flex; height:9px; border-radius:999px; overflow:hidden; background:var(--panel-2); gap:2px; }
+.sm-sevbar > span { display:block; height:100%; }
+.sm-sfill-crit { background:var(--crit); } .sm-sfill-high { background:var(--high); }
+.sm-sfill-med { background:var(--med); } .sm-sfill-low { background:var(--low); }
+.sm-sfill-ok { background:var(--ok); } .sm-sfill-na { background:var(--ink-faint); }
+
+.sm-legend { display:flex; flex-wrap:wrap; gap:9px 16px; margin-top:11px; font-size:12px; color:var(--ink-dim); }
+.sm-legend span { display:inline-flex; align-items:center; gap:6px; }
+.sm-swatch { width:9px; height:9px; border-radius:3px; display:inline-block; }
+
+.sm-rate { display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-top:14px; padding-top:14px; border-top:1px solid var(--line); }
+.sm-band { font-weight:700; font-size:15px; padding:5px 12px; border-radius:8px; white-space:nowrap; }
+.sm-band-critical { color:var(--crit); background:var(--sm-crit-s); }
+.sm-band-high { color:var(--high); background:var(--sm-high-s); }
+.sm-band-medium { color:var(--med); background:var(--sm-med-s); }
+.sm-band-low { color:var(--ok); background:var(--sm-ok-s); }
+.sm-band-na { color:var(--ink-faint); background:var(--sm-na-s); }
+.sm-note { font-size:11.5px; color:var(--ink-faint); max-width:42ch; line-height:1.45; }
+.sm-money { margin-left:auto; text-align:right; }
+.sm-money .sm-n { font-size:22px; font-weight:800; letter-spacing:-.02em; color:var(--ink); font-variant-numeric:tabular-nums; }
+.sm-money .sm-l { font-size:11px; color:var(--ink-faint); font-weight:600; }
+
+.sm-domrow { display:grid; grid-template-columns:118px 1fr 64px 44px; align-items:center; gap:11px; padding:8px 0;
+  color:inherit; text-decoration:none; }
+.sm-domrow + .sm-domrow { border-top:1px solid var(--line); }
+a.sm-domrow:hover .sm-dn { color:var(--accent); }
+.sm-dn { font-size:12.5px; font-weight:600; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sm-lvl { font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:3px 7px;
+  border-radius:6px; text-align:center; white-space:nowrap; }
+.sm-lvl-critical { color:var(--crit); background:var(--sm-crit-s); }
+.sm-lvl-high { color:var(--high); background:var(--sm-high-s); }
+.sm-lvl-medium { color:var(--med); background:var(--sm-med-s); }
+.sm-lvl-low { color:var(--ok); background:var(--sm-ok-s); }
+.sm-lvl-na { color:var(--ink-faint); background:var(--sm-na-s); }
+.sm-domcount { text-align:right; font-weight:700; color:var(--ink-dim); font-size:13px; font-variant-numeric:tabular-nums; }
+
+.sm-tabs { display:flex; gap:2px; margin:22px 0 0; overflow-x:auto; scrollbar-width:none; border-bottom:1px solid var(--line); }
+.sm-tabs::-webkit-scrollbar { display:none; }
+.sm-tab { border:0; background:transparent; color:var(--ink-faint); font-weight:600; font-size:13.5px;
+  padding:11px 14px; white-space:nowrap; border-bottom:2px solid transparent; display:flex; align-items:center; gap:8px; cursor:pointer; }
+.sm-tab:hover { color:var(--ink-dim); }
+.sm-tab[aria-selected="true"] { color:var(--accent); border-bottom-color:var(--accent); }
+.sm-cnt { font-family:var(--font-mono); font-size:11px; background:var(--panel-2); border:1px solid var(--line);
+  border-radius:999px; padding:1px 7px; color:var(--ink-dim); }
+.sm-tab[aria-selected="true"] .sm-cnt { background:var(--accent-dim); border-color:transparent; color:var(--accent); }
+
+.sm-filter { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:14px 0; }
+.sm-chip { border:1px solid var(--line); background:var(--panel); color:var(--ink-dim); border-radius:999px;
+  padding:5px 11px; font-size:12px; font-weight:600; display:inline-flex; align-items:center; gap:6px; cursor:pointer; }
+.sm-chip[aria-pressed="true"] { background:var(--accent-dim); border-color:transparent; color:var(--accent); }
+.sm-flab { font-size:11px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--ink-faint); margin-right:2px; }
+
+.sm-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:13px; margin-bottom:12px; }
+.sm-chk { background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--ink-faint);
+  border-radius:11px; padding:14px 15px; display:flex; flex-direction:column; gap:9px; text-align:left;
+  text-decoration:none; color:inherit; cursor:pointer;
+  transition:transform .12s, box-shadow .12s, border-color .12s; }
+.sm-chk:hover { transform:translateY(-2px); box-shadow:0 12px 26px -16px rgba(0,0,0,.4); border-color:var(--card-line); }
+.sm-b-crit { border-left-color:var(--crit); } .sm-b-high { border-left-color:var(--high); }
+.sm-b-med { border-left-color:var(--med); } .sm-b-low { border-left-color:var(--low); }
+.sm-b-ok { border-left-color:var(--ok); } .sm-b-na { border-left-color:var(--ink-faint); }
+.sm-cid { font-family:var(--font-mono); font-size:11px; color:var(--ink-faint); font-weight:500; word-break:break-all; }
+.sm-ct { font-size:13.5px; font-weight:600; color:var(--ink); line-height:1.35; }
+.sm-foot { display:flex; align-items:center; gap:8px; margin-top:2px; flex-wrap:wrap; }
+.sm-stat { display:inline-flex; align-items:center; gap:6px; font-weight:800; font-size:16px; font-variant-numeric:tabular-nums; }
+.sm-pill { font-size:10.5px; font-weight:700; border-radius:6px; padding:2px 7px; letter-spacing:.02em; white-space:nowrap; }
+.sm-pill-yours { color:var(--ok); background:var(--sm-ok-s); }
+.sm-pill-sap { color:var(--accent); background:var(--accent-dim); }
+.sm-pill-na { color:var(--ink-faint); background:var(--sm-na-s); }
+.sm-run { margin-left:auto; font-size:11px; color:var(--ink-faint); white-space:nowrap; }
+.sm-domnote { font-size:12px; color:var(--ink-faint); margin:0 0 34px; }
+
+/* detail drawer */
+.sm-scrim { position:fixed; inset:0; background:rgba(2,6,18,.5); z-index:40; opacity:0; pointer-events:none; transition:opacity .18s; }
+.sm-scrim.sm-open { opacity:1; pointer-events:auto; }
+.sm-drawer { position:fixed; top:0; right:0; height:100%; width:min(460px,94vw); background:var(--panel); z-index:50;
+  border-left:1px solid var(--line); box-shadow:-16px 0 40px -18px rgba(0,0,0,.5);
+  transform:translateX(100%); transition:transform .22s cubic-bezier(.4,0,.2,1); display:flex; flex-direction:column; }
+.sm-drawer.sm-open { transform:none; }
+.sm-dhead { padding:18px 20px; border-bottom:1px solid var(--line); display:flex; align-items:flex-start; gap:12px; }
+.sm-dclose { display:grid; place-items:center; width:34px; height:34px; border-radius:8px; border:1px solid var(--line);
+  background:var(--panel); color:var(--ink-dim); cursor:pointer; margin-left:auto; flex:none; }
+.sm-dbody { padding:18px 20px; overflow-y:auto; display:flex; flex-direction:column; gap:16px; }
+.sm-dsec h4 { margin:0 0 7px; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint); }
+.sm-dsec p { margin:0; color:var(--ink-dim); font-size:13px; line-height:1.6; white-space:pre-line; }
+.sm-kv { display:flex; justify-content:space-between; gap:10px; font-size:13px; padding:5px 0; border-bottom:1px solid var(--line); }
+.sm-kv .sm-k { color:var(--ink-faint); } .sm-kv .sm-v { font-weight:600; color:var(--ink); }
+
+@media (max-width:860px) {
+  .sm-summary { grid-template-columns:1fr; }
+  .sm-tiles { grid-template-columns:repeat(2,1fr); }
+  .sm-tile.sm-full { grid-column:span 2; }
+}
+@media (max-width:520px) {
+  .sm-domrow { grid-template-columns:92px 1fr 56px 34px; }
+}
+
 }
