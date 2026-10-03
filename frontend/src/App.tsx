@@ -13,6 +13,7 @@ import { Coverage } from './routes/Coverage'
 import { RequirementDetail } from './routes/RequirementDetail'
 import { CrqInputs } from './routes/CrqInputs'
 import { CustomCode } from './routes/CustomCode'
+import { PatchCurrency } from './routes/PatchCurrency'
 import { DomainDetail } from './routes/DomainDetail'
 import { Domains } from './routes/Domains'
 import { TopRisks } from './routes/TopRisks'
@@ -94,6 +95,7 @@ export default function App() {
           <Route path="/findings" element={<Findings />} />
           <Route path="/vulnerabilities" element={<Vulnerabilities />} />
           <Route path="/misconfiguration" element={<Misconfiguration />} />
+          <Route path="/patch-currency" element={<PatchCurrency />} />
           {/* /findings/:id takes an id, so it has no nav entry: it is reached by
               clicking a row on /findings, which links both the check id and the
               title of every row it renders. */}

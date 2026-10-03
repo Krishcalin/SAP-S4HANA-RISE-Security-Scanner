@@ -1741,6 +1741,47 @@ export interface CustomCodeView {
   }
 }
 
+// Patch currency, from GET /api/patch-currency (server/patch_currency.py roll_up
+// over the HOTNEWS-* findings). A LATENCY view, not a percentage: how far behind
+// the estate has fallen. `band` is a verdict with stated criteria; `not_assessed`
+// whenever no applied-notes export was supplied (never "current").
+export type PatchBand =
+  | 'not_assessed' | 'critically_behind' | 'lagging' | 'behind' | 'current'
+export interface PatchNoteFact {
+  note: string
+  released: string | null
+  exploited: boolean
+  cvss: number | null
+  priority: string | null
+  /** Present only on DATED notes (release date known). */
+  age_days?: number
+}
+export interface PatchAgeBand {
+  id: string
+  label: string
+  count: number
+}
+export interface PatchSpStack {
+  release: string | null
+  sp: string | null
+  sp_release_date: string | null
+  age_days: number | null
+  threshold_days: number | null
+}
+export interface PatchCurrencyView {
+  band: PatchBand
+  assessed: boolean
+  oldest: PatchNoteFact | null
+  exploited_missing: { count: number; notes: PatchNoteFact[] }
+  age_bands: PatchAgeBand[]
+  undated: { count: number; notes: PatchNoteFact[] }
+  by_priority: Record<string, number>
+  sp_stack: PatchSpStack | null
+  sp_out_of_date: boolean
+  catalogue: { catalogue_size: number | null; curated_through: string | null } | null
+  totals: { missing: number; dated: number; measured: Measured | null }
+}
+
 // Vulnerabilities / Mis-Configuration lenses, from GET /api/vulnerabilities and
 // /api/misconfiguration (server/finding_classes.py roll_up over the same finding
 // projection the domains screen uses). A partition of findings by check-id

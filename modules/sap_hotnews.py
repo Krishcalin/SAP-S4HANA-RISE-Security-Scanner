@@ -702,6 +702,24 @@ class SapHotNewsAuditor(BaseAuditor):
         return out
 
     @staticmethod
+    def _note_fact(e: Dict[str, Any]) -> Dict[str, Any]:
+        """The typed per-note facts the patch-currency rollup needs, taken straight
+        from the catalog entry — never invented.
+
+        `released` ("YYYY-MM") may be absent for a user-supplied note that carried
+        no date; it is passed through as-is (None then), and the rollup buckets a
+        dateless note as "release date unknown" rather than assuming one. This rides
+        in the finding's `details` ALONGSIDE the existing `missing_notes` number
+        list (additive), so the patch-currency screen reads structured dates rather
+        than parsing them back out of the display label.
+        """
+        return {"note": str(e.get("note") or "").strip(),
+                "released": e.get("released") or None,
+                "exploited": bool(e.get("exploited")),
+                "cvss": e.get("cvss"),
+                "priority": e.get("priority")}
+
+    @staticmethod
     def _label(e: Dict[str, Any]) -> str:
         bits = [f"Note {e['note']}"]
         if e.get("cve"):
@@ -810,7 +828,8 @@ class SapHotNewsAuditor(BaseAuditor):
                     "SAP Note 3627998 (S/4HANA RFC code injection), 3123396 (ICMAD)",
                     "CISA — SAP exploitation advisories",
                 ],
-                details={"missing_notes": [e["note"] for e in missing]},
+                details={"missing_notes": [e["note"] for e in missing],
+                         "missing_note_facts": [self._note_fact(e) for e in missing]},
             )
         else:
             self.finding(
@@ -831,7 +850,8 @@ class SapHotNewsAuditor(BaseAuditor):
                     "implement via SNOTE / Support Package with testing."
                 ),
                 references=["SAP Security Patch Day"],
-                details={"missing_notes": [e["note"] for e in missing]},
+                details={"missing_notes": [e["note"] for e in missing],
+                         "missing_note_facts": [self._note_fact(e) for e in missing]},
             )
 
     def _report_exploited(self, catalog, applied):
@@ -867,7 +887,8 @@ class SapHotNewsAuditor(BaseAuditor):
                 "CISA Known Exploited Vulnerabilities Catalog",
                 "SAP Security Patch Day",
             ],
-            details={"exploited_notes": [e["note"] for e in exploited]},
+            details={"exploited_notes": [e["note"] for e in exploited],
+                     "missing_note_facts": [self._note_fact(e) for e in exploited]},
         )
 
     def _report_partial(self, catalog, partial):

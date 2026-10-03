@@ -1194,6 +1194,36 @@ def custom_code_findings(scope: Optional[Sequence[int]]) -> List[Dict[str, Any]]
         params)
 
 
+def patch_findings(scope: Optional[Sequence[int]]) -> List[Dict[str, Any]]:
+    """Open SAP-Security-Note findings (HOTNEWS-*) for the Patch Currency screen.
+
+    The patch-currency rollup needs the per-note release dates and exploited flags
+    that sap_hotnews stamps into each finding's `details.missing_note_facts`, plus
+    the SP-stack age on HOTNEWS-SPAGE-001's details and the "nothing applied"
+    honesty signal HOTNEWS-000. All of that is per-RUN state, so — like
+    custom_code_findings — details come from the newest observation, not from
+    `finding`. One LIKE namespace (HOTNEWS-%) bound as a parameter, scoped per
+    system like every read. jsonb comes back as list/dict.
+    """
+    where = ["f.state NOT IN ('resolved','false_positive')",
+             "f.check_id LIKE %s"]
+    params: List[Any] = ["HOTNEWS-%"]
+    _scoped(where, params, scope)
+    return db.query(
+        "SELECT f.id, f.check_id, f.severity, f.priority_tier, "
+        "       f.state, cd.category, cd.title, s.sid, "
+        "(SELECT o.details FROM finding_observation o "
+        "  WHERE o.finding_id = f.id ORDER BY o.scan_run_id DESC LIMIT 1) "
+        "  AS details "
+        "FROM finding f "
+        "JOIN check_definition cd ON cd.check_id = f.check_id "
+        "LEFT JOIN sap_system s ON s.id = f.system_id "
+        f"WHERE {' AND '.join(where)} "
+        "ORDER BY CASE f.severity WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1 "
+        "         WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 ELSE 4 END, f.check_id",
+        params)
+
+
 def evidence_gaps(scope: Optional[Sequence[int]]) -> Dict[str, Any]:
     """Which unsupplied export would make the most findings decidable.
 
