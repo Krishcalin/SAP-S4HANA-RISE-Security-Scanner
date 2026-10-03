@@ -134,12 +134,26 @@ export function ThreatHunt() {
       <p className="text-ink2 mb-3 max-w-[80ch]">
         For every actively-exploited SAP note this estate has <strong>not</strong> applied,
         the indicators to hunt for in the logs it already exported.{' '}
-        {t.exploited_missing > 0
+        {!view.assessed
+          ? <span className="text-med font-semibold">Patch status not assessed.</span>
+          : t.exploited_missing > 0
           ? <><span className="text-crit font-semibold">{t.with_pack}</span> with a hunt pack
               {' '}· <span className="text-ok font-semibold">{t.huntable_now}</span> huntable now
               {t.without_pack > 0 ? <> · {t.without_pack} without a pack yet</> : null}.</>
           : 'None in scope.'}
       </p>
+
+      {!view.assessed && (
+        <div className="banner banner-warn max-w-[80ch] mb-4">
+          <strong className="font-semibold text-med">Patch status not assessed.</strong>{' '}
+          <span className="text-ink2">
+            No applied-notes export was supplied, so which actively-exploited notes
+            are unapplied could not be determined. An empty hunt list below means the
+            exposure was not looked for — not that none exists. Supply the applied-notes
+            export (and run Patch Currency) to populate this.
+          </span>
+        </div>
+      )}
 
       <div className="banner banner-warn max-w-[80ch] mb-4">
         <strong className="font-semibold">A match is a lead, not a verdict.</strong>{' '}
@@ -153,17 +167,28 @@ export function ThreatHunt() {
 
       {view.logs.length > 0 && <LogHealth logs={view.logs} />}
 
-      {t.exploited_missing === 0 ? (
+      {t.exploited_missing > 0 ? (
+        <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(460px,1fr))]">
+          {view.threats.map((th) => <ThreatCard key={th.note} t={th} />)}
+        </div>
+      ) : view.assessed ? (
         <div className="banner banner-ok max-w-[80ch]">
           No actively-exploited SAP note is unapplied in scope. This is measured
           against a curated catalogue of significant notes — a floor, not a full
           clearance — so keep patch currency and the Security Audit Log review
           running.
         </div>
-      ) : (
-        <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(460px,1fr))]">
-          {view.threats.map((th) => <ThreatCard key={th.note} t={th} />)}
-        </div>
+      ) : null}
+
+      {view.undeclared.length > 0 && (
+        <p className="text-[12px] text-ink3 mt-4 max-w-[80ch]">
+          {view.undeclared.length} actively-exploited note
+          {view.undeclared.length === 1 ? '' : 's'} (
+          {view.undeclared.map((u) => u.cve ?? u.note).join(', ')}) {view.undeclared.length === 1 ? 'has' : 'have'}{' '}
+          an authored hunt pack but target{view.undeclared.length === 1 ? 's' : ''} a stack you have
+          not declared present — so exposure cannot be confirmed here. Declare the stack
+          in the landscape profile to assess and hunt {view.undeclared.length === 1 ? 'it' : 'them'}.
+        </p>
       )}
 
       {view.without_pack.length > 0 && (

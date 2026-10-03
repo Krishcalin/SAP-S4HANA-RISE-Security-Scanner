@@ -1813,14 +1813,28 @@ export interface ThreatHuntLog {
   module: string
   supplied: boolean | null
 }
+export interface ThreatUndeclared {
+  note: string
+  cvss: number | null
+  cve: string | null
+  name: string | null
+  has_pack: boolean
+}
 export interface ThreatHuntView {
+  /** false when no applied-notes export was supplied — exploited exposure was not
+   *  determined, so an empty view is "not assessed", not "nothing to hunt". */
+  assessed: boolean
   threats: ThreatHuntPack[]
   without_pack: { note: string; cvss: number | null }[]
+  /** Exploited notes on stacks not declared present — authored packs may exist, but
+   *  exposure can't be claimed; offered as "declare the stack to assess". */
+  undeclared: ThreatUndeclared[]
   logs: ThreatHuntLog[]
   totals: {
     exploited_missing: number
     with_pack: number
     without_pack: number
+    undeclared: number
     huntable_now: number
     measured: Measured | null
   }

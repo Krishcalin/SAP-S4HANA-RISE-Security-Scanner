@@ -105,10 +105,18 @@ def test_the_floor_stops_a_small_estate_from_flagging_noise():
 
 
 def test_blank_user_events_do_not_form_a_phantom_peer():
-    # Events with no user must not count as an account in the population.
-    rows = _population(8) + [_ev("", tcode="T0", terminal="WS") for _ in range(50)]
+    # Events with no user must not count as an account in the population. This test
+    # includes a REAL named outlier (BATCH) so LREV-UEBA-001 actually FIRES — the
+    # assertion body runs — and 200 blank-user events, ABOVE the volume floor (100):
+    # if the blank-user exclusion in _user_profiles were removed, "" would itself be
+    # a volume outlier and produce an affected_item beginning ":", which the final
+    # assert would catch. (The earlier version used 50 blank events, below the floor,
+    # so no check ever fired and the assertion never ran — a false green.)
+    rows = (_population(8)
+            + [_ev("BATCH", tcode="T0", terminal="WS") for _ in range(200)]
+            + [_ev("", tcode="T0", terminal="WS") for _ in range(200)])
     f = _run(rows)
-    # population is still the 8 named users; no finding blames "" and no crash
-    for cid in ("LREV-UEBA-001", "LREV-UEBA-002", "LREV-UEBA-003"):
-        if cid in f:
-            assert all(not it.startswith(":") for it in f[cid]["affected_items"])
+    assert "LREV-UEBA-001" in f                           # the outlier check fired
+    items = f["LREV-UEBA-001"]["affected_items"]
+    assert any("BATCH" in it for it in items)             # names the real account
+    assert all(not it.startswith(":") for it in items)    # never the blank user

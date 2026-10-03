@@ -128,8 +128,9 @@ _MAP: Dict[str, Tuple[Optional[str], str, str, str]] = {
     "ICMLOG-002": ("T1595.002", "Reconnaissance", "high",
                    "HTTP scanning pattern; MITRE T1595.002 Vulnerability Scanning"),
     "ICMLOG-003": ("T1190", "Initial Access", "high",
-                   "Remote-execution HTTP endpoint used (ICMAD/CVE-2025-31324 "
-                   "class); MITRE T1190"),
+                   "Remote-exploit HTTP endpoint used — e.g. the Visual Composer "
+                   "metadata uploader (CVE-2025-31324) or ICM request smuggling "
+                   "(ICMAD, CVE-2022-22536); MITRE T1190"),
     # ── Network log review (logserv_review) ─────────────────────────────────
     "NETLOG-001": ("T1021", "Lateral Movement", "low",
                    "Connections to SAP service ports; MITRE T1021 Remote Services "

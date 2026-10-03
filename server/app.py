@@ -1463,11 +1463,16 @@ def api_compliance_evidence_pack(framework: str,
     payload = export.build_evidence_pack(scope, framework)
     if payload is None:
         raise HTTPException(status_code=404, detail="unknown compliance framework")
+    # Sanitise the id before it reaches the Content-Disposition header. It is
+    # already an exact-match whitelisted framework id by this point (build returns
+    # None otherwise), so this is defence-in-depth: the header's safety is local to
+    # the sink rather than resting on the 404-before-Response ordering upstream.
+    safe = "".join(c for c in framework if c.isalnum()) or "framework"
     return Response(
         content=payload,
         media_type=export.EVIDENCE_PACK_MEDIA_TYPE,
         headers={"Content-Disposition":
-                 f'attachment; filename="monitorrisk-evidence-{framework}.html"'})
+                 f'attachment; filename="monitorrisk-evidence-{safe}.html"'})
 
 
 @app.get("/api/csf/{function_id}")

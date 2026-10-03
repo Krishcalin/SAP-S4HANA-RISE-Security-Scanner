@@ -943,7 +943,9 @@ def roadmap(scope: Optional[Sequence[int]] = None) -> Dict[str, Any]:
     """
     from server import queries
 
-    where = ["f.state IN (%s, %s)"]
+    # Placeholders built from _OPEN_STATES rather than hardcoded, so this query
+    # cannot silently desync from plan_for_system if the open-state set changes.
+    where = ["f.state IN (%s)" % ",".join(["%s"] * len(_OPEN_STATES))]
     params: List[Any] = list(_OPEN_STATES)
     queries._scoped(where, params, scope)
     rows = db.query(

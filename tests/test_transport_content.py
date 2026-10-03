@@ -82,6 +82,16 @@ def test_transport_of_copies_to_non_prod_does_not_fire():
     assert "CODE-TMS-008" not in _by_id(objects, to_qas)
 
 
+def test_transport_of_copies_to_a_p_convention_prod_sid_fires():
+    # SAP production SIDs commonly follow the P<nn> convention (P01, PP1, PRP) and
+    # contain no "PRD"/"PROD" substring — these must still be recognised as prod.
+    objects = [_obj("TOC1", "R3TR", "PROG", "ZHOTFIX", trfunction="T")]
+    for sid in ("P01", "PP1", "PRP"):
+        assert "CODE-TMS-008" in _by_id(objects, [{"TRKORR": "TOC1", "TARGET": sid}]), sid
+    # a dev/QA/sandbox target still does not fire
+    assert "CODE-TMS-008" not in _by_id(objects, [{"TRKORR": "TOC1", "TARGET": "D01"}])
+
+
 def test_a_normal_request_type_is_not_a_transport_of_copies():
     objects = [_obj("WB1", "R3TR", "PROG", "ZREPORT", trfunction="K")]
     to_prod = [{"TRKORR": "WB1", "TARGET": "PRD"}]

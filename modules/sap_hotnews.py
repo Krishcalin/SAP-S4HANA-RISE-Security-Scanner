@@ -981,7 +981,12 @@ class SapHotNewsAuditor(BaseAuditor):
                 "CISA Known Exploited Vulnerabilities Catalog",
             ],
             details={"unassessable_notes": [e["note"] for e in hits],
-                     "exploited_among_them": exploited},
+                     "exploited_among_them": exploited,
+                     # The typed per-note facts, so the Threat Hunt view can offer
+                     # the authored IoC packs for an exploited adjacent-stack note —
+                     # but as "declare the stack to assess", NOT as confirmed
+                     # exposure, since this export cannot prove the stack even exists.
+                     "missing_note_facts": [self._note_fact(e) for e in hits]},
         )
 
     #: Non-ABAP stacks a customer can declare present, so an adjacent-stack note
@@ -1066,7 +1071,12 @@ class SapHotNewsAuditor(BaseAuditor):
             details={"declared_stacks": sorted(self._declared_stacks()),
                      "internet_facing": internet_facing,
                      "notes": [e["note"] for e in hits],
-                     "exploited_among_them": sum(1 for e in hits if e.get("exploited"))},
+                     "exploited_among_them": sum(1 for e in hits if e.get("exploited")),
+                     # The declared stack is confirmed present, so an exploited note
+                     # here is real, not-confirmed-applied exposure — these facts let
+                     # the Threat Hunt view surface the IoC packs (e.g. CVE-2025-31324
+                     # once the Java stack is declared) alongside the ABAP ones.
+                     "missing_note_facts": [self._note_fact(e) for e in hits]},
         )
 
     # ================================================================
