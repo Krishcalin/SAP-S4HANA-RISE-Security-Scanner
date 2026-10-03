@@ -14,9 +14,12 @@
  */
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { ClipboardCheck } from 'lucide-react'
+import { ClipboardCheck, Download } from 'lucide-react'
 
-import { ApiError, complianceDrift as fetchDrift, complianceEvidence as fetchEvidence } from '../api/client'
+import {
+  ApiError, complianceDrift as fetchDrift, complianceEvidence as fetchEvidence,
+  evidencePackHref,
+} from '../api/client'
 import type {
   ControlChange, ControlDriftView, ControlEntry, ControlEvidenceView, ControlStatus,
 } from '../api/types'
@@ -184,7 +187,15 @@ export function ComplianceEvidence() {
 
   return (
     <>
-      <Link className={`${LINK} text-[12px]`} to="/compliance">← Compliance posture</Link>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <Link className={`${LINK} text-[12px]`} to="/compliance">← Compliance posture</Link>
+        {/* A download, not a route: the endpoint returns the pack as an HTML
+            attachment, so a plain anchor saves it with the session cookie. */}
+        <a className={`${LINK} text-[12px] inline-flex items-center gap-1`}
+           href={evidencePackHref(framework)} download>
+          <Download size={13} className="shrink-0" /> Download evidence pack (HTML)
+        </a>
+      </div>
       <h1 className="text-2xl font-extrabold tracking-tight text-ink flex items-center gap-2 mb-1 mt-1">
         <ClipboardCheck size={22} className="text-accent shrink-0" />
         {view.name}

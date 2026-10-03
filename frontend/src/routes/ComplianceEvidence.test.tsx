@@ -16,6 +16,7 @@ const complianceDrift = vi.fn()
 vi.mock('../api/client', () => ({
   complianceEvidence: (...a: unknown[]) => complianceEvidence(...a),
   complianceDrift: (...a: unknown[]) => complianceDrift(...a),
+  evidencePackHref: (f: string) => `/api/compliance/${f}/evidence-pack.html`,
   ApiError: class ApiError extends Error {
     status: number
     constructor(status: number, message: string) { super(message); this.status = status }
@@ -108,6 +109,13 @@ describe('Compliance evidence', () => {
     draw()
     expect(await screen.findByText(/Since the previous scan/)).toBeInTheDocument()
     expect(screen.getByText(/↑ newly failing/)).toBeInTheDocument()
+  })
+
+  it('offers a download of the evidence pack for this framework', async () => {
+    complianceEvidence.mockResolvedValue(view())
+    draw()
+    const link = await screen.findByRole('link', { name: /Download evidence pack/ })
+    expect(link).toHaveAttribute('href', '/api/compliance/soxitgc/evidence-pack.html')
   })
 
   it('reports an unknown framework', async () => {
