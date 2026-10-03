@@ -32,6 +32,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Sequence
 
 from modules import domains, posture_score, rise_ownership
+from modules.coverage import check_catalogue
 
 #: Severity buckets, worst first — the same tuple the rest of the product orders by.
 _SEVERITIES = ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")
@@ -59,7 +60,8 @@ def _check_rank(card: Dict[str, Any]):
 def roll_up(findings: Sequence[Dict[str, Any]],
             coverage: Optional[Dict[str, Any]] = None,
             deployment_mode: str = "on_prem",
-            risk: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+            risk: Optional[Dict[str, Any]] = None,
+            standard: Optional[str] = None) -> Dict[str, Any]:
     """Compose the Security Monitor view from the finding projection.
 
     `findings` is the projection `queries.findings_for_domains` returns (it carries
@@ -131,8 +133,21 @@ def roll_up(findings: Sequence[Dict[str, Any]],
             "anchor": posture_score.ANCHOR,
         }
 
+    measured = domain_view["measured"]
+    manifest_counts = (coverage or {}).get("counts") or {}
+    # checks_total is a PRODUCT fact (every id the catalogue can ever emit), the
+    # denominator for the "not assessed" headline tile; posture.assessed is how
+    # many of them actually ran, so checks_total - assessed is the not-run count.
+    checks_total = len(check_catalogue())
+
     return {
-        "measured": domain_view["measured"],
+        "measured": measured,
+        "context": {
+            "systems": (measured or {}).get("systems"),
+            "standard": standard,
+            "sources_supplied": manifest_counts.get("sources_supplied"),
+            "sources_known": manifest_counts.get("sources_known"),
+        },
         "posture": posture_block,
         "risk": risk,
         "domains": out_domains,
@@ -140,6 +155,7 @@ def roll_up(findings: Sequence[Dict[str, Any]],
             "findings": sum(counts.values()),       # placed in the twelve domains
             "counts": counts,
             "gaps": gaps,                            # distinct firing checks
+            "checks_total": checks_total,
             "domains": len(states),
             "assessed": sum(1 for s in states if s == domains.ASSESSED),
             "clear": sum(1 for s in states if s == domains.CLEAR),
