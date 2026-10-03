@@ -214,6 +214,14 @@ class LogReviewAuditor(BaseAuditor):
         self.check_os_command_execution()
         self.check_technical_user_dialog_logons()
         self.check_password_spraying()
+        # Half 2b — peer-relative behaviour outliers (UEBA-lite). Within-window and
+        # relative to the population you exported — never a learned baseline. Each
+        # profiles every account in the window and flags the ones that stand out
+        # from their peers on one axis; the comparison, not a threshold, is the test.
+        self.check_behaviour_comparable()
+        self.check_volume_outlier()
+        self.check_transaction_breadth_outlier()
+        self.check_terminal_breadth_outlier()
         # Half 3 — log-observed governance violations (LVIO-*), the retrospective
         # window crossed with the firefighter log and the privileged set.
         self.check_firefighter_used_outside_the_log()
@@ -1390,6 +1398,223 @@ class LogReviewAuditor(BaseAuditor):
                 "SAP Security Baseline — privileged access review",
                 "NIST SP 800-92 — Guide to Computer Security Log Management",
             ],
+        )
+
+    # ------------------------------------------- UEBA-lite: peer-relative outliers
+    #
+    # WHAT THESE ARE, AND THE LINE THEY DO NOT CROSS. The pattern checks above match
+    # a FIXED signature (off-hours, a run of failures, a rare terminal). These do
+    # something different: they profile every account in the exported window and
+    # flag the ones that stand out FROM THEIR PEERS on one axis — volume, the
+    # breadth of transactions, the breadth of terminals. The comparison is the test,
+    # not a threshold.
+    #
+    # It is still a WITHIN-WINDOW, RELATIVE measure and the findings say so. The
+    # review holds no history before the export and learns no baseline of "normal";
+    # "outlier" means "far from the median of the accounts you exported", not
+    # "abnormal for this system". An account legitimately busier or broader than its
+    # peers — a batch user, an integration account, an administrator — will appear,
+    # and that is the point: it stands out from the population, which is a question
+    # to ask, not a verdict. With too few accounts to form a population the checks
+    # do not run and LREV-UEBA-000 says so rather than inventing a comparison.
+
+    @staticmethod
+    def _median(values: Any) -> float:
+        xs = sorted(values)
+        n = len(xs)
+        if n == 0:
+            return 0.0
+        mid = n // 2
+        return float(xs[mid]) if n % 2 else (xs[mid - 1] + xs[mid]) / 2.0
+
+    def _user_profiles(self) -> Dict[str, Dict[str, Any]]:
+        """`{USER: {events, terminals:set, tcodes:set}}` over the exported window.
+
+        Blank-user events are excluded: an account with no name is not a peer to
+        compare, and attributing its activity to a placeholder would invent one.
+        Cached — the three outlier checks share it.
+        """
+        cached = getattr(self, "_profiles_cache", None)
+        if cached is not None:
+            return cached
+        prof: Dict[str, Dict[str, Any]] = {}
+        for ev in self._events:
+            user = ev["user"]
+            if not user:
+                continue
+            p = prof.setdefault(user, {"events": 0, "terminals": set(), "tcodes": set()})
+            p["events"] += 1
+            if ev["terminal"]:
+                p["terminals"].add(ev["terminal"])
+            if ev["tcode"]:
+                p["tcodes"].add(ev["tcode"])
+        self._profiles_cache = prof
+        return prof
+
+    def _peer_outliers(self, metric, multiple: float, floor: int):
+        """Accounts whose `metric(profile)` is an extreme HIGH outlier versus the
+        population: at or above max(floor, multiple x median). Returns
+        ({user: value}, median). The floor keeps a tiny or quiet estate from
+        flagging noise as an outlier; the multiple is the peer-relative test."""
+        prof = self._user_profiles()
+        values = {u: metric(p) for u, p in prof.items()}
+        med = self._median(values.values())
+        threshold = max(float(floor), multiple * med)
+        return {u: v for u, v in values.items() if v >= threshold}, med
+
+    def _ueba_min_users(self) -> int:
+        return int(self.get_config("logreview_ueba_min_users", 8))
+
+    def check_behaviour_comparable(self):
+        """LREV-UEBA-000: too few accounts in the window to compare against peers."""
+        if not self._events:
+            return
+        prof = self._user_profiles()
+        min_users = self._ueba_min_users()
+        if not prof or len(prof) >= min_users:
+            return
+        self.finding(
+            check_id="LREV-UEBA-000",
+            title="Too few accounts in the window to compare behaviour against peers",
+            severity=self.SEVERITY_INFO,
+            category=self.CATEGORY,
+            description=self._with_window(
+                "The reviewed window names only {0} distinct account(s) — fewer than "
+                "the {1} needed to compare one account against a population of peers. "
+                "The behaviour-outlier checks (volume, transaction breadth, terminal "
+                "breadth) are therefore NOT run: with this few actors there is no "
+                "population to be an outlier against, and a comparison invented from a "
+                "handful of accounts would mislead. This is a within-window, "
+                "peer-relative measure and never a learned baseline; export a longer "
+                "or busier window to enable it."
+            ).format(len(prof), min_users),
+            affected_items=["{0} distinct account(s) in the window".format(len(prof))],
+            scope="aggregate",
+            details=self._details({"accounts_in_window": len(prof),
+                                   "min_users": min_users}),
+            remediation=(
+                "Supply a longer or higher-volume Security Audit Log / SAP LogServ "
+                "export so account behaviour can be compared across enough peers."
+            ),
+            references=["NIST SP 800-92 — Guide to Computer Security Log Management"],
+        )
+
+    def check_volume_outlier(self):
+        """LREV-UEBA-001: accounts generating far more audit activity than peers."""
+        if len(self._user_profiles()) < self._ueba_min_users():
+            return
+        mult = float(self.get_config("logreview_ueba_volume_multiple", 6))
+        floor = int(self.get_config("logreview_ueba_volume_floor", 100))
+        outliers, med = self._peer_outliers(lambda p: p["events"], mult, floor)
+        if not outliers:
+            return
+        self.finding(
+            check_id="LREV-UEBA-001",
+            title="Accounts generating far more audit activity than their peers",
+            severity=self.SEVERITY_MEDIUM,
+            category=self.CATEGORY,
+            description=self._with_window(
+                "{0} account(s) produced at least {1}x the median account's audit "
+                "events across the reviewed window (median {2:.0f} per account). This "
+                "is a within-window, peer-relative comparison, not a learned baseline: "
+                "an account legitimately busier than its peers — a batch or "
+                "integration user, a shared service account — will appear here. What "
+                "it says is that the account stands out from the population you "
+                "exported, which is worth confirming against what it is meant to do."
+            ).format(len(outliers), int(mult), med),
+            affected_items=["{0}: {1} event(s)".format(u, n) for u, n in
+                            sorted(outliers.items(), key=lambda kv: (-kv[1], kv[0]))],
+            affected_objects=self._user_objects(outliers),
+            scope="aggregate",
+            details=self._details({"median_events": med, "multiple": mult,
+                                   "floor": floor, "per_account": dict(outliers)}),
+            remediation=(
+                "Confirm each listed account against its expected role: a human "
+                "account with batch-scale volume, or a service account used "
+                "interactively, is the finding. Where high volume is expected "
+                "(integration, batch), record it so the outlier is explained."
+            ),
+            references=["SAP Security Baseline — monitoring and review",
+                        "NIST SP 800-92 — Guide to Computer Security Log Management"],
+        )
+
+    def check_transaction_breadth_outlier(self):
+        """LREV-UEBA-002: accounts exercising an unusually broad set of transactions."""
+        if len(self._user_profiles()) < self._ueba_min_users():
+            return
+        mult = float(self.get_config("logreview_ueba_tcode_multiple", 4))
+        floor = int(self.get_config("logreview_ueba_tcode_floor", 20))
+        outliers, med = self._peer_outliers(lambda p: len(p["tcodes"]), mult, floor)
+        if not outliers:
+            return
+        self.finding(
+            check_id="LREV-UEBA-002",
+            title="Accounts using a far broader set of transactions than their peers",
+            severity=self.SEVERITY_MEDIUM,
+            category=self.CATEGORY,
+            description=self._with_window(
+                "{0} account(s) ran at least {1}x the median account's number of "
+                "DISTINCT transactions in the reviewed window (median {2:.0f} per "
+                "account). A does-everything footprint relative to the population is "
+                "worth checking against least privilege — one account exercising a far "
+                "wider range than its peers is either an administrator, a shared "
+                "account, or over-provisioned. This is a within-window, peer-relative "
+                "comparison, not a learned baseline."
+            ).format(len(outliers), int(mult), med),
+            affected_items=["{0}: {1} distinct transaction(s)".format(u, n) for u, n in
+                            sorted(outliers.items(), key=lambda kv: (-kv[1], kv[0]))],
+            affected_objects=self._user_objects(outliers),
+            scope="aggregate",
+            details=self._details({"median_tcodes": med, "multiple": mult,
+                                   "floor": floor, "per_account": dict(outliers)}),
+            remediation=(
+                "Review each listed account's authorizations against what it actually "
+                "needs: a human account exercising an administrator's breadth, or a "
+                "service account ranging far beyond its interface, is the finding. "
+                "Reconcile with role design and the SoD analysis."
+            ),
+            references=["SAP Security Baseline — least privilege",
+                        "NIST SP 800-92 — Guide to Computer Security Log Management"],
+        )
+
+    def check_terminal_breadth_outlier(self):
+        """LREV-UEBA-003: accounts seen from far more terminals than their peers."""
+        if len(self._user_profiles()) < self._ueba_min_users():
+            return
+        mult = float(self.get_config("logreview_ueba_terminal_multiple", 4))
+        floor = int(self.get_config("logreview_ueba_terminal_floor", 8))
+        outliers, med = self._peer_outliers(lambda p: len(p["terminals"]), mult, floor)
+        if not outliers:
+            return
+        self.finding(
+            check_id="LREV-UEBA-003",
+            title="Accounts signing on from far more terminals than their peers",
+            severity=self.SEVERITY_MEDIUM,
+            category=self.CATEGORY,
+            description=self._with_window(
+                "{0} account(s) signed on from at least {1}x the median account's "
+                "number of DISTINCT terminals in the reviewed window (median {2:.0f} "
+                "per account). An account reaching the system from far more places "
+                "than its peers is a roaming-credential or shared-account signal — the "
+                "same login used from many workstations. This is a within-window, "
+                "peer-relative comparison, not a learned baseline; the terminal string "
+                "in an audit extract is whatever the front end reported, so read it as "
+                "a short list to ask about rather than proof."
+            ).format(len(outliers), int(mult), med),
+            affected_items=["{0}: {1} distinct terminal(s)".format(u, n) for u, n in
+                            sorted(outliers.items(), key=lambda kv: (-kv[1], kv[0]))],
+            affected_objects=self._user_objects(outliers),
+            scope="aggregate",
+            details=self._details({"median_terminals": med, "multiple": mult,
+                                   "floor": floor, "per_account": dict(outliers)}),
+            remediation=(
+                "Confirm with each account owner whether the login is used from that "
+                "many machines. Where an account is shared, replace it with named "
+                "accounts; where a credential may be roaming, rotate it and enforce "
+                "named, managed access points."
+            ),
+            references=["SAP Security Baseline — privileged access review",
+                        "NIST SP 800-92 — Guide to Computer Security Log Management"],
         )
 
     # ---------------------------------------------------------- input: user types
