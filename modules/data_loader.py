@@ -219,6 +219,11 @@ class DataLoader:
         "custom_code_scan":        ["custom_code_scan.csv", "atc_results.csv", "code_inspector.csv"],
         "transport_routes":        ["transport_routes.csv", "tms_routes.csv"],
         "transport_history":       ["transport_history.csv", "stms_log.csv", "import_history.csv"],
+        # The transport OBJECT DIRECTORY (E070 request headers + E071 object
+        # entries): TRKORR, TRFUNCTION, PGMID, OBJECT, OBJ_NAME — what each
+        # transport CARRIES, read by modules/transport_content.py. Distinct from
+        # transport_history (which records when/where a request was imported).
+        "transport_objects":       ["transport_objects.csv", "e071.csv", "e070.csv"],
         "client_settings":         ["client_settings.csv", "scc4.csv"],
         "change_documents":        ["change_documents.csv", "cdhdr.csv"],
         "change_document_items":   ["change_document_items.csv", "cdpos.csv"],

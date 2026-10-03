@@ -94,6 +94,10 @@ RISE_MODULE_SCOPE: Dict[str, str] = {
     "snc_posture": "split",           # SNC profile params are SAP-operated in PCE
     "ecs_config_items": "split",      # client/table settings split customer vs SAP
     "code_transport": "split",            # SE06/SCC4 are ticket-to-SAP
+    # Reads the E070/E071 object directory — an ABAP application-layer export the
+    # customer produces — and reviews what transports carry; the data and the
+    # review are both reachable in a RISE tenant.
+    "transport_content": "in_scope",
     "log_monitoring": "in_scope",
     # A retrospective review reads an export the customer produces themselves from
     # the ABAP application layer, which they keep in RISE.
@@ -169,6 +173,7 @@ CLI_MODULE_ALIASES: Dict[str, str] = {
     "codeinv": "code_inventory_report",
     "resilience": "resilience_posture",
     "codetrans": "code_transport",
+    "transobj": "transport_content",
     "atc": "atc_import",
     "cva": "abap_sast",
     "logmon": "log_monitoring",

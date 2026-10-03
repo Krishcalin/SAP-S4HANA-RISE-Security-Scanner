@@ -62,11 +62,11 @@ reason for each.
 
 ## Every source, including the ones this guide does not cover
 
-The scanner reads **149** logical sources. All of them now have a procedure: the
+The scanner reads **150** logical sources. All of them now have a procedure: the
 sections up to *SAP Cloud ALM* cover what a first scan needs, and
 [*The remaining sources*](#the-remaining-sources) below covers the rest.
 
-[**`EXPORT_SOURCES.md`**](EXPORT_SOURCES.md) lists all 149 — the filenames the
+[**`EXPORT_SOURCES.md`**](EXPORT_SOURCES.md) lists all 150 — the filenames the
 loader accepts, which checks each one feeds, and whether a procedure exists. It is
 generated from the code, so a source cannot be added to the scanner without
 appearing there, and it will show up as undocumented until somebody writes the
@@ -1886,6 +1886,31 @@ released and who imported; approval lives in ChaRM, ServiceNow or whatever your
 change process runs on. Join it in if you can — a transport released and imported
 by the same person is the four-eyes finding, and without the approval column the
 check can only say that no third party appears, not that none existed.
+
+### Transport object directory (`transport_objects.csv`, `e071.csv`, `e070.csv`)
+**Source:** `SE16`/`SE16N` on `E070` (request headers) and `E071` (object entries);
+or `SE09`/`SE10` → select a request → the object list. One row per object entry.
+
+Also accepted: `e071.csv`, `e070.csv`
+
+This is what each transport *carries*, read by the `transobj` module — distinct
+from the import history above, which records when and where a request was imported.
+It is the input for the transport-content checks: authorization-check deactivation
+(`TOBJ_OFF`), user/role table content, security object types, transports of copies
+to production, and table content moved through TMS.
+
+| Column (any of) | Meaning |
+|---|---|
+| `TRKORR` · `TRANSPORT` · `REQUEST` | Request number (E070/E071 key) |
+| `TRFUNCTION` · `FUNCTION` · `REQUEST_TYPE` | E070 request function — `K` workbench, `W` customizing, `T` transport of copies, `C` relocation |
+| `PGMID` · `PROGRAM_ID` | Program id — `R3TR` (complete object) or `LIMU` (sub-object) |
+| `OBJECT` · `OBJECT_TYPE` | E071 object type — e.g. `TABU` (table content), `PROG`, `SUSO`, `ACGR` |
+| `OBJ_NAME` · `OBJECT_NAME` · `NAME` | Object name; for `R3TR TABU` it is `TABLE/key…`, and the table is the part before the first slash |
+
+**The binary cofile/datafile is deliberately not read.** The object directory
+above answers the content question — what objects and tables a request carries —
+without parsing the transport payload files (K9xxxxx/R9xxxxx), which are binary and
+outside this scanner's offline, table-export model.
 
 ### SAP standard modifications (`sap_modifications.csv`, `se95.csv`)
 **Source:** `SE95` — the Modification Browser.

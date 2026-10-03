@@ -2788,5 +2788,35 @@
   "module": "logserv_review",
   "risk": "SAP LogServ events were supplied, but none carried a timestamp this review could read. A retrospective review needs a bounded window: without a time, events cannot be ordered or placed in the window, so every finding that depends on timing - off-hours activity, a run of failures, a sequence - cannot be formed, and the review cannot even state the period it covers. The class detectors still run over volume, but the analysis has silently degraded from 'what happened when' to 'how many', and a reader who does not know that will over-trust the result.",
   "mitigation": "1. Confirm the LogServ export carries the event time: OCSF `time` (epoch milliseconds) or the raw LogServ `_time` (epoch seconds).\n2. Fix the export/forwarder so the time field is present and populated.\n3. Re-pull the window once the time is present, so the review can be bounded and the time-dependent findings can form."
+ },
+ "CODE-TMS-006": {
+  "mitigation": "1. In the target system, open AUTH_SWITCH_OBJECTS and list every authorization object currently switched off.\n2. For each, establish whether a documented, approved reason exists; reactivate any that do not.\n3. Trace the transport(s) named here back to who created and released them, and review the change.\n4. Add TOBJ_OFF to the critical-objects list of the transport release check (SE03 / the release-check BAdI) so future requests carrying it are flagged at release.",
+  "module": "transport_content",
+  "risk": "A transport carries content for the AUTH_SWITCH_OBJECTS table (TOBJ_OFF). Importing it GLOBALLY deactivates one or more authorization checks in the target system: every S_* check for the switched-off object stops being enforced, for every user, estate-wide. Because the request looks like ordinary customizing, no transport route or approval control flags it — the deactivation arrives as table content."
+ },
+ "CODE-TMS-007": {
+  "mitigation": "1. Identify which tables and keys the transport carries (the finding lists them).\n2. Confirm whether the resulting authorizations exist intentionally in the target; where not, remove them through role administration and regenerate the affected profiles.\n3. Establish why authorization data was transported rather than built per system, and correct the process.\n4. Add the user / role / authorization tables to the transport release check's critical-objects list.",
+  "module": "transport_content",
+  "risk": "A transport carries table CONTENT for user, role or authorization tables (e.g. USRBF2, the authorization buffer; the AGR_* role tables; USOBT/USOBX SU24 defaults). Transporting these as data delivers AUTHORIZATIONS from the source system into the target — access the target's own role administration never granted — and bypasses the normal PFCG build-and-generate process."
+ },
+ "CODE-TMS-008": {
+  "mitigation": "1. Review each transport of copies that reached production: confirm what it delivered and whether the change was approved.\n2. Restrict who may create and import transports of copies to production via S_TRANSPRT (request type TRAN, activity 60/43).\n3. Require production changes to follow the normal release path; treat a transport of copies to production as an exception requiring sign-off.",
+  "module": "transport_content",
+  "risk": "A transport of copies (request type TRAN, E070 TRFUNCTION 'T') was imported to a production system. A transport of copies carries objects without following a transport route, so it delivers a change straight to production outside the dev→QA→prod sequence the route-integrity control enforces — and a routes-only review never sees it."
+ },
+ "CODE-TMS-009": {
+  "mitigation": "1. Review each transport that carries authorization objects, auth defaults or roles.\n2. Confirm the security change was intended and approved, and that transported role content matches the target system's access design.\n3. Where a security object changed unintentionally, correct it through SU21 / SU24 / PFCG in the target and re-transport deliberately.",
+  "module": "transport_content",
+  "risk": "A transport carries security-configuration objects as repository objects — authorization objects (SUSO), their classes (SUSC), SU22/SU24 defaults (SUSH), authorization profiles (SUSM) or PFCG roles (ACGR). Moving these through TMS changes the security configuration of the target; legitimate when deliberate, but an unreviewed one alters what access is possible without going through role administration in the target."
+ },
+ "CODE-TMS-010": {
+  "mitigation": "1. For each table-content transport, confirm the table and its keys are intended to be delivered rather than maintained per system.\n2. Verify no critical or security-relevant table rides along unreviewed.\n3. Where content should be maintained per system (environment-specific customizing), remove it from the transport and maintain it directly in each client.",
+  "module": "transport_content",
+  "risk": "A transport carries table CONTENT (R3TR TABU) other than the authorization tables raised separately. Transporting table content moves configuration as data; often legitimate (currencies, number ranges, customizing) but also how settings diverge silently between systems, so a content transport should be a reviewed, intended delivery rather than an incidental one."
+ },
+ "CODE-TMS-011": {
+  "mitigation": "1. Export the transport object directory from the source ABAP system: tables E070 (request headers) and E071 (object entries), for example via SE16/SE16N, or the object list shown per request in SE09/SE10. Save it as transport_objects.csv.\n2. Re-run the scan with that file present, so the transport-content checks can assess what each transport carries (TOBJ_OFF authorization deactivation, USRBF2/AGR_* table content, transports of copies to production).\n3. If transports genuinely do not exist in this estate, no action is needed — but confirm that rather than inferring it from the empty result.",
+  "module": "transport_content",
+  "risk": "Transport import history was supplied — so this estate uses transports — but no transport object directory (tables E070/E071, transport_objects.csv) was, so what those transports CARRY was not assessed. Only how the transport system is configured (routes, approvals, import history) could be checked; the content checks — authorization-check deactivation, user and role table content, security objects, and transports of copies to production — had no input to run against. The absence of transport-content findings therefore reflects a missing export, not a transport landscape that was examined and found clean."
  }
 }

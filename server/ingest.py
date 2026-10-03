@@ -61,6 +61,7 @@ AUDITORS: List[Tuple[str, str]] = [
     ("integration_layer", "IntegrationLayerAuditor"),
     ("data_protection", "DataProtectionAuditor"),
     ("code_transport", "CodeTransportAuditor"),
+    ("transport_content", "TransportContentAuditor"),
     ("code_inventory_report", "CodeInventoryAuditor"),
     ("resilience_posture", "ResiliencePostureAuditor"),
     ("snc_posture", "SncPostureAuditor"),

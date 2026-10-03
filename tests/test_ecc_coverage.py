@@ -86,14 +86,17 @@ def test_thirteen_auditors_are_identical_on_ecc(measured):
 
 
 def test_twentyfive_auditors_produce_something_on_ecc(measured):
-    """The other honest number. Twelve modules produce findings without being at
-    parity — eleven return fewer than the full sample and one (`sap_hotnews`)
+    """The other honest number. Thirteen modules produce findings without being at
+    parity — twelve return fewer than the full sample and one (`sap_hotnews`)
     returns more, because an older kernel is exposed to more published notes.
-    All twelve are worth running, which the parity count alone hides."""
+    All of them are worth running, which the parity count alone hides.
+    (`transport_content` is among the twelve: it emits its not-assessed disclosure
+    on ECC — history but no object directory — versus the content findings it
+    produces when the full sample supplies transport_objects.)"""
     ecc, _ = measured
     producing = [m for m, r in ecc.items() if r["findings"] > 0]
-    assert len(producing) == 25, \
-        f"moved to {len(producing)} of 38: {sorted(producing)}"
+    assert len(producing) == 26, \
+        f"moved to {len(producing)} of 40: {sorted(producing)}"
 
 
 def test_no_auditor_errors_on_the_ecc_fixture(measured):
@@ -169,7 +172,13 @@ def test_every_auditor_is_visible_to_the_coverage_manifest():
     # weakness and a log observation of it being used coincide. It is deliberately NOT
     # in server/ingest.AUDITORS (it runs after them); the manifest still sees it,
     # which is what this test checks.
-    assert len(auditors) == 42, f"auditor count moved to {len(auditors)}"
+    #
+    # 43 since `transport_content`, which reads the transport OBJECT DIRECTORY
+    # (E070/E071) to audit what each transport CARRIES — authorization-check
+    # deactivation (TOBJ_OFF), user/role table content, transports of copies to
+    # production. It is the first auditor whose subject is transport PAYLOAD rather
+    # than the transport system's configuration, which code_transport already covers.
+    assert len(auditors) == 43, f"auditor count moved to {len(auditors)}"
 
 
 def test_a_required_source_is_always_one_the_loader_knows():
@@ -267,11 +276,11 @@ def test_the_published_document_states_the_number_it_measured():
     doc = (ROOT / "docs" / "ECC_COVERAGE.md").read_text(encoding="utf-8")
     assert "| **13** |" in doc, \
         "docs/ECC_COVERAGE.md no longer states 13; update it and the test together"
-    assert "**25**" in doc
-    assert "| of 39 |" in doc, (
+    assert "**26**" in doc
+    assert "| of 40 |" in doc, (
         "docs/ECC_COVERAGE.md does not head its table with the current auditor "
         "count. Re-measure with tests/measure_ecc_coverage.py and update both.")
     # The prose above the table restates the parity figure in words, and that is
     # where the last drift lived.
-    assert "thirteen of thirty-nine" in doc, \
+    assert "thirteen of forty" in doc, \
         "the prose in docs/ECC_COVERAGE.md disagrees with its own table"
