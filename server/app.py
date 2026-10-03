@@ -49,8 +49,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import Scope
 
 from server import (analytics, auth, checkdocs, crq, custom_code, db, export,
-                    finding_classes, graph, ingest, perceived_threats, queries,
-                    sapcontent)
+                    finding_classes, graph, ingest, patch_currency,
+                    perceived_threats, queries, sapcontent)
 from modules import domains, nist_csf, platforms, compliance_mapping, control_status
 #: SESSION_COOKIE is imported but not USED here any more — the routes that set and
 #: cleared it were the Jinja form's sign-in and sign-out, and the SPA uses
@@ -1711,6 +1711,23 @@ def api_custom_code(user: Dict[str, Any] = Depends(current_user)):
     findings = queries.custom_code_findings(scope)
     return custom_code.roll_up(findings,
                                coverage=queries.latest_coverage(scope))
+
+
+@app.get("/api/patch-currency")
+def api_patch_currency(user: Dict[str, Any] = Depends(current_user)):
+    """How current the estate is on SAP Security Notes — a latency view, not a
+    percentage.
+
+    Scores how far BEHIND the estate has fallen from the HOTNEWS-* findings: the
+    oldest unapplied note, the actively-exploited-and-open set, an age-band
+    histogram, and the support-package stack age — summarised as a band with
+    stated criteria. No percentage (a "percent patched" needs a denominator no
+    offline export knows). Reports `not_assessed`, never `current`, when no
+    applied-notes export was supplied. Scoped per system like every read.
+    """
+    scope = auth.scope_for(user)
+    return patch_currency.roll_up(queries.patch_findings(scope),
+                                  coverage=queries.latest_coverage(scope))
 
 
 @app.get("/api/vulnerabilities")

@@ -1,5 +1,5 @@
 import {
-  Calculator, CircleAlert, FileCode2, FileQuestion, ListOrdered, ScrollText, CircleDollarSign, Landmark, LayoutDashboard, LayoutGrid, Scissors, ShieldAlert, ShieldCheck, Siren, SlidersHorizontal, TrendingUp, Upload, UserCog, Waypoints, type LucideIcon,
+  Calculator, CalendarClock, CircleAlert, FileCode2, FileQuestion, ListOrdered, ScrollText, CircleDollarSign, Landmark, LayoutDashboard, LayoutGrid, Scissors, ShieldAlert, ShieldCheck, Siren, SlidersHorizontal, TrendingUp, Upload, UserCog, Waypoints, type LucideIcon,
 } from 'lucide-react'
 import type { Role } from '../api/types'
 
@@ -38,6 +38,11 @@ export const NAV_MAIN: NavItem[] = [
   // observations are deliberately in neither.
   { to: '/vulnerabilities', label: 'Vulnerabilities', icon: ShieldAlert },
   { to: '/misconfiguration', label: 'Mis-Configuration', icon: SlidersHorizontal },
+  // Directly under the vuln split: the same missing-SAP-Note findings asked a
+  // TIMELINESS question — not how many are missing but how far behind the estate
+  // has fallen (oldest unapplied, actively-exploited-and-open, support-pack age).
+  // A latency metric no incumbent produces; never a percentage.
+  { to: '/patch-currency', label: 'Patch Currency', icon: CalendarClock },
   { to: '/trend', label: 'Trend', icon: TrendingUp },
   { to: '/paths', label: 'Risk Paths', icon: Waypoints },
   // Directly under Risk Paths: paths are what the CONFIG could permit; this is

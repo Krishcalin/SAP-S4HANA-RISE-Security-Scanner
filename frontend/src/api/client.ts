@@ -40,6 +40,7 @@ import type {
   ControlDriftView,
   CsfView, Dashboard, DomainsView, FindingDetail, FindingFilters, TopRisksView,
   CustomCodeView,
+  PatchCurrencyView,
   PerceivedThreatsView,
   PostureView,
   FindingHistory, FindingPage, GeneratedPassword, Health, Journey, Landscape,
@@ -590,6 +591,10 @@ export function perceivedThreats(): Promise<PerceivedThreatsView> {
 
 export function customCode(): Promise<CustomCodeView> {
   return get<CustomCodeView>('/custom-code')
+}
+
+export function patchCurrency(): Promise<PatchCurrencyView> {
+  return get<PatchCurrencyView>('/patch-currency')
 }
 
 export function vulnerabilities(): Promise<PostureView> {
