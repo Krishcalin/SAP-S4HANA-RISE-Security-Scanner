@@ -43,6 +43,7 @@ import type {
   PatchCurrencyView,
   PerceivedThreatsView,
   PostureView,
+  ThreatHuntView,
   FindingHistory, FindingPage, GeneratedPassword, Health, Journey, Landscape,
   Me, PathView, PathsOverview, RequirementDoc, ResolvedView, RiskView,
   RunDiff, SapSystem, SaveViewResult, SavedView, ScanRun, SecurityDomain,
@@ -595,6 +596,10 @@ export function customCode(): Promise<CustomCodeView> {
 
 export function patchCurrency(): Promise<PatchCurrencyView> {
   return get<PatchCurrencyView>('/patch-currency')
+}
+
+export function threatHunt(): Promise<ThreatHuntView> {
+  return get<ThreatHuntView>('/threat-hunt')
 }
 
 export function vulnerabilities(): Promise<PostureView> {
