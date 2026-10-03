@@ -50,7 +50,7 @@ from starlette.types import Scope
 
 from server import (analytics, auth, checkdocs, crq, custom_code, db, export,
                     finding_classes, graph, ingest, patch_currency,
-                    perceived_threats, queries, sapcontent)
+                    perceived_threats, queries, sapcontent, threat_hunt)
 from modules import domains, nist_csf, platforms, compliance_mapping, control_status
 #: SESSION_COOKIE is imported but not USED here any more — the routes that set and
 #: cleared it were the Jinja form's sign-in and sign-out, and the SPA uses
@@ -1728,6 +1728,22 @@ def api_patch_currency(user: Dict[str, Any] = Depends(current_user)):
     scope = auth.scope_for(user)
     return patch_currency.roll_up(queries.patch_findings(scope),
                                   coverage=queries.latest_coverage(scope))
+
+
+@app.get("/api/threat-hunt")
+def api_threat_hunt(user: Dict[str, Any] = Depends(current_user)):
+    """For every actively-exploited SAP note the estate has not applied, the
+    indicators to hunt for in the logs it already exported.
+
+    Bridges the exploited-and-missing notes (the `exploited` facts on the HotNews
+    findings) to the retrospective log review: per CVE, the IoCs to search for and
+    whether the log each lives in was even supplied (`huntable`). It asserts no
+    compromise — a match is evidence to investigate, an empty short window is not
+    an all-clear. Scoped per system; reuses the HotNews finding projection.
+    """
+    scope = auth.scope_for(user)
+    return threat_hunt.roll_up(queries.patch_findings(scope),
+                               coverage=queries.latest_coverage(scope))
 
 
 @app.get("/api/vulnerabilities")

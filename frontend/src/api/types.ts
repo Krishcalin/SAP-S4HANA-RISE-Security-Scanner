@@ -1782,6 +1782,50 @@ export interface PatchCurrencyView {
   totals: { missing: number; dated: number; measured: Measured | null }
 }
 
+// Threat Hunt, from GET /api/threat-hunt (server/threat_hunt.py). For every
+// actively-exploited missing SAP note, the IoCs to hunt in the exported logs, with
+// whether the log each indicator needs was even supplied (`huntable`). Asserts no
+// compromise. `log_supplied`/`huntable`/`supplied` are tri-state: true / false /
+// null (unknown — no coverage manifest).
+export interface ThreatIndicator {
+  log: string
+  log_label: string
+  signature: string
+  meaning: string
+  log_supplied: boolean | null
+}
+export interface ThreatHuntPack {
+  note: string
+  cve: string | null
+  name: string | null
+  summary: string
+  campaign: string | null
+  cvss: number | null
+  indicators: ThreatIndicator[]
+  confirm: string[]
+  references: string[]
+  log_sources: string[]
+  huntable: boolean | null
+}
+export interface ThreatHuntLog {
+  id: string
+  label: string
+  module: string
+  supplied: boolean | null
+}
+export interface ThreatHuntView {
+  threats: ThreatHuntPack[]
+  without_pack: { note: string; cvss: number | null }[]
+  logs: ThreatHuntLog[]
+  totals: {
+    exploited_missing: number
+    with_pack: number
+    without_pack: number
+    huntable_now: number
+    measured: Measured | null
+  }
+}
+
 // Vulnerabilities / Mis-Configuration lenses, from GET /api/vulnerabilities and
 // /api/misconfiguration (server/finding_classes.py roll_up over the same finding
 // projection the domains screen uses). A partition of findings by check-id

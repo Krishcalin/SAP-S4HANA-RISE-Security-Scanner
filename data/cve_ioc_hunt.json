@@ -1,0 +1,108 @@
+{
+ "_meta": {
+  "purpose": "Indicators of compromise to HUNT FOR in exported logs, per actively-exploited SAP vulnerability. Read by server/threat_hunt.py and attached to the actively-exploited-missing-note finding (HOTNEWS-003). Keyed by SAP Note number, matching modules/sap_hotnews.py HOTNEWS_CATALOG.",
+  "discipline": "Indicators are drawn from public advisories (CISA KEV, SAP, vendor exploitation reports) for the named CVE. They say WHAT TO LOOK FOR; a match is evidence to investigate, never proof of compromise, and the absence of a match over a short log window is not an all-clear. `log` names the logical export the indicator is found in, so the hunt view can say whether that log was even supplied. No indicator is invented: an entry exists only where public exploitation detail does.",
+  "logs": {
+   "logserv_events": "SAP LogServ (ICM / gateway / HTTP access) — read by logserv_review",
+   "security_audit_log": "Security Audit Log (SM20 / RSAU) — read by log_review"
+  }
+ },
+ "2890213": {
+  "cve": "CVE-2020-6207",
+  "name": "Solution Manager EEM — missing authentication",
+  "summary": "Missing authentication in the SolMan End-user Experience Monitoring / diagnostics agent lets an unauthenticated attacker run administrative actions on every connected SMD agent, up to OS command execution on managed hosts.",
+  "indicators": [
+   {"log": "logserv_events", "signature": "Unauthenticated HTTP requests to the SolMan EEM web services (/EemAdminService/EemAdmin, CA-Introscope / diagnostics-agent endpoints) that succeed with no logon", "meaning": "The vulnerability is reached over HTTP with no credential; a 200 with no preceding authentication is the exploitation primitive."},
+   {"log": "security_audit_log", "signature": "Administrative actions or OS-level commands originating from the SolMan/SMD technical user shortly after such requests", "meaning": "Exploitation pivots through the agent to run actions on managed systems under the agent's identity."}
+  ],
+  "confirm": [
+   "Confirm whether the SolMan host is internet- or broadly network-reachable, and whether SAP Note 2890213 is applied.",
+   "Review SMD agent administration and any OS commands the diagnostics agent ran in the window."
+  ],
+  "references": ["CISA KEV — CVE-2020-6207", "SAP Note 2890213"]
+ },
+ "2934135": {
+  "cve": "CVE-2020-6287",
+  "name": "RECON — NetWeaver AS Java LM Configuration Wizard",
+  "summary": "Missing authentication in the LM Configuration Wizard (RECON) lets an unauthenticated attacker create an administrator user on AS Java, giving full control of the system and connected SAP estate.",
+  "indicators": [
+   {"log": "logserv_events", "signature": "HTTP POST to /CTCWebService/CTCWebServiceBean (and requests to /lmconfigwizard) from outside the admin network", "meaning": "The CTC web service is the RECON exploitation endpoint; a POST to it from an unexpected source is the attack."},
+   {"log": "security_audit_log", "signature": "Creation of a new AS Java administrator / UME user not traceable to a change request, immediately after such a POST", "meaning": "RECON's payload is a new admin account; an unexplained admin user is the post-exploitation artefact."}
+  ],
+  "confirm": [
+   "List AS Java / UME administrator accounts and reconcile each against an authorised request; disable any that cannot be explained.",
+   "Confirm SAP Note 2934135 (and the AS Java patch) is applied."
+  ],
+  "references": ["CISA KEV — CVE-2020-6287", "SAP Note 2934135"]
+ },
+ "3084487": {
+  "cve": "CVE-2021-38163",
+  "name": "NetWeaver Visual Composer 7.0 RT — unrestricted upload",
+  "summary": "An authenticated-but-low-privilege upload flaw in Visual Composer 7.0 runtime allows arbitrary file upload leading to code execution on AS Java.",
+  "indicators": [
+   {"log": "logserv_events", "signature": "Uploads to Visual Composer 7.0 runtime endpoints followed by requests to newly-created files under the J2EE deployment", "meaning": "The flaw is an upload-to-execute; a request fetching a just-uploaded file is the execution step."}
+  ],
+  "confirm": [
+   "Review the AS Java deployment for files created in the window that do not belong to a deployment, and the Visual Composer upload endpoints' access.",
+   "Confirm SAP Note 3084487 is applied."
+  ],
+  "references": ["CISA KEV — CVE-2021-38163", "SAP Note 3084487"]
+ },
+ "3123396": {
+  "cve": "CVE-2022-22536",
+  "name": "ICMAD — ICM/Web Dispatcher HTTP request smuggling",
+  "summary": "A memory-pipe (MPI) flaw in the Internet Communication Manager and Web Dispatcher allows HTTP request smuggling / response splitting, enabling cache poisoning and hijacking of authenticated user sessions with a single unauthenticated request.",
+  "indicators": [
+   {"log": "logserv_events", "signature": "HTTP requests to the ICM / Web Dispatcher with malformed or duplicated Content-Length / Transfer-Encoding headers, or oversized request bodies, and anomalous ICM responses pairing one request with another user's response", "meaning": "Request smuggling is carried in the length-header discrepancy; mismatched request/response pairing in the ICM log is the smuggling signature."}
+  ],
+  "confirm": [
+   "Review ICM / Web Dispatcher access logs for the header anomalies above; confirm SAP Note 3123396 (ICMAD) is applied across every ICM and Web Dispatcher in the landscape.",
+   "Check for session hijacking downstream (actions under a user from an unexpected source IP)."
+  ],
+  "references": ["CISA KEV — CVE-2022-22536", "SAP Note 3123396"]
+ },
+ "3594142": {
+  "cve": "CVE-2025-31324",
+  "name": "NetWeaver Visual Composer Metadata Uploader — unauthenticated upload",
+  "campaign": "Mass-exploited in 2025; webshell deployment widely reported.",
+  "summary": "Missing authorization on the Visual Composer Metadata Uploader lets an unauthenticated attacker upload arbitrary files to AS Java, routinely used to drop JSP webshells and achieve remote code execution.",
+  "indicators": [
+   {"log": "logserv_events", "signature": "Unauthenticated HTTP POST to /developmentserver/metadatauploader", "meaning": "This endpoint is the exploitation primitive; an unauthenticated POST to it is the attack and has no legitimate external use."},
+   {"log": "logserv_events", "signature": "GET requests to newly-appeared .jsp files under the AS Java web root (irj/root, servlet_jsp), e.g. helper.jsp, cache.jsp, or randomly-named JSPs", "meaning": "The uploaded file is a JSP webshell; a request executing it is the post-exploitation step."}
+  ],
+  "confirm": [
+   "Inspect the AS Java web root (irj/root, servlet_jsp/irj/root) for unexpected .jsp files created in the window — the primary host-side IoC; preserve and remove any webshell.",
+   "Confirm SAP Note 3594142 is applied and the Metadata Uploader is not externally reachable."
+  ],
+  "references": ["CISA KEV — CVE-2025-31324", "SAP Note 3594142"]
+ },
+ "3604119": {
+  "cve": "CVE-2025-42999",
+  "name": "NetWeaver Visual Composer Metadata Uploader — insecure deserialization",
+  "campaign": "Chained with CVE-2025-31324 in 2025 exploitation.",
+  "summary": "Insecure deserialization in the Visual Composer Metadata Uploader allows a privileged user to execute arbitrary code; observed chained with CVE-2025-31324 to achieve unauthenticated RCE.",
+  "indicators": [
+   {"log": "logserv_events", "signature": "POST requests to /developmentserver/metadatauploader carrying serialized-object payloads, especially following or alongside the CVE-2025-31324 pattern above", "meaning": "The deserialization flaw is reached through the same uploader; the two were chained in the wild."}
+  ],
+  "confirm": [
+   "Hunt the CVE-2025-31324 indicators above together with this one — they were exploited as a chain.",
+   "Confirm SAP Note 3604119 is applied."
+  ],
+  "references": ["CISA KEV — CVE-2025-42999", "SAP Note 3604119"]
+ },
+ "3627998": {
+  "cve": "CVE-2025-42957",
+  "name": "S/4HANA — remote-enabled RFC code injection",
+  "campaign": "Vendor-reported in-the-wild exploitation (SecurityBridge).",
+  "summary": "A remote-enabled RFC function module in S/4HANA fails to validate input, allowing a low-privileged authenticated user to inject and run arbitrary ABAP, leading to full system compromise.",
+  "indicators": [
+   {"log": "security_audit_log", "signature": "RFC calls to the affected remote-enabled function module from low-privileged or technical users that would not normally invoke it", "meaning": "The flaw is reached through an RFC call; an unexpected caller of the vulnerable module is the exploitation primitive."},
+   {"log": "security_audit_log", "signature": "Creation of unexpected administrator / SAP_ALL users, new background jobs, or debug/replace activity shortly after such RFC calls", "meaning": "Code injection is used to escalate; new admin users and jobs are the post-exploitation artefacts."}
+  ],
+  "confirm": [
+   "Reconcile new privileged users and background jobs created in the window against authorised changes; investigate any RFC call to the affected module from an unexpected account.",
+   "Confirm SAP Note 3627998 is applied."
+  ],
+  "references": ["SAP Note 3627998", "SecurityBridge — CVE-2025-42957 exploitation report"]
+ }
+}

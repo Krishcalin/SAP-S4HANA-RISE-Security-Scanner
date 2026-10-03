@@ -24,6 +24,7 @@ import { CsfFunction } from './routes/CsfFunction'
 import { PathDetail } from './routes/PathDetail'
 import { Paths } from './routes/Paths'
 import { PerceivedThreats } from './routes/PerceivedThreats'
+import { ThreatHunt } from './routes/ThreatHunt'
 import { Misconfiguration, Vulnerabilities } from './routes/Posture'
 import { Risk } from './routes/Risk'
 import { Trend } from './routes/Trend'
@@ -105,6 +106,7 @@ export default function App() {
               clicking a row on /paths, which links every row it renders. */}
           <Route path="/paths/:id" element={<PathDetail />} />
           <Route path="/perceived-threats" element={<PerceivedThreats />} />
+          <Route path="/threat-hunt" element={<ThreatHunt />} />
           <Route path="/risk" element={<Risk />} />
           {/* /runs/:id takes an id, so it has no nav entry: it is reached from the
               dashboard's recent runs and from the receipt the upload screen shows. */}

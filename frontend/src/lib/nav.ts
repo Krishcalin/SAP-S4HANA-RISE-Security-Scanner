@@ -1,5 +1,5 @@
 import {
-  Calculator, CalendarClock, CircleAlert, FileCode2, FileQuestion, ListOrdered, ScrollText, CircleDollarSign, Landmark, LayoutDashboard, LayoutGrid, Scissors, ShieldAlert, ShieldCheck, Siren, SlidersHorizontal, TrendingUp, Upload, UserCog, Waypoints, type LucideIcon,
+  Calculator, CalendarClock, CircleAlert, Crosshair, FileCode2, FileQuestion, ListOrdered, ScrollText, CircleDollarSign, Landmark, LayoutDashboard, LayoutGrid, Scissors, ShieldAlert, ShieldCheck, Siren, SlidersHorizontal, TrendingUp, Upload, UserCog, Waypoints, type LucideIcon,
 } from 'lucide-react'
 import type { Role } from '../api/types'
 
@@ -49,6 +49,11 @@ export const NAV_MAIN: NavItem[] = [
   // what the LOGS actually observed happening (SAP LogServ retrospective review),
   // grouped by log class, plus whether LogServ is forwarding each class.
   { to: '/perceived-threats', label: 'Perceived Threats', icon: Siren },
+  // Directly under Perceived Threats: the other direction of the log question. That
+  // screen says what the logs DID observe; this says, for each actively-exploited
+  // note the estate has NOT patched, what to HUNT for in those same logs — and
+  // whether the log you'd hunt in was even supplied.
+  { to: '/threat-hunt', label: 'Threat Hunt', icon: Crosshair },
   // Directly under the paths it cuts. The shortest worklist the product makes:
   // one fix, one or more paths gone.
   { to: '/chokepoints', label: 'Choke Points', icon: Scissors },
