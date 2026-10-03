@@ -1009,6 +1009,43 @@ def _distinct_risks(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return out
 
 
+def previous_scan(scope: Optional[Sequence[int]]):
+    """The findings observed in, and the merged coverage of, the PREVIOUS complete
+    scan per system in scope — the SECOND-latest — for control drift.
+
+    `latest_coverage` pairs the open findings with each system's latest complete
+    run; this is its mirror one run back, so control status can be recomputed as
+    it stood at the previous scan and diffed against now. Findings come from
+    `finding_observation` (what that run actually saw), category/severity from the
+    durable finding/check rows. Returns (None, None) when no system in scope has a
+    second complete run yet — there is no baseline to drift against, and the caller
+    must say so rather than invent one.
+    """
+    where = ["r.status = 'complete'"]
+    params: List[Any] = []
+    _scoped(where, params, scope, "r.system_id")
+    runs = db.query(
+        "SELECT id, coverage FROM ("
+        "  SELECT r.id, r.coverage, ROW_NUMBER() OVER "
+        "    (PARTITION BY r.system_id ORDER BY r.started_at DESC) AS rn "
+        f"  FROM scan_run r WHERE {' AND '.join(where)}"
+        ") q WHERE q.rn = 2", params)
+    if not runs:
+        return None, None
+    run_ids = [r["id"] for r in runs]
+    findings = db.query(
+        "SELECT f.id, f.check_id, f.severity, f.priority_tier, "
+        "       cd.category, cd.title, s.sid "
+        "FROM finding_observation o "
+        "JOIN finding f ON f.id = o.finding_id "
+        "JOIN check_definition cd ON cd.check_id = f.check_id "
+        "LEFT JOIN sap_system s ON s.id = f.system_id "
+        "WHERE o.scan_run_id = ANY(%s)", [run_ids])
+    from modules.coverage import merge_manifests
+    manifest = merge_manifests(r["coverage"] for r in runs)
+    return [dict(f) for f in findings], manifest
+
+
 def latest_coverage(scope: Optional[Sequence[int]],
                     landscape_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
     """The coverage manifests behind the findings a reader can currently see.

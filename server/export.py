@@ -108,6 +108,8 @@ def findings_for_report(scope: Optional[Sequence[int]]) -> List[Dict[str, Any]]:
         record = dict(row)
         items = _items_from_subject(record.get("subject"))
         findings.append({
+            "id": record.get("id"),
+            "sid": record.get("sid"),
             "check_id": record.get("check_id"),
             "title": record.get("title") or record.get("check_id"),
             "severity": record.get("severity"),

@@ -1378,6 +1378,68 @@ export interface ComplianceView {
   note: string
 }
 
+// Per-control audit evidence, from GET /api/compliance/{framework}/evidence
+// (modules/control_status.py). Each control carries a status and the findings
+// that prove it. 'clear' = checks ran and found nothing (NOT an assertion of
+// compliance); 'not_tested' = the feeding checks did not run.
+export type ControlStatus = 'gap' | 'clear' | 'not_tested' | 'not_mapped'
+export interface ControlFinding {
+  id: number | null
+  check_id: string
+  severity: string
+  priority_tier: string | null
+  title: string
+  sid: string | null
+  state: string
+  affected_items: string[]
+}
+export interface ControlEntry {
+  id: string
+  name: string
+  themes: string[]
+  status: ControlStatus
+  counts: Record<string, number>
+  total: number
+  findings: ControlFinding[]
+}
+export interface ControlEvidenceView {
+  id: string
+  name: string
+  subtitle: string
+  controls: ControlEntry[]
+  totals: {
+    controls: number
+    by_status: Record<ControlStatus, number>
+    findings: number
+    measured: Measured | null
+  }
+}
+
+// Control drift, from GET /api/compliance/{framework}/drift — how each control's
+// status changed since the previous complete scan.
+export type ControlChange =
+  'newly_failing' | 'remediated' | 'still_failing'
+  | 'stopped_testing' | 'started_testing' | 'unchanged' | 'no_baseline'
+export interface ControlDriftEntry {
+  id: string
+  name: string
+  status: ControlStatus
+  was: ControlStatus | null
+  change: ControlChange
+}
+export interface ControlDriftView {
+  id: string
+  name: string
+  subtitle: string
+  has_baseline: boolean
+  controls: ControlDriftEntry[]
+  totals: {
+    controls: number
+    by_change: Record<ControlChange, number>
+    measured: Measured | null
+  }
+}
+
 export interface CsfView {
   measured: Measured | null
   framework: string

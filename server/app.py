@@ -51,7 +51,7 @@ from starlette.types import Scope
 from server import (analytics, auth, checkdocs, crq, custom_code, db, export,
                     finding_classes, graph, ingest, perceived_threats, queries,
                     sapcontent)
-from modules import domains, nist_csf, platforms, compliance_mapping
+from modules import domains, nist_csf, platforms, compliance_mapping, control_status
 #: SESSION_COOKIE is imported but not USED here any more — the routes that set and
 #: cleared it were the Jinja form's sign-in and sign-out, and the SPA uses
 #: /api/auth/login and /api/auth/logout instead. It stays as a deliberate
@@ -1379,6 +1379,50 @@ def api_compliance(user: Dict[str, Any] = Depends(current_user)):
                  "with it: this product reads configuration exports, not the "
                  "control environment. No percentage is computed."),
     }
+
+
+@app.get("/api/compliance/{framework}/evidence")
+def api_compliance_evidence(framework: str,
+                            user: Dict[str, Any] = Depends(current_user)):
+    """Per-control audit evidence for one framework: a status (gap / clear /
+    not-tested / not-mapped) and the findings that prove it.
+
+    Generalises the CSF status recipe to every framework, so an auditor gets the
+    same honest three-state answer for SOX/ITGC, CIS Controls, DORA and the rest,
+    not just a count. "Clear" means the feeding checks RAN and found nothing — an
+    observation, never an assertion of compliance; "not tested" means they did
+    not run. No percentage is computed. Scoped per system; reuses the report
+    finding projection so the evidence matches an exported report.
+    """
+    scope = auth.scope_for(user)
+    result = control_status.assess_framework(
+        framework, export.findings_for_report(scope),
+        coverage=queries.latest_coverage(scope))
+    if result is None:
+        raise HTTPException(status_code=404, detail="unknown compliance framework")
+    return result
+
+
+@app.get("/api/compliance/{framework}/drift")
+def api_compliance_drift(framework: str,
+                         user: Dict[str, Any] = Depends(current_user)):
+    """How each control's status changed since the PREVIOUS complete scan —
+    newly failing, remediated, still failing, stopped / started testing.
+
+    Continuous controls monitoring, offline edition. Status is recomputed at both
+    scans with that scan's own coverage, so a control that changed only because an
+    export stopped arriving reads as 'stopped testing', not a remediation or a new
+    gap. When no system in scope has a second complete scan yet, every control is
+    'no baseline' rather than a fabricated change.
+    """
+    scope = auth.scope_for(user)
+    before_findings, before_cov = queries.previous_scan(scope)
+    result = control_status.drift(
+        framework, export.findings_for_report(scope),
+        queries.latest_coverage(scope), before_findings, before_cov)
+    if result is None:
+        raise HTTPException(status_code=404, detail="unknown compliance framework")
+    return result
 
 
 @app.get("/api/csf/{function_id}")
