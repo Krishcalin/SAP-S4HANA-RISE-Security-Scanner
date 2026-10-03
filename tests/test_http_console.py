@@ -113,6 +113,7 @@ _SCREEN_ENDPOINTS = [
     ("/api/custom-code", ("groups", "health", "objects", "measured", "totals")),
     ("/api/patch-currency", ("band", "assessed", "age_bands", "exploited_missing", "totals")),
     ("/api/threat-hunt", ("threats", "without_pack", "logs", "totals")),
+    ("/api/remediation-roadmap", ("waves", "totals")),
     ("/api/vulnerabilities", ("kind", "groups", "measured", "totals")),
     ("/api/misconfiguration", ("kind", "groups", "measured", "totals")),
     ("/api/paths", ("summary", "paths", "chokepoints", "closed",

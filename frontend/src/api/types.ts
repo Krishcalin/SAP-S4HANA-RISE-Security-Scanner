@@ -1826,6 +1826,44 @@ export interface ThreatHuntView {
   }
 }
 
+// Remediation Roadmap, from GET /api/remediation-roadmap (server/remediation.py
+// roadmap()). Every open finding in scope sequenced into the P1-P4 action tiers,
+// each tagged with the owning team, SLA due date, and whether it is the customer's
+// to fix or a SAP service request. The "what order, who, by when" across the
+// estate; the per-system remediation plan (in the run page) is the "how".
+export interface RoadmapItem {
+  finding_id: number
+  check_id: string
+  title: string
+  severity: string
+  system_id: number | null
+  sid: string | null
+  owner: string
+  owner_label: string
+  customer_fixable: boolean
+  team: string
+  due_date: string | null
+}
+export interface RoadmapWave {
+  tier: string
+  label: string
+  window: string
+  blurb: string
+  items: RoadmapItem[]
+  counts: { total: number; customer: number; sap: number }
+}
+export interface RemediationRoadmapView {
+  waves: RoadmapWave[]
+  totals: {
+    open: number
+    customer_fixable: number
+    sap_owned: number
+    by_tier: Record<string, number>
+    systems: number
+    measured: Measured | null
+  }
+}
+
 // Vulnerabilities / Mis-Configuration lenses, from GET /api/vulnerabilities and
 // /api/misconfiguration (server/finding_classes.py roll_up over the same finding
 // projection the domains screen uses). A partition of findings by check-id

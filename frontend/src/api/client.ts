@@ -43,6 +43,7 @@ import type {
   PatchCurrencyView,
   PerceivedThreatsView,
   PostureView,
+  RemediationRoadmapView,
   ThreatHuntView,
   FindingHistory, FindingPage, GeneratedPassword, Health, Journey, Landscape,
   Me, PathView, PathsOverview, RequirementDoc, ResolvedView, RiskView,
@@ -600,6 +601,10 @@ export function patchCurrency(): Promise<PatchCurrencyView> {
 
 export function threatHunt(): Promise<ThreatHuntView> {
   return get<ThreatHuntView>('/threat-hunt')
+}
+
+export function remediationRoadmap(): Promise<RemediationRoadmapView> {
+  return get<RemediationRoadmapView>('/remediation-roadmap')
 }
 
 export function vulnerabilities(): Promise<PostureView> {

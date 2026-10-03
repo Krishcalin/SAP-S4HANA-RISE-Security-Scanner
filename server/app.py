@@ -608,6 +608,23 @@ def api_system_remediation_plan(system_id: int,
     return plan
 
 
+@app.get("/api/remediation-roadmap")
+def api_remediation_roadmap(user: Dict[str, Any] = Depends(current_user)):
+    """The estate-wide remediation roadmap: every open finding in scope sequenced
+    into the P1-P4 action tiers, each tagged with the owning team, its SLA due
+    date, and whether it is yours to fix or a SAP service request.
+
+    The per-system plan above is the "how" for one change window; this is the
+    "what order, who, by when" across the whole estate. It reads the stored tier
+    and ownership, so it cannot disagree with the queue or a finding's owner badge,
+    and it never drops a finding (an unexpected tier parks in P4). Scoped per
+    system like every read.
+    """
+    from server import remediation
+
+    return remediation.roadmap(auth.scope_for(user))
+
+
 @app.get("/api/severing-sets")
 def api_severing_sets(user: Dict[str, Any] = Depends(current_user)):
     """Per scenario: the smallest set of fixes that leaves it no route at all.

@@ -25,6 +25,7 @@ import { PathDetail } from './routes/PathDetail'
 import { Paths } from './routes/Paths'
 import { PerceivedThreats } from './routes/PerceivedThreats'
 import { ThreatHunt } from './routes/ThreatHunt'
+import { RemediationRoadmap } from './routes/RemediationRoadmap'
 import { Misconfiguration, Vulnerabilities } from './routes/Posture'
 import { Risk } from './routes/Risk'
 import { Trend } from './routes/Trend'
@@ -107,6 +108,7 @@ export default function App() {
           <Route path="/paths/:id" element={<PathDetail />} />
           <Route path="/perceived-threats" element={<PerceivedThreats />} />
           <Route path="/threat-hunt" element={<ThreatHunt />} />
+          <Route path="/remediation-roadmap" element={<RemediationRoadmap />} />
           <Route path="/risk" element={<Risk />} />
           {/* /runs/:id takes an id, so it has no nav entry: it is reached from the
               dashboard's recent runs and from the receipt the upload screen shows. */}
