@@ -291,18 +291,29 @@ def recompute_latest(landscape_id: int) -> Dict[str, Any]:
 #  Reads                                                                      #
 # --------------------------------------------------------------------------- #
 
-def latest(scope: Optional[Sequence[int]] = None) -> Optional[Dict[str, Any]]:
-    """Portfolio CRQ from the most recent completed run in scope."""
+def latest(scope: Optional[Sequence[int]] = None,
+           landscape_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
+    """Portfolio CRQ from the most recent completed run in scope.
+
+    `landscape_id` bounds the board view to one landscape. The product is
+    single-landscape, so the board must show the organization's latest run; left
+    unbounded it returns the globally-latest run, which a stray landscape (a demo
+    estate, leftover test data) could hijack.
+    """
     clause, params = db.scope_clause(scope, "r.system_id")
+    land_clause, land_params = "", []
+    if landscape_id is not None:
+        land_clause = " AND r.landscape_id = %s"
+        land_params = [landscape_id]
     return db.one(
         f"""
         SELECT c.*, r.started_at, r.id AS run_id, s.sid, s.client
         FROM crq_result c
         JOIN scan_run r ON r.id = c.scan_run_id
         LEFT JOIN sap_system s ON s.id = r.system_id
-        WHERE c.scenario_id IS NULL AND r.status = 'complete' AND {clause}
+        WHERE c.scenario_id IS NULL AND r.status = 'complete' AND {clause}{land_clause}
         ORDER BY r.started_at DESC LIMIT 1
-        """, params)
+        """, list(params) + land_params)
 
 
 def scenarios_for_run(run_id: int) -> List[Dict[str, Any]]:
@@ -311,9 +322,18 @@ def scenarios_for_run(run_id: int) -> List[Dict[str, Any]]:
         "ORDER BY ale_p90 DESC NULLS LAST", (run_id,))
 
 
-def trend(scope: Optional[Sequence[int]] = None, limit: int = 12) -> List[Dict[str, Any]]:
-    """Portfolio ALE per run — does the money figure move as findings are fixed?"""
+def trend(scope: Optional[Sequence[int]] = None, limit: int = 12,
+          landscape_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    """Portfolio ALE per run — does the money figure move as findings are fixed?
+
+    `landscape_id` bounds the board trend to one landscape, for the same reason
+    as `latest`: the organization's history, not every landscape's runs interleaved.
+    """
     clause, params = db.scope_clause(scope, "r.system_id")
+    land_clause, land_params = "", []
+    if landscape_id is not None:
+        land_clause = " AND r.landscape_id = %s"
+        land_params = [landscape_id]
     rows = db.query(
         f"""
         SELECT c.ale_p50, c.ale_p90, c.ale_mean, c.unrouted_count,
@@ -322,9 +342,9 @@ def trend(scope: Optional[Sequence[int]] = None, limit: int = 12) -> List[Dict[s
         FROM crq_result c
         JOIN scan_run r ON r.id = c.scan_run_id
         WHERE c.scenario_id IS NULL AND r.status = 'complete'
-          AND c.ale_p90 IS NOT NULL AND {clause}
+          AND c.ale_p90 IS NOT NULL AND {clause}{land_clause}
         ORDER BY r.started_at DESC LIMIT %s
-        """, list(params) + [limit])
+        """, list(params) + land_params + [limit])
     rows = list(reversed(rows))
 
     # THE TREND LINE MOVES FOR SEVEN REASONS AND ONLY ONE OF THEM IS REMEDIATION.

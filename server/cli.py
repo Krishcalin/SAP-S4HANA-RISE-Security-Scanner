@@ -103,6 +103,24 @@ def cmd_recompute_crq(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_set_org(args: argparse.Namespace) -> int:
+    """Name the organization this deployment assesses; set its deployment mode.
+
+    Single-landscape product: there is one landscape = the organization. This
+    renames it (and optionally changes its deployment mode) rather than creating
+    another, so an installer replaces the default 'Organization' name once.
+    """
+    land_id = db.singleton_landscape_id()
+    if args.mode:
+        db.execute("UPDATE landscape SET name = %s, deployment_mode = %s WHERE id = %s",
+                   (args.name, args.mode, land_id))
+    else:
+        db.execute("UPDATE landscape SET name = %s WHERE id = %s", (args.name, land_id))
+    row = db.one("SELECT name, deployment_mode FROM landscape WHERE id = %s", (land_id,))
+    print(f"organization set to {row['name']} ({row['deployment_mode']})")
+    return 0
+
+
 def cmd_init_db(args: argparse.Namespace) -> int:
     db.init_schema()
     print("schema applied")
@@ -612,6 +630,14 @@ def main(argv=None) -> int:
         help="Re-price the latest scan from saved CRQ answers, without a rescan.")
     rc.add_argument("landscape")
     rc.set_defaults(fn=cmd_recompute_crq)
+
+    so = sub.add_parser(
+        "set-org",
+        help="Name the organization this deployment assesses (single landscape).")
+    so.add_argument("name")
+    so.add_argument("--mode", choices=DEPLOYMENT_MODES,
+                    help="Deployment mode of this organization's SAP landscape.")
+    so.set_defaults(fn=cmd_set_org)
 
     cu = sub.add_parser("create-user", help="Create a console account with a role.")
     cu.add_argument("username")
