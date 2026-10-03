@@ -1,5 +1,5 @@
 import {
-  Calculator, CalendarClock, CircleAlert, Crosshair, FileCode2, FileQuestion, ListOrdered, ScrollText, CircleDollarSign, Landmark, LayoutDashboard, LayoutGrid, Scissors, ShieldAlert, ShieldCheck, Siren, SlidersHorizontal, TrendingUp, Upload, UserCog, Waypoints, type LucideIcon,
+  Calculator, CalendarClock, CircleAlert, Crosshair, FileCode2, FileQuestion, ListOrdered, ScrollText, CircleDollarSign, Landmark, LayoutDashboard, LayoutGrid, Scissors, ShieldAlert, ShieldCheck, Siren, SlidersHorizontal, TrendingUp, Upload, UserCog, Waypoints, Wrench, type LucideIcon,
 } from 'lucide-react'
 import type { Role } from '../api/types'
 
@@ -57,6 +57,11 @@ export const NAV_MAIN: NavItem[] = [
   // Directly under the paths it cuts. The shortest worklist the product makes:
   // one fix, one or more paths gone.
   { to: '/chokepoints', label: 'Choke Points', icon: Scissors },
+  // Directly under the action views: every open finding sequenced into the P1-P4
+  // action tiers, each tagged with the owning team, its SLA due date, and whether
+  // it is yours to fix or a SAP service request. The "what order, who, by when"
+  // across the estate; the per-system plan on the run page is the "how".
+  { to: '/remediation-roadmap', label: 'Remediation', icon: Wrench },
   // The currency figure. Neither incumbent produces one at all, which is why it
   // sits in the main list rather than under a reports submenu.
   { to: '/risk', label: 'Risk ($)', icon: CircleDollarSign },

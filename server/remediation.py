@@ -911,3 +911,114 @@ def pack(row: Dict[str, Any],
             or role_pack(row, neighbourhood)
             or assignment_pack(row, neighbourhood)
             or platform_pack(row, neighbourhood))
+
+
+#: What the roadmap shows for each ownership class. The keys are rise_ownership's
+#: vocabulary; the labels are what the reader has to go and do.
+_OWNER_LABEL = {
+    "customer_fixable": "Yours",
+    "ticket_to_sap": "SAP service request",
+    "provider_owned": "SAP-operated",
+    "not_assessable": "Not assessable",
+}
+_SEV_RANK = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
+
+
+def roadmap(scope: Optional[Sequence[int]] = None) -> Dict[str, Any]:
+    """Estate-wide remediation roadmap: every open finding in scope, SEQUENCED into
+    the P1-P4 action tiers, each item tagged with the team that owns it, its SLA
+    due date, and whether it is the CUSTOMER's to fix or a SAP service request.
+
+    WHY THIS SITS ALONGSIDE plan_for_system. That builds the exact change set for
+    ONE system, grouped by change kind — the "how", for a single change window.
+    This is the "what order, who, by when" across the WHOLE estate: the sequence a
+    programme manager works, with the per-system plans as the detail beneath each
+    item. It reuses the STORED priority tier (risk_prioritizer, at ingest) and the
+    STORED ownership (rise_ownership, at ingest) rather than recomputing either, so
+    the roadmap cannot disagree with the queue's tiers or a finding's owner badge.
+
+    NEVER DROPS A FINDING. A finding whose tier is absent or unexpected is parked in
+    P4 rather than omitted — a roadmap that silently loses items is the one mistake
+    a programme manager cannot afford.
+    """
+    from server import queries
+
+    where = ["f.state IN (%s, %s)"]
+    params: List[Any] = list(_OPEN_STATES)
+    queries._scoped(where, params, scope)
+    rows = db.query(
+        "SELECT f.id, f.check_id, f.severity, f.priority_tier, "
+        "       f.remediation_owner, f.system_id, s.sid, cd.title "
+        "FROM finding f "
+        "JOIN check_definition cd ON cd.check_id = f.check_id "
+        "LEFT JOIN sap_system s ON s.id = f.system_id "
+        f"WHERE {' AND '.join(where)}",
+        params)
+    return _build_roadmap(rows, queries.latest_coverage(scope))
+
+
+def _build_roadmap(rows: Sequence[Dict[str, Any]],
+                   coverage: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """The pure tier/owner/SLA sequencing over already-fetched finding rows, split
+    from the query so it is testable without a database. `rows` carry id, check_id,
+    severity, priority_tier, remediation_owner, system_id, sid, title."""
+    from modules.rise_ownership import sla_due_date, team_for
+    from modules.risk_prioritizer import TIER_META
+
+    waves: Dict[str, Dict[str, Any]] = {}
+    for tier in ("P1", "P2", "P3", "P4"):
+        meta = TIER_META[tier]
+        waves[tier] = {"tier": tier, "label": meta["label"], "window": meta["window"],
+                       "blurb": meta["blurb"], "items": []}
+
+    by_tier = {t: 0 for t in waves}
+    customer_total = sap_total = 0
+    systems: set = set()
+    for row in rows:
+        tier = row.get("priority_tier") if row.get("priority_tier") in waves else "P4"
+        owner = str(row.get("remediation_owner") or _CUSTOMER_FIXABLE)
+        due = sla_due_date(tier, owner)
+        fixable = owner == _CUSTOMER_FIXABLE
+        waves[tier]["items"].append({
+            "finding_id": row["id"],
+            "check_id": row["check_id"],
+            "title": row.get("title") or row["check_id"],
+            "severity": row.get("severity"),
+            "system_id": row.get("system_id"),
+            "sid": row.get("sid"),
+            "owner": owner,
+            "owner_label": _OWNER_LABEL.get(owner, owner),
+            "customer_fixable": fixable,
+            "team": team_for(row["check_id"]),
+            "due_date": due.isoformat() if due else None,
+        })
+        by_tier[tier] += 1
+        customer_total += 1 if fixable else 0
+        sap_total += 0 if fixable else 1
+        if row.get("system_id") is not None:
+            systems.add(row["system_id"])
+
+    # Within a wave: the customer's own fixes first (actionable now), then
+    # worst-first by severity, then by system — a stable, workable order.
+    for w in waves.values():
+        w["items"].sort(key=lambda it: (
+            0 if it["customer_fixable"] else 1,
+            _SEV_RANK.get(str(it["severity"] or "").upper(), 9),
+            str(it["sid"] or ""), str(it["check_id"])))
+        w["counts"] = {
+            "total": len(w["items"]),
+            "customer": sum(1 for it in w["items"] if it["customer_fixable"]),
+            "sap": sum(1 for it in w["items"] if not it["customer_fixable"]),
+        }
+
+    return {
+        "waves": [waves[t] for t in ("P1", "P2", "P3", "P4")],
+        "totals": {
+            "open": len(rows),
+            "customer_fixable": customer_total,
+            "sap_owned": sap_total,
+            "by_tier": by_tier,
+            "systems": len(systems),
+            "measured": (coverage or {}).get("measured"),
+        },
+    }
