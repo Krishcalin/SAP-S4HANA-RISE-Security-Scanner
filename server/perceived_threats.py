@@ -37,12 +37,14 @@ _SEVERITIES = ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO")
 #: with str.startswith; none is a prefix of another across groups.
 GROUPS: List[Dict[str, Any]] = [
     {"id": "audit_behaviour", "label": "Audit-log behaviour",
-     "prefixes": ("LREV-PAT",),
+     "prefixes": ("LREV-PAT", "LREV-UEBA"),
      "blurb": "Threat patterns the Security Audit Log recorded — off-hours "
               "privileged logons, failed-then-success runs, default accounts "
               "active, debug activity, high-volume table access, audit-config "
               "changes, rare-terminal logons, external OS commands, password "
-              "spraying."},
+              "spraying — plus peer-relative behaviour outliers (UEBA-lite): "
+              "accounts that stand out from the exported population on volume, "
+              "transaction breadth or terminal breadth."},
     {"id": "violations", "label": "Access violations",
      "prefixes": ("LVIO-",),
      "blurb": "Emergency-access (firefighter) use and privileged change outside "

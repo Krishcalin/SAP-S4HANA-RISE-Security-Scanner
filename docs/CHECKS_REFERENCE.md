@@ -6,13 +6,13 @@
      here is reverted by the next build rather than merged. Change the
      check, then regenerate:  python -m tools.build_checks_reference -->
 
-**520** check ids are written as literals in `modules/`, across **43** modules. A further **362** are built at runtime from shipped rule tables, giving **882** in total.
+**524** check ids are written as literals in `modules/`, across **43** modules. A further **362** are built at runtime from shipped rule tables, giving **886** in total.
 
 Each check is published with **what it reads** and **which SAP Security Baseline requirement it answers** — the two things that make a catalogue auditable rather than a number. A competitor publishing a count and no itemised list is making a claim; this is a claim somebody else can check.
 
 ## What this file does not claim
 
-**62 of the 520 titles and 35 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
+**62 of the 524 titles and 35 of the severities are not fixed.** A title is often an f-string naming the object it found, and a severity is often conditional on what was found — a locked account and an unlocked one are the same check at different severities.
 
 Those are rendered as *varies*, with the template where one can be shown. They are **not** resolved to one example. The previous hand-written version of this file froze one branch as fact and ended up carrying eleven wrong titles and four wrong severities; a generator repeating that mistake would carry a machine's authority while doing it.
 
@@ -25,7 +25,7 @@ Every check below carries the SAP Security Baseline requirement it answers, wher
 - **35 of 35** requirements that are IN SCOPE for this product are addressed by at least one check here.
 - **10 of 45** published requirements are out of scope, because they are for a stack this product does not read. They are named below, not dropped: the denominator has to be honest in both directions, and a reader comparing 35 against 45 has no way to know that.
 - **0** in-scope requirements are not addressed at all. They are listed below rather than summarised away.
-- **575 of 882** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
+- **579 of 886** checks answer no Baseline requirement — **which is not a failure.** Segregation of duties, GRC, financial controls, the attack-path content and the RISE-specific checks have no Baseline equivalent, and that is where this product goes beyond it.
 
 > ⚠️ These are CHECK ITEMS in the CSA policies, not the 'control points' counted in the Baseline document — the widely-quoted 214 (69/92/53) is that other unit. The two do not reconcile; do not publish a percentage of one against the other.
 
@@ -578,7 +578,7 @@ Reads: `audit_config`, `incident_response`, `log_retention`, `logon_events`, `se
 | `LOG-TBL-001` | HIGH | Critical tables without change logging enabled | — |
 | `LOG-TBL-010` | HIGH | Table change logging master switch off (rec/client not set) | — |
 
-### `log_review` — 20 checks
+### `log_review` — 24 checks
 
 Reads: `audit_config`, `client_settings`, `firefighter_log`, `grac_firefighter_log`, `grac_firefighter_owners`, `logon_events`, `logserv_events`, `profiles`, `security_audit_log`, `standard_users`, `users` — the sources the MODULE consumes; an individual check below reads some subset of them.
 
@@ -600,6 +600,10 @@ Reads: `audit_config`, `client_settings`, `firefighter_log`, `grac_firefighter_l
 | `LREV-SRC-001` | MEDIUM | No Security Audit Log event extract supplied — no window could be reviewed | — |
 | `LREV-SRC-002` | MEDIUM | Audit log extract carries no usable event timestamp | — |
 | `LREV-SRC-003` | MEDIUM | Audit filter configuration not supplied alongside the event extract | — |
+| `LREV-UEBA-000` | INFO | Too few accounts in the window to compare behaviour against peers | — |
+| `LREV-UEBA-001` | MEDIUM | Accounts generating far more audit activity than their peers | — |
+| `LREV-UEBA-002` | MEDIUM | Accounts using a far broader set of transactions than their peers | — |
+| `LREV-UEBA-003` | MEDIUM | Accounts signing on from far more terminals than their peers | — |
 | `LREV-WIN-001` | LOW | Reviewed window is too short to be representative | — |
 | `LREV-WIN-002` | HIGH | *varies* | — |
 | `LVIO-FF-001` | *varies* — HIGH or MEDIUM | Firefighter (emergency-access) account active in the reviewed window | — |
